@@ -6,6 +6,7 @@ import {
   hookSlots,
   lazy,
   memo,
+  publisherBoundary,
   Suspense,
   useContext,
   useState,
@@ -150,20 +151,105 @@ test('application updates preserve the loaded remote and its native state while 
   }
 });
 
-test('remote defaults and memo components retain ordinary native lazy behavior', async () => {
+test('native publisher instances keep signal state and retire independently', async () => {
+  const events: [string, string][] = [];
+  const lifecycle = (event: 'mount' | 'cleanup', id: string) => {
+    events.push([event, id]);
+  };
+  const loadRemote = rstest.fn(() => import('./fixtures/federation-publisher'));
+  const Widget = federatedComponent<{
+    label: string;
+    initial: number;
+    lifecycle: typeof lifecycle;
+  }>('remote/Widget');
+  const App = (props: { first: boolean; label: string }) => [
+    props.first &&
+      createElement(Widget, {
+        key: 'first',
+        label: props.label,
+        initial: 3,
+        lifecycle,
+      }),
+    createElement(Widget, {
+      key: 'second',
+      label: 'second',
+      initial: 9,
+      lifecycle,
+    }),
+  ];
+  const container = document.createElement('div');
+  const handle = await mountOctaneApplication({
+    container,
+    identity,
+    nativeHydrationBuildId: 'native-build',
+    federation: { instance: () => ({ loadRemote }) },
+    load: async () => ({
+      default: App,
+      props: { first: true, label: 'first' },
+    }),
+  });
+  try {
+    await waitFor(() => expect(events).toHaveLength(2));
+    const first = container.querySelector<HTMLButtonElement>(
+      '[data-publisher="first"]',
+    )!;
+    const second = container.querySelector<HTMLButtonElement>(
+      '[data-publisher="second"]',
+    )!;
+    expect(first.id).toContain('-publisher-');
+    expect(second.id).toContain('-publisher-');
+    expect(first.id).not.toBe(second.id);
+    first.click();
+    await waitFor(() => expect(first.textContent).toBe('first: 4'));
+    expect(second.textContent).toBe('second: 9');
+    handle.update({ default: App, props: { first: true, label: 'updated' } });
+    await waitFor(() => expect(first.textContent).toBe('updated: 4'));
+    expect(container.querySelector('[data-publisher="updated"]')).toBe(first);
+    expect(container.querySelector('[data-publisher="second"]')).toBe(second);
+    expect(events).toEqual([
+      ['mount', first.id],
+      ['mount', second.id],
+    ]);
+    handle.update({ default: App, props: { first: false, label: 'updated' } });
+    await waitFor(() => expect(events).toContainEqual(['cleanup', first.id]));
+    expect(events.filter(([event]) => event === 'cleanup')).toEqual([
+      ['cleanup', first.id],
+    ]);
+    expect(container.querySelector('[data-publisher="second"]')).toBe(second);
+    second.click();
+    await waitFor(() => expect(second.textContent).toBe('second: 10'));
+    expect(loadRemote).toHaveBeenCalledTimes(1);
+    handle.dispose();
+    expect(events.filter(([event]) => event === 'cleanup')).toEqual([
+      ['cleanup', first.id],
+      ['cleanup', second.id],
+    ]);
+  } finally {
+    handle.dispose();
+  }
+});
+
+test('remote defaults and memo comparisons match an ordinary native publisher', async () => {
   const run = async (federated: boolean) => {
-    const render = rstest.fn((props: { label?: string }) =>
+    const render = rstest.fn((props: { label?: string; memoKey: number }) =>
       createElement('button', null, props.label),
     );
     const Remote = memo(
       Object.assign(render, { defaultProps: { label: 'native default' } }),
-      (previous, incoming) => previous.label === incoming.label,
+      (previous, incoming) => previous.memoKey === incoming.memoKey,
     );
     const Widget = federated
-      ? federatedComponent<{ label?: string }>('remote/Widget')
-      : lazy(async () => ({ default: Remote }));
-    const App = (props: { label?: string; tick?: number }) => {
-      const widget = createElement(Widget, { label: props.label });
+      ? federatedComponent<{ label?: string; memoKey: number }>('remote/Widget')
+      : lazy(async () => ({
+          // Compare the same native ownership boundary, not naked lazy: the
+          // adapter must retain the publisher's own memo/default semantics.
+          default: publisherBoundary(Remote, { publisherKey: 'remote/Widget' }),
+        }));
+    const App = (props: { label?: string; tick?: number; memoKey: number }) => {
+      const widget = createElement(Widget, {
+        label: props.label,
+        memoKey: props.memoKey,
+      });
       return federated ? widget : createElement(Suspense, { children: widget });
     };
     const container = document.createElement('div');
@@ -180,23 +266,35 @@ test('remote defaults and memo components retain ordinary native lazy behavior',
             },
           }
         : {}),
-      load: async () => ({ default: App, props: { tick: 1 } }),
+      load: async () => ({ default: App, props: { tick: 1, memoKey: 0 } }),
     });
     try {
       await waitFor(() => expect(container.textContent).toBe('native default'));
       const initial = render.mock.calls.length;
-      handle.update({ default: App, props: { tick: 2 } });
+      handle.update({ default: App, props: { tick: 2, memoKey: 0 } });
       await new Promise(resolve => setTimeout(resolve, 20));
       const unchanged = render.mock.calls.length;
       expect(container.textContent).toBe('native default');
-      handle.update({ default: App, props: { label: 'new props' } });
+      handle.update({
+        default: App,
+        props: { label: 'ignored props', memoKey: 0 },
+      });
+      await new Promise(resolve => setTimeout(resolve, 20));
+      const rejected = render.mock.calls.length;
+      expect(container.textContent).toBe('native default');
+      handle.update({
+        default: App,
+        props: { label: 'new props', memoKey: 1 },
+      });
       await waitFor(() => expect(container.textContent).toBe('new props'));
-      return [initial, unchanged, render.mock.calls.length];
+      return [initial, unchanged, rejected, render.mock.calls.length];
     } finally {
       handle.dispose();
     }
   };
-  expect(await run(true)).toEqual(await run(false));
+  const ordinary = await run(false);
+  expect(ordinary).toEqual([1, 1, 1, 2]);
+  expect(await run(true)).toEqual(ordinary);
 });
 
 test('a browser rejection reaches the native ErrorBoundary and a new application retries', async () => {

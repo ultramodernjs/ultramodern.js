@@ -1,11 +1,13 @@
 import type { RendererIdentity } from '@modern-js/renderer-core/identity';
 import { createRequestSession } from '@modern-js/renderer-core/session';
+import { Window } from 'happy-dom';
 import {
   createContext,
   createElement,
   ssrHtml,
   useContext,
 } from 'octane/server';
+import { decodeOctaneSSRDocument } from '../../../../tests/ultramodern-renderers/octane-federation/fixtures.mjs';
 import { federatedComponent } from '../src/federation';
 import { renderOctaneApplication } from '../src/server';
 
@@ -85,6 +87,59 @@ test('streams native remote HTML, props and provider context with styles before 
   );
   expect(html).toContain('nonce="mf-nonce"');
   expect(html).toMatch(/<\/body><\/html>$/);
+});
+
+test('same remote siblings receive native publisher descriptors for this document', async () => {
+  const loadRemote = rstest.fn(() => import('./fixtures/federation-publisher'));
+  const Widget = federatedComponent<{ label: string; initial: number }>(
+    'remote/Widget',
+  );
+  const response = await renderOctaneApplication({
+    session: createSession(),
+    App: () => [
+      createElement(Widget, { key: 'first', label: 'first', initial: 3 }),
+      createElement(Widget, { key: 'second', label: 'second', initial: 9 }),
+    ],
+    federation: { instance: () => host(loadRemote) },
+    document,
+  });
+  // Native lazy SSR sends inert JSON segments plus same-document completion
+  // markers. Parse only completed segments; document.write does not run them.
+  const { markup, segments } = decodeOctaneSSRDocument(await response.text());
+  expect(segments.length).toBeGreaterThan(0);
+  const descriptors = Array.from(
+    markup.matchAll(
+      /<script\b(?=[^>]*\bdata-octane-publisher\b)[^>]*>([\s\S]*?)<\/script>/gu,
+    ),
+    ([, payload]) => JSON.parse(payload),
+  );
+  expect(descriptors).toHaveLength(2);
+  for (const descriptor of descriptors) {
+    expect(descriptor.publisherKey).toBe('remote/Widget');
+    expect(descriptor.documentId).toBe(document.documentId);
+    expect(descriptor.streamBuildId).toBe(document.nativeHydrationBuildId);
+    expect(descriptor.identifierPrefix).toContain('-publisher-');
+  }
+  expect(descriptors[0].ownerKey).not.toBe(descriptors[1].ownerKey);
+  const window = new Window();
+  try {
+    window.document.write(markup);
+    const buttons = [
+      ...window.document.querySelectorAll('button[data-publisher]'),
+    ];
+    expect(buttons.map(button => button.textContent)).toEqual([
+      'first: 3',
+      'second: 9',
+    ]);
+    expect(buttons.map(button => button.id)).toEqual(
+      descriptors.map(descriptor =>
+        expect.stringContaining(descriptor.identifierPrefix),
+      ),
+    );
+    expect(loadRemote).toHaveBeenCalledTimes(1);
+  } finally {
+    await window.happyDOM.close();
+  }
 });
 
 test('concurrent requests using one component retain their own host and asset snapshots', async () => {

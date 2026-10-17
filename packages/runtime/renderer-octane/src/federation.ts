@@ -5,6 +5,7 @@ import {
   lazy,
   type OctaneNode,
   preinit,
+  publisherBoundary,
   Suspense,
   useContext,
 } from 'octane';
@@ -121,7 +122,12 @@ export function federatedComponent<P extends object = Record<string, never>>(
               `Cannot server-render ${id}: the host has no browser assets for this remote`,
             );
           }
-          const component = module.default;
+          // Native publisher ownership admits this exact compiled component's
+          // signal generations. Keep the boundary in the context-scoped lazy
+          // cache so props and compatible hot updates retain its live owner.
+          const component = publisherBoundary(module.default, {
+            publisherKey: id ?? 'ultramodern:browser-loader',
+          });
           const Loaded: ComponentBody<P> = props => {
             // Resource APIs require an active native render. Late styles travel
             // in Octane's resource carrier ahead of the remote's HTML segment.
