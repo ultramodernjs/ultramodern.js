@@ -306,7 +306,24 @@ async function invokeNativeRouteWorker(route, identity, request, env, ctx) {
   const resources =
     nativeRenderer?.renderer === identity.renderer &&
     Object.hasOwn(nativeRenderer.entries, route.entryName)
-      ? nativeRenderer.entries[route.entryName]
+      ? {
+          ...nativeRenderer.entries[route.entryName],
+          ...(Object.hasOwn(nativeRenderer, 'workerFederation')
+            ? { workerFederation: nativeRenderer.workerFederation }
+            : {}),
+          ...(Object.hasOwn(nativeRenderer, 'workerFederationManifestUrl')
+            ? {
+                workerFederationManifestUrl:
+                  nativeRenderer.workerFederationManifestUrl,
+              }
+            : {}),
+          ...(Object.hasOwn(nativeRenderer, 'workerFederationServices')
+            ? {
+                workerFederationServices:
+                  nativeRenderer.workerFederationServices,
+              }
+            : {}),
+        }
       : undefined;
   // Native renderers have no Flight transport. Reject before the bundle loads.
   if (

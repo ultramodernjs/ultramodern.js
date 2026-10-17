@@ -130,6 +130,107 @@ function nativeBundle(
   };
 }
 
+it('passes build-level Worker federation authority and services with the selected document resources', async () => {
+  const renderer = 'octane';
+  const staleManifestUrl = 'https://stale-entry.invalid/mf-manifest.json';
+  const entry = {
+    ...nativeResources(renderer).entries.main,
+    // Build-level routing authority must override a stale per-entry carrier.
+    workerFederationManifestUrl: staleManifestUrl,
+  };
+  const fragment = {
+    expose: './Widget',
+    boundaryId: 'remote-a-widget',
+    paths: { en: '/_mf/widget/en' },
+  };
+  const federationResources = {
+    workerFederation: {
+      renderer: {
+        schema: 'ultramodern.renderer-federation',
+        schemaVersion: 1,
+        profile: {
+          renderer,
+          protocolVersion: 1,
+          compiler: { name: '@octanejs/rspack-plugin', version: '0.2.4' },
+          hydration: { name: 'octane', version: '0.13.8' },
+          router: { name: '@octanejs/tanstack-router', version: '0.2.10' },
+        },
+        runtime: { name: 'octane', version: '0.13.8' },
+        bootstrap: { name: '@modern-js/renderer-octane', version: '3.8.3' },
+        identities: { main: identity(renderer) },
+      },
+      worker: {
+        schema: 'ultramodern.worker-federation',
+        schemaVersion: 1,
+        remote: 'native-worker-fixture',
+        exposes: {
+          './Widget': {
+            entryName: 'main',
+            boundaryId: 'native-widget',
+            paths: { en: '/_mf/native-widget/en' },
+            native: { publisherBuildId: 'client-compilation', runtimeABI: 1 },
+          },
+        },
+      },
+    },
+    workerFederationManifestUrl: 'https://example.com/mf-manifest.json',
+    workerFederationServices: [
+      {
+        remote: 'remote-a',
+        alias: 'remoteA',
+        manifestUrl: 'https://remote-a.example/mf-manifest.json',
+        binding: 'REMOTE_A_WORKER',
+        fragments: [fragment],
+      },
+    ],
+  };
+  const env = { ASSETS: assetBinding(), REMOTE_A_WORKER: { fetch } };
+  let observed: unknown;
+  const worker = emittedWorker(
+    {
+      rendererIdentities: {
+        main: identity(renderer),
+        other: { ...identity(renderer), entryName: 'other' },
+      },
+      nativeRenderer: {
+        ...nativeResources(renderer),
+        ...federationResources,
+        entries: {
+          main: entry,
+          other: {
+            assets: [{ kind: 'script', href: '/static/js/other.js' }],
+            nativeManifest: { compiler: 'other-fixture' },
+            serverConfig: { ssr: false },
+          },
+        },
+      },
+    },
+    {
+      [route.worker]: async () => ({
+        ...nativeBundle(renderer, () => new Response('native document')),
+        dispatchNativeWorkerRequest(
+          request: Request,
+          options: Parameters<typeof dispatchNativeWorkerRequest>[1],
+        ) {
+          observed = options.resources;
+          expect(options.bindings).toBe(env);
+          return dispatchNativeWorkerRequest(request, options);
+        },
+      }),
+    },
+  );
+  const response = await worker.fetch(
+    new Request('https://example.com/'),
+    env,
+    executionContext().context,
+  );
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe('native document');
+  expect(observed).toEqual({ ...entry, ...federationResources });
+  expect(entry).not.toHaveProperty('workerFederationServices');
+  expect(entry.workerFederationManifestUrl).toBe(staleManifestUrl);
+});
+
 describe.each(['solid', 'octane'] as const)(
   '%s native worker dispatch',
   renderer => {
