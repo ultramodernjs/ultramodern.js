@@ -7,6 +7,7 @@ import {
   rendererProfileKey,
 } from '@modern-js/app-tools-extensions/renderer-build-identity';
 import { SERVICE_WORKER_ENVIRONMENT_NAME } from '@modern-js/builder';
+import type { RendererFederationCompatibility } from '@modern-js/federation-runtime/renderer-contract';
 import type {
   BffRuntimeBuildIdentityProvider,
   WithBffRuntimeBuildIdentity,
@@ -25,6 +26,7 @@ import { validateNativeClientAssetManifest } from '@modern-js/renderer-core/serv
 import type { Entrypoint } from '@modern-js/types/cli/base';
 import { getArgv, SERVER_BUNDLE_DIRECTORY } from '@modern-js/utils';
 import { isEntryMetadataRead } from './config-read-context';
+import { resolveRendererFederationCompatibility } from './module-federation-renderer-plugin';
 import {
   createRendererBuildManifest,
   RENDERER_DEVELOPMENT_DIRECTORY,
@@ -36,17 +38,33 @@ import {
   NativeDevelopment,
   nativeDevelopmentOutputDirectory,
 } from './native-development';
+import { findNativeFederationConfig } from './native-federation-files';
 import {
   type NativeI18nConfig,
   type NativeI18nEntry,
   resolveNativeI18nEntry,
 } from './native-i18n';
+import { loadNativeFederationConfig } from './native-module-federation';
 import {
   isNativeWorkerBuild,
   nativeWorkerEntrySource,
   nativeWorkerEnvironment,
   writeNativeWorkerResources,
 } from './native-worker';
+import { resolveNativeWorkerContextProfiles } from './native-worker-context-profiles';
+import {
+  createNativeWorkerFederationPlan,
+  type NativeWorkerFederationPlan,
+} from './native-worker-federation';
+import {
+  type NativeWorkerFederationServiceConfig,
+  resolveNativeWorkerFederationConfig,
+} from './native-worker-federation-config';
+import { loadNativeWorkerFederationPolicies } from './native-worker-federation-policy';
+import {
+  NativeWorkerFederationPublicationPlugin,
+  nativeWorkerFederationManifestUrl,
+} from './native-worker-publication';
 import {
   type RendererBuildProfile,
   resolveCandidateRendererProfile,
@@ -70,6 +88,12 @@ export interface NativeEntryGeneration {
   basePath: string;
   /** Present when the application registered the native i18nPlugin(). */
   i18n?: NativeI18nEntry;
+  workerFederation?: {
+    compatibility: RendererFederationCompatibility;
+    services: readonly NativeWorkerFederationServiceConfig[];
+    plan?: NativeWorkerFederationPlan;
+    contextProfiles?: readonly string[];
+  };
   modifyRoutes(routes: FileSystemRouteIR[]): Promise<FileSystemRouteIR[]>;
 }
 
@@ -77,6 +101,7 @@ export interface NativeEntryGeneration {
 export interface NativeEntryGenerator {
   client(context: NativeEntryGeneration): string | Promise<string>;
   server(context: NativeEntryGeneration): string | Promise<string>;
+  worker?(context: NativeEntryGeneration): string | Promise<string>;
 }
 
 export interface NativeInfrastructureOptions {
@@ -178,6 +203,8 @@ export function nativeRendererInfrastructurePlugin(
   let buildIdentities: RendererBuildIdentities | undefined;
   let completedBuildIdentities: RendererBuildIdentities | undefined;
   let development: NativeDevelopment | undefined;
+  let workerFederation: NativeEntryGeneration['workerFederation'];
+  let workerFederationManifestAsset: string | undefined;
   return {
     name: nativeInfrastructurePluginName(renderer),
     post: ['@modern-js/plugin-analyze', '@modern-js/plugin-bff'],
@@ -191,6 +218,16 @@ export function nativeRendererInfrastructurePlugin(
           ? resolveCandidateRendererProfile(renderer)
           : resolveRendererProfile(renderer));
       const { appDirectory, command } = api.getAppContext();
+      api.modifyBundlerChain((chain, { environment }) => {
+        if (environment.name !== 'client') return;
+        chain
+          .plugin('ultramodern-native-worker-publication')
+          .use(NativeWorkerFederationPublicationPlugin, [
+            () => workerFederation?.plan,
+            compilerArtifacts,
+          ]);
+      });
+
       if (
         options.resolveBuildIdentities &&
         (command === 'build' || command === 'deploy')
@@ -336,6 +373,24 @@ export function nativeRendererInfrastructurePlugin(
         serverEntries.clear();
         workerEntries.clear();
         const workerBuild = isNativeWorkerBuild(api.getNormalizedConfig());
+        const federationFile =
+          workerBuild && findNativeFederationConfig(appDirectory);
+        const profileModules =
+          api.getNormalizedConfig().deploy?.worker?.federation?.contextProfiles;
+        if (
+          profileModules !== undefined &&
+          (!federationFile || renderer !== 'octane')
+        )
+          throw new Error(
+            'Native Worker contextProfiles require Octane federation and a Cloudflare Worker build.',
+          );
+        const contextProfiles = federationFile
+          ? await resolveNativeWorkerContextProfiles(
+              profileModules,
+              appDirectory,
+            )
+          : [];
+
         const entryBasePaths = new Map<string, string>();
         for (const entrypoint of entrypoints) {
           const directory =
@@ -351,6 +406,14 @@ export function nativeRendererInfrastructurePlugin(
           );
           await assertSupportedSource?.(entrypoint.entry);
           await assertSupportedSource?.(entrypoint.customServerEntry);
+          if (
+            federationFile &&
+            (entrypoint.customEntry || entrypoint.customServerEntry)
+          )
+            throw new Error(
+              'Native Worker federation requires generated client and server entries to own snapshot hydration and dispatch.',
+            );
+
           const basePaths = [
             ...new Set(
               (serverRoutes ?? [])
@@ -410,6 +473,76 @@ export function nativeRendererInfrastructurePlugin(
               : {}),
           });
         }
+        workerFederation = undefined;
+        workerFederationManifestAsset = undefined;
+        if (federationFile && !buildIdentities && !metadataRead)
+          throw new Error(
+            'Native Worker federation requires finalized renderer build identities.',
+          );
+        if (federationFile && buildIdentities) {
+          if (renderer !== 'octane')
+            throw new Error(
+              `unsupported-renderer-capability: renderer ${renderer} has no native Worker snapshot federation transport`,
+            );
+          const authored = await loadNativeFederationConfig(federationFile);
+          const services =
+            api.getNormalizedConfig().deploy?.worker?.services ?? [];
+          const remoteI18n = await loadNativeWorkerFederationPolicies({
+            appDirectory,
+            services,
+            env: command === 'dev' ? 'development' : 'production',
+          });
+          const prefixes = [...new Set(entryBasePaths.values())];
+          if (prefixes.length !== 1)
+            throw new Error(
+              'Native Worker federation requires one analyzed publication prefix.',
+            );
+          const resolved = resolveNativeWorkerFederationConfig({
+            authored,
+            appDirectory,
+            identities: buildIdentities,
+            services,
+            i18n: options.i18n,
+            basePath: prefixes[0],
+            remoteI18n,
+            contextProfiles,
+          });
+          const compatibility =
+            resolveRendererFederationCompatibility(renderer);
+          workerFederation = {
+            compatibility,
+            services: resolved.services,
+            contextProfiles: resolved.contextProfiles,
+            ...(resolved.publication
+              ? {
+                  plan: createNativeWorkerFederationPlan({
+                    authored,
+                    appDirectory,
+                    identities: buildIdentities,
+                    compatibility,
+                    ...resolved.publication,
+                  }),
+                }
+              : {}),
+          };
+          if (workerFederation.plan) {
+            const manifest =
+              typeof authored.manifest === 'object' &&
+              authored.manifest !== null
+                ? (authored.manifest as Record<string, unknown>)
+                : {};
+            const filename =
+              typeof manifest.fileName === 'string' && manifest.fileName
+                ? manifest.fileName
+                : 'mf-manifest.json';
+            const directory =
+              typeof manifest.filePath === 'string' ? manifest.filePath : '';
+            workerFederationManifestAsset = path.posix.join(
+              directory,
+              filename.endsWith('.json') ? filename : `${filename}.json`,
+            );
+          }
+        }
         for (const entrypoint of entrypoints) {
           const context: NativeEntryGeneration = {
             renderer,
@@ -428,6 +561,7 @@ export function nativeRendererInfrastructurePlugin(
                 }
               : {}),
             rendererIdentity: buildIdentities?.identities[entrypoint.entryName],
+            workerFederation,
             documentSSR: Boolean(
               api.getNormalizedConfig().server?.ssrByEntries?.[
                 entrypoint.entryName
@@ -495,7 +629,11 @@ export function nativeRendererInfrastructurePlugin(
             if (workerEntry)
               await fs.writeFile(
                 workerEntry,
-                nativeWorkerEntrySource('./index.server'),
+                entrypoint.customServerEntry
+                  ? nativeWorkerEntrySource('./index.server')
+                  : generator?.worker
+                    ? await generator.worker(context)
+                    : nativeWorkerEntrySource('./index.server'),
               );
           }
         }
@@ -850,6 +988,21 @@ export function nativeRendererInfrastructurePlugin(
                 'Native Cloudflare SSR requires its emitted worker compilation',
               );
             const workerOutput = worker.compilation.outputOptions.path!;
+            const manifestUrl = workerFederationManifestAsset
+              ? nativeWorkerFederationManifestUrl(
+                  workerFederationManifestAsset,
+                  JSON.parse(
+                    await fs.readFile(
+                      path.join(
+                        client.compilation.outputOptions.path!,
+                        workerFederationManifestAsset,
+                      ),
+                      'utf8',
+                    ),
+                  ),
+                )
+              : undefined;
+
             await writeNativeWorkerResources({
               renderer,
               distDirectory: api.getAppContext().distDirectory,
@@ -858,6 +1011,16 @@ export function nativeRendererInfrastructurePlugin(
               config: api.getNormalizedConfig(),
               identities: buildIdentities.identities,
               compilerArtifacts,
+              clientCompilationHash,
+              ...(workerFederation
+                ? {
+                    workerFederation: {
+                      plan: workerFederation.plan,
+                      services: workerFederation.services,
+                      manifestUrl,
+                    },
+                  }
+                : {}),
               workerEntryFiles: Object.fromEntries(
                 [...workerEntries.keys()].map(entryName => {
                   const chunk = worker.compilation.entrypoints

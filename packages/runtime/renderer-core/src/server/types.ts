@@ -1,6 +1,7 @@
 import type { DocumentAsset } from '../document';
 import type { RendererIdentity } from '../identity';
 import type { RequestPlatform, RequestSession } from '../session';
+import type { WorkerFederationTransport } from '../worker-federation';
 
 /** Native route matching remains with the selected router adapter. */
 export interface NativeServerConfig {
@@ -17,6 +18,8 @@ export interface NativeRequestContext<Bindings extends object = object> {
   readonly nativeManifest?: unknown;
   readonly serverConfig?: NativeServerConfig;
   readonly entry: Readonly<RendererIdentity>;
+  /** Request-owned service transport for native Worker snapshot boundaries. */
+  readonly workerFederation?: WorkerFederationTransport;
 }
 
 export type NativeRequestHandler<Bindings extends object = object> = (

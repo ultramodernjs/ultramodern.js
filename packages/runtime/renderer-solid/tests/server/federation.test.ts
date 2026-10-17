@@ -8,7 +8,10 @@ import {
   createFederationScope,
   provideFederation,
 } from '../../src/federation-context';
-import { withFederatedAssets } from '../../src/federation-ssr';
+import {
+  captureFederatedServerAssets,
+  withFederatedAssets,
+} from '../../src/federation-ssr';
 import { renderDocumentApplication } from '../../src/server';
 
 function createHost(
@@ -134,6 +137,77 @@ describe('federated Solid components on the server', () => {
     expect(host.instance.loadRemote).toHaveBeenCalledTimes(1);
     expect(html).toContain('data-fallback');
     expect(html).not.toContain('federation-hydration');
+  });
+
+  test('serializes the assets captured with its module after the native snapshot advances', async () => {
+    const host = createHost(
+      async () => ({ default: () => ssr('<b>captured remote</b>') }),
+      'host',
+      'http://admitted.test/',
+    );
+    Object.defineProperty(
+      host.instance,
+      Symbol.for('ultramodern.federation.load-with-capture'),
+      {
+        value: async (id: string, capture: (module: unknown) => unknown) => {
+          const module = await host.instance.loadRemote(id);
+          const captured = capture(module);
+          host.instance.snapshotHandler.getGlobalRemoteInfo = createHost(
+            async () => null,
+            'host',
+            'http://replacement.test/',
+          ).instance.snapshotHandler.getGlobalRemoteInfo;
+          return { module, captured };
+        },
+      },
+    );
+    const Widget = federatedComponent('remote/Widget', { fallback });
+    const html = await renderResponse(
+      () => createComponent(Widget, {}),
+      host.binding,
+    );
+    expect(html).toContain('<b>captured remote</b>');
+    expect(html).toContain('http://admitted.test/static/css/widget.css');
+    expect(html).toContain('http://admitted.test/static/js/widget.js');
+    expect(html).not.toContain('http://replacement.test/');
+  });
+
+  test('retains separate asset captures for repeated loads in one response and isolates other responses', () => {
+    const host = createHost(async () => null);
+    const scope = createFederationScope(host.binding)!;
+    const otherScope = createFederationScope(host.binding)!;
+    const firstAssets = { js: ['first.js'], css: ['first.css'] };
+    const secondAssets = { js: ['second.js'], css: ['second.css'] };
+    const first = captureFederatedServerAssets(
+      scope,
+      'remote/Widget',
+      firstAssets,
+    )!;
+    const second = captureFederatedServerAssets(
+      scope,
+      'remote/Widget',
+      secondAssets,
+    )!;
+    const manifest = withFederatedAssets<{
+      _base: string;
+      resolve?: (key: string) => unknown;
+    }>({ _base: '/' }, scope);
+    const otherManifest = withFederatedAssets<{
+      _base: string;
+      resolve?: (key: string) => unknown;
+    }>({ _base: '/' }, otherScope);
+    const hydration =
+      '/static/js/federation-hydration.test.js?id=remote%2FWidget&host=host';
+    expect(first).not.toBe(second);
+    expect(manifest.resolve!(first)).toEqual({
+      js: [hydration, 'first.js'],
+      css: ['first.css'],
+    });
+    expect(manifest.resolve!(second)).toEqual({
+      js: [hydration, 'second.js'],
+      css: ['second.css'],
+    });
+    expect(otherManifest.resolve!(first)).toBeNull();
   });
 
   test('load the remote again on a later request after a failure', async () => {

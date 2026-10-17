@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { mime } from '@modern-js/utils';
 import type { Rspack } from '@rsbuild/core';
@@ -5,6 +6,23 @@ import type { Rspack } from '@rsbuild/core';
 export interface NativeDevelopmentAsset {
   readonly bytes: Buffer;
   readonly contentType: string;
+}
+
+export const NATIVE_FEDERATION_DEV_REVISION_HEADER =
+  'x-ultramodern-mf-revision';
+
+/** Stable across identical compiles; changes with any admitted container asset. */
+export function nativeFederationDevRevision(
+  assets: ReadonlyMap<string, NativeDevelopmentAsset>,
+): string {
+  const hash = createHash('sha256');
+  for (const [url, asset] of [...assets].sort(([left], [right]) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  )) {
+    hash.update(`${Buffer.byteLength(url)}:`).update(url);
+    hash.update(`${asset.bytes.length}:`).update(asset.bytes);
+  }
+  return hash.digest('hex');
 }
 
 /** The native MF owner marks its container, rather than exposing server output. */

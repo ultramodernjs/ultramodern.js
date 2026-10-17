@@ -1074,3 +1074,93 @@ export async function assertHydrationIdentityAndBootstrap() {
     element.remove();
   }
 }
+
+export async function assertWorkerTransportDocumentLifetime() {
+  const element = container();
+  const signals: AbortSignal[] = [];
+  const disposals: number[] = [];
+  const workerFederation = (signal: AbortSignal) => {
+    const document = signals.length;
+    signals.push(signal);
+    disposals.push(0);
+    return {
+      locale: 'en',
+      signal,
+      transport: {
+        admit: async () => {
+          throw new Error('No remote expected');
+        },
+        request: async () => {
+          throw new Error('No remote expected');
+        },
+        dispose: () => {
+          disposals[document] = disposals[document]! + 1;
+        },
+      },
+    };
+  };
+  const options = {
+    container: element,
+    identity,
+    nativeHydrationBuildId,
+    documentId: 'worker-document-lifetime',
+    workerFederation,
+    load: async () => ({
+      default: ClientApplication,
+      props: { label: 'Worker owner' },
+    }),
+  };
+  let first: OctaneApplicationHandle | undefined;
+  let second: OctaneApplicationHandle | undefined;
+  try {
+    first = await mountOctaneApplication(options);
+    assert.equal(signals.length, 1);
+    assert.equal(signals[0]!.aborted, false);
+    first.dispose();
+    first.dispose();
+    assert.equal(signals[0]!.aborted, true);
+    assert.deepEqual(disposals, [1]);
+    second = await mountOctaneApplication(options);
+    assert.equal(signals.length, 2);
+    assert.notEqual(signals[0], signals[1]);
+    assert.equal(signals[1]!.aborted, false);
+    second.dispose();
+    assert.deepEqual(disposals, [1, 1]);
+  } finally {
+    first?.dispose();
+    second?.dispose();
+    element.remove();
+  }
+}
+
+export async function assertWorkerFactoryFailureReleasesOwnership() {
+  const element = container();
+  const reason = new Error('Worker factory failed');
+  const options = {
+    container: element,
+    identity,
+    nativeHydrationBuildId,
+    documentId: 'worker-factory-failure',
+    load: async () => ({
+      default: ClientApplication,
+      props: { label: 'Recovered' },
+    }),
+  };
+  let replacement: OctaneApplicationHandle | undefined;
+  try {
+    await assert.rejects(
+      mountOctaneApplication({
+        ...options,
+        workerFederation: () => {
+          throw reason;
+        },
+      }),
+      error => error === reason,
+    );
+    replacement = await mountOctaneApplication(options);
+    assert.ok(element.querySelector('section'));
+  } finally {
+    replacement?.dispose();
+    element.remove();
+  }
+}

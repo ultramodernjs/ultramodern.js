@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -965,6 +966,73 @@ describe('native Module Federation plugin', () => {
       expect(
         fs.existsSync(path.join(root, 'node_modules/.modern-js/federation')),
       ).toBe(false);
+    },
+  );
+
+  it.each(nativeRenderers)(
+    'registers %s graph refresh only in the Node development runtime',
+    async renderer => {
+      const root = app({
+        'package.json': '{}',
+        'module-federation.config.mjs': `export default { name: 'host', remotes: { remote: '${manifestRemote}' } };`,
+      });
+      installPackages(root, true, renderer);
+      const refresh = createRequire(import.meta.url).resolve(
+        '@modern-js/federation-runtime/native-dev-refresh-runtime-plugin',
+      );
+      for (const command of ['dev', 'build']) {
+        const hooks = setup(
+          renderer,
+          root,
+          { server: { ssr: true } },
+          { command },
+        );
+        for (const name of ['client', 'server']) {
+          const configured = chain();
+          await hooks.modifyBundlerChain(configured.chain, {
+            environment: { name },
+          });
+          const [, , [options]] = configured.uses.find(
+            ([key]) => key === 'plugin-module-federation',
+          ) as [string, unknown, [any]];
+          const registration = options.runtimePlugins.find(
+            (plugin: unknown) => Array.isArray(plugin) && plugin[0] === refresh,
+          );
+          if (command === 'dev' && name === 'server')
+            expect(registration).toEqual([
+              refresh,
+              {
+                remotes: [
+                  {
+                    name: 'remote',
+                    alias: 'remote',
+                    entry: 'https://remote.example/mf-manifest.json',
+                  },
+                ],
+                revisionHeader: 'x-ultramodern-mf-revision',
+                requestTimeout: 3000,
+                shared: expect.arrayContaining(
+                  renderer === 'octane'
+                    ? [
+                        'octane/server',
+                        'octane/internal/server',
+                        'octane/signals/server',
+                        '@modern-js/renderer-octane/',
+                        '@modern-js/renderer-core/',
+                      ]
+                    : [
+                        'solid-js',
+                        '@solidjs/web',
+                        '@solidjs/signals',
+                        '@modern-js/renderer-solid/federation',
+                        '@modern-js/renderer-core/',
+                      ],
+                ),
+              },
+            ]);
+          else expect(registration).toBeUndefined();
+        }
+      }
     },
   );
 

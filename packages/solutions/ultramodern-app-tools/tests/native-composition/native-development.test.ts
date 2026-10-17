@@ -29,7 +29,10 @@ import {
   nativeDevelopmentOutputDirectory,
 } from '../../src/native-composition/native-development';
 import { createNativeEntryGenerator } from '../../src/native-composition/native-entry';
-import { NativeFederationDevAssetsPlugin } from '../../src/native-composition/native-federation-dev-assets';
+import {
+  NATIVE_FEDERATION_DEV_REVISION_HEADER,
+  NativeFederationDevAssetsPlugin,
+} from '../../src/native-composition/native-federation-dev-assets';
 import type { NativeDevelopmentSnapshot } from '../../src/native-composition/native-server-plugin';
 import {
   type RendererBuildProfile,
@@ -443,12 +446,17 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
           config.target = 'async-node';
           config.output ??= {};
           config.output.publicPath = `http://${api.context.devServer!.hostname}:${api.context.devServer!.port}/bundles/`;
+        }
+        if (federation) {
           config.plugins ??= [];
           config.plugins.push(
             new rspack.container.ModuleFederationPlugin({
               name: 'test_remote',
               filename: 'remoteEntry.js',
-              library: { type: 'commonjs-module', name: 'test_remote' },
+              library: {
+                type: environment.name === 'server' ? 'commonjs-module' : 'var',
+                name: 'test_remote',
+              },
               exposes: { './Widget': widget },
               shared: {
                 'fixture-shared': {
@@ -458,8 +466,11 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
                 },
               },
             }),
-            new NativeFederationDevAssetsPlugin('test_remote'),
           );
+          if (environment.name === 'server')
+            config.plugins.push(
+              new NativeFederationDevAssetsPlugin('test_remote'),
+            );
           config.module ??= {};
           config.module.rules ??= [];
           config.module.rules.push({
@@ -511,6 +522,14 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
                     new rspack.sources.RawSource(JSON.stringify(manifest)),
                     { immutable: false },
                   );
+                  if (federation)
+                    current.emitAsset(
+                      'mf-manifest.json',
+                      new rspack.sources.RawSource(
+                        JSON.stringify({ compilationHash: current.hash }),
+                      ),
+                      { immutable: false },
+                    );
                 },
               ),
             );
@@ -554,7 +573,16 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
       environments: {
         client: {
           source: { entry: { main: clientEntry } },
-          output: { target: 'web', assetPrefix: '/replacement-assets/' },
+          output: {
+            target: 'web',
+            assetPrefix: '/replacement-assets/',
+            distPath: {
+              root: nativeDevelopmentOutputDirectory(
+                path.join(root, 'dist'),
+                'client',
+              ),
+            },
+          },
           tools: { htmlPlugin: false },
         },
         server: {
@@ -562,6 +590,12 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
           output: {
             target: 'node',
             module,
+            distPath: {
+              root: nativeDevelopmentOutputDirectory(
+                path.join(root, 'dist'),
+                'server',
+              ),
+            },
             filename: { js: module ? '[name].mjs' : '[name].js' },
           },
           tools: { htmlPlugin: false, rspack: { externals: [] } },
@@ -579,6 +613,12 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
     removeFederatedImport() {
       fs.writeFileSync(widget, 'export const marker = "second-remote";\n');
       app.edit('second');
+    },
+    editRemoteLazy(marker: string) {
+      fs.writeFileSync(
+        path.join(root, 'remote-lazy.js'),
+        `export default ${JSON.stringify(marker)};\n`,
+      );
     },
     beforeNextAggregateCompile(callback: () => Promise<void>) {
       beforeAggregateCompile = callback;
@@ -661,10 +701,56 @@ describe('native development asset headers', () => {
 });
 
 describe('native development', () => {
+  it('refreshes stable browser federation files and publishes the completed server graph revision', async () => {
+    const app = await replacementApp(false, true);
+    await until(app, 'first:replacement-compiler');
+    const entryUrl = new URL('/bundles/remoteEntry.js', app.address);
+    const manifestUrl = new URL(
+      '/replacement-assets/mf-manifest.json',
+      app.address,
+    );
+    const browserEntryUrl = new URL(
+      '/replacement-assets/remoteEntry.js',
+      app.address,
+    );
+    const first = await fetch(entryUrl, { method: 'HEAD' });
+    const revision = first.headers.get(NATIVE_FEDERATION_DEV_REVISION_HEADER);
+    expect(revision).toMatch(/^[a-f0-9]{64}$/u);
+    const firstManifest = await (await fetch(manifestUrl)).text();
+    const firstBrowserEntry = await (await fetch(browserEntryUrl)).text();
+    const completed = Promise.withResolvers<void>();
+    app.afterNextAggregateCompile(() => completed.resolve());
+    app.editRemoteLazy('REMOTE_LAZY_SECOND');
+    await completed.promise;
+    const latest = await fetch(entryUrl, { method: 'HEAD' });
+    const latestRevision = latest.headers.get(
+      NATIVE_FEDERATION_DEV_REVISION_HEADER,
+    );
+    expect(latestRevision).toMatch(/^[a-f0-9]{64}$/u);
+    expect(latestRevision).not.toBe(revision);
+    expect(
+      (await fetch(entryUrl)).headers.get(
+        NATIVE_FEDERATION_DEV_REVISION_HEADER,
+      ),
+    ).toBe(latestRevision);
+    expect(await (await fetch(manifestUrl)).text()).not.toBe(firstManifest);
+    expect(await (await fetch(browserEntryUrl)).text()).not.toBe(
+      firstBrowserEntry,
+    );
+  }, 300_000);
+
   it('discards an old aggregate done callback after a sibling starts another compile', async () => {
     const app = await replacementApp(false, true);
     await until(app, 'first:replacement-compiler');
+    const entryUrl = new URL('/bundles/remoteEntry.js', app.address);
+    const firstEntry = await fetch(entryUrl);
+    const firstRevision = firstEntry.headers.get(
+      NATIVE_FEDERATION_DEV_REVISION_HEADER,
+    );
+    const firstBytes = Buffer.from(await firstEntry.arrayBuffer());
     const aggregateReached = Promise.withResolvers<void>();
+    const publicationReached = Promise.withResolvers<void>();
+    const resumePublication = Promise.withResolvers<void>();
     const abort = new AbortController();
     let resolved = false;
     let snapshot: Promise<unknown> | undefined;
@@ -678,14 +764,50 @@ describe('native development', () => {
           });
       });
       app.afterNextAggregateCompile(() => aggregateReached.resolve());
+      app.editRemoteLazy('REMOTE_LAZY_CONCURRENT');
       app.edit('stale');
       await aggregateReached.promise;
       expect(resolved).toBe(false);
+      app.beforeNextAggregateCompile(async () => {
+        publicationReached.resolve();
+        await resumePublication.promise;
+      });
+      const entryRequest = fetch(entryUrl);
       app.invalidateClient();
+      await publicationReached.promise;
+      // The web compilation is finished while native publication is held.
+      // Concurrent requests still see the last completed graph and revision.
+      const retained = await entryRequest;
+      expect(retained.headers.get(NATIVE_FEDERATION_DEV_REVISION_HEADER)).toBe(
+        firstRevision,
+      );
+      expect(
+        Buffer.compare(Buffer.from(await retained.arrayBuffer()), firstBytes),
+      ).toBe(0);
+      expect(resolved).toBe(false);
+      resumePublication.resolve();
       await until(app, 'stale:replacement-compiler');
       await snapshot;
       expect(resolved).toBe(true);
+      const latest = await fetch(entryUrl);
+      expect(
+        latest.headers.get(NATIVE_FEDERATION_DEV_REVISION_HEADER),
+      ).not.toBe(firstRevision);
+      const latestBytes = Buffer.from(await latest.arrayBuffer());
+      expect(
+        Buffer.compare(
+          latestBytes,
+          fs.readFileSync(
+            path.join(
+              app.serverCompilation().outputOptions.path!,
+              'remoteEntry.js',
+            ),
+          ),
+        ),
+      ).toBe(0);
+      expect(Buffer.compare(latestBytes, firstBytes)).not.toBe(0);
     } finally {
+      resumePublication.resolve();
       abort.abort();
       await snapshot?.catch(() => {});
     }
@@ -747,6 +869,9 @@ describe('native development', () => {
       method: 'HEAD',
     });
     expect(head.status).toBe(200);
+    expect(head.headers.get(NATIVE_FEDERATION_DEV_REVISION_HEADER)).toMatch(
+      /^[a-f0-9]{64}$/u,
+    );
     expect(Number(head.headers.get('content-length'))).toBeGreaterThan(0);
     expect(await head.text()).toBe('');
     // Answered before Rsbuild's middlewares, the assets still carry its CORS
@@ -845,6 +970,9 @@ describe('native development', () => {
       // Pages opened before the edit still load their own scripts.
       const retained = await fetch(new URL(script.href, app.address));
       expect(retained.status).toBe(200);
+      expect(
+        retained.headers.get(NATIVE_FEDERATION_DEV_REVISION_HEADER),
+      ).toBeNull();
       expect(Buffer.from(await retained.arrayBuffer())).toEqual(firstScript);
 
       // Saving during a compile just leads to another compile. The failure

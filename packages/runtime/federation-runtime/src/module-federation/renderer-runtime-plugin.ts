@@ -155,6 +155,11 @@ export function createRendererFederationRuntimePlugin(
   const observedEntries = new WeakMap<object, string>();
   const acceptedEntries = new Set<string>();
   const versions = rendererShareVersions(expected);
+  const sharedVersion = (name: string): string | undefined =>
+    versions.get(name) ??
+    (expected.profile.renderer === 'react'
+      ? undefined
+      : [...versions].find(([owner]) => name.startsWith(`${owner}/`))?.[1]);
   return {
     name: 'ultramodern-renderer-federation-contract',
     beforeRegisterRemote(args: { remote: unknown }) {
@@ -332,7 +337,7 @@ export function createRendererFederationRuntimePlugin(
       return args;
     },
     resolveShare(args: ResolveShareArgs) {
-      const version = versions.get(args.pkgName);
+      const version = sharedVersion(args.pkgName);
       if (version === undefined) return args;
       const resolve = args.resolver;
       return {
@@ -378,7 +383,7 @@ export function createRendererFederationRuntimePlugin(
       // Native loading fills lib after resolveShare. Observe that completed
       // factory identity here; rejection remains in the pre-factory resolver
       // because native afterLoadShare deliberately swallows thrown errors.
-      if (versions.has(args.pkgName) && args.selectedShared) {
+      if (sharedVersion(args.pkgName) !== undefined && args.selectedShared) {
         const shared =
           record(args.selectedShared.treeShaking) &&
           args.selectedShared.treeShaking.loaded

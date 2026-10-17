@@ -24,6 +24,11 @@ import {
   FederationApplication,
   type OctaneFederationScope,
 } from './federation-context';
+import {
+  type OctaneWorkerFederationFactory,
+  type OctaneWorkerFederationScope,
+  WorkerFederationApplication,
+} from './worker-federation-context';
 
 export type { OctaneDocumentBootstrap } from './bootstrap';
 export { readOctaneDocumentBootstrap } from './bootstrap';
@@ -50,9 +55,14 @@ export interface OctaneApplicationOptions {
   readonly signal?: AbortSignal;
   /** Hydration installs the native signal bridge before invoking this importer. */
   readonly load: () => Promise<OctaneApplicationModule>;
-  readonly options?: Omit<RootOptions, 'signalOwner'>;
+  readonly options?: Omit<RootOptions, 'signalOwner' | 'externalSnapshots'>;
   /** This browser compilation's native Module Federation runtime. */
   readonly federation?: NativeFederationBinding;
+  readonly workerFederation?:
+    | OctaneWorkerFederationScope
+    | OctaneWorkerFederationFactory;
+  /** Trusted document bootstrap identity, also present for a CSR document. */
+  readonly documentId?: string;
 }
 
 export interface OctaneHydrationOptions extends OctaneApplicationOptions {
@@ -296,6 +306,8 @@ function createHandle(input: {
   signal?: AbortSignal;
   onCleanupError?: (error: unknown) => void;
   federation?: OctaneFederationScope;
+  workerFederation?: OctaneWorkerFederationScope;
+  retireWorkerFederation?: () => void;
 }): OctaneApplicationHandle {
   let releaseModule = input.releaseModule;
   let disposed = false;
@@ -310,12 +322,18 @@ function createHandle(input: {
       const nextRelease = claimModuleResources(next);
       releaseModule = nextRelease;
       try {
-        input.federation
-          ? input.root.render(FederationApplication, {
-              scope: input.federation,
+        input.workerFederation
+          ? input.root.render(WorkerFederationApplication, {
+              scope: input.workerFederation,
+              federation: input.federation,
               application: next,
             })
-          : input.root.render(next.default, next.props);
+          : input.federation
+            ? input.root.render(FederationApplication, {
+                scope: input.federation,
+                application: next,
+              })
+            : input.root.render(next.default, next.props);
         previousRelease();
       } catch (error) {
         cleanupResources([previousRelease, () => handle.dispose()]);
@@ -327,6 +345,7 @@ function createHandle(input: {
       disposed = true;
       input.signal?.removeEventListener('abort', onAbort);
       cleanupResources([
+        () => input.retireWorkerFederation?.(),
         () => input.root.unmount(),
         () => releaseModule(),
         () => input.bridge?.dispose(),
@@ -356,6 +375,21 @@ async function startApplication(
   hydration?: { document: Document; documentId: string },
 ): Promise<OctaneApplicationHandle> {
   const errors = observeRootErrors(input.options);
+  const workerController = input.workerFederation
+    ? new AbortController()
+    : undefined;
+  let workerFederation: OctaneWorkerFederationScope | undefined;
+  const retireWorkerFederation = () =>
+    cleanupResources([
+      () =>
+        workerController?.abort(
+          new DOMException(
+            'The Worker federation document was disposed',
+            'AbortError',
+          ),
+        ),
+      () => workerFederation?.transport.dispose(),
+    ]);
   let bridge: StreamedSignalHydration | undefined;
   let root: Root | undefined;
   let releaseModule: (() => void) | undefined;
@@ -369,6 +403,7 @@ async function startApplication(
     if (cleaned) return;
     cleaned = true;
     cleanupResources([
+      retireWorkerFederation,
       () => root?.unmount(),
       () => releaseModule?.(),
       () => bridge?.dispose(),
@@ -376,6 +411,24 @@ async function startApplication(
     ]);
   };
   try {
+    if (input.workerFederation && workerController) {
+      const signal = AbortSignal.any([
+        workerController.signal,
+        ...(input.signal ? [input.signal] : []),
+      ]);
+      const scope =
+        typeof input.workerFederation === 'function'
+          ? input.workerFederation(signal)
+          : input.workerFederation;
+      workerFederation = {
+        ...scope,
+        signal: scope.signal ? AbortSignal.any([signal, scope.signal]) : signal,
+      };
+    }
+    if (workerFederation && !hydration && !input.documentId)
+      throw new Error(
+        'Worker federation requires the trusted document identity before application loading',
+      );
     // Capture the selected host before asynchronous application imports.
     const federation = input.federation
       ? createFederationScope(input.federation, false)
@@ -402,15 +455,41 @@ async function startApplication(
     if (bridge) {
       root = hydrateRoot(
         input.container,
-        federation ? FederationApplication : application.default,
-        federation ? { scope: federation, application } : application.props,
-        { ...errors.options, signalOwner: bridge.signalOwner },
+        workerFederation
+          ? WorkerFederationApplication
+          : federation
+            ? FederationApplication
+            : application.default,
+        workerFederation
+          ? { scope: workerFederation, federation, application }
+          : federation
+            ? { scope: federation, application }
+            : application.props,
+        {
+          ...errors.options,
+          signalOwner: bridge.signalOwner,
+          externalSnapshots: { documentId: hydration!.documentId },
+        },
       );
     } else {
-      root = createRoot(input.container, errors.options);
-      federation
-        ? root.render(FederationApplication, { scope: federation, application })
-        : root.render(application.default, application.props);
+      root = createRoot(input.container, {
+        ...errors.options,
+        ...(input.documentId
+          ? { externalSnapshots: { documentId: input.documentId } }
+          : {}),
+      });
+      workerFederation
+        ? root.render(WorkerFederationApplication, {
+            scope: workerFederation,
+            federation,
+            application,
+          })
+        : federation
+          ? root.render(FederationApplication, {
+              scope: federation,
+              application,
+            })
+          : root.render(application.default, application.props);
     }
     errors.assertInitialRender();
     input.signal?.throwIfAborted();
@@ -421,6 +500,8 @@ async function startApplication(
       release,
       bridge,
       federation,
+      workerFederation,
+      retireWorkerFederation,
       ...(input.signal === undefined ? {} : { signal: input.signal }),
       onCleanupError: error => reportCleanupError(input, error),
     });

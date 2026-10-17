@@ -4,18 +4,26 @@ import { createRequire, isBuiltin, registerHooks } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { RendererRouterBindings } from '@modern-js/backend-federation-contracts';
+import { createCli } from '@modern-js/plugin/cli';
 import type { Renderer } from '@modern-js/renderer-core';
 import { loadEnv } from '@rsbuild/core';
 import {
   loadUltramodernConfigFile,
   resolveUltramodernEntryIdentities,
 } from './config';
+import { withEntryMetadataRead } from './config-read-context';
+import { findNativeI18nConfig, type NativeI18nConfig } from './native-i18n';
+import { resolveEntrypointRouterBindings } from './renderer-router-resolution';
+import type { UltramodernConfigLoader } from './types';
 
 export interface UltramodernConfigMetadata {
   renderer: Renderer;
   entries: readonly { entryName: string; isMainEntry: boolean }[];
   primaryEntryName: string;
   routerBindings: RendererRouterBindings;
+  /** Present only when the owning analyzer completed all server route hooks. */
+  entryBasePaths?: Readonly<Record<string, string>>;
+  i18n?: NativeI18nConfig;
 }
 
 export interface LoadUltramodernConfigMetadataOptions {
@@ -23,6 +31,8 @@ export interface LoadUltramodernConfigMetadataOptions {
   configFile?: string;
   env: string;
   command: string;
+  /** Run the real public preparation lifecycle in the isolated metadata child. */
+  analyzeServerRoutes?: boolean;
   /** Authored files under this root may use the fallbacks; default: the app. */
   sourceRoot?: string;
   /**
@@ -144,19 +154,102 @@ export async function readUltramodernConfigMetadata(
       appDirectory,
       configFile: options.configFile,
       env: options.env,
-      command: options.command,
+      command: options.analyzeServerRoutes ? 'metadata' : options.command,
     });
+    const installedAppDirectory =
+      options.stagedWorkspace &&
+      (appDirectory === path.resolve(options.stagedWorkspace.root) ||
+        inside(path.resolve(options.stagedWorkspace.root), appDirectory))
+        ? path.resolve(
+            options.stagedWorkspace.originalRoot,
+            path.relative(options.stagedWorkspace.root, appDirectory),
+          )
+        : appDirectory;
+    if (options.analyzeServerRoutes) {
+      // The native analyzer selects build/serve branches from MODERN_ARGV as
+      // well as context.command. Metadata must never inherit a caller's build.
+      const previousArgv = process.env.MODERN_ARGV;
+      process.env.MODERN_ARGV = 'node modern metadata';
+      const cli = createCli<UltramodernConfigLoader>();
+      let cleanup: (() => Promise<unknown>) | undefined;
+      try {
+        return await withEntryMetadataRead(async () => {
+          const { appContext } = await cli.init({
+            cwd: appDirectory,
+            configFile: false,
+            config: loaded.config,
+            command: 'metadata',
+            internalPlugins: [
+              {
+                name: '@modern-js/ultramodern-route-metadata-context',
+                setup(api) {
+                  api.updateAppContext({ configFile: loaded.configFile });
+                  cleanup = () => api.getHooks().onBeforeExit.call();
+                },
+              },
+            ],
+          });
+          const context = appContext.pluginAPI!.getAppContext();
+          const entrypoints = context.entrypoints ?? [];
+          if (!entrypoints.length)
+            throw new Error(
+              'UltraModern analyzed configuration has no application entries',
+            );
+          const entryBasePaths: Record<string, string> = {};
+          for (const entry of entrypoints) {
+            const prefixes = [
+              ...new Set(
+                (context.serverRoutes ?? [])
+                  .filter(
+                    route =>
+                      route.entryName === entry.entryName && !route.isApi,
+                  )
+                  .map(route => route.urlPath),
+              ),
+            ];
+            if (prefixes.length !== 1 || typeof prefixes[0] !== 'string')
+              throw new Error(
+                `Native Worker federation entry ${entry.entryName} requires exactly one analyzed public route prefix.`,
+              );
+            entryBasePaths[entry.entryName] = prefixes[0];
+          }
+          const entries = entrypoints.map(({ entryName, isMainEntry }) => ({
+            entryName,
+            isMainEntry,
+          }));
+          const primary =
+            entries.find(entry => entry.isMainEntry) ?? entries[0];
+          const renderer = loaded.config.renderer!;
+          const routerBindings = await resolveEntrypointRouterBindings(
+            renderer,
+            entrypoints,
+            context.plugins.map(plugin => plugin.name),
+            undefined,
+            installedAppDirectory,
+          );
+          const i18n = findNativeI18nConfig(loaded.config.plugins ?? []);
+          return {
+            renderer,
+            entries,
+            primaryEntryName: primary.entryName,
+            routerBindings,
+            entryBasePaths,
+            ...(i18n ? { i18n } : {}),
+          };
+        });
+      } finally {
+        try {
+          await cleanup?.();
+        } finally {
+          cli.dispose();
+          if (previousArgv === undefined) delete process.env.MODERN_ARGV;
+          else process.env.MODERN_ARGV = previousArgv;
+        }
+      }
+    }
     const resolution = await resolveUltramodernEntryIdentities({
       appDirectory,
-      installedAppDirectory:
-        options.stagedWorkspace &&
-        (appDirectory === path.resolve(options.stagedWorkspace.root) ||
-          inside(path.resolve(options.stagedWorkspace.root), appDirectory))
-          ? path.resolve(
-              options.stagedWorkspace.originalRoot,
-              path.relative(options.stagedWorkspace.root, appDirectory),
-            )
-          : appDirectory,
+      installedAppDirectory,
       config: loaded.config,
       command: options.command,
       configFile: loaded.configFile,
@@ -203,7 +296,13 @@ export function loadUltramodernConfigMetadata(
     const child = fork(workerFile(), [], {
       cwd: appDirectory,
       execArgv: [],
-      env: { ...process.env, NODE_ENV: options.env },
+      env: {
+        ...process.env,
+        NODE_ENV: options.env,
+        ...(options.analyzeServerRoutes
+          ? { MODERN_ARGV: 'node modern metadata' }
+          : {}),
+      },
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     });
     let output = '';

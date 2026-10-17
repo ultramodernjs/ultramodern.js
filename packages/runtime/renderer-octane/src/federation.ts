@@ -1,7 +1,4 @@
-import {
-  loadFederatedModule,
-  remoteBrowserAssets,
-} from '@modern-js/renderer-core/federation';
+import { loadFederatedModule } from '@modern-js/renderer-core/federation';
 import {
   type ComponentBody,
   createElement,
@@ -103,11 +100,13 @@ export function federatedComponent<P extends object = Record<string, never>>(
               'A federatedComponent loader renders in the browser only; use a remote id to server-render it',
             );
           }
-          const module = await withTimeout(
+          const { module, assets } = await withTimeout(
             Promise.resolve().then(() =>
               id
                 ? loadFederatedModule<FederatedModule<P>>(context.instance, id)
-                : (remote as () => Promise<FederatedModule<P>>)(),
+                : (remote as () => Promise<FederatedModule<P>>)().then(
+                    module => ({ module, assets: undefined }),
+                  ),
             ),
             options.timeout ?? (context.server ? 3000 : undefined),
             id ?? 'loader',
@@ -117,10 +116,6 @@ export function federatedComponent<P extends object = Record<string, never>>(
               'A federated Octane module must default-export a native component',
             );
           }
-          const assets =
-            id && context.instance
-              ? remoteBrowserAssets(context.instance, id)
-              : undefined;
           if (context.server && !assets) {
             throw new Error(
               `Cannot server-render ${id}: the host has no browser assets for this remote`,

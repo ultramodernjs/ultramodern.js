@@ -1,5 +1,9 @@
 import { collectDocumentAssets, type DocumentAsset } from '../document';
 import { assertRendererIdentity, type RendererIdentity } from '../identity';
+import type {
+  WorkerFederationPublication,
+  WorkerFederationTransport,
+} from '../worker-federation';
 import { dispatchNativeRequest, rejectNativeRscRequest } from './dispatch';
 import type {
   NativeExecutionContext,
@@ -17,6 +21,22 @@ export interface NativeWorkerEntryResources {
   /** Present only when the entry admits a CSR fallback request. */
   readonly csrFallbackHeader?: string;
   readonly nonce?: string;
+  readonly workerFederation?: {
+    readonly renderer: unknown;
+    readonly worker: WorkerFederationPublication;
+  };
+  readonly workerFederationManifestUrl?: string;
+  readonly workerFederationServices?: readonly {
+    readonly remote: string;
+    readonly alias?: string;
+    readonly manifestUrl: string;
+    readonly binding: string;
+    readonly fragments: readonly {
+      readonly expose: string;
+      readonly boundaryId: string;
+      readonly paths: Readonly<Record<string, string>>;
+    }[];
+  }[];
 }
 
 export interface NativeWorkerDispatchOptions<Bindings extends object> {
@@ -27,6 +47,8 @@ export interface NativeWorkerDispatchOptions<Bindings extends object> {
   /** The module worker `env`, forwarded unchanged as the platform binding. */
   readonly bindings: Bindings | undefined;
   readonly executionContext?: NativeExecutionContext;
+  /** Constructed by this compiled renderer entry for this document only. */
+  readonly workerFederation?: WorkerFederationTransport;
 }
 
 function workerManifest<Bindings extends object>(
@@ -89,6 +111,7 @@ export function dispatchNativeWorkerRequest<Bindings extends object>(
       bindings,
       serverConfig: { ...resources.serverConfig, forceCSR },
       nonce: resources.nonce,
+      workerFederation: options.workerFederation,
     },
   });
 }

@@ -203,9 +203,9 @@ describe('native filesystem route source emission', () => {
       },
     );
     const sources: Record<string, unknown> = {
-      '/app/proto.tsx': { __esModule: true, default: 'ProtoView' },
-      '/app/proto.data.ts': { __esModule: true, loader: 'protoLoader' },
-      '/app/constructor.tsx': { __esModule: true, default: 'ConstructorView' },
+      '/app/proto': { __esModule: true, default: 'ProtoView' },
+      '/app/proto.data': { __esModule: true, loader: 'protoLoader' },
+      '/app/constructor': { __esModule: true, default: 'ConstructorView' },
     };
     const application: Record<string, any> = {};
     new Function('require', 'exports', code)((name: string) => {
@@ -219,14 +219,62 @@ describe('native filesystem route source emission', () => {
     expect(Object.getPrototypeOf(application.routeModules)).toBeNull();
     const own = (map: object) =>
       Object.getOwnPropertyDescriptor(map, '__proto__')?.value;
-    expect(own(application.routeModules).component).toBe(
-      sources['/app/proto.tsx'],
-    );
+    expect(own(application.routeModules).component).toBe(sources['/app/proto']);
     expect(Object.keys(application.dataModules)).toEqual(['__proto__']);
-    expect(own(application.dataModules)).toBe(sources['/app/proto.data.ts']);
+    expect(own(application.dataModules)).toBe(sources['/app/proto.data']);
     // A route without data finds nothing, not an Object.prototype member.
     expect(application.dataModules.constructor).toBeUndefined();
   });
+
+  it.each(['client', 'server'] as const)(
+    'emits bundler-resolvable TypeScript requests while retaining %s source identities',
+    mode => {
+      const routes = [
+        {
+          id: 'layout',
+          file: '/source/routes/layout.tsx',
+          modules: {
+            head: '/source/routes/page.head.ts',
+            search: '/source/routes/page.head.ts',
+            data: '/source/routes/page.data.ts',
+            clientData: '/source/routes/page.data.client.ts',
+            loading: '/source/routes/loading.tsrx',
+          },
+          children: [],
+        },
+      ];
+      const source = emitNativeApplicationModule({
+        routes,
+        mode,
+        basePath: '/',
+      });
+      expect(source).toContain(
+        'import * as routeModule0 from "/source/routes/layout";',
+      );
+      expect(source).toContain(
+        'import * as routeModule1 from "/source/routes/loading.tsrx";',
+      );
+      expect(source).toContain(
+        'import * as routeModule2 from "/source/routes/page.head";',
+      );
+      expect(
+        source.match(/from "\/source\/routes\/page\.head";/gu),
+      ).toHaveLength(1);
+      expect(source).toContain(
+        `import * as routeModule3 from "/source/routes/page.data${mode === 'client' ? '.client' : ''}";`,
+      );
+      expect(source).not.toMatch(/from "[^"\n]+\.tsx?"/u);
+      // Route provenance keeps the selected files. Only executable requests use
+      // bundler resolution, without opting applications into TS extension imports.
+      expect(source).toContain('"file": "/source/routes/layout.tsx"');
+      expect(source).toContain('"head": "/source/routes/page.head.ts"');
+      expect(source).toContain('"loading": "/source/routes/loading.tsrx"');
+      if (mode === 'client') {
+        expect(source).toContain('"data": "server-data:layout"');
+        expect(source).not.toContain('from "/source/routes/page.data"');
+      }
+    },
+  );
 
   it('rejects an application module without its analyzed base path', () => {
     expect(() =>

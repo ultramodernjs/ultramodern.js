@@ -16,7 +16,7 @@ import {
   FederationContext,
   type SolidFederationScope,
 } from './federation-context';
-import { federatedAssetKey, federatedServerAssets } from './federation-ssr';
+import { captureFederatedServerAssets } from './federation-ssr';
 
 /** The module shape a same-renderer Module Federation remote exposes. */
 export interface FederatedModule<P extends object> {
@@ -120,11 +120,14 @@ export function federatedComponent<P extends object = Record<string, never>>(
         throw new Error(
           'A federatedComponent loader renders in the browser only; use a remote id to server-render it',
         );
-      const module = await withTimeout(
+      const { module, assets } = await withTimeout(
         Promise.resolve().then(() =>
           id
             ? loadFederatedModule<FederatedModule<P>>(scope.instance, id)
-            : (remote as () => Promise<never>)(),
+            : (remote as () => Promise<FederatedModule<P>>)().then(module => ({
+                module,
+                assets: undefined,
+              })),
         ),
         timeout,
         id ?? 'loader',
@@ -135,13 +138,14 @@ export function federatedComponent<P extends object = Record<string, never>>(
           'A federated Solid module must default-export a component',
         );
       if (!isServer || !id) return { default: component };
-      if (!federatedServerAssets(scope, id))
+      const assetKey = captureFederatedServerAssets(scope, id, assets);
+      if (!assetKey)
         throw new Error(
           `Cannot server-render ${id}: the host has no server federation state for its browser assets`,
         );
       // Solid resolves a loaded module's $$moduleUrl through the response's
       // asset resolver: stylesheets, preloads and the hydration module.
-      return { default: component, $$moduleUrl: federatedAssetKey(id) };
+      return { default: component, $$moduleUrl: assetKey };
     }) as Component<P>;
   // Solid's lazy caches its module. Scope the cache to one application or
   // response, so two hosts rendering this component never share a remote.

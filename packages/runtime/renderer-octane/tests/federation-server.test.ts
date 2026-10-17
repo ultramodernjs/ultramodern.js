@@ -118,6 +118,41 @@ test('concurrent requests using one component retain their own host and asset sn
   expect(second).not.toContain('https://first.test/');
 });
 
+test('streams the assets captured with its module after the native snapshot advances', async () => {
+  const instance = host(
+    async () => ({
+      default: () => ssrHtml('<b>captured remote</b>'),
+    }),
+    'admitted',
+  );
+  Object.defineProperty(
+    instance,
+    Symbol.for('ultramodern.federation.load-with-capture'),
+    {
+      value: async (id: string, capture: (module: unknown) => unknown) => {
+        const module = await instance.loadRemote(id);
+        const captured = capture(module);
+        instance.snapshotHandler.getGlobalRemoteInfo = host(
+          async () => null,
+          'replacement',
+        ).snapshotHandler.getGlobalRemoteInfo;
+        return { module, captured };
+      },
+    },
+  );
+  const Widget = federatedComponent('remote/Widget', { fallback });
+  const response = await renderOctaneApplication({
+    session: createSession(),
+    App: () => createElement(Widget),
+    federation: { instance: () => instance },
+    document,
+  });
+  const html = await response.text();
+  expect(html).toContain('<b>captured remote</b>');
+  expect(html).toContain('https://admitted.test/widget.css');
+  expect(html).not.toContain('https://replacement.test/');
+});
+
 test('the native server applies a remote component default prop', async () => {
   const Widget = federatedComponent<{ label?: string }>('remote/Widget');
   const Remote = Object.assign(

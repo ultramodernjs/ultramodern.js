@@ -247,6 +247,10 @@ export interface CloudflareWorkerDeployConfig {
    * `env[binding].fetch(request)`.
    */
   services?: CloudflareWorkerServiceBindingConfig[];
+  /** Native Worker context profiles, registered before federated exposes load. */
+  federation?: {
+    contextProfiles?: readonly string[];
+  };
   /**
    * First-class Workers VPC service bindings to private origins reached
    * through a Cloudflare Tunnel. Modern.js writes these to `wrangler.json`

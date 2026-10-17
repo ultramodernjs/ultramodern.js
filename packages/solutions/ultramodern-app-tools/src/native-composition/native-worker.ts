@@ -7,6 +7,7 @@ import {
 } from '@modern-js/app-tools-extensions/cloudflare/native-renderer';
 import { applyCloudflareWorkerRspackConfig } from '@modern-js/app-tools-extensions/cloudflare-builder';
 import { resolveDeployTarget } from '@modern-js/app-tools-extensions/deploy-output/target';
+import type { RendererFederationCompatibility } from '@modern-js/federation-runtime/renderer-contract';
 import type { Renderer, RendererIdentity } from '@modern-js/renderer-core';
 import type { NativeCompilerArtifacts } from '@modern-js/renderer-core/adapter';
 import {
@@ -19,6 +20,9 @@ import {
 } from '@modern-js/utils';
 import { cutNameByHyphen } from '@modern-js/utils/universal';
 import type { EnvironmentConfig, ModifyBundlerChainFn } from '@rsbuild/core';
+import type { NativeWorkerFederationPlan } from './native-worker-federation';
+import { finalizeNativeWorkerFederationPublication } from './native-worker-federation';
+import type { NativeWorkerFederationServiceConfig } from './native-worker-federation-config';
 
 export interface NativeWorkerConfig {
   deploy?: { target?: string; worker?: { ssr?: boolean } };
@@ -36,8 +40,34 @@ export const isNativeWorkerBuild = (config: NativeWorkerConfig): boolean =>
     'cloudflare' && Boolean(config.deploy?.worker?.ssr);
 
 /** The worker entry re-exports the native handler and its Fetch dispatcher. */
-export const nativeWorkerEntrySource = (serverEntry: string): string =>
-  `export * from ${JSON.stringify(serverEntry)};
+export const nativeWorkerEntrySource = (
+  serverEntry: string,
+  federation?: {
+    runtime: string;
+    compatibility: RendererFederationCompatibility;
+    registry?: string;
+  },
+): string =>
+  federation
+    ? `export * from ${JSON.stringify(serverEntry)};
+import {dispatchNativeWorkerRequest as dispatchDocument} from '@modern-js/renderer-core/server';
+import {createNativeWorkerFederationRuntime} from ${JSON.stringify(federation.runtime)};
+import {readRendererFederationContract,assertRendererFederationCompatibility} from '@modern-js/federation-runtime/renderer-contract';
+${federation.registry ? `import {initializeNativeWorkerFederation} from ${JSON.stringify(federation.registry)};` : ''}
+const expectedRenderer = ${JSON.stringify(federation.compatibility)};
+export async function dispatchNativeWorkerRequest(request, options) {
+  const runtime = createNativeWorkerFederationRuntime(options, {
+    ${federation.registry ? 'registry:{initialize:initializeNativeWorkerFederation},' : ''}
+    admitRendererContract(value) {
+      const contract = readRendererFederationContract(value);
+      assertRendererFederationCompatibility(expectedRenderer,contract);
+      return contract;
+    },
+  });
+  return await runtime.handleRequest(request) ?? dispatchDocument(request,{...options,workerFederation:runtime.transport});
+}
+`
+    : `export * from ${JSON.stringify(serverEntry)};
 export { dispatchNativeWorkerRequest } from '@modern-js/renderer-core/server';
 `;
 
@@ -135,7 +165,20 @@ export async function writeNativeWorkerResources(options: {
   identities: Readonly<Record<string, RendererIdentity>>;
   compilerArtifacts: NativeCompilerArtifacts;
   workerEntryFiles: Readonly<Record<string, readonly string[]>>;
+  clientCompilationHash?: string;
+  workerFederation?: {
+    plan?: NativeWorkerFederationPlan;
+    services: readonly NativeWorkerFederationServiceConfig[];
+    manifestUrl?: string;
+  };
 }): Promise<void> {
+  if (
+    options.workerFederation?.plan &&
+    (!options.clientCompilationHash || !options.workerFederation.manifestUrl)
+  )
+    throw new Error(
+      'Native Worker publication requires its completed client compilation and pinned manifest URL.',
+    );
   const assetManifest = JSON.parse(
     await fs.readFile(
       path.join(options.distDirectory, RENDERER_ASSET_MANIFEST_FILE),
@@ -144,6 +187,10 @@ export async function writeNativeWorkerResources(options: {
   );
   const fallbackHeader = `x-${cutNameByHyphen(options.metaName || 'modern-js')}-ssr-fallback`;
   const entries: Record<string, NativeRendererWorkerEntry> = {};
+  const validatedArtifacts: Record<
+    string,
+    Awaited<ReturnType<NativeCompilerArtifacts['validateClientManifest']>>
+  > = {};
   for (const [entryName, identity] of Object.entries(options.identities)) {
     const files = options.workerEntryFiles[entryName] ?? [];
     if (
@@ -165,12 +212,18 @@ export async function writeNativeWorkerResources(options: {
         ),
       ),
       identity,
-      { development: false },
+      {
+        development: false,
+        ...(options.clientCompilationHash
+          ? { compilationHash: options.clientCompilationHash }
+          : {}),
+      },
     );
     const { serverConfig: entryServerConfig, csrFallback } = serverConfig(
       options.config,
       entryName,
     );
+    validatedArtifacts[entryName] = validated;
     entries[entryName] = {
       assets,
       nativeManifest: validated.nativeManifest,
@@ -189,6 +242,21 @@ export async function writeNativeWorkerResources(options: {
     version: 1,
     renderer: options.renderer,
     entries,
+    ...(options.workerFederation?.plan
+      ? {
+          workerFederation: {
+            renderer: options.workerFederation.plan.renderer,
+            worker: finalizeNativeWorkerFederationPublication(
+              options.workerFederation.plan,
+              validatedArtifacts,
+            ),
+          },
+          workerFederationManifestUrl: options.workerFederation.manifestUrl,
+        }
+      : {}),
+    ...(options.workerFederation?.services.length
+      ? { workerFederationServices: options.workerFederation.services }
+      : {}),
   };
   const output = path.join(
     options.distDirectory,

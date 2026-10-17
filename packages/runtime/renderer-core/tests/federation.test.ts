@@ -18,10 +18,12 @@ describe('application-owned federation', () => {
     expect(getFederationHost({ instance: () => second })).toBe(second);
     expect(host).toBe(first);
     expect(await loadFederatedModule(host, 'remote/Widget')).toEqual({
-      default: 'first',
+      module: { default: 'first' },
+      assets: undefined,
     });
     expect(await loadFederatedModule(second, 'remote/Widget')).toEqual({
-      default: 'second',
+      module: { default: 'second' },
+      assets: undefined,
     });
   });
 
@@ -90,5 +92,96 @@ describe('application-owned federation', () => {
       ],
     });
     expect(remoteBrowserAssets(instance, 'remote/Missing')).toBeUndefined();
+  });
+
+  test('retains the assets captured with the old module when development refresh replaces its snapshot', async () => {
+    const captureLoad = Symbol.for('ultramodern.federation.load-with-capture');
+    let file = 'v1.css';
+    const instance: FederationInstance = {
+      loadRemote: async <T>() => ({ default: 'old module' }) as T,
+      remoteHandler: {
+        idToRemoteMap: {
+          'remote/Widget': { name: 'remote', expose: './Widget' },
+        },
+      },
+      moduleCache: new Map([['remote', { remoteInfo: {} }]]),
+      snapshotHandler: {
+        getGlobalRemoteInfo: () => ({
+          remoteSnapshot: {
+            publicPath: 'https://remote.example/',
+            remoteEntry: 'remoteEntry.js',
+            modules: [
+              { modulePath: './Widget', assets: { css: { sync: [file] } } },
+            ],
+          },
+        }),
+      },
+    };
+    Object.defineProperty(instance, captureLoad, {
+      value: async <T, Captured>(
+        _id: string,
+        capture: (module: T | null) => Captured,
+      ) => {
+        const module = { default: 'old module' } as T;
+        const captured = capture(module);
+        file = 'v2.css';
+        return { module, captured };
+      },
+    });
+    const loaded = await loadFederatedModule(instance, 'remote/Widget');
+    expect(loaded.module).toEqual({ default: 'old module' });
+    expect(loaded.assets?.css).toEqual(['https://remote.example/v1.css']);
+    expect(remoteBrowserAssets(instance, 'remote/Widget')?.css).toEqual([
+      'https://remote.example/v2.css',
+    ]);
+  });
+
+  test('captures a load-owned admitted snapshot after another host replaces the process-global snapshot', async () => {
+    const snapshot = (file: string) => ({
+      publicPath: 'https://remote.example/',
+      remoteEntry: 'remoteEntry.js',
+      modules: [{ modulePath: './Widget', assets: { css: { sync: [file] } } }],
+    });
+    const admitted = snapshot('v1.css');
+    const instance: FederationInstance = {
+      loadRemote: async () => null,
+      remoteHandler: {
+        idToRemoteMap: {
+          'remote/Widget': { name: 'remote', expose: './Widget' },
+        },
+      },
+      moduleCache: new Map([['remote', { remoteInfo: {} }]]),
+      snapshotHandler: {
+        getGlobalRemoteInfo: () => ({ remoteSnapshot: snapshot('v2.css') }),
+      },
+    };
+    Object.defineProperty(
+      instance,
+      Symbol.for('ultramodern.federation.load-with-capture'),
+      {
+        value: async <T, Captured>(
+          _id: string,
+          capture: (
+            module: T | null,
+            resolution: { remoteSnapshot: unknown; expose: string },
+          ) => Captured,
+        ) => {
+          const module = { default: 'old module' } as T;
+          return {
+            module,
+            captured: capture(module, {
+              remoteSnapshot: admitted,
+              expose: './Widget',
+            }),
+          };
+        },
+      },
+    );
+    expect(
+      (await loadFederatedModule(instance, 'remote/Widget')).assets?.css,
+    ).toEqual(['https://remote.example/v1.css']);
+    expect(remoteBrowserAssets(instance, 'remote/Widget')?.css).toEqual([
+      'https://remote.example/v2.css',
+    ]);
   });
 });

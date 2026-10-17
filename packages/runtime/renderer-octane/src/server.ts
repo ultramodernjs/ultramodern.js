@@ -9,6 +9,7 @@ import {
   type ResponsePolicy,
   untilAborted,
 } from '@modern-js/renderer-core/session';
+import type { WorkerFederationTransport } from '@modern-js/renderer-core/worker-federation';
 import type { AnyRouter } from '@octanejs/tanstack-router';
 import { transformReadableStreamWithRouter } from '@octanejs/tanstack-router/ssr/server';
 import {
@@ -23,6 +24,7 @@ import {
   assertOctaneIdentity,
 } from './bootstrap';
 import { createFederationScope, FederationRoot } from './federation-context';
+import { WorkerFederationRoot } from './worker-federation-context';
 
 export interface OctaneDocumentOptions {
   /** One identity for this response, shared with the client's signal receiver. */
@@ -62,6 +64,8 @@ export interface RenderOctaneApplicationOptions<
   readonly routerSerializationTimeoutMs?: number;
   /** This server compilation's native Module Federation runtime. */
   readonly federation?: NativeFederationBinding;
+  readonly workerFederation?: WorkerFederationTransport;
+  readonly workerFederationLocale?: string;
 }
 
 function prepareOctaneDocument<Bindings extends object>(
@@ -183,7 +187,20 @@ export async function renderOctaneApplication<Bindings extends object>(
                 : input.App,
           })
       : input.App;
-    const nativeStream = await renderToReadableStream(App, input.props, {
+    const workerFederation = input.workerFederation;
+    const NativeApp = workerFederation
+      ? () =>
+          createElement(WorkerFederationRoot, {
+            scope: {
+              transport: workerFederation,
+              locale: input.workerFederationLocale ?? 'default',
+              signal: session.signal,
+            },
+            children:
+              typeof App === 'function' ? createElement(App, input.props) : App,
+          })
+      : App;
+    const nativeStream = await renderToReadableStream(NativeApp, input.props, {
       signal: session.signal,
       ...(document.nonce === undefined ? {} : { nonce: document.nonce }),
       earlySignalBootstrap: 'external',
@@ -192,6 +209,7 @@ export async function renderOctaneApplication<Bindings extends object>(
         buildId: document.nativeHydrationBuildId,
         documentId: document.documentId,
       },
+      externalSnapshots: { documentId: document.documentId },
       headChannel: 'separate',
       onHeadReady(value) {
         head = value;

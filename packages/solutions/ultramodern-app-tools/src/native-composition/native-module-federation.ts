@@ -10,7 +10,10 @@ import { SERVER_BUNDLE_DIRECTORY } from '@modern-js/utils';
 import { type Rspack, rspack } from '@rsbuild/core';
 import { resolveManifestRecoveryRuntimePlugin } from '../renderers/react/module-federation-recovery-plugin';
 import { NATIVE_MODULE_FEDERATION_PLUGIN } from './module-federation-renderer-plugin';
-import { NativeFederationDevAssetsPlugin } from './native-federation-dev-assets';
+import {
+  NATIVE_FEDERATION_DEV_REVISION_HEADER,
+  NativeFederationDevAssetsPlugin,
+} from './native-federation-dev-assets';
 import { resolveNativeFederationDevPublicPath } from './native-federation-dev-public-path';
 import { findNativeFederationConfig } from './native-federation-files';
 import { resolveNativeRendererAdapter } from './renderer-registration';
@@ -610,7 +613,10 @@ export function createNativeServerFederationOptions(
   renderer: NativeRenderer,
   authored: FederationOptions,
   versions: Readonly<Record<string, string>>,
-  runtimePlugins: readonly string[],
+  runtimePlugins: readonly (
+    | string
+    | readonly [string, Record<string, unknown>]
+  )[],
   bindings?: NativeSharedBindings,
 ): FederationOptions {
   const { remotes: _remotes, ...container } = authored;
@@ -1000,20 +1006,40 @@ export function nativeModuleFederationPlugin(
             'native-runtime.server.mjs',
             nativeFederationRuntimePluginSource(remotes, {}),
           );
-          chain
-            .plugin(NATIVE_FEDERATION_CHAIN_KEY)
-            .use(
-              Plugin as never,
-              [
-                createNativeServerFederationOptions(
-                  renderer,
-                  authored,
-                  versions,
-                  [resolveNodeRuntimePlugin(appDirectory), runtimePlugin],
-                  bindings,
-                ),
-              ] as never,
-            );
+          chain.plugin(NATIVE_FEDERATION_CHAIN_KEY).use(
+            Plugin as never,
+            [
+              createNativeServerFederationOptions(
+                renderer,
+                authored,
+                versions,
+                [
+                  resolveNodeRuntimePlugin(appDirectory),
+                  runtimePlugin,
+                  ...(api.getAppContext().command === 'dev'
+                    ? [
+                        [
+                          createRequire(import.meta.url).resolve(
+                            '@modern-js/federation-runtime/native-dev-refresh-runtime-plugin',
+                          ),
+                          {
+                            remotes,
+                            shared: nativeSharedRequests(
+                              nativeFederationProfile(renderer),
+                              'server',
+                            ),
+                            revisionHeader:
+                              NATIVE_FEDERATION_DEV_REVISION_HEADER,
+                            requestTimeout: 3000,
+                          },
+                        ] as const,
+                      ]
+                    : []),
+                ],
+                bindings,
+              ),
+            ] as never,
+          );
           return;
         }
         const runtimePlugin = await writeRuntimePlugin(

@@ -18,6 +18,8 @@ import {
   assertRootClaimsAndImportFailures,
   assertScheduledRenderFailureReleasesRoot,
   assertStrictBootstrapIdentity,
+  assertWorkerFactoryFailureReleasesOwnership,
+  assertWorkerTransportDocumentLifetime,
 } from './fixtures/client-lifecycle';
 
 describe('native Octane application lifecycle', () => {
@@ -96,5 +98,16 @@ describe('native Octane application lifecycle', () => {
   it(
     'defers abort teardown until a native render finishes',
     assertAbortDuringNativeRenderDoesNotReenterUnmount,
+  );
+});
+
+describe('Worker transport ownership', () => {
+  it(
+    'creates and disposes exactly one transport per document handle',
+    assertWorkerTransportDocumentLifetime,
+  );
+  it(
+    'releases application ownership when the transport factory throws',
+    assertWorkerFactoryFailureReleasesOwnership,
   );
 });

@@ -12,6 +12,7 @@ export default withTestPreset({
       include: [
         'tests/client.test.ts',
         'tests/federation-client.test.ts',
+        'tests/worker-federation-contexts.test.ts',
         'tests/route-completion-browser.test.ts',
       ],
       testEnvironment: 'happy-dom',
@@ -71,8 +72,11 @@ export default withTestPreset({
       include: [
         'tests/server.test.ts',
         'tests/federation-server.test.ts',
+        'tests/worker-federation-server.test.ts',
         'tests/component-i18n-server.test.ts',
         'tests/routes.test.ts',
+        'tests/router-external-snapshot.test.ts',
+        'tests/i18n-external-snapshot.test.ts',
         'tests/manifest.test.ts',
         'tests/router-handler.test.ts',
         'tests/action-redirect.test.ts',

@@ -1,4 +1,4 @@
-import { remoteBrowserAssets } from '@modern-js/renderer-core/federation';
+import type { FederatedAssets } from '@modern-js/renderer-core/federation';
 import type { SolidFederationScope } from './federation-context';
 
 /**
@@ -10,17 +10,39 @@ import type { SolidFederationScope } from './federation-context';
 /** Asset keys for server-rendered remotes, e.g. `ultramodern-federation:remote/Widget`. */
 export const FEDERATED_ASSET_PREFIX = 'ultramodern-federation:';
 
-/** The host's server state for a remote: its browser assets and hydration module. */
-export function federatedServerAssets(
-  scope: SolidFederationScope | undefined,
+interface CapturedServerAssets {
+  readonly hydration: string;
+  readonly assets: FederatedAssets;
+}
+
+const capturedAssets = new WeakMap<
+  SolidFederationScope,
+  Map<string, CapturedServerAssets>
+>();
+
+/** Retain the assets admitted with this module until its response resolves them. */
+export function captureFederatedServerAssets(
+  scope: SolidFederationScope,
   id: string,
-) {
-  const instance = scope?.instance;
-  const assets = instance && remoteBrowserAssets(instance, id);
-  if (!assets || !scope?.hydrationModule || !instance.name) return undefined;
+  assets: FederatedAssets | undefined,
+): string | undefined {
+  const instance = scope.instance;
+  if (!assets || !scope.hydrationModule || !instance?.name) return undefined;
   // The browser module finds this host by name among the realm's instances.
   const hydration = `${scope.hydrationModule}?id=${encodeURIComponent(id)}&host=${encodeURIComponent(instance.name)}`;
-  return { hydration, assets };
+  let records = capturedAssets.get(scope);
+  if (!records) {
+    records = new Map();
+    capturedAssets.set(scope, records);
+  }
+  const baseKey = federatedAssetKey(id);
+  let key = baseKey;
+  // Two loads of one remote may straddle a development revision in one response.
+  // Give each loaded module its own key rather than replacing earlier assets.
+  for (let revision = 1; records.has(key); revision += 1)
+    key = `${baseKey}:${revision}`;
+  records.set(key, { hydration, assets });
+  return key;
 }
 
 export function federatedAssetKey(id: string): string {
@@ -103,10 +125,7 @@ export function withFederatedAssets<Manifest>(
   const resolve = (key: string): ResolvedDocumentAssets | null => {
     if (!key.startsWith(FEDERATED_ASSET_PREFIX))
       return resolveStaticAssets(modules, key);
-    const remote = federatedServerAssets(
-      scope,
-      key.slice(FEDERATED_ASSET_PREFIX.length),
-    );
+    const remote = capturedAssets.get(scope)?.get(key);
     if (!remote) return null;
     return {
       js: [joinAssetPath(modules._base, remote.hydration), ...remote.assets.js],

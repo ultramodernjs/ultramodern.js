@@ -2,6 +2,7 @@ import type { AppTools, CliPlugin } from '@modern-js/app-tools/cli-config';
 import { resolveDeployTarget } from '@modern-js/app-tools-extensions/deploy-output/target';
 import { type Renderer, resolveRenderer } from '@modern-js/renderer-core';
 import type { RsbuildPlugin, RsbuildPlugins } from '@rsbuild/core';
+import { isEntryMetadataRead } from './config-read-context';
 import { resolveRendererAdapter } from './renderer-registration';
 import { assertRouteSourcesMatchRenderer } from './renderer-source-ownership';
 import type { UltramodernAppUserConfig } from './types';
@@ -347,7 +348,8 @@ export function rendererSelectionGuard(
       api.onPrepare(async () => {
         const config = api.getNormalizedConfig() as UltramodernAppUserConfig;
         validate(config);
-        if (verifyCompilerOwnership) {
+        // Metadata preparation deliberately does not create a compiler.
+        if (verifyCompilerOwnership && !isEntryMetadataRead()) {
           assertRendererCompilerOwnership(
             renderer,
             await resolveRendererBuilderPlugins(config.builderPlugins ?? []),

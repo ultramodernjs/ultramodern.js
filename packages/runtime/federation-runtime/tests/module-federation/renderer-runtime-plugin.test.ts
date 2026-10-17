@@ -1058,4 +1058,50 @@ describe('native renderer share tuple', () => {
     });
     expect(react.resolver()).toEqual({ shared: { version: '1.0.0' } });
   });
+
+  test.each([
+    'octane/server',
+    'octane/internal/server',
+    'octane/signals/server',
+  ])(
+    'gates the version and completed factory identity of native %s',
+    pkgName => {
+      const octane: RendererFederationCompatibility = {
+        ...solid,
+        profile: {
+          ...solid.profile,
+          renderer: 'octane',
+          hydration: { name: 'octane', version: '0.13.8' },
+        },
+        runtime: { name: 'octane', version: '0.13.8' },
+      };
+      const plugin = createRendererFederationRuntimePlugin(octane);
+      const resolve = (shared: ShareResult['shared']) =>
+        plugin
+          .resolveShare({
+            pkgName,
+            shareScopeMap: {},
+            resolver: () => ({ shared }),
+          })
+          .resolver();
+      expect(() => resolve({ version: '0.13.9' })).toThrow(
+        `shared ${pkgName} version must be 0.13.8`,
+      );
+      const get = () => Promise.resolve(() => ({}));
+      const loaded = () => ({});
+      resolve({ version: '0.13.8', get });
+      plugin.afterLoadShare({
+        pkgName,
+        selectedShared: { version: '0.13.8', get, lib: loaded },
+      });
+      // Native loading completes lib after resolution. Even an unchanged get
+      // must not conceal a different evaluated runtime factory on refresh.
+      expect(() =>
+        resolve({ version: '0.13.8', get, lib: () => ({}) }),
+      ).toThrow('conflicting runtime ownership');
+      expect(resolve({ version: '0.13.8', get, lib: loaded })?.shared.lib).toBe(
+        loaded,
+      );
+    },
+  );
 });

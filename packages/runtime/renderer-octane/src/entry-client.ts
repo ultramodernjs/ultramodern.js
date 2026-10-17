@@ -21,11 +21,18 @@ import {
   OctaneRouterRoot,
   prepareOctaneRouterHydration,
 } from './router-client';
+import type {
+  OctaneWorkerFederationFactory,
+  OctaneWorkerFederationScope,
+} from './worker-federation-context';
 
 export interface OctaneClientEntryOptions
   extends NativeClientEntryOptions<NativeI18nInstance, LocalisedUrlsOption> {
   /** The native client compilation hash, `__webpack_hash__`. */
   readonly nativeHydrationBuildId: string;
+  readonly workerFederation?:
+    | OctaneWorkerFederationScope
+    | OctaneWorkerFederationFactory;
 }
 
 const LocalizedRouterRoot = localizedRouterRoot(OctaneRouterRoot);
@@ -49,6 +56,8 @@ export function startNativeClient(options: OctaneClientEntryOptions): void {
         identity,
         nativeHydrationBuildId,
         federation: options.federation,
+        workerFederation: options.workerFederation,
+        documentId: bootstrap?.documentId,
         signal,
         // Hydration installs the native signal bridge before this importer runs.
         load: async (): Promise<OctaneApplicationModule> => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@rstest/core';
 import {
   type NativeDevelopmentAsset,
+  nativeFederationDevRevision,
   resolveNativeFederationDevAsset,
 } from '../../src/native-composition/native-federation-dev-assets';
 
@@ -15,6 +16,28 @@ const assets = new Map([
 ]);
 
 describe('native federation development asset lookup', () => {
+  it('revises the whole admitted graph independently of asset iteration order', () => {
+    const graph = new Map([
+      [`${origin}/bundles/remoteEntry.js`, asset],
+      [
+        `${origin}/bundles/lazy.js`,
+        { ...asset, bytes: Buffer.from('first lazy') },
+      ],
+    ]);
+    const revision = nativeFederationDevRevision(graph);
+    expect(revision).toMatch(/^[a-f0-9]{64}$/u);
+    expect(nativeFederationDevRevision(new Map([...graph].reverse()))).toBe(
+      revision,
+    );
+    graph.set(`${origin}/bundles/lazy.js`, {
+      ...asset,
+      bytes: Buffer.from('second lazy'),
+    });
+    expect(nativeFederationDevRevision(graph)).not.toBe(revision);
+    graph.delete(`${origin}/bundles/lazy.js`);
+    expect(nativeFederationDevRevision(graph)).not.toBe(revision);
+  });
+
   it('matches the emitted URL and permits request query strings', () => {
     for (const target of [
       '/bundles/remoteEntry.js',

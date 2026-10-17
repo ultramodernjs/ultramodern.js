@@ -3,12 +3,14 @@ import os from 'node:os';
 import path from 'node:path';
 import type { RendererIdentity } from '@modern-js/renderer-core';
 import type { NativeCompilerArtifacts } from '@modern-js/renderer-core/adapter';
+import { resolveRendererFederationCompatibility } from '../../src/native-composition/module-federation-renderer-plugin';
 import {
   isNativeWorkerBuild,
   nativeWorkerEntrySource,
   nativeWorkerEnvironment,
   writeNativeWorkerResources,
 } from '../../src/native-composition/native-worker';
+import { createNativeWorkerFederationPlan } from '../../src/native-composition/native-worker-federation';
 
 const identity: RendererIdentity = {
   renderer: 'solid',
@@ -183,6 +185,87 @@ export { dispatchNativeWorkerRequest } from '@modern-js/renderer-core/server';
         },
       },
     });
+  });
+
+  it('binds completed Worker publication to the validated native client hash', async () => {
+    const distDirectory = await distFixture();
+    const plan = createNativeWorkerFederationPlan({
+      authored: {
+        name: 'nativeWorkerContainer',
+        exposes: { './Widget': './Widget.tsx' },
+      },
+      appDirectory: distDirectory,
+      remote: 'native-worker',
+      exposeEntryNames: { './Widget': 'index' },
+      fragments: [
+        {
+          remote: 'native-worker',
+          expose: './Widget',
+          boundaryId: 'nativeWorkerContainer',
+          paths: { default: '/_mf/fragment/widget' },
+        },
+      ],
+      compatibility: resolveRendererFederationCompatibility('solid'),
+      identities: {
+        identities: { index: identity },
+        buildId: identity.buildId,
+        profileKey: 'profile',
+        sourceRevision: 'revision',
+        routerBindings: {},
+      },
+    });
+    const calls: unknown[][] = [];
+    const options = {
+      renderer: 'solid' as const,
+      distDirectory,
+      clientOutputDirectory: distDirectory,
+      metaName: 'modern-js',
+      config: { server: { ssr: true } },
+      identities: { index: identity },
+      compilerArtifacts: compilerArtifacts(
+        {
+          nativeManifest: { validated: true },
+          hydrationBuildId: 'actual-client-hash',
+        },
+        calls,
+      ),
+      workerEntryFiles: { index: ['worker/index.js'] },
+      workerFederation: {
+        plan,
+        services: [],
+        manifestUrl: 'https://worker.example/mf-manifest.json',
+      },
+    };
+    await expect(writeNativeWorkerResources(options)).rejects.toThrow(
+      'completed client compilation',
+    );
+    await writeNativeWorkerResources({
+      ...options,
+      clientCompilationHash: 'actual-client-hash',
+    });
+    expect(calls[0]?.[2]).toEqual({
+      development: false,
+      compilationHash: 'actual-client-hash',
+    });
+    const resources = JSON.parse(
+      await fs.readFile(
+        path.join(distDirectory, 'worker/native-renderer.json'),
+        'utf8',
+      ),
+    );
+    expect(
+      resources.workerFederation.worker.exposes['./Widget'].native,
+    ).toEqual({ publisherBuildId: 'actual-client-hash', runtimeABI: 1 });
+    expect(
+      resources.workerFederation.worker.exposes['./Widget'].native
+        .publisherBuildId,
+    ).not.toBe(identity.buildId);
+    expect(resources.workerFederation.renderer.identities.index).toEqual(
+      identity,
+    );
+    expect(resources.workerFederationManifestUrl).toBe(
+      'https://worker.example/mf-manifest.json',
+    );
   });
 
   it.each([

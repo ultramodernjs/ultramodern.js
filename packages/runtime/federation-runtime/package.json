@@ -59,6 +59,14 @@
         "require": "./dist/cjs/module-federation/manifest-recovery-runtime-plugin.js"
       },
       "default": "./dist/esm/module-federation/manifest-recovery-runtime-plugin.mjs"
+    },
+    "./native-dev-refresh-runtime-plugin": {
+      "types": "./dist/types/module-federation/native-dev-refresh-runtime-plugin.d.ts",
+      "modern:source": "./src/module-federation/native-dev-refresh-runtime-plugin.ts",
+      "node": {
+        "import": "./dist/esm-node/module-federation/native-dev-refresh-runtime-plugin.mjs",
+        "require": "./dist/cjs/module-federation/native-dev-refresh-runtime-plugin.js"
+      }
     }
   },
   "typesVersions": {
@@ -82,6 +90,10 @@
       "manifest-recovery-runtime-plugin": [
         "./dist/types/module-federation/manifest-recovery-runtime-plugin.d.ts",
         "./src/module-federation/manifest-recovery-runtime-plugin.ts"
+      ],
+      "native-dev-refresh-runtime-plugin": [
+        "./dist/types/module-federation/native-dev-refresh-runtime-plugin.d.ts",
+        "./src/module-federation/native-dev-refresh-runtime-plugin.ts"
       ]
     }
   },
@@ -171,6 +183,13 @@
           "require": "./dist/cjs/module-federation/manifest-recovery-runtime-plugin.js"
         },
         "default": "./dist/esm/module-federation/manifest-recovery-runtime-plugin.mjs"
+      },
+      "./native-dev-refresh-runtime-plugin": {
+        "types": "./dist/types/module-federation/native-dev-refresh-runtime-plugin.d.ts",
+        "node": {
+          "import": "./dist/esm-node/module-federation/native-dev-refresh-runtime-plugin.mjs",
+          "require": "./dist/cjs/module-federation/native-dev-refresh-runtime-plugin.js"
+        }
       }
     }
   }

@@ -156,7 +156,40 @@
         "default": "./dist/cjs/plugin/index.js"
       }
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./router-external-snapshot": {
+      "modern:source": "./src/router-external-snapshot.ts",
+      "import": {
+        "types": "./dist/types/router-external-snapshot.d.ts",
+        "default": "./dist/esm/router-external-snapshot.mjs"
+      },
+      "require": {
+        "types": "./dist/types/router-external-snapshot.d.ts",
+        "default": "./dist/cjs/router-external-snapshot.js"
+      }
+    },
+    "./i18n-external-snapshot": {
+      "modern:source": "./src/i18n-external-snapshot.ts",
+      "import": {
+        "types": "./dist/types/i18n-external-snapshot.d.ts",
+        "default": "./dist/esm/i18n-external-snapshot.mjs"
+      },
+      "require": {
+        "types": "./dist/types/i18n-external-snapshot.d.ts",
+        "default": "./dist/cjs/i18n-external-snapshot.js"
+      }
+    },
+    "./worker-federation-contexts": {
+      "modern:source": "./src/worker-federation-contexts.ts",
+      "import": {
+        "types": "./dist/types/worker-federation-contexts.d.ts",
+        "default": "./dist/esm/worker-federation-contexts.mjs"
+      },
+      "require": {
+        "types": "./dist/types/worker-federation-contexts.d.ts",
+        "default": "./dist/cjs/worker-federation-contexts.js"
+      }
+    }
   },
   "bin": {
     "octane-tsc": "./bin/octane-tsc.mjs"

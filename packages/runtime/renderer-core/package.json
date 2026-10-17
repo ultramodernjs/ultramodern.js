@@ -115,6 +115,17 @@
         "default": "./dist/cjs/server/index.js"
       }
     },
+    "./worker-federation": {
+      "modern:source": "./src/worker-federation/index.ts",
+      "import": {
+        "types": "./dist/types/worker-federation/index.d.ts",
+        "default": "./dist/esm/worker-federation/index.mjs"
+      },
+      "require": {
+        "types": "./dist/types/worker-federation/index.d.ts",
+        "default": "./dist/cjs/worker-federation/index.js"
+      }
+    },
     "./entry-client": {
       "modern:source": "./src/entry-client.ts",
       "import": {

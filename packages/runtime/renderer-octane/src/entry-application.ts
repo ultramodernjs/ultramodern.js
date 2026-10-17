@@ -10,6 +10,7 @@ import {
 import { type ComponentBody, createElement } from 'octane';
 import { I18nProvider } from './i18n/I18nProvider';
 import type { I18nInstanceLike } from './i18n/types';
+import { associateOctaneFileRouteSnapshot } from './router-external-snapshot';
 import {
   createFileSystemRouteTree,
   type FileSystemRouteModule,
@@ -41,8 +42,8 @@ export const octaneRouterFactory: NativeRouterFactory<AnyRoute, AnyRouter> = {
       modules as Readonly<Record<string, FileSystemRouteModule>>,
       options,
     ),
-  router: ({ location, ...options }) =>
-    createRouter({
+  router: ({ location, ...options }) => {
+    const router = createRouter({
       ...options,
       ...(location
         ? {
@@ -50,7 +51,10 @@ export const octaneRouterFactory: NativeRouterFactory<AnyRoute, AnyRouter> = {
             history: createMemoryHistory({ initialEntries: [location.href] }),
           }
         : {}),
-    }),
+    });
+    associateOctaneFileRouteSnapshot(router);
+    return router;
+  },
 };
 
 interface LocalizedRouterProps {

@@ -21,6 +21,7 @@ import {
   createDefineConfig,
   resolveUltramodernConfig,
 } from '../../src/native-composition/config';
+import { withEntryMetadataRead } from '../../src/native-composition/config-read-context';
 import {
   assertRendererCompilerOwnership,
   attachRendererCompilerClaim,
@@ -474,6 +475,63 @@ describe('renderer guard in the owning plugin manager', () => {
     );
     expect(output).not.toHaveBeenCalled();
   });
+
+  it.each(['solid', 'octane'] as const)(
+    'prepares compiler-free %s metadata without admitting compiler-free output',
+    async renderer => {
+      const prepared = rstest.fn();
+      const config = await selectHost(
+        renderer,
+        {
+          name: 'fixture:selected-host',
+          setup(api) {
+            api.onPrepare(prepared);
+          },
+        },
+        [],
+        true,
+      );
+      const { api } = await withEntryMetadataRead(async () => {
+        const initialized = await initializeSelection(config);
+        await initialized.api.getHooks().onPrepare.call();
+        return initialized;
+      });
+      expect(prepared).toHaveBeenCalledTimes(1);
+      await expect(api.getHooks().onPrepare.call()).rejects.toThrow(
+        `Renderer ${renderer} requires exactly one matching native compiler owner`,
+      );
+      expect(prepared).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(['solid', 'octane'] as const)(
+    'still rejects a late renderer change during %s metadata preparation',
+    async renderer => {
+      const prepared = rstest.fn();
+      const config = await selectHost(
+        renderer,
+        {
+          name: 'fixture:selected-host',
+          setup(api) {
+            api.onPrepare(prepared);
+          },
+        },
+        [],
+        true,
+      );
+      await withEntryMetadataRead(async () => {
+        const { api, context } = await initializeSelection(config);
+        context.normalizedConfig = {
+          ...config,
+          renderer: renderer === 'solid' ? 'octane' : 'solid',
+        };
+        await expect(api.getHooks().onPrepare.call()).rejects.toThrow(
+          `Renderer changed from ${renderer} to ${context.normalizedConfig.renderer} after plugin selection`,
+        );
+      });
+      expect(prepared).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     { renderer: 'solid', ownership: 'missing' },
