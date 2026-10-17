@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
@@ -18,6 +19,53 @@ import {
   workerFederationFaultSource,
 } from './fixtures.mjs';
 import { readWorkerFixturePlan } from './proof.mjs';
+import { sourceWorkerGitignore } from './source.mjs';
+
+test('authored source ignores temporary compiler configs while retaining source changes', t => {
+  const root = fs.mkdtempSync(
+    path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'worker-git-source-'),
+  );
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([name]) => !name.toUpperCase().startsWith('GIT_'),
+    ),
+  );
+  const git = args =>
+    execFileSync('git', ['-c', 'core.excludesFile=/dev/null', ...args], {
+      cwd: root,
+      env,
+      encoding: 'utf8',
+    });
+  git(['init', '--quiet']);
+  fs.writeFileSync(path.join(root, '.gitignore'), sourceWorkerGitignore);
+  const temporary = [
+    'apps/host/.modern-js/tsgo/tsconfig.host.json',
+    'verticals/remote-a/.modern-js/tsgo/tsconfig.remote-a.json',
+    'verticals/remote-b/.modern-js/tsgo/tsconfig.58fde6bbfd.json',
+  ];
+  const authored = [
+    'apps/host/src/routes/index.tsx',
+    'verticals/remote-b/src/components/Widget.tsx',
+    'shared/Counter.tsx',
+    'topology/reference-topology.json',
+    'verticals/remote-b/.modern-js/authored.json',
+  ];
+  for (const relative of [...temporary, ...authored]) {
+    const filename = path.join(root, relative);
+    fs.mkdirSync(path.dirname(filename), { recursive: true });
+    fs.writeFileSync(filename, '{}\n');
+  }
+  assert.deepEqual(
+    git(['check-ignore', '--no-index', ...temporary])
+      .trim()
+      .split('\n'),
+    temporary,
+  );
+  const changes = git(['status', '--porcelain', '--untracked-files=all']);
+  for (const relative of temporary) assert(!changes.includes(relative));
+  for (const relative of authored) assert(changes.includes(`?? ${relative}\n`));
+});
 
 function fixtures(t) {
   const root = fs.mkdtempSync(

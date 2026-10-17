@@ -17,6 +17,9 @@ import { readWorkerFederationProvider } from '../../../scripts/ultramodern-rende
 import { createOctaneWorkerFederationFixtures } from './fixtures.mjs';
 import { readWorkerFixturePlan, runWorkerFixtureProof } from './proof.mjs';
 
+export const sourceWorkerGitignore =
+  'node_modules/\ndist-cloudflare/\n.output/\n.modern/\n**/.modern-js/tsgo/\n';
+
 const readJson = filename => JSON.parse(fs.readFileSync(filename, 'utf8'));
 const writeJson = (filename, value) => {
   fs.mkdirSync(path.dirname(filename), { recursive: true });
@@ -370,7 +373,7 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
     private: true,
   });
   writeFiles(workspaceRoot, {
-    '.gitignore': 'node_modules/\ndist-cloudflare/\n.output/\n.modern/\n',
+    '.gitignore': sourceWorkerGitignore,
   });
   const policyPath = path.join(workspaceRoot, 'pnpm-workspace.yaml');
   writeJson(policyPath, {
