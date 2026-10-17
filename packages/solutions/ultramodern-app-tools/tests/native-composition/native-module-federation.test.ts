@@ -1020,6 +1020,62 @@ describe('native Module Federation plugin', () => {
     },
   );
 
+  it('resolves publisher replacement from each initialized host only when it is used', () => {
+    const source = nativeFederationRuntimePluginSource([], undefined, true);
+    // A static Octane import becomes a non-eager shared consume in the MF
+    // bootstrap itself, before that consume's module factory is installed.
+    expect(source).not.toMatch(/import[^\n]*from ['"]octane['"]/u);
+    const preparations: { prepareReplacement(boundary: object): unknown }[] =
+      [];
+    const createPlugin = new Function(
+      'ModuleFederation',
+      'createNativeBrowserDevRuntimePlugin',
+      'prepareNativeBrowserDevClient',
+      'releaseNativeBrowserDevClient',
+      source
+        .replace(/^import[^\n]+;\n/gmu, '')
+        .replace('export default function', 'return function'),
+    )(
+      class {},
+      (options: { prepareReplacement(boundary: object): unknown }) => {
+        preparations.push(options);
+        return { beforeInit: (args: unknown) => args };
+      },
+      () => () => {},
+      () => {},
+    );
+    const plugin = createPlugin();
+    const calls: string[] = [];
+    let hydrated = false;
+    const origin = (label: string) => ({
+      loadShareSync(name: string) {
+        if (!hydrated) throw new Error('Native provider is not initialized.');
+        calls.push(label + ':' + name);
+        return () => ({
+          preparePublisherBoundaryReplacement(boundary: object) {
+            return { label, boundary };
+          },
+        });
+      },
+    });
+    const first = origin('first');
+    const second = origin('second');
+    plugin.beforeInit({ origin: first, userOptions: {} });
+    plugin.beforeInit({ origin: second, userOptions: {} });
+    expect(calls).toEqual([]);
+    hydrated = true;
+    const boundary = {};
+    expect(preparations[0]!.prepareReplacement(boundary)).toEqual({
+      label: 'first',
+      boundary,
+    });
+    expect(preparations[1]!.prepareReplacement(boundary)).toEqual({
+      label: 'second',
+      boundary,
+    });
+    expect(calls).toEqual(['first:octane', 'second:octane']);
+  });
+
   it('stages only its immutable remote when actual MF initialization appends a configured sibling', () => {
     const appToolsRequire = createRequire(
       path.resolve(__dirname, '../../package.json'),
@@ -1057,14 +1113,14 @@ describe('native Module Federation plugin', () => {
       const { ModuleFederation } = require(process.argv[1]);
       const prepared = [], retired = [];
       let releaseLease = 0, stageOptions;
-      const createPlugin = new Function('ModuleFederation', 'createNativeBrowserDevRuntimePlugin', 'prepareNativeBrowserDevClient', 'releaseNativeBrowserDevClient', 'preparePublisherBoundaryReplacement', process.argv[2])(
+      const createPlugin = new Function('ModuleFederation', 'createNativeBrowserDevRuntimePlugin', 'prepareNativeBrowserDevClient', 'releaseNativeBrowserDevClient', process.argv[2])(
         ModuleFederation,
         options => { stageOptions = options; return { beforeInit: args => args }; },
         (...args) => { prepared.push(args); return () => { releaseLease++; }; },
-        (...args) => { retired.push(args); },
-        () => { throw new Error('The stage-construction control must not replace a mounted publisher.'); }
+        (...args) => { retired.push(args); }
       );
       const plugin = createPlugin();
+      plugin.beforeInit({ origin: {}, userOptions: {} });
       const input = { name: 'recovery_glue_proof', remotes: [JSON.parse(process.argv[3])], plugins: [plugin] };
       const stage = stageOptions.createHost(input);
       stage.prepareFactory();

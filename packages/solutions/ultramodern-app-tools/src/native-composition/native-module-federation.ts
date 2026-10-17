@@ -780,7 +780,6 @@ export function nativeFederationRuntimePluginSource(
   return `${
     browserDev
       ? `import { ModuleFederation } from '@module-federation/enhanced/runtime';
-import { preparePublisherBoundaryReplacement } from 'octane';
 import { createNativeBrowserDevRuntimePlugin } from '@modern-js/federation-runtime/native-browser-dev-runtime-plugin';
 import { prepareNativeBrowserDevClient, releaseNativeBrowserDevClient } from '@modern-js/federation-runtime/native-browser-dev-client';
 `
@@ -794,9 +793,15 @@ ${
 }export default function ultramodernNativeFederation() {
   ${
     browserDev
-      ? `const browser = createNativeBrowserDevRuntimePlugin({
+      ? `function browserFor(origin) {
+    return createNativeBrowserDevRuntimePlugin({
     remotes,
-    prepareReplacement: preparePublisherBoundaryReplacement,
+    prepareReplacement(boundary) {
+      // Runtime plugins run before non-eager shared consumers are installed.
+      // Replacement runs after hydration, on this exact host's native provider.
+      const native = origin.loadShareSync('octane')();
+      return native.preparePublisherBoundaryReplacement(boundary);
+    },
     createHost(options) {
       // Normal beforeInit can append sibling remotes to the mutable options.
       // This attempt owns only the immutable remotes passed before construction.
@@ -812,7 +817,8 @@ ${
           releaseNativeBrowserDevClient(remote.name, remote.entry);
       } };
     },
-  });`
+    });
+  }`
       : ''
   }
   return {
@@ -845,7 +851,7 @@ ${
         ...registered,
         ...remotes.filter(remote => !known.has(remote.alias)).map(remote => ({ ...remote })),
       ];
-      ${browserDev ? 'browser.beforeInit(args);' : ''}
+      ${browserDev ? 'browserFor(args.origin).beforeInit(args);' : ''}
       return args;
     },
   };
