@@ -13,11 +13,17 @@ const completed = () => ({
   manifestSha256: binding.manifestSha256,
   cohortDigest: binding.frameworkCohortDigest,
   installedCopies: 12,
-  tuple: Object.fromEntries(
-    ['solid-js', '@solidjs/web', '@solidjs/signals', '@solidjs/compiler'].map(
-      name => [name, '2.0.0-rc.15'],
-    ),
-  ),
+  // This is the complete installedTuple() output from generated-consumer.mjs.
+  tuple: {
+    'solid-js': '2.0.0-rc.15',
+    '@solidjs/web': '2.0.0-rc.15',
+    '@solidjs/signals': '2.0.0-rc.15',
+    '@solidjs/compiler': '2.0.0-rc.15',
+    '@babel/core': '7.29.7',
+    typescript: '7.0.2',
+    seroval: '1.6.7',
+    'seroval-plugins': '1.6.7',
+  },
   types: {
     entries: ['node_modules/.modern-js/solid/index/index.ts'],
     generatedDigests: {
@@ -49,6 +55,35 @@ const completed = () => ({
     blockedEntryRequests: ['/static/app.js'],
     deliveredEntryRequests: ['/static/app.js'],
   },
+});
+
+test('the actual eight-package installed tuple qualifies and every version remains exact', () => {
+  const result = completed();
+  assert.equal(Object.keys(result.tuple).length, 8);
+  assert.equal(
+    verifyGeneratedSolidResult(result, binding).sameNativeOwner,
+    true,
+  );
+  for (const name of Object.keys(result.tuple)) {
+    const missing = completed();
+    delete missing.tuple[name];
+    assert.throws(
+      () => verifyGeneratedSolidResult(missing, binding),
+      /Solid 2 RC15 tuple/u,
+    );
+    const drifted = completed();
+    drifted.tuple[name] = '0.0.0';
+    assert.throws(
+      () => verifyGeneratedSolidResult(drifted, binding),
+      /Solid 2 RC15 tuple/u,
+    );
+  }
+  const unexpected = completed();
+  unexpected.tuple['unexpected-native-owner'] = '1.0.0';
+  assert.throws(
+    () => verifyGeneratedSolidResult(unexpected, binding),
+    /Solid 2 RC15 tuple/u,
+  );
 });
 
 test('the generated Solid row requires the completed strict/browser result', () => {

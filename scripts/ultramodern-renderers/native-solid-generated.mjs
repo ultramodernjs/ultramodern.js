@@ -11,6 +11,13 @@ const nativePackages = [
   '@solidjs/signals',
   '@solidjs/compiler',
 ];
+const installedTuple = Object.freeze({
+  ...Object.fromEntries(nativePackages.map(name => [name, '2.0.0-rc.15'])),
+  '@babel/core': '7.29.7',
+  typescript: '7.0.2',
+  seroval: '1.6.7',
+  'seroval-plugins': '1.6.7',
+});
 
 /** Only the completed original strict-build/browser proof may supply this row. */
 export function verifyGeneratedSolidResult(result, binding) {
@@ -23,7 +30,7 @@ export function verifyGeneratedSolidResult(result, binding) {
   );
   assert.deepEqual(
     result.tuple,
-    Object.fromEntries(nativePackages.map(name => [name, '2.0.0-rc.15'])),
+    installedTuple,
     'The generated consumer must use the actual Solid 2 RC15 tuple',
   );
   const types = result.types;
