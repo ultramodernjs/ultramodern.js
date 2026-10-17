@@ -16,6 +16,7 @@ import {
 } from './native-federation-dev-assets';
 import { resolveNativeFederationDevPublicPath } from './native-federation-dev-public-path';
 import { findNativeFederationConfig } from './native-federation-files';
+import { isNativeWorkerBuild } from './native-worker';
 import { resolveNativeRendererAdapter } from './renderer-registration';
 
 export {
@@ -909,8 +910,10 @@ class NativeFederationHydrationModulePlugin {
  * without a module-federation.config file; with one, the client compilation
  * publishes and consumes ESM containers whose renderer runtime is shared.
  * When the application server-renders, or exposes modules a host may
- * server-render, the server compilation publishes and consumes Node
- * containers with the same singletons.
+ * server-render, the Node server compilation publishes and consumes Node
+ * containers with the same singletons. Native Workers instead compile their
+ * static expose registry and use service-binding snapshot transport; only
+ * their browser compilation installs Module Federation.
  */
 export function nativeModuleFederationPlugin(
   renderer: NativeRenderer,
@@ -919,6 +922,7 @@ export function nativeModuleFederationPlugin(
     name: NATIVE_MODULE_FEDERATION_PLUGIN,
     setup(api) {
       let loaded: Promise<FederationOptions | undefined> | undefined;
+      const workerBuild = () => isNativeWorkerBuild(api.getNormalizedConfig());
       const load = () =>
         (loaded ??= (async () => {
           const file = findNativeFederationConfig(
@@ -929,15 +933,20 @@ export function nativeModuleFederationPlugin(
             throw new Error(
               `unsupported-renderer-capability: renderer ${renderer} does not support Module Federation; remove ${path.basename(file)}`,
             );
-          if (api.getNormalizedConfig().deploy?.worker?.ssr)
+          if (workerBuild() && renderer !== 'octane')
             throw new Error(
-              `unsupported-renderer-capability: renderer ${renderer} does not support Module Federation worker server rendering; native federation requires the Node server transport`,
+              `unsupported-renderer-capability: renderer ${renderer} has no native Worker snapshot federation transport`,
             );
           return loadNativeFederationConfig(file);
         })());
       const serverRendered = (authored: FederationOptions): boolean => {
-        // Client-only federation never publishes or consumes Node containers.
-        if (!resolveNativeRendererAdapter(renderer).federation?.ssr)
+        // Worker SSR owns static exposes and service bindings, not HTTP-loaded
+        // Node containers. Its client still publishes the browser manifest
+        // stamped by native infrastructure with exact Worker coordinates.
+        if (
+          workerBuild() ||
+          !resolveNativeRendererAdapter(renderer).federation?.ssr
+        )
           return false;
         if (exposesNativeModules(authored)) return true;
         const { server } = api.getNormalizedConfig();

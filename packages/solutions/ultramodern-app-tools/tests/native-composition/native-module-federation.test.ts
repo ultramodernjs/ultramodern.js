@@ -947,27 +947,87 @@ describe('native Module Federation plugin', () => {
     },
   );
 
-  it.each(nativeRenderers)(
-    'rejects %s Worker MF before creating runtime files or providers',
-    async renderer => {
+  it.each([
+    { name: 'host', remotes: { remote: manifestRemote } },
+    { name: 'remote', exposes: { './Widget': './src/Widget.tsrx' } },
+  ])(
+    'publishes only browser containers for a native Worker $name',
+    async authored => {
       const root = app({
-        'module-federation.config.mjs': `export default { name: 'host' };`,
+        'package.json': '{}',
+        'module-federation.config.mjs': `export default ${JSON.stringify(authored)};`,
       });
-      const hooks = setup(renderer, root, {
-        deploy: { worker: { ssr: true } },
+      // Workers have their own static expose registry and service bindings.
+      // Neither the native Worker compiler nor the unused Node compilation
+      // should resolve @module-federation/node or load remote Node containers.
+      installPackages(root, false, 'octane');
+      const hooks = setup('octane', root, {
+        deploy: { target: 'cloudflare', worker: { ssr: true } },
+        server: { ssr: true },
       });
       const client = chain();
-      await expect(
-        hooks.modifyBundlerChain(client.chain, {
-          environment: { name: 'client' },
-        }),
-      ).rejects.toThrow('native federation requires the Node server transport');
-      expect(client.uses).toEqual([]);
+      await hooks.modifyBundlerChain(client.chain, {
+        environment: { name: 'client' },
+      });
+      expect(client.uses.map(([name]) => name)).toEqual([
+        'ultramodern-federation-shared-owners',
+        'plugin-module-federation',
+      ]);
+      const [, , [options]] = client.uses.find(
+        ([key]) => key === 'plugin-module-federation',
+      ) as [string, unknown, [any]];
+      expect(options.name).toBe(authored.name);
+      expect(options.exposes).toEqual(authored.exposes);
+      expect(options.library).toEqual({ type: 'module' });
+      // No ssrRemoteEntry/ssrPublicPath advertises a nonexistent Node container.
+      expect(options.manifest).toBe(true);
+      expect(options.runtimePlugins).toEqual([
+        path.join(
+          root,
+          'node_modules/.modern-js/federation/native-runtime.mjs',
+        ),
+      ]);
+      for (const name of ['workerSSR', 'server']) {
+        const compiler = chain();
+        await hooks.modifyBundlerChain(compiler.chain, {
+          environment: { name },
+        });
+        expect(compiler.uses).toEqual([]);
+        const config = { output: { publicPath: '/' } };
+        await hooks.modifyRspackConfig(config, {
+          environment: { name },
+        });
+        expect(config).toEqual({ output: { publicPath: '/' } });
+      }
       expect(
-        fs.existsSync(path.join(root, 'node_modules/.modern-js/federation')),
+        fs.existsSync(
+          path.join(
+            root,
+            'node_modules/.modern-js/federation/native-runtime.server.mjs',
+          ),
+        ),
       ).toBe(false);
     },
   );
+
+  it('rejects a Solid Worker without a native snapshot transport', async () => {
+    const root = app({
+      'module-federation.config.mjs': `export default { name: 'host' };`,
+    });
+    const hooks = setup('solid', root, {
+      deploy: { target: 'cloudflare', worker: { ssr: true } },
+    });
+    const client = chain();
+    await expect(
+      hooks.modifyBundlerChain(client.chain, {
+        environment: { name: 'client' },
+      }),
+    ).rejects.toThrow('has no native Worker snapshot federation transport');
+    expect(client.uses).toEqual([]);
+    expect(
+      fs.existsSync(path.join(root, 'node_modules/.modern-js/federation')),
+    ).toBe(false);
+  });
 
   it.each(nativeRenderers)(
     'registers %s graph refresh only in the Node development runtime',

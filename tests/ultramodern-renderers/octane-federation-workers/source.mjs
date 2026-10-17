@@ -68,6 +68,118 @@ const installedOwner = (request, name) => {
   }
 };
 
+/** Resolve authored topology projections through the installed config owners. */
+async function finalizeAuthoredSourceTopology(workspaceRoot) {
+  const filename = path.join(workspaceRoot, 'topology/reference-topology.json');
+  const topology = readJson(filename);
+  const apps = [topology.shell, ...topology.verticals];
+  for (const app of apps) {
+    const appRoot = path.join(workspaceRoot, app.path);
+    const request = createRequire(path.join(appRoot, 'package.json'));
+    const tools = request('@modern-js/ultramodern-app-tools');
+    const toolingRequest = createRequire(
+      request.resolve('@modern-js/ultramodern-app-tools'),
+    );
+    const contracts = toolingRequest('@modern-js/backend-federation-contracts');
+    const { loadUltramodernConfigMetadata } = request(
+      '@modern-js/ultramodern-app-tools/config-metadata',
+    );
+    // No fallback package roots: every config import belongs to this actual install.
+    const metadata = await loadUltramodernConfigMetadata({
+      appDirectory: appRoot,
+      env: 'production',
+      command: 'build',
+      sourceRoot: workspaceRoot,
+    });
+    assert.equal(metadata.renderer, 'octane');
+    assert(
+      metadata.entries.some(
+        entry => entry.entryName === metadata.primaryEntryName,
+      ),
+    );
+    const selected = tools.resolveRendererProfile(metadata.renderer);
+    const rendererProfile = {
+      renderer: selected.renderer,
+      protocolVersion: selected.protocolVersion,
+      compiler: selected.compiler,
+      hydration: selected.hydration,
+      router: selected.router,
+    };
+    assert.equal(contracts.validateRendererProfile(rendererProfile).ok, true);
+    assert.equal(
+      contracts.validateRendererRouterBindings(
+        metadata.routerBindings,
+        metadata.entries.map(entry => entry.entryName),
+        'routerBindings',
+        tools.resolveRendererRouterFrameworks(metadata.renderer),
+      ).ok,
+      true,
+    );
+    // These are source-authoring generation coordinates. The normal production
+    // build derives its release marker from the real clean fixture Git revision.
+    const buildMarker = createHash('sha256')
+      .update(
+        JSON.stringify({
+          namespace: 'authored-source-worker-delivery:v1',
+          appId: app.id,
+          packageName: app.package,
+          version: app.deliveryUnit.version,
+          rendererProfile,
+          routerBindings: metadata.routerBindings,
+        }),
+      )
+      .digest('hex')
+      .slice(0, 16);
+    const record = {
+      ...app.deliveryUnit,
+      appId: app.id,
+      buildMarker,
+      sourceRevision: 'workspace',
+      schemaVersion: contracts.DELIVERY_UNIT_SCHEMA_VERSION,
+      kind: contracts.DELIVERY_UNIT_KIND,
+      deployProfile: contracts.DELIVERY_UNIT_DEPLOY_PROFILE,
+    };
+    assert.equal(contracts.validateDeliveryUnitRecord(record).ok, true);
+    const rendererIdentities = Object.fromEntries(
+      metadata.entries.map(({ entryName }) => [
+        entryName,
+        {
+          renderer: metadata.renderer,
+          appId: app.id,
+          entryName,
+          protocolVersion: rendererProfile.protocolVersion,
+          buildId: buildMarker,
+        },
+      ]),
+    );
+    for (const identity of Object.values(rendererIdentities))
+      assert.equal(contracts.validateRendererIdentity(identity).ok, true);
+    Object.assign(app, {
+      renderer: metadata.renderer,
+      rendererProfile,
+      routerBindings: metadata.routerBindings,
+      rendererIdentity: rendererIdentities[metadata.primaryEntryName],
+      rendererIdentities,
+      deliveryUnit: contracts.deliveryUnitContractBlock(record),
+    });
+    // Author the same input carrier used by the normal workspace generator.
+    // emitRendererBuildArtifact owns its later compiled/stamped counterpart.
+    const carrier = contracts.createUltramodernBuildArtifact(record, {
+      ui: {
+        identity: app.rendererIdentity,
+        profile: rendererProfile,
+        routerBindings: metadata.routerBindings,
+      },
+    });
+    writeJson(
+      path.join(appRoot, contracts.ULTRAMODERN_BUILD_ARTIFACT_PATH),
+      carrier,
+    );
+  }
+  // This is the authored source topology, never a generated or compiler output.
+  fs.writeFileSync(filename, `${JSON.stringify(topology, null, 2)}\n`);
+}
+
 /** Serve only the genuine emitted publication while the next consumer builds. */
 async function serveAssets(root, origin) {
   const server = http.createServer((request, response) => {
@@ -182,7 +294,7 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
   const topologyApp = (id, index) => ({
     id,
     kind: index ? 'vertical' : 'shell',
-    renderer: 'octane',
+    surfaceProfile: 'ui-only',
     path: `${index ? 'verticals' : 'apps'}/${id}`,
     package: `@authored-worker/${id}`,
     ...(index ? { domain: id } : { verticalRefs: ['remote-a', 'remote-b'] }),
@@ -191,8 +303,11 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
       exposes: index ? ['./Widget'] : [],
     },
     deliveryUnit: {
+      schemaVersion: 1,
+      kind: 'microvertical-delivery-unit',
       unitId: `authored-worker/${id}`,
       buildMarker: generationBuildMarker,
+      sourceRevision: 'workspace',
       packageName: `@authored-worker/${id}`,
       version: '0.0.0',
     },
@@ -244,6 +359,9 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
     version: '0.0.0',
     private: true,
   });
+  writeFiles(workspaceRoot, {
+    '.gitignore': 'node_modules/\ndist-cloudflare/\n.output/\n.modern/\n',
+  });
   const policyPath = path.join(workspaceRoot, 'pnpm-workspace.yaml');
   writeJson(policyPath, {
     packages: ['apps/*', 'verticals/*'],
@@ -274,10 +392,15 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
   for (const { app, files } of fixture.applications)
     writeFiles(path.join(workspaceRoot, app.directory), files);
   const environment = {
-    ...process.env,
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(
+        ([name]) => !name.toUpperCase().startsWith('GIT_'),
+      ),
+    ),
     NODE_PATH: '',
     NODE_OPTIONS: '',
     NODE_ENV: 'production',
+    ULTRAMODERN_SOURCE_REVISION: '',
     PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH ?? ''}`,
     ...Object.fromEntries(
       apps.map((app, index) => [app.cloudflare.publicUrlEnv, origins[index]]),
@@ -399,6 +522,31 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
       generatorPackageRoot,
     });
     provider.verify();
+    // Before this step topology declares only membership and a complete source
+    // delivery unit; final build projections come from actual installed config.
+    await run(
+      process.execPath,
+      [fileURLToPath(import.meta.url), '--finalize-topology', workspaceRoot],
+      workspaceRoot,
+      'finalize-authored-topology',
+    );
+    await run('git', ['init', '--quiet'], workspaceRoot, 'source-git-init');
+    await run('git', ['add', '--all'], workspaceRoot, 'source-git-add');
+    await run(
+      'git',
+      [
+        '-c',
+        'user.name=UltraModern source fixture',
+        '-c',
+        'user.email=source-fixture@invalid',
+        'commit',
+        '--quiet',
+        '-m',
+        'Record actual authored Worker consumer sources and installed lockfile',
+      ],
+      workspaceRoot,
+      'source-git-commit',
+    );
     for (const [index, app] of apps.entries()) {
       const request = createRequire(
         path.join(workspaceRoot, app.path, 'package.json'),
@@ -414,11 +562,8 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
         assert.equal(actual.name, name);
         assert.equal(actual.version, version);
       }
-      // App roots and all later compiler outputs belong to this operation.
-      await artifact(
-        path.join(workspaceRoot, app.path, 'dist-cloudflare'),
-        'build',
-      );
+      // The enclosing registered owned-temp-dir lease owns dist-cloudflare.
+      // It is not a separately registrable DiskGuardian build basename.
       await artifact(path.join(workspaceRoot, app.path, '.output'), 'build');
       assert.equal(ports[index], Number(new URL(origins[index]).port));
     }
@@ -531,21 +676,37 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  assert.equal(process.argv.length, 3, 'Usage: source.mjs <source-input.json>');
-  const abort = new AbortController();
-  const stop = () =>
-    abort.abort(new Error('Source Worker consumer interrupted.'));
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
-  process.once('SIGHUP', stop);
-  try {
-    const result = await runSourceWorkerConsumer(readJson(process.argv[2]), {
-      signal: abort.signal,
-    });
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  } finally {
-    process.removeListener('SIGINT', stop);
-    process.removeListener('SIGTERM', stop);
-    process.removeListener('SIGHUP', stop);
+  if (process.argv[2] === '--finalize-topology') {
+    assert.equal(process.argv.length, 4);
+    assert(
+      process.env.OWNED_TEMP_DIR,
+      'Topology preparation requires the source proof owner.',
+    );
+    const root = fs.realpathSync(process.env.OWNED_TEMP_DIR);
+    const workspaceRoot = fs.realpathSync(process.argv[3]);
+    assert(workspaceRoot.startsWith(`${root}${path.sep}`));
+    await finalizeAuthoredSourceTopology(workspaceRoot);
+  } else {
+    assert.equal(
+      process.argv.length,
+      3,
+      'Usage: source.mjs <source-input.json>',
+    );
+    const abort = new AbortController();
+    const stop = () =>
+      abort.abort(new Error('Source Worker consumer interrupted.'));
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+    process.once('SIGHUP', stop);
+    try {
+      const result = await runSourceWorkerConsumer(readJson(process.argv[2]), {
+        signal: abort.signal,
+      });
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } finally {
+      process.removeListener('SIGINT', stop);
+      process.removeListener('SIGTERM', stop);
+      process.removeListener('SIGHUP', stop);
+    }
   }
 }
