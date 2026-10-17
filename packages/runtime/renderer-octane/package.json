@@ -251,6 +251,7 @@
     "@scripts/rstest-config": "workspace:*",
     "@types/node": "^26.6.5",
     "happy-dom": "^21.0.3",
+    "i18next": "26.4.6",
     "octane": "https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-d5988dd93614/octane-0.13.8.tgz",
     "typescript": "7.0.2",
     "@tsrx/oxc": "0.20.0"

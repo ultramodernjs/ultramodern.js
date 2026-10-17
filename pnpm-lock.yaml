@@ -2428,6 +2428,9 @@ importers:
       happy-dom:
         specifier: ^21.0.3
         version: 21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+      i18next:
+        specifier: 26.4.6
+        version: 26.4.6(typescript@7.0.2)
       octane:
         specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-d5988dd93614/octane-0.13.8.tgz
         version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-d5988dd93614/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))

@@ -5,6 +5,8 @@ import {
   associateRouterRenderProfile,
   captureRouterRenderSnapshot,
   createRouterRenderRouteTree,
+  defaultParseSearch,
+  defaultStringifySearch,
   disposeRouterRenderSnapshot,
   getRouterRenderProfile,
   matchContext,
@@ -32,15 +34,19 @@ interface GeneratedRouterOrigin {
 const origins = new WeakMap<AnyRouter, GeneratedRouterOrigin>();
 let profileRegistered = false;
 
+function plainRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    [Object.prototype, null].includes(Object.getPrototypeOf(value))
+  );
+}
+
 function record(
   value: unknown,
   fields?: readonly string[],
 ): Record<string, unknown> {
-  if (
-    value === null ||
-    typeof value !== 'object' ||
-    ![Object.prototype, null].includes(Object.getPrototypeOf(value))
-  )
+  if (!plainRecord(value))
     throw new TypeError('Worker router context requires a plain record');
   for (const key of Reflect.ownKeys(value)) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -185,12 +191,16 @@ function ensureDefaultProfile(): void {
       return createRouterRenderRouteTree(snapshot.routes);
     },
     routingOptions: snapshot => {
+      const defaults = {
+        parseSearch: defaultParseSearch,
+        stringifySearch: defaultStringifySearch,
+      };
       const i18n = rewriteDescriptor(snapshot.i18n);
-      if (!i18n) return {};
+      if (!i18n) return defaults;
       const codec = getOctaneWorkerRouterRewrite();
       if (!codec)
         throw new TypeError('Missing owning Worker router i18n codec');
-      return { rewrite: codec.restore(i18n) };
+      return { ...defaults, rewrite: codec.restore(i18n) };
     },
   });
   profileRegistered = true;

@@ -119,9 +119,11 @@ function copyJson(value: unknown, maxBytes = MAX_BYTES): I18nSnapshotJson {
       return input;
     }
     if (
-      Array.isArray(input)
+      typeof input !== 'object' ||
+      input === null ||
+      (Array.isArray(input)
         ? Object.getPrototypeOf(input) !== Array.prototype
-        : !record(input)
+        : !record(input))
     )
       throw new Error('i18n snapshots contain only plain JSON data');
     if (ancestors.has(input))

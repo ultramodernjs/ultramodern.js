@@ -50,8 +50,14 @@ export function createNativeWorkerFederationRuntime<Bindings extends object>(
     ? createWorkerFederationTransport({
         admitRendererContract: compiler.admitRendererContract,
         services: resources.workerFederationServices.map(service => {
-          const binding = bindings && Reflect.get(bindings, service.binding);
-          if (!binding || typeof binding.fetch !== 'function')
+          const binding: unknown =
+            bindings && Reflect.get(bindings, service.binding);
+          if (
+            !binding ||
+            (typeof binding !== 'object' && typeof binding !== 'function') ||
+            !('fetch' in binding) ||
+            typeof binding.fetch !== 'function'
+          )
             throw new Error(
               `Native Worker federation requires service binding ${service.binding}.`,
             );
