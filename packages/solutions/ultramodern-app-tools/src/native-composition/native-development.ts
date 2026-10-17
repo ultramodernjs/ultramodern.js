@@ -31,6 +31,7 @@ import {
   nativeFederationDevGraph,
   nativeFederationDevRevision,
   resolveNativeFederationDevAsset,
+  resolveNativeFederationDevManifest,
   retainNativeFederationDevAssets,
 } from './native-federation-dev-assets';
 import { nativeFederationDevHotUpdateTarget } from './native-federation-dev-public-path';
@@ -257,11 +258,18 @@ export class NativeDevelopment {
                 request.url = hotUpdate;
                 return next();
               }
-              const federationAsset = resolveNativeFederationDevAsset(
-                this.federationAssets,
-                request.url ?? '/',
-                origin,
-              );
+              const federationAsset =
+                resolveNativeFederationDevAsset(
+                  this.federationAssets,
+                  request.url ?? '/',
+                  origin,
+                ) ??
+                (this.federationGraph &&
+                  resolveNativeFederationDevManifest(
+                    this.federationAssets,
+                    request.url ?? '/',
+                    this.federationGraph.manifest,
+                  ));
               const revision = this.federationRevision;
               const asset =
                 federationAsset || (pathname && this.retained.get(pathname));

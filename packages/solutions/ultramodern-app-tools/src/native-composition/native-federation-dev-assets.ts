@@ -327,3 +327,18 @@ export function resolveNativeFederationDevAsset(
   url.search = '';
   return assets.get(url.href);
 }
+
+/** The stable discovery route belongs to this server's completed publication.
+ * Its absolute public URL can use a different listener alias from the request.
+ * Only that exact manifest is routed here; immutable assets keep exact origins. */
+export function resolveNativeFederationDevManifest(
+  assets: ReadonlyMap<string, NativeDevelopmentAsset>,
+  target: string,
+  manifest: string,
+): NativeDevelopmentAsset | undefined {
+  const published = URL.parse(manifest);
+  if (!published) return;
+  const requested = URL.parse(target, published.origin);
+  if (requested?.pathname !== published.pathname) return;
+  return resolveNativeFederationDevAsset(assets, target, published.origin);
+}

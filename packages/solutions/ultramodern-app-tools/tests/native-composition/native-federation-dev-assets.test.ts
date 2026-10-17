@@ -3,6 +3,7 @@ import {
   type NativeDevelopmentAsset,
   nativeFederationDevRevision,
   resolveNativeFederationDevAsset,
+  resolveNativeFederationDevManifest,
   retainNativeFederationDevAssets,
 } from '../../src/native-composition/native-federation-dev-assets';
 
@@ -48,6 +49,52 @@ describe('native federation development asset lookup', () => {
       expect(resolveNativeFederationDevAsset(assets, target, origin)).toBe(
         asset,
       );
+  });
+
+  it('routes only the exact completed stable manifest across development listener aliases', () => {
+    const manifest = `${origin}/mf-manifest.json`;
+    const completed = {
+      bytes: Buffer.from(
+        JSON.stringify({
+          metaData: {
+            publicPath: `${origin}/__ultramodern_mf__/f0ff36297bbb8405/`,
+            remoteEntry: { name: 'remoteEntry.js', path: '', type: 'module' },
+          },
+        }),
+      ),
+      contentType: 'application/json',
+      immutable: false,
+    };
+    const graph = new Map([...assets, [manifest, completed]]);
+    // The real installed host registers 127.0.0.1 while Rsbuild publishes
+    // localhost. Its fallback JSON lacks the completed publication headers.
+    expect(
+      resolveNativeFederationDevAsset(
+        graph,
+        '/mf-manifest.json',
+        'http://127.0.0.1:43123',
+      ),
+    ).toBeUndefined();
+    expect(
+      resolveNativeFederationDevManifest(
+        graph,
+        '/mf-manifest.json?latest=1',
+        manifest,
+      ),
+    ).toBe(completed);
+    for (const target of [
+      '/bundles/remoteEntry.js',
+      '/__ultramodern_mf__/f0ff36297bbb8405/mf-manifest.json',
+      '/other/mf-manifest.json',
+      '/nested/../mf-manifest.json',
+      '/%2e/mf-manifest.json',
+      '//localhost:43123/mf-manifest.json',
+      manifest,
+      '/mf-manifest.json#fragment',
+    ])
+      expect(
+        resolveNativeFederationDevManifest(graph, target, manifest),
+      ).toBeUndefined();
   });
 
   it('requires the container public origin and an admitted asset name', () => {

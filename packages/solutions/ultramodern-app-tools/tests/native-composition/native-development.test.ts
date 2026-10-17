@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { type IncomingHttpHeaders, request } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -762,6 +763,44 @@ describe('native development', () => {
     );
     const immutableManifestUrl = /^<([^>]+)>/u.exec(link!)![1];
     const firstManifest = await discovered.text();
+    // Request the same listener using a Host alias unlike the compiler's public
+    // URL. Discovery must retain the accepted bytes and completed coordinates.
+    const aliased = await new Promise<{
+      status: number | undefined;
+      headers: IncomingHttpHeaders;
+      body: Buffer;
+    }>((resolve, reject) => {
+      request(
+        manifestUrl,
+        {
+          headers: {
+            Host: `localhost:${new URL(app.address).port}`,
+            Origin: 'http://another-host.invalid',
+          },
+        },
+        response => {
+          const chunks: Buffer[] = [];
+          response.on('data', chunk => chunks.push(Buffer.from(chunk)));
+          response.on('error', reject);
+          response.on('end', () =>
+            resolve({
+              status: response.statusCode,
+              headers: response.headers,
+              body: Buffer.concat(chunks),
+            }),
+          );
+        },
+      )
+        .on('error', reject)
+        .end();
+    });
+    expect(aliased.status).toBe(200);
+    expect(aliased.body).toEqual(Buffer.from(firstManifest));
+    expect(aliased.headers.link).toBe(link);
+    expect(aliased.headers[NATIVE_FEDERATION_DEV_REVISION_HEADER]).toBe(
+      revision,
+    );
+    expect(aliased.headers['cache-control']).toBe('no-store');
     const frozenManifest = await fetch(immutableManifestUrl);
     expect(frozenManifest.headers.get('Cache-Control')).toBe(
       'public, max-age=31536000, immutable',
