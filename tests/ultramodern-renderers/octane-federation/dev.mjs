@@ -1295,6 +1295,12 @@ export default function Away() { const router = useRouter(); return <section dat
     ).catch(String);
     results.browserSnapshot = await evaluate(`({
       marker: typeof window.__ssrRemoteWidget !== 'undefined',
+      markerIsNull: window.__ssrRemoteWidget === null,
+      markerConnected: window.__ssrRemoteWidget?.isConnected ?? false,
+      markerMatchesCurrent: window.__ssrRemoteWidget !== null && window.__ssrRemoteWidget === document.querySelector('[data-testid="remote-widget"]'),
+      markerCapture: window.__ssrRemoteWidgetCapture,
+      markedWidgetHTML: window.__ssrRemoteWidget?.outerHTML ?? null,
+      currentWidgetHTML: document.querySelector('[data-testid="remote-widget"]')?.outerHTML ?? null,
       markerBeforeHydration: window.__ssrRemoteAlreadyHydrated,
       nativeScripts: window.__ssrEntryScripts,
       hydration: document.querySelector('[data-testid="remote-widget"]')?.getAttribute('data-hydrated'),

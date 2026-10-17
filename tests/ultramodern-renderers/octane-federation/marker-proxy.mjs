@@ -71,6 +71,14 @@ export function createSSRMarkerProxy({
 window.__ssrRemoteWidget = document.querySelector(${JSON.stringify(widgetSelector)});
 window.__ssrRemoteCounter = ${counterSelector ? `document.querySelector(${JSON.stringify(counterSelector)})` : 'null'};
 window.__ssrRemoteAlreadyHydrated = window.__ssrRemoteWidget?.getAttribute('data-hydrated') === 'true';
+window.__ssrRemoteWidgetCapture = {
+  present: window.__ssrRemoteWidget !== null,
+  connected: window.__ssrRemoteWidget?.isConnected ?? false,
+  outerHTML: window.__ssrRemoteWidget?.outerHTML ?? null,
+  hydrateBoundaryId: window.__ssrRemoteWidget?.closest('[data-octane-hydrate-id]')?.getAttribute('data-octane-hydrate-id') ?? null,
+  publisherDescriptor: window.__ssrRemoteWidget?.closest('[data-octane-hydrate-id]')?.querySelector('script[data-octane-publisher]')?.textContent ?? null,
+  pendingSegmentIds: Array.from(document.querySelectorAll('[data-oct-s]')).map(node => node.getAttribute('data-oct-s')),
+};
 window.__ssrEntryScripts = Array.from(document.scripts).filter(script => script.type === 'module').map(script => ({ source: script.getAttribute('src'), asyncAttribute: script.hasAttribute('async'), asyncProperty: script.async }));
 window.__remoteFallbackSeen = Boolean(document.querySelector('[data-testid="remote-fallback"]'));
 new MutationObserver(records => {
