@@ -181,7 +181,7 @@ jobs:
         run: |
           feature_work="$(mktemp -d "$RUNNER_TEMP/renderer-features-XXXXXX")"
           OWNED_TEMP_DIR="$feature_work" mise exec -- node scripts/ultramodern-renderers/release.mjs \
-            --cohort-dir .modern/bleedingdev-publish --renderers octane --with '' \
+            --cohort-dir .modern/bleedingdev-publish --renderers solid,octane --with '' \
             --work-dir "$feature_work" --required-features \
             --acceptance-receipt .modern/bleedingdev-publish/acceptance-receipt.json \
             --feature-receipt .modern/bleedingdev-publish/acceptance-receipt.renderer-features.json \

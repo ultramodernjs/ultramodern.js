@@ -103,6 +103,31 @@ test('missing generated Worker proof cannot be replaced by prebuilt Worker', t =
   );
 });
 
+test('generated Solid strict/browser acceptance is required independently of Worker and HMR', t => {
+  const { options } = fixture(t);
+  delete options.rows['generated-solid'];
+  assert.throws(
+    () => writeRendererFeatureReceipt(options),
+    /Every renderer feature row/u,
+  );
+});
+
+test('generated Solid cannot be skipped or omit its strict compilation result', t => {
+  const { rows, binding } = fixture(t);
+  const solid = rows['generated-solid'];
+  solid.status = 'skipped';
+  assert.throws(
+    () => assertRendererFeatureRow('generated-solid', solid, binding),
+    /did not pass/u,
+  );
+  solid.status = 'passed';
+  delete solid.checks.strictGeneratedTypes;
+  assert.throws(
+    () => assertRendererFeatureRow('generated-solid', solid, binding),
+    /did not execute strictGeneratedTypes/u,
+  );
+});
+
 test('a passed row cannot omit, skip or fail a required runtime assertion', t => {
   const { rows, binding } = fixture(t);
   delete rows['dev-refresh'].checks.noDocumentReload;

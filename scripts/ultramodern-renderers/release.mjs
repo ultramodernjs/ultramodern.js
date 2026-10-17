@@ -107,8 +107,8 @@ if (opts['required-features']) {
     'run-identity',
   ])
     if (!opts[option]) throw new Error(`--required-features needs --${option}`);
-  if (!renderers.includes('octane'))
-    throw new Error('Required renderer features need Octane');
+  if (!['solid', 'octane'].every(renderer => renderers.includes(renderer)))
+    throw new Error('Required renderer features need Solid and Octane');
   if (
     opts['acceptance-mode'] === 'published' &&
     (!opts['source-feature-receipt'] || !opts['source-acceptance-receipt'])
@@ -867,26 +867,37 @@ async function main() {
     if (opts['required-features']) {
       const rows = {};
       const binding = rendererFeatureBinding(cohort);
-      for (const [row, module, exported] of [
+      for (const [row, renderer, module, exported] of [
+        [
+          'generated-solid',
+          'solid',
+          './native-solid-generated.mjs',
+          'runPackedGeneratedSolidProof',
+        ],
         [
           'dev-refresh',
+          'octane',
           './native-federation-dev.mjs',
           'runPackedNativeFederationDevProof',
         ],
         [
           'prebuilt-worker',
+          'octane',
           './native-federation-worker.mjs',
           'runPackedNativeFederationWorkerProof',
         ],
         [
           'generated-worker',
+          'octane',
           './native-federation-generated-worker.mjs',
           'runPackedNativeFederationGeneratedWorkerProof',
         ],
       ]) {
         await step(row, async () => {
-          if (!apps.octane)
-            throw new Error('The installed Octane consumer is unavailable');
+          if (!apps[renderer])
+            throw new Error(
+              `The installed ${renderer} consumer is unavailable`,
+            );
           const { allowBuilds } = parseYaml(
             fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
           );
@@ -894,8 +905,8 @@ async function main() {
           if (typeof run !== 'function')
             throw new Error(`${row} has no installed proof entrypoint`);
           activeNativeFederation = run({
-            renderer: 'octane',
-            consumerRoot: apps.octane.appRoot,
+            renderer,
+            consumerRoot: apps[renderer].appRoot,
             generatorConsumerRoot: createRoot,
             browserDependencyRoot: playwrightRoot(),
             browserExecutable: browserExecutable(),

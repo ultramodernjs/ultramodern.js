@@ -97,3 +97,38 @@ test('a bounded command timeout closes its subprocess', async () => {
     await scope.dispose();
   }
 });
+
+test('parent cancellation closes an active owned command without aborting unrelated scopes', async () => {
+  const parent = new AbortController();
+  const scope = createAdmissionProcessScope({ signal: parent.signal });
+  const sibling = createAdmissionProcessScope();
+  let child;
+  try {
+    child = scope.start(process.execPath, [
+      '-e',
+      'setInterval(() => {}, 1000)',
+    ]);
+    parent.abort(new Error('Renderer feature acceptance cancelled'));
+    await child.admissionCompletion;
+    assert.equal(
+      scope.signal.reason.message,
+      'Renderer feature acceptance cancelled',
+    );
+    assert.equal(alive(child.pid), false);
+    assert.equal(sibling.signal.aborted, false);
+    assert.deepEqual(
+      await sibling.execute(process.execPath, [
+        '-e',
+        "process.stdout.write('retained')",
+      ]),
+      { stdout: 'retained', stderr: '' },
+    );
+    assert.throws(
+      () => scope.start(process.execPath, []),
+      /acceptance cancelled/u,
+    );
+  } finally {
+    await scope.dispose();
+    await sibling.dispose();
+  }
+});

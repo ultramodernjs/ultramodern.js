@@ -2,8 +2,12 @@ import { spawn } from 'node:child_process';
 
 /** Own only subprocess groups created by this scope. Lifecycle cleanup remains
  * outside its abort signal so registrations can always be released. */
-export function createAdmissionProcessScope() {
+export function createAdmissionProcessScope({ signal } = {}) {
   const controller = new AbortController();
+  const interrupted = () =>
+    controller.abort(signal.reason ?? new Error('Solid admission interrupted'));
+  signal?.addEventListener('abort', interrupted, { once: true });
+  if (signal?.aborted) interrupted();
   const children = new Set();
   const handlers = new Map();
   for (const signal of ['SIGINT', 'SIGTERM']) {
@@ -127,6 +131,7 @@ export function createAdmissionProcessScope() {
       const results = await Promise.allSettled(
         [...children].map(child => child.admissionStop()),
       );
+      signal?.removeEventListener('abort', interrupted);
       for (const [signal, handler] of handlers)
         process.removeListener(signal, handler);
       const failures = results

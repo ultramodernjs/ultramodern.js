@@ -788,14 +788,17 @@ export async function runGeneratedSolidConsumer({
   manifestPath,
   browserRoot,
   browserExecutable,
+  signal,
 }) {
+  signal?.throwIfAborted();
   appRoot = await fs.realpath(appRoot);
   const cohort = readCohort(manifestPath);
   const copies = checkInstalledCohort({ appRoot, cohort });
   const tuple = await installedTuple(appRoot, cohort);
-  const scope = createAdmissionProcessScope();
-  const observer = await createSolidConsumerObserver(scope.signal);
+  const scope = createAdmissionProcessScope({ signal });
+  let observer;
   try {
+    observer = await createSolidConsumerObserver(scope.signal);
     const types = await checkGeneratedSolidTypes({
       appRoot,
       execute: scope.execute,
@@ -859,7 +862,7 @@ export async function runGeneratedSolidConsumer({
     try {
       await scope.dispose();
     } finally {
-      await observer.close();
+      await observer?.close();
     }
   }
 }

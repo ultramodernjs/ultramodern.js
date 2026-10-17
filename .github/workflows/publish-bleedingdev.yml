@@ -1403,7 +1403,7 @@ jobs:
         run: |
           feature_work="$(mktemp -d "$RUNNER_TEMP/renderer-features-XXXXXX")"
           OWNED_TEMP_DIR="$feature_work" mise exec -- node scripts/ultramodern-renderers/release.mjs \
-            --cohort-dir "$BLEEDINGDEV_RELEASE_DIR" --renderers octane --with '' \
+            --cohort-dir "$BLEEDINGDEV_RELEASE_DIR" --renderers solid,octane --with '' \
             --work-dir "$feature_work" --required-features \
             --acceptance-mode published --registry-url https://registry.npmjs.org/ \
             --source-feature-receipt "$BLEEDINGDEV_RELEASE_DIR/acceptance-receipt.renderer-features.json" \

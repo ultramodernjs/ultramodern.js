@@ -4,6 +4,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const requiredRendererFeatureRows = Object.freeze({
+  'generated-solid': [
+    'strictGeneratedTypes',
+    'sameNativeOwner',
+    'retainedHydration',
+    'nativeActions',
+    'nativeNavigation',
+    'requestIsolation',
+    'incrementalStreaming',
+    'cancellation',
+    'noDocumentReload',
+  ],
   'dev-refresh': [
     'noDocumentReload',
     'retainedHostState',
