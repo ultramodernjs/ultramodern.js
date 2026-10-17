@@ -3,6 +3,9 @@ name: UltraModern Packed Release Acceptance
 on:
   workflow_call:
     inputs:
+      required_renderer_features:
+        default: false
+        type: boolean
       producer_artifact_identity:
         required: true
         type: string
@@ -39,7 +42,7 @@ jobs:
   accept-release:
     name: Clean-room acceptance of the immutable release bundle
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || fromJSON(vars.BLEEDINGDEV_ACCEPT_RUNNER_LABELS || '"ubuntu-latest"') }}
-    timeout-minutes: 120
+    timeout-minutes: 180
     outputs:
       producer_artifact_identity: ${{ inputs.producer_artifact_identity }}
       producer_run_attempt: ${{ inputs.producer_run_attempt }}
@@ -83,7 +86,7 @@ jobs:
             pnpm-store-${{ runner.os }}-
 
       - name: Install acceptance runner dependencies
-        run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts --filter @scripts/ultramodern-production-readiness
+        run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts --filter @scripts/ultramodern-production-readiness --filter modern-js-monorepo --filter tests
 
       - name: Download immutable release bundle
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -160,6 +163,39 @@ jobs:
           include-hidden-files: true
           retention-days: 3
 
+      - name: Resolve installed-renderer browser runtime
+        id: renderer-browser-runtime
+        if: inputs.required_renderer_features
+        run: mise exec -- node scripts/lib/browser-provisioning.js --resolve --runtime tests
+
+      - name: Install installed-renderer browser runtime
+        if: inputs.required_renderer_features
+        run: >-
+          mise exec -- node scripts/lib/browser-provisioning.js --install --runtime tests
+          --version ${{ steps.renderer-browser-runtime.outputs.version }}
+
+      - name: Run exact-bundle installed renderer features
+        if: inputs.required_renderer_features
+        env:
+          PRODUCER_RUN_IDENTITY: ${{ inputs.producer_run_identity }}
+        run: |
+          feature_work="$(mktemp -d "$RUNNER_TEMP/renderer-features-XXXXXX")"
+          OWNED_TEMP_DIR="$feature_work" mise exec -- node scripts/ultramodern-renderers/release.mjs \
+            --cohort-dir .modern/bleedingdev-publish --renderers octane --with '' \
+            --work-dir "$feature_work" --required-features \
+            --acceptance-receipt .modern/bleedingdev-publish/acceptance-receipt.json \
+            --feature-receipt .modern/bleedingdev-publish/acceptance-receipt.renderer-features.json \
+            --run-identity "$PRODUCER_RUN_IDENTITY"
+
+      - name: Preserve renderer feature runtime evidence
+        if: always() && inputs.required_renderer_features
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: renderer-feature-source-runtime-${{ inputs.producer_artifact_identity }}
+          path: ${{ runner.temp }}/renderer-features-*/logs/feature-*
+          if-no-files-found: error
+          include-hidden-files: true
+
       - name: Upload release acceptance receipt
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -167,6 +203,7 @@ jobs:
           path: |
             .modern/bleedingdev-publish/acceptance-receipt.json
             .modern/bleedingdev-publish/acceptance-receipt.operational-independence.json
+            .modern/bleedingdev-publish/acceptance-receipt.renderer-features.json
           if-no-files-found: error
           include-hidden-files: true
 

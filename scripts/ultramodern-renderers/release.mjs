@@ -34,17 +34,27 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { assertAcceptanceReceipt } from '../ultramodern-production-readiness/published-create-proof/acceptance-receipt.mjs';
 import { releaseAgeExemptions } from '../ultramodern-production-readiness/published-create-proof/release-age-audit.mjs';
 import { runWorkerDispatchProbe } from '../ultramodern-production-readiness/renderer-worker-lifecycle-proof/probe.mjs';
 import { readReleaseManifest } from '../ultramodern-publish/lib/source-create-proof/release-manifest.mjs';
 import { startEphemeralRegistry } from '../ultramodern-publish/lib/source-create-proof/runtime-proof/registry.mjs';
 import { defaultReleaseAgePolicyPath } from '../ultramodern-publish/run-release-acceptance.mjs';
+import {
+  assertRendererFeatureRow,
+  rendererFeatureBinding,
+  writeRendererFeatureReceipt,
+} from './feature-gates.mjs';
 import { checkInstalledCohort, readCohort } from './installed-cohort.mjs';
 import { runPackedNativeFederationGeneratedProof } from './native-federation-generated.mjs';
 import {
   installedBin,
   runPackedNativeFederationProof,
 } from './native-federation-packed.mjs';
+import {
+  assertReleaseAgeExclusionsUnchanged,
+  captureReleaseAgeExclusions,
+} from './release-age-policy.mjs';
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -63,6 +73,14 @@ const { values: opts } = parseArgs({
     'tractor-revision': { type: 'string' },
     'browser-executable': { type: 'string' },
     'work-dir': { type: 'string' },
+    'required-features': { type: 'boolean', default: false },
+    'acceptance-mode': { type: 'string', default: 'source' },
+    'acceptance-receipt': { type: 'string' },
+    'source-feature-receipt': { type: 'string' },
+    'source-acceptance-receipt': { type: 'string' },
+    'feature-receipt': { type: 'string' },
+    'run-identity': { type: 'string' },
+    'registry-url': { type: 'string', default: 'https://registry.npmjs.org/' },
   },
 });
 const renderers = opts.renderers.split(',').map(name => name.trim());
@@ -79,6 +97,26 @@ if (!opts.version === !opts['cohort-dir'])
   throw new Error('Pass exactly one of --version or --cohort-dir');
 if (opts['tractor-revision'] && !opts['tractor-source'])
   throw new Error('--tractor-revision needs --tractor-source');
+if (!['source', 'published'].includes(opts['acceptance-mode']))
+  throw new Error('--acceptance-mode must be source or published');
+if (opts['required-features']) {
+  for (const option of [
+    'cohort-dir',
+    'acceptance-receipt',
+    'feature-receipt',
+    'run-identity',
+  ])
+    if (!opts[option]) throw new Error(`--required-features needs --${option}`);
+  if (!renderers.includes('octane'))
+    throw new Error('Required renderer features need Octane');
+  if (
+    opts['acceptance-mode'] === 'published' &&
+    (!opts['source-feature-receipt'] || !opts['source-acceptance-receipt'])
+  )
+    throw new Error(
+      'Published renderer features need --source-feature-receipt',
+    );
+}
 
 const workDir = fs.realpathSync(
   opts['work-dir'] ??
@@ -96,13 +134,18 @@ const children = new Set();
 const nativeFederationCancellation = new AbortController();
 let activeNativeFederation;
 let registry;
+let releaseForAgePolicy;
 async function stopAll() {
   for (const child of children) child.kill('SIGTERM');
-  await registry?.stop();
+  await registry?.stop?.();
 }
 /** Runs a command, logging to logs/<log>.log; rejects with the log tail. */
 function sh(command, args, { cwd = root, env = process.env, log }) {
   const file = path.join(logs, `${log}.log`);
+  const releaseAgeBaseline =
+    path.basename(command) === 'pnpm' && args[0] === 'install'
+      ? captureReleaseAgeExclusions(cwd, { release: releaseForAgePolicy })
+      : undefined;
   return new Promise((resolve, reject) => {
     const out = fs.openSync(file, 'w');
     const child = spawn(command, args, {
@@ -115,7 +158,15 @@ function sh(command, args, { cwd = root, env = process.env, log }) {
     child.once('error', reject);
     child.once('close', code => {
       children.delete(child);
-      if (code === 0) return resolve();
+      if (code === 0) {
+        try {
+          if (releaseAgeBaseline)
+            assertReleaseAgeExclusionsUnchanged(releaseAgeBaseline);
+          return resolve();
+        } catch (error) {
+          return reject(error);
+        }
+      }
       const tail = fs.readFileSync(file, 'utf8').trim().split('\n');
       reject(
         new Error(
@@ -422,6 +473,7 @@ async function main() {
         manifestPath: path.join(cohortDir, 'manifest.json'),
       });
       cohort = readCohort(release.manifestPath);
+      releaseForAgePolicy = release;
     });
 
     let createBin;
@@ -432,12 +484,20 @@ async function main() {
           cwd: workDir,
           encoding: 'utf8',
         }).trim();
-        registry = await startEphemeralRegistry({
-          release,
-          releaseDir: cohortDir,
-          rootDir: path.join(workDir, 'registry'),
-          storeDir,
-        });
+        registry =
+          opts['acceptance-mode'] === 'published'
+            ? {
+                env: {
+                  npm_config_registry: new URL(opts['registry-url']).href,
+                  pnpm_config_registry: new URL(opts['registry-url']).href,
+                },
+              }
+            : await startEphemeralRegistry({
+                release,
+                releaseDir: cohortDir,
+                rootDir: path.join(workDir, 'registry'),
+                storeDir,
+              });
         // Strict release-age policy; only our own cohort is exempt.
         Object.assign(env, registry.env, {
           npm_config_store_dir: storeDir,
@@ -462,7 +522,13 @@ async function main() {
         );
         fs.writeFileSync(
           path.join(createRoot, 'pnpm-workspace.yaml'),
-          stringifyYaml({ packages: ['.'], allowBuilds }),
+          stringifyYaml({
+            packages: ['.'],
+            allowBuilds,
+            minimumReleaseAge: 1440,
+            minimumReleaseAgeStrict: true,
+            minimumReleaseAgeIgnoreMissingTime: false,
+          }),
         );
         await sh('pnpm', ['install'], {
           cwd: createRoot,
@@ -470,6 +536,7 @@ async function main() {
           log: 'create-install',
         });
         const packageRoot = path.join(createRoot, 'node_modules', targetName);
+        checkInstalledCohort({ appRoot: createRoot, cohort });
         createBin = path.join(
           packageRoot,
           readJson(path.join(packageRoot, 'package.json')).bin[
@@ -593,6 +660,9 @@ async function main() {
                 packages: ['.'],
                 allowBuilds,
                 packageImportMethod: 'clone-or-copy',
+                minimumReleaseAge: 1440,
+                minimumReleaseAgeStrict: true,
+                minimumReleaseAgeIgnoreMissingTime: false,
               }),
             );
             await sh('pnpm', ['install'], {
@@ -794,6 +864,102 @@ async function main() {
           },
           Boolean(apps[renderer]) && runners.includes('mf'),
         );
+    if (opts['required-features']) {
+      const rows = {};
+      const binding = rendererFeatureBinding(cohort);
+      for (const [row, module, exported] of [
+        [
+          'dev-refresh',
+          './native-federation-dev.mjs',
+          'runPackedNativeFederationDevProof',
+        ],
+        [
+          'prebuilt-worker',
+          './native-federation-worker.mjs',
+          'runPackedNativeFederationWorkerProof',
+        ],
+        [
+          'generated-worker',
+          './native-federation-generated-worker.mjs',
+          'runPackedNativeFederationGeneratedWorkerProof',
+        ],
+      ]) {
+        await step(row, async () => {
+          if (!apps.octane)
+            throw new Error('The installed Octane consumer is unavailable');
+          const { allowBuilds } = parseYaml(
+            fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
+          );
+          const run = (await import(module))[exported];
+          if (typeof run !== 'function')
+            throw new Error(`${row} has no installed proof entrypoint`);
+          activeNativeFederation = run({
+            renderer: 'octane',
+            consumerRoot: apps.octane.appRoot,
+            generatorConsumerRoot: createRoot,
+            browserDependencyRoot: playwrightRoot(),
+            browserExecutable: browserExecutable(),
+            manifestPath: release.manifestPath,
+            pnpmExecutable: execFileSync('which', ['pnpm'], {
+              encoding: 'utf8',
+            }).trim(),
+            workDir: path.join(workDir, `feature-${row}`),
+            log: path.join(logs, `feature-${row}.log`),
+            receiptPath: path.join(logs, `feature-${row}.receipt.json`),
+            binding,
+            env,
+            signal: nativeFederationCancellation.signal,
+            allowBuilds,
+          });
+          try {
+            rows[row] = assertRendererFeatureRow(
+              row,
+              await activeNativeFederation,
+              binding,
+              { evidenceRoot: logs },
+            );
+          } finally {
+            activeNativeFederation = undefined;
+          }
+        });
+      }
+      await step('renderer feature acceptance receipt', async () => {
+        assertAcceptanceReceipt(
+          readJson(path.resolve(opts['acceptance-receipt'])),
+          {
+            release,
+            expectedMode: opts['acceptance-mode'],
+            runIdentity: opts['run-identity'],
+          },
+        );
+        if (opts['acceptance-mode'] === 'published') {
+          assertAcceptanceReceipt(
+            readJson(path.resolve(opts['source-acceptance-receipt'])),
+            {
+              release,
+              expectedMode: 'source',
+              runIdentity: opts['run-identity'],
+            },
+          );
+        }
+        writeRendererFeatureReceipt({
+          receiptPath: path.resolve(opts['feature-receipt']),
+          registryUrl: env.npm_config_registry ?? env.pnpm_config_registry,
+          evidenceRoot: logs,
+          sourceAcceptanceReceiptPath:
+            opts['source-acceptance-receipt'] &&
+            path.resolve(opts['source-acceptance-receipt']),
+          rows,
+          binding,
+          mode: opts['acceptance-mode'],
+          runIdentity: opts['run-identity'],
+          acceptanceReceiptPath: path.resolve(opts['acceptance-receipt']),
+          sourceFeatureReceiptPath:
+            opts['source-feature-receipt'] &&
+            path.resolve(opts['source-feature-receipt']),
+        });
+      });
+    }
     await step(
       'tractor',
       async () => {

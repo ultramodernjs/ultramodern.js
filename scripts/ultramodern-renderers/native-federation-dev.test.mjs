@@ -1,0 +1,267 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { validateNativeDevRefreshObservations } from './native-federation-dev.mjs';
+
+// Receipt-validation controls only. These fabricated observations never stand
+// in for the real browser/compiler/SSR execution required by the release runner.
+function observations() {
+  const digest = number => String(number).repeat(64);
+  const document = {
+    sentinel: 'document',
+    timeOrigin: 1,
+    location: 'http://host/',
+    historyLength: 1,
+    navigationCount: 1,
+    routerPath: '/',
+    routerKey: 'initial',
+  };
+  const lifecycle = {
+    mounts: 1,
+    cleanups: 0,
+    instances: [{ id: 1, cleanups: 0 }],
+  };
+  const snapshot = version => ({
+    version,
+    remoteCount: 'Count 3',
+    hostCount: 'Host count 2',
+    label: 'relabelled',
+    owner: 'host-owned',
+    remoteRoots: 1,
+    remoteFallbacks: 0,
+    fallbackEverSeen: false,
+    lifecycle: structuredClone(lifecycle),
+  });
+  const ssr = (version, before, after) => ({
+    status: 200,
+    expectedVersion: version,
+    versions: [version],
+    owners: ['host-owned'],
+    fallbackCount: 0,
+    shapes: [],
+    publication: {
+      previous: { revision: digest(before) },
+      current: { revision: digest(after) },
+    },
+  });
+  const data = {
+    verdict: 'PASS',
+    initialCompatibleUpdate: {
+      before: structuredClone(lifecycle),
+      after: structuredClone(lifecycle),
+      remoteCountBefore: 'Count 2',
+      remoteCountAfter: 'Count 2',
+      documentBefore: document,
+      documentAfter: structuredClone(document),
+    },
+    refreshes: {},
+    freshSSR: ssr('Remote native v2', 1, 2),
+    componentAndDependencyRefresh: ssr('Remote native v3', 2, 3),
+    burstRefresh: ssr('Remote native v5', 3, 4),
+    burstStableRefresh: ssr('Remote native v5', 4, 4),
+    recoveredSsr: ssr('Remote native v5', 4, 4),
+    reconnectedRefresh: ssr('Remote native v6', 4, 5),
+    incompatibleRefresh: ssr('Remote native v6', 5, 6),
+    burstStability: {
+      clientCompilationHash: 'abcd1234',
+      clientAssetsSha256: digest(8),
+      serverRevision: digest(4),
+      compilerDebounceMs: 100,
+      stableMs: 500,
+      samples: 5,
+    },
+    navigation: {
+      away: {
+        ...document,
+        location: 'http://host/away',
+        routerPath: '/away',
+        routerKey: 'away',
+        historyLength: 2,
+      },
+      back: { ...document, routerKey: 'back', historyLength: 3 },
+    },
+    resourceCleanup: {
+      errorCount: 0,
+      processGroups: [1, 2, 3].map(pid => ({ pid, alive: false })),
+      registeredArtifactCount: 6,
+      releasedArtifactCount: 6,
+    },
+    hmr: {
+      nativeCleanup: {
+        mounts: 3,
+        cleanups: 3,
+        instances: [1, 2, 3].map(id => ({ id, cleanups: 1 })),
+      },
+    },
+  };
+  for (const [name, version] of [
+    ['componentAndDependencyRefresh', 'Remote native v3'],
+    ['burstRefresh', 'Remote native v5'],
+    ['burstStableRefresh', 'Remote native v5'],
+    ['reconnectedRefresh', 'Remote native v6'],
+  ])
+    data.refreshes[name] = {
+      before: snapshot(version),
+      after: snapshot(version),
+      document: structuredClone(document),
+    };
+  const shapeAfter = snapshot('Remote native v6');
+  shapeAfter.remoteCount = 'Count 0';
+  shapeAfter.lifecycle = {
+    mounts: 2,
+    cleanups: 1,
+    instances: [
+      { id: 1, cleanups: 1 },
+      { id: 2, cleanups: 0 },
+    ],
+  };
+  data.incompatibleUpdate = {
+    before: snapshot('Remote native v6'),
+    after: shapeAfter,
+    renderedShape: 'expanded',
+    countAfterClick: 'Count 1',
+    document: structuredClone(document),
+  };
+  data.incompatibleRefresh.shapes = ['expanded'];
+  data.refreshes.incompatibleRefresh = {
+    before: snapshot('Remote native v6'),
+    after: shapeAfter,
+    document: structuredClone(document),
+  };
+  data.incompatibleRemoval = ssr('Remote native v6', 6, 7);
+  const removalBefore = structuredClone(shapeAfter);
+  removalBefore.remoteCount = 'Count 1';
+  const removalAfter = structuredClone(removalBefore);
+  removalAfter.remoteCount = 'Count 0';
+  removalAfter.lifecycle = {
+    mounts: 3,
+    cleanups: 2,
+    instances: [
+      { id: 1, cleanups: 1 },
+      { id: 2, cleanups: 1 },
+      { id: 3, cleanups: 0 },
+    ],
+  };
+  data.incompatibleRemovalUpdate = {
+    before: removalBefore,
+    after: removalAfter,
+    renderedShape: null,
+    countAfterClick: 'Count 1',
+    document: structuredClone(document),
+  };
+  data.refreshes.incompatibleRemoval = {
+    before: removalBefore,
+    after: removalAfter,
+    document: structuredClone(document),
+  };
+  const beforeOutage = snapshot('Remote native v5');
+  data.outageRecovery = {
+    before: beforeOutage,
+    server: {
+      status: 200,
+      hostDocuments: 1,
+      fallbackCount: 1,
+      staleRemoteCount: 0,
+    },
+    observedMs: 500,
+    samples: [1, 2].map(() => ({
+      observation: structuredClone(beforeOutage),
+      document: structuredClone(document),
+    })),
+  };
+  return data;
+}
+
+test('derives checks from complete raw observations', () => {
+  assert.ok(
+    Object.values(validateNativeDevRefreshObservations(observations())).every(
+      value => value === true,
+    ),
+  );
+});
+
+for (const [name, corrupt] of [
+  [
+    'declaration removal without cleanup',
+    data => {
+      data.incompatibleRemovalUpdate.after.lifecycle.cleanups--;
+    },
+  ],
+  [
+    'transient outage fallback',
+    data => {
+      data.outageRecovery.samples[0].observation.fallbackEverSeen = true;
+    },
+  ],
+  [
+    'compatible counter reset',
+    data => {
+      data.refreshes.burstRefresh.after.remoteCount = 'Count 0';
+    },
+  ],
+  [
+    'compatible remount',
+    data => {
+      data.refreshes.componentAndDependencyRefresh.after.lifecycle.mounts++;
+    },
+  ],
+  [
+    'incompatible update without a remount',
+    data => {
+      data.incompatibleUpdate.after.lifecycle.mounts = 1;
+    },
+  ],
+  [
+    'late stale burst',
+    data => {
+      data.refreshes.burstStableRefresh.after.version = 'Remote native v4';
+    },
+  ],
+  [
+    'recovered server fallback',
+    data => {
+      data.recoveredSsr.fallbackCount = 1;
+    },
+  ],
+  [
+    'outage browser fallback',
+    data => {
+      data.outageRecovery.samples[0].observation.remoteFallbacks = 1;
+    },
+  ],
+  [
+    'hidden in-app navigation',
+    data => {
+      data.refreshes.burstRefresh.document.historyLength++;
+    },
+  ],
+  [
+    'changed router owner key',
+    data => {
+      data.refreshes.burstRefresh.document.routerKey = 'foreign';
+    },
+  ],
+  [
+    'unchanged Node publication',
+    data => {
+      data.incompatibleRefresh.publication.current.revision =
+        data.incompatibleRefresh.publication.previous.revision;
+    },
+  ],
+  [
+    'live process group',
+    data => {
+      data.resourceCleanup.processGroups[0].alive = true;
+    },
+  ],
+  [
+    'duplicate native cleanup',
+    data => {
+      data.hmr.nativeCleanup.instances[0].cleanups = 2;
+    },
+  ],
+])
+  test(`rejects ${name} despite a PASS flag`, () => {
+    const data = observations();
+    corrupt(data);
+    assert.throws(() => validateNativeDevRefreshObservations(data));
+  });

@@ -5,12 +5,15 @@
     "moduleResolution": "Bundler",
     "jsx": "preserve",
     "jsxImportSource": "@solidjs/web",
-    "customConditions": ["solid"],
+    "customConditions": ["solid", "browser"],
     "strict": true,
     "skipLibCheck": false,
     "noEmit": true,
     "types": [],
-    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true
   },
   "include": ["typing.tsx"]
 }

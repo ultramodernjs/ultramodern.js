@@ -278,6 +278,35 @@ test('witnessed commands preserve arguments, status, and retired process groups'
   }
 });
 
+test('witness directories record the actual command child PID', async () => {
+  const supplied = fixture();
+  try {
+    const witnessDirectory = path.join(supplied.root, 'process-witnesses');
+    fs.mkdirSync(witnessDirectory);
+    const result = await runPackedNativeFederationCommand(
+      process.execPath,
+      ['-e', 'console.log("actual child")'],
+      {
+        cwd: supplied.appRoot,
+        env: process.env,
+        log: path.join(supplied.root, 'directory-command.log'),
+        witnessDirectory,
+        signal: new AbortController().signal,
+      },
+    );
+    assert.deepEqual(fs.readdirSync(witnessDirectory), [`${result.pid}.json`]);
+    const witness = JSON.parse(
+      fs.readFileSync(path.join(witnessDirectory, `${result.pid}.json`)),
+    );
+    assert.equal(witness.pid, result.pid);
+    assert.notEqual(witness.pid, process.pid);
+    assert.equal(witness.uid, process.geteuid());
+    assert(witness.startTime);
+  } finally {
+    fs.rmSync(supplied.root, { recursive: true });
+  }
+});
+
 test('parent cleanup retires a detached group left by an exited proof', async () => {
   const supplied = fixture();
   const copiedWitness = path.join(supplied.root, 'child-process.json');

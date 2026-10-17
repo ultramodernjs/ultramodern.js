@@ -17,10 +17,14 @@ import {
   readCohort,
   verifyInstalledPackage,
 } from './installed-cohort.mjs';
+import {
+  assertReleaseAgeExclusionsUnchanged,
+  captureReleaseAgeExclusions,
+} from './release-age-policy.mjs';
 
 const readJson = filename => JSON.parse(fs.readFileSync(filename, 'utf8'));
 const nativeDependency = name =>
-  /^(?:@module-federation\/|@octanejs\/|@solidjs\/|octane$|solid-js$|typescript$|@types\/node$)/u.test(
+  /^(?:@module-federation\/|@octanejs\/|@solidjs\/|octane$|solid-js$|i18next$|typescript$|@types\/node$)/u.test(
     name,
   );
 const inside = (parent, child) => {
@@ -84,8 +88,21 @@ export function recordPackedNativeFederationProcess(filename, pid) {
 export function runPackedNativeFederationCommand(
   command,
   args,
-  { witness, ...options },
+  { witness, witnessDirectory, ...options },
 ) {
+  assert(
+    Boolean(witness) !== Boolean(witnessDirectory),
+    'Select one packed command witness path or directory',
+  );
+  if (witnessDirectory) {
+    assert(path.isAbsolute(witnessDirectory));
+    assert.equal(fs.realpathSync(witnessDirectory), witnessDirectory);
+    const stat = fs.statSync(witnessDirectory);
+    assert(
+      stat.isDirectory() && stat.uid === process.getuid(),
+      'Packed command witnesses require an owned physical directory',
+    );
+  }
   return runCommand(
     process.execPath,
     [
@@ -93,14 +110,16 @@ export function runPackedNativeFederationCommand(
       '-e',
       `
 import fs from 'node:fs';
+import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 const startTime = execFileSync('/bin/ps', ['-p', String(process.pid), '-o', 'lstart='], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } }).trim();
-fs.writeFileSync(process.argv[1], JSON.stringify({ pid: process.pid, uid: process.geteuid(), startTime }), { flag: 'wx' });
+const witness = ${witnessDirectory ? "path.join(process.argv[1], String(process.pid) + '.json')" : 'process.argv[1]'};
+fs.writeFileSync(witness, JSON.stringify({ pid: process.pid, uid: process.geteuid(), startTime }), { flag: 'wx' });
 const result = spawnSync(process.argv[2], process.argv.slice(3), { stdio: 'inherit' });
 if (result.error) throw result.error;
 process.exitCode = result.status ?? 1;
 `,
-      witness,
+      witnessDirectory ?? witness,
       command,
       ...args,
     ],
@@ -383,6 +402,7 @@ export async function installPackedNativeFederationDependencies({
   context,
   registerArtifact,
   signal,
+  installerWitnessPath,
 }) {
   const appRoot = fs.realpathSync(directory);
   assert(
@@ -426,7 +446,16 @@ export async function installPackedNativeFederationDependencies({
   try {
     // The wrapper records its private group before pnpm starts. The parent
     // acceptance command can still retire it if the proof is interrupted.
-    const witness = path.join(appRoot, 'packed-mf-install-process.json');
+    const witness = installerWitnessPath
+      ? path.resolve(installerWitnessPath)
+      : path.join(appRoot, 'packed-mf-install-process.json');
+    assert(
+      inside(context.workRoot, witness),
+      'Packed installer witness must belong to its proof',
+    );
+    const releaseAgeBaseline = captureReleaseAgeExclusions(appRoot, {
+      release: context.release,
+    });
     await runPackedNativeFederationCommand(
       context.pnpmExecutable,
       ['install'],
@@ -446,6 +475,7 @@ export async function installPackedNativeFederationDependencies({
           : controller.signal,
       },
     );
+    assertReleaseAgeExclusionsUnchanged(releaseAgeBaseline);
   } finally {
     for (const event of ['SIGINT', 'SIGTERM', 'SIGHUP'])
       process.removeListener(event, interrupt);
@@ -465,6 +495,7 @@ export async function preparePackedNativeFederationApp({
   context,
   registerArtifact,
   signal,
+  installerWitnessPath,
 }) {
   assert(
     context.release.packages.some(
@@ -486,6 +517,9 @@ export async function preparePackedNativeFederationApp({
     stringifyYaml({
       packages: ['.'],
       packageImportMethod: 'clone-or-copy',
+      minimumReleaseAge: 1440,
+      minimumReleaseAgeStrict: true,
+      minimumReleaseAgeIgnoreMissingTime: false,
       allowBuilds: context.allowBuilds,
     }),
   );
@@ -494,6 +528,7 @@ export async function preparePackedNativeFederationApp({
     context,
     registerArtifact,
     signal,
+    installerWitnessPath,
   });
   const roots = verifyPackedNativeFederationDependencies({
     appRoot,

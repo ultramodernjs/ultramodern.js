@@ -150,6 +150,7 @@ jobs:
     needs: pack-candidate
     uses: ./.github/workflows/ultramodern-release-acceptance.yml
     with:
+      required_renderer_features: true
       producer_artifact_identity: ${{ needs.pack-candidate.outputs.producer_artifact_identity }}
       producer_run_attempt: ${{ needs.pack-candidate.outputs.producer_run_attempt }}
       producer_run_identity: ${{ needs.pack-candidate.outputs.producer_run_identity }}

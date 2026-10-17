@@ -1,0 +1,889 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+import { reservePort } from '../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/runtime.mjs';
+import { readInstalledPackageFiles } from '../../../scripts/ultramodern-renderers/installed-cohort.mjs';
+import {
+  readWorkerFederationProvider,
+  startWorkerFederationRuntime,
+  verifyWorkerFederationModule,
+  workerFederationOptions,
+} from '../../../scripts/ultramodern-renderers/native-federation-workers.mjs';
+import {
+  createOctaneWorkerFederationFixtures,
+  createWorkerFederationFaultHandler,
+  workerFederationFaultSource,
+} from './fixtures.mjs';
+import { readWorkerFixturePlan } from './proof.mjs';
+
+function fixtures(t) {
+  const root = fs.mkdtempSync(
+    path.join(
+      process.env.OWNED_TEMP_DIR ?? os.tmpdir(),
+      'octane-worker-contract-',
+    ),
+  );
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const applications = ['host', 'remote-a', 'remote-b'].map(name => {
+    const outputRoot = path.join(root, name, '.output');
+    for (const directory of ['server', 'worker', 'public'])
+      fs.mkdirSync(path.join(outputRoot, directory), { recursive: true });
+    fs.writeFileSync(
+      path.join(outputRoot, 'server/index.mjs'),
+      'export default {};',
+    );
+    fs.writeFileSync(
+      path.join(outputRoot, 'worker/entry.mjs'),
+      'export default {};',
+    );
+    return {
+      outputRoot,
+      wrangler: {
+        name,
+        main: 'server/index.mjs',
+        compatibility_date: '2026-10-07',
+        compatibility_flags: [],
+        assets: { binding: 'ASSETS', directory: 'public' },
+        vars: { appId: name },
+        services:
+          name === 'host'
+            ? [
+                { binding: 'REMOTE_A', service: 'remote-a' },
+                { binding: 'REMOTE_B', service: 'remote-b' },
+              ]
+            : [],
+      },
+    };
+  });
+  return { root, applications };
+}
+
+test('emitted names, resources, variables and two service bindings stay intact', t => {
+  const { applications } = fixtures(t);
+  const workers = workerFederationOptions(applications);
+  assert.deepEqual(
+    workers.map(worker => worker.name),
+    ['host', 'remote-a', 'remote-b'],
+  );
+  assert.deepEqual(workers[0].serviceBindings, {
+    REMOTE_A: 'remote-a',
+    REMOTE_B: 'remote-b',
+  });
+  assert.deepEqual(workers[0].bindings, { appId: 'host' });
+  assert.equal(workers[0].modulesRoot, applications[0].outputRoot);
+  assert.equal(workers[0].modules.length, 2);
+  assert.equal(workers[0].assets.binding, 'ASSETS');
+});
+
+test('an undeployed remote, duplicate binding or duplicate Worker name fails closed', t => {
+  const { applications } = fixtures(t);
+  applications[0].wrangler.services[0].service = 'foreign-worker';
+  assert.throws(
+    () => workerFederationOptions(applications),
+    /Missing deployed Worker/,
+  );
+  applications[0].wrangler.services[0].service = 'remote-a';
+  applications[0].wrangler.services[1].binding = 'REMOTE_A';
+  assert.throws(
+    () => workerFederationOptions(applications),
+    /Duplicate Worker binding/,
+  );
+  applications[1].wrangler.name = 'host';
+  assert.throws(
+    () => workerFederationOptions(applications),
+    /Worker names must be unique/,
+  );
+});
+
+test('every emitted binding name is retained, including __proto__, with duplicates rejected', t => {
+  const { applications } = fixtures(t);
+  applications[0].wrangler.services[0].binding = '__proto__';
+  const bindings = workerFederationOptions(applications)[0].serviceBindings;
+  assert.equal(Object.getPrototypeOf(bindings), Object.prototype);
+  assert(Object.hasOwn(bindings, '__proto__'));
+  assert.equal(
+    Object.getOwnPropertyDescriptor(bindings, '__proto__').value,
+    'remote-a',
+  );
+  applications[0].wrangler.services[1].binding = '__proto__';
+  assert.throws(
+    () => workerFederationOptions(applications),
+    /Duplicate Worker binding/,
+  );
+});
+
+test('ordinary fixtures retain public generator identity and share one native signal source', () => {
+  const descriptor = (id, directory, container) => ({
+    id,
+    directory,
+    renderer: 'octane',
+    moduleFederationName: container,
+    packageName: `@worker-proof/${id}`,
+    exposes: {
+      './Widget': './src/components/widget.tsx',
+      './Route': './src/federation-entry.tsx',
+    },
+    manifest: {
+      name: `@worker-proof/${id}`,
+      version: '1.0.0',
+      modernjs: {
+        appId: id,
+        topology: '../../topology/reference-topology.json',
+      },
+      dependencies: { preserved: '1.2.3' },
+    },
+  });
+  const host = descriptor(
+    'shell-super-app',
+    'apps/shell-super-app',
+    'shellSuperApp',
+  );
+  const remotes = [
+    descriptor('remote-a', 'verticals/remote-a', 'verticalRemoteA'),
+    descriptor('remote-b', 'verticals/remote-b', 'verticalRemoteB'),
+  ];
+  const dependencies = Object.fromEntries(
+    [
+      '@modern-js/ultramodern-app-tools',
+      '@modern-js/renderer-octane',
+      '@modern-js/renderer-core',
+      '@modern-js/i18n-runtime-extensions',
+      'octane',
+      'i18next',
+    ].map(name => [name, '1.0.0']),
+  );
+  const options = {
+    host,
+    remotes,
+    dependencies,
+    remoteOrigins: ['http://127.0.0.1:41001', 'http://127.0.0.1:41002'],
+    services: [{ binding: 'REMOTE_A' }, { binding: 'REMOTE_B' }],
+    remoteServices: { 'remote-a': [{ binding: 'REMOTE_B' }] },
+  };
+  assert.throws(
+    () =>
+      createOctaneWorkerFederationFixtures({
+        ...options,
+        remoteServices: undefined,
+      }),
+    /ordinary Worker service binding/,
+  );
+  const fixture = createOctaneWorkerFederationFixtures(options);
+  const presetFixture = createOctaneWorkerFederationFixtures({
+    ...options,
+    hostServiceSource: 'topology',
+  });
+  assert.doesNotMatch(
+    presetFixture.applications[0].files['modern.config.ts'],
+    /"services":/u,
+  );
+  assert.match(
+    presetFixture.applications[1].files['modern.config.ts'],
+    /"services":\[\{"binding":"REMOTE_B"\}\]/u,
+  );
+  assert.match(
+    fixture.applications[0].files['modern.config.ts'],
+    /"services":/u,
+  );
+  assert.match(fixture.shared['Counter.tsx'], /signal\$\(3\)/);
+  for (const { app, files } of fixture.applications) {
+    const manifest = JSON.parse(files['package.json']);
+    assert.equal(manifest.name, app.packageName);
+    assert.equal(manifest.version, app.manifest.version);
+    assert.deepEqual(manifest.modernjs, app.manifest.modernjs);
+    assert.equal(manifest.dependencies.preserved, '1.2.3');
+    assert.match(files['modern.config.ts'], /plugins: \[i18nPlugin\(/);
+    assert.deepEqual(JSON.parse(files['locales/en/translation.json']), {
+      greeting: app === host ? 'Hello from host' : `Hello from ${app.id}`,
+    });
+    assert.deepEqual(JSON.parse(files['locales/cs/translation.json']), {
+      greeting: app === host ? 'Ahoj od hostitele' : `Ahoj od ${app.id}`,
+    });
+    assert.doesNotMatch(
+      files['src/routes/layout.tsx'],
+      /I18nProvider|createInstance|register/,
+    );
+    assert.match(files['modern.config.ts'], /presetUltramodernWorkspace/);
+    assert.match(files['modern.config.ts'], /deployTarget: 'cloudflare'/);
+    assert(files['modern.config.ts'].includes(JSON.stringify(app.id)));
+    const source =
+      app === host
+        ? files['src/components/Shell.tsx']
+        : files['src/components/widget.tsx'];
+    assert.match(
+      source,
+      /import Counter from '\.\.\/\.\.\/\.\.\/\.\.\/shared\/Counter'/,
+    );
+    if (app !== host) {
+      assert.match(source, /useRouterState/);
+      assert.match(source, /useMatch\(\{ strict: false/);
+      assert.match(
+        source,
+        /data-match-current=\{matches.includes\(match.id\)\}/,
+      );
+      assert(
+        files['module-federation.config.ts'].includes(app.moduleFederationName),
+      );
+    }
+    assert.equal(
+      Object.keys(files).filter(filename => filename.endsWith('Counter.tsx'))
+        .length,
+      0,
+    );
+  }
+  const firstRemote = fixture.applications[1].files;
+  assert.match(
+    firstRemote['modern.config.ts'],
+    /"services":\[\{"binding":"REMOTE_B"\}\]/,
+  );
+  assert.match(
+    firstRemote['module-federation.config.ts'],
+    /verticalRemoteB@http:\/\/127\.0\.0\.1:41002\/mf-manifest\.json/,
+  );
+  assert.match(
+    firstRemote['src/components/widget.tsx'],
+    /federatedComponent<RemoteProps>\("remote-b\/Widget"/,
+  );
+  assert.match(
+    fixture.applications[0].files['src/routes/nested/page.tsx'],
+    /nested=\{true\}/,
+  );
+  assert.deepEqual(fixture.hops, [
+    {
+      from: remotes[0].id,
+      to: remotes[1].id,
+      expose: './Widget',
+      selector: '[data-worker-remote="b-hop"]',
+      routes: ['/en/nested', '/cs/nested'],
+    },
+  ]);
+  assert.deepEqual(
+    fixture.routes.map(route => route.context.language),
+    ['en', 'en', 'cs'],
+  );
+  assert.equal(fixture.routes[2].expected.length, 4);
+});
+
+test('a named fault Worker forwards through a real target binding without editing deployment files', t => {
+  const { root, applications } = fixtures(t);
+  const scriptPath = path.join(root, 'fault-worker.mjs');
+  fs.writeFileSync(scriptPath, workerFederationFaultSource);
+  const workers = workerFederationOptions(applications, {
+    faults: [
+      {
+        name: 'fault-a',
+        host: 'host',
+        binding: 'REMOTE_A',
+        target: 'remote-a',
+        scriptPath,
+      },
+    ],
+  });
+  assert.equal(workers[0].serviceBindings.REMOTE_A, 'fault-a');
+  assert.equal(workers[0].serviceBindings.REMOTE_B, 'remote-b');
+  assert.deepEqual(workers[3].serviceBindings, { TARGET: 'remote-a' });
+  assert.equal(workers[3].modules[0].path, scriptPath);
+  assert.equal(applications[0].wrangler.services[0].service, 'remote-a');
+  assert.equal(
+    fs.readFileSync(
+      path.join(applications[1].outputRoot, 'server/index.mjs'),
+      'utf8',
+    ),
+    'export default {};',
+  );
+});
+
+async function faultMode(handler, mode) {
+  const response = await handler.fetch(
+    new Request('https://fault.invalid/__proof/control', {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    }),
+    {},
+  );
+  assert.equal(response.status, 200);
+  return response.json();
+}
+
+test('the fault Worker pass mode preserves the native Request and Response objects', async () => {
+  const handler = createWorkerFederationFaultHandler();
+  const request = new Request('https://remote.invalid/native', {
+    method: 'POST',
+    body: 'opaque native bytes',
+  });
+  const response = new Response('untouched native response', { status: 202 });
+  assert.equal(
+    await handler.fetch(request, {
+      TARGET: {
+        async fetch(value) {
+          assert.equal(value, request);
+          return response;
+        },
+      },
+    }),
+    response,
+  );
+});
+
+test('a snapshot 503 keeps manifest forwarding healthy and recovers in the same fault Worker', async () => {
+  const handler = createWorkerFederationFaultHandler();
+  let forwards = 0;
+  const env = {
+    TARGET: {
+      async fetch() {
+        forwards++;
+        return new Response('native');
+      },
+    },
+  };
+  await faultMode(handler, 'unavailable');
+  assert.equal(
+    (await handler.fetch(new Request('https://remote.invalid/manifest'), env))
+      .status,
+    200,
+  );
+  assert.equal(
+    (
+      await handler.fetch(
+        new Request('https://remote.invalid/native', { method: 'POST' }),
+        env,
+      )
+    ).status,
+    503,
+  );
+  assert.equal(forwards, 1);
+  await faultMode(handler, 'pass');
+  assert.equal(
+    await (
+      await handler.fetch(
+        new Request('https://remote.invalid/native', { method: 'POST' }),
+        env,
+      )
+    ).text(),
+    'native',
+  );
+  assert.equal(forwards, 2);
+});
+
+test('header and full-body hangs release their request lease once on cancellation', async () => {
+  for (const mode of ['headers-hang', 'body-hang']) {
+    const handler = createWorkerFederationFaultHandler();
+    await faultMode(handler, mode);
+    const controller = new AbortController();
+    const request = new Request('https://remote.invalid/native', {
+      method: 'POST',
+      signal: controller.signal,
+    });
+    const env = {
+      TARGET: {
+        async fetch() {
+          return new Response('native body prefix');
+        },
+      },
+    };
+    const pending = handler.fetch(request, env);
+    if (mode === 'headers-hang') {
+      const failure = assert.rejects(pending, /owned request ended/);
+      controller.abort(new Error('owned request ended'));
+      await failure;
+    } else {
+      const response = await pending;
+      const reader = response.body.getReader();
+      assert.equal(
+        new TextDecoder().decode((await reader.read()).value),
+        'native body prefix',
+      );
+      const failure = assert.rejects(reader.read(), /owned request ended/);
+      controller.abort(new Error('owned request ended'));
+      await failure;
+    }
+    controller.abort();
+    const state = await faultMode(handler, 'pass');
+    assert.equal(state.active, 0);
+    assert.equal(state.cancellations, 1);
+  }
+});
+
+test('foreign request admission changes only the test authority and retains opaque native bytes', async () => {
+  const handler = createWorkerFederationFaultHandler();
+  await faultMode(handler, 'foreign-request-authority');
+  const opaque = '{"native":"renderer-owned bytes"}';
+  const envelope = {
+    authority: { origin: 'https://remote.invalid' },
+    payload: opaque,
+  };
+  await handler.fetch(
+    new Request('https://remote.invalid/native', {
+      method: 'POST',
+      body: JSON.stringify(envelope),
+    }),
+    {
+      TARGET: {
+        async fetch(request) {
+          const received = await request.json();
+          assert.equal(received.authority.origin, 'https://foreign.invalid');
+          assert.equal(received.payload, opaque);
+          return new Response('rejected before expose', { status: 400 });
+        },
+      },
+    },
+  );
+});
+
+test('native identity faults preserve unrelated request fields', async () => {
+  for (const mode of [
+    'foreign-native-publisher',
+    'foreign-native-abi',
+    'foreign-native-document',
+    'foreign-native-boundary',
+  ]) {
+    const handler = createWorkerFederationFaultHandler();
+    await faultMode(handler, mode);
+    const native = {
+      authority: { publisherBuildId: 'actual-publisher', runtimeABI: 1 },
+      documentId: 'actual-document',
+      boundaryId: 'actual-boundary',
+      props: ['opaque-native-props'],
+    };
+    const expected = structuredClone(native);
+    if (mode === 'foreign-native-publisher')
+      expected.authority.publisherBuildId = 'foreign-publisher';
+    else if (mode === 'foreign-native-abi') expected.authority.runtimeABI = 2;
+    else if (mode === 'foreign-native-document')
+      expected.documentId = 'foreign-document';
+    else expected.boundaryId = 'foreign-boundary';
+    const envelope = {
+      authority: { origin: 'https://remote.invalid' },
+      payload: JSON.stringify(native),
+    };
+    const response = await handler.fetch(
+      new Request('https://remote.invalid/native', {
+        method: 'POST',
+        body: JSON.stringify(envelope),
+      }),
+      {
+        TARGET: {
+          async fetch(request) {
+            const received = await request.json();
+            assert.deepEqual(received.authority, envelope.authority);
+            assert.deepEqual(JSON.parse(received.payload), expected);
+            return new Response('rejected', { status: 400 });
+          },
+        },
+      },
+    );
+    assert.equal(response.status, 400);
+    const evidence = await faultMode(handler, 'pass');
+    assert.equal(evidence.requests[0].mutation, mode);
+  }
+});
+
+test('packed public reader resolution authenticates the actual transitive owner before execution', t => {
+  const { root } = fixtures(t);
+  const directory = path.join(
+    root,
+    'node_modules/@modern-js/federation-runtime',
+  );
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(
+    path.join(directory, 'package.json'),
+    JSON.stringify({
+      name: '@bleedingdev/modern-js-federation-runtime',
+      version: '3.9.0-proof',
+      exports: { './renderer-contract': './index.cjs' },
+    }),
+  );
+  const filename = path.join(directory, 'index.cjs');
+  fs.writeFileSync(
+    filename,
+    'throw new Error("must not execute before authentication");',
+  );
+  const artifact = {
+    sourceName: '@modern-js/federation-runtime',
+    targetName: '@bleedingdev/modern-js-federation-runtime',
+    version: '3.9.0-proof',
+    files: readInstalledPackageFiles(directory).map(file => ({
+      path: file.path,
+      size: file.byteLength,
+      sha256: file.sha256,
+    })),
+  };
+  const input = {
+    request: createRequire(path.join(root, 'package.json')),
+    specifier: '@modern-js/federation-runtime/renderer-contract',
+    sourceName: artifact.sourceName,
+    cohort: { artifacts: [artifact] },
+    consumerRoot: root,
+  };
+  assert.equal(verifyWorkerFederationModule(input).directory, directory);
+  fs.appendFileSync(filename, '\nthrow new Error("unpacked injected helper");');
+  assert.throws(
+    () => verifyWorkerFederationModule(input),
+    /differs from its tarball/,
+  );
+});
+
+test('missing output modules and output paths outside the deployment fail before execution', t => {
+  const { root, applications } = fixtures(t);
+  fs.unlinkSync(path.join(applications[1].outputRoot, 'server/index.mjs'));
+  assert.throws(() => workerFederationOptions(applications));
+  fs.writeFileSync(path.join(root, 'caller-owned.mjs'), 'export default {};');
+  applications[1].wrangler.main = '../../caller-owned.mjs';
+  assert.throws(
+    () => workerFederationOptions(applications),
+    /escape|outside|confined/i,
+  );
+  assert(fs.existsSync(path.join(root, 'caller-owned.mjs')));
+});
+
+function provider(Runtime) {
+  return {
+    Miniflare: Runtime,
+    convertV4MiniflareOptions: options => options,
+    Log: class {},
+    LogLevel: { ERROR: 0 },
+  };
+}
+
+test('failure immediately after runtime creation disposes it and preserves the failure', async t => {
+  const { applications } = fixtures(t);
+  const failure = new Error('workerd startup failed');
+  let disposals = 0;
+  class Runtime {
+    ready = Promise.reject(failure);
+    async dispose() {
+      disposals++;
+    }
+  }
+  await assert.rejects(
+    startWorkerFederationRuntime({
+      applications,
+      provider: provider(Runtime),
+      bridgeNames: [],
+    }),
+    error => error === failure,
+  );
+  assert.equal(disposals, 1);
+});
+
+test('an interrupted pending startup disposes its runtime without opening bridges', async t => {
+  const { applications } = fixtures(t);
+  const cancellation = new AbortController();
+  let disposals = 0;
+  class Runtime {
+    ready = new Promise(() => {});
+    async getWorker() {
+      throw new Error('must not open a bridge');
+    }
+    async dispose() {
+      disposals++;
+    }
+  }
+  const pending = startWorkerFederationRuntime({
+    applications,
+    provider: provider(Runtime),
+    bridgeNames: ['host'],
+    signal: cancellation.signal,
+  });
+  const failure = new Error('proof interrupted');
+  const rejected = assert.rejects(pending, error => error === failure);
+  cancellation.abort(failure);
+  await rejected;
+  assert.equal(disposals, 1);
+});
+
+test('the proof plan preserves per-route owners and confines all compiled outputs to its owner', t => {
+  const { root, applications } = fixtures(t);
+  const plan = {
+    schemaVersion: 1,
+    mode: 'source',
+    applications: applications.map(({ outputRoot, wrangler }, index) => {
+      const appRoot = path.dirname(outputRoot);
+      const buildRoot = path.join(appRoot, 'dist');
+      const clientRoot = path.join(outputRoot, 'public');
+      fs.mkdirSync(buildRoot);
+      const wranglerPath = path.join(outputRoot, 'wrangler.json');
+      const manifestPath = path.join(clientRoot, 'mf-manifest.json');
+      fs.writeFileSync(wranglerPath, JSON.stringify(wrangler));
+      fs.writeFileSync(manifestPath, '{}');
+      return {
+        role: index ? 'remote' : 'host',
+        remote: index ? wrangler.name : undefined,
+        appRoot,
+        buildRoot,
+        clientRoot,
+        outputRoot,
+        wranglerPath,
+        manifestPath,
+        origin: `http://127.0.0.1:${41000 + index}`,
+      };
+    }),
+    routes: [
+      {
+        path: '/en/remotes/remote-a',
+        context: {
+          pathname: '/remotes/remote-a',
+          publicHref: '/en/remotes/remote-a',
+          language: 'en',
+          greeting: 'Hello from host',
+        },
+        expected: [
+          {
+            remote: 'remote-a',
+            expose: './Route',
+            selector: '[data-owner="remote-a"]',
+            contextSelector: '[data-worker-host]',
+          },
+        ],
+      },
+      ...['en', 'cs'].map(language => ({
+        path: `/${language}/nested`,
+        context: {
+          pathname: '/nested',
+          publicHref: `/${language}/nested`,
+          language,
+          greeting: language === 'en' ? 'Hello from host' : 'Ahoj od hostitele',
+        },
+        expected: [
+          {
+            remote: 'remote-b',
+            expose: './Widget',
+            selector: '[data-worker-remote="b-hop"]',
+            contextSelector: '[data-host-nested]',
+          },
+        ],
+      })),
+    ],
+    hops: [
+      {
+        from: 'remote-a',
+        to: 'remote-b',
+        expose: './Widget',
+        selector: '[data-worker-remote="b-hop"]',
+        routes: ['/en/nested', '/cs/nested'],
+      },
+    ],
+  };
+  const filename = path.join(root, 'plan.json');
+  fs.writeFileSync(filename, JSON.stringify(plan));
+  assert.deepEqual(readWorkerFixturePlan(filename, root).routes, plan.routes);
+  plan.routes[0].expected[0].contextSelector = '';
+  fs.writeFileSync(filename, JSON.stringify(plan));
+  assert.throws(
+    () => readWorkerFixturePlan(filename, root),
+    /nearest-match provider/,
+  );
+  plan.routes[0].expected[0].contextSelector = '[data-worker-host]';
+  plan.hops[0].routes = ['/en/nested'];
+  fs.writeFileSync(filename, JSON.stringify(plan));
+  assert.throws(
+    () => readWorkerFixturePlan(filename, root),
+    /both declared languages/,
+  );
+  plan.hops[0].routes = ['/en/nested', '/cs/nested'];
+  plan.applications[0].buildRoot = path.dirname(root);
+  fs.writeFileSync(filename, JSON.stringify(plan));
+  assert.throws(
+    () => readWorkerFixturePlan(filename, root),
+    /buildRoot escapes/,
+  );
+  assert(fs.existsSync(applications[0].outputRoot));
+});
+
+test('runtime cleanup is idempotent and preserves startup plus cleanup failures', async t => {
+  const { applications } = fixtures(t);
+  const startup = new Error('startup');
+  const cleanup = new Error('cleanup');
+  let disposals = 0;
+  class Broken {
+    ready = Promise.reject(startup);
+    async dispose() {
+      disposals++;
+      throw cleanup;
+    }
+  }
+  await assert.rejects(
+    startWorkerFederationRuntime({
+      applications,
+      provider: provider(Broken),
+      bridgeNames: [],
+    }),
+    error => {
+      assert.equal(error.errors[0], startup);
+      assert.equal(error.errors[1].errors[0], cleanup);
+      return true;
+    },
+  );
+  class Ready {
+    ready = Promise.resolve();
+    async dispose() {
+      disposals++;
+    }
+  }
+  const runtime = await startWorkerFederationRuntime({
+    applications,
+    provider: provider(Ready),
+    bridgeNames: [],
+  });
+  const first = runtime.dispose();
+  assert.equal(runtime.dispose(), first);
+  await first;
+  assert.equal(disposals, 2);
+});
+
+test('later Worker lookup failure retires earlier bridges and the runtime', async t => {
+  const { applications } = fixtures(t);
+  const failure = new Error('missing second Worker');
+  let disposals = 0;
+  class Runtime {
+    ready = Promise.resolve();
+    async getWorker(name) {
+      if (name === 'remote-a') throw failure;
+      return { fetch: () => Promise.resolve(new Response('host')) };
+    }
+    async dispose() {
+      disposals++;
+    }
+  }
+  await assert.rejects(
+    startWorkerFederationRuntime({
+      applications,
+      provider: provider(Runtime),
+      bridgeNames: ['host', 'remote-a'],
+    }),
+    error => error === failure,
+  );
+  assert.equal(disposals, 1);
+});
+
+test('Worker bridges use the reserved compiled origins and forward native bytes unchanged', async t => {
+  const { applications } = fixtures(t);
+  const bridgePorts = {};
+  for (const name of ['host', 'remote-a', 'remote-b']) {
+    bridgePorts[name] = await reservePort();
+  }
+  const requests = [];
+  let disposals = 0;
+  class Runtime {
+    ready = Promise.resolve();
+    async getWorker(name) {
+      return {
+        fetch: async (input, init) => {
+          requests.push({
+            name,
+            input,
+            bytes: Buffer.from(init.body).toString(),
+          });
+          return new Response(init.body, {
+            headers: { 'x-native-worker': name },
+          });
+        },
+      };
+    }
+    async dispose() {
+      disposals++;
+    }
+  }
+  const instance = await startWorkerFederationRuntime({
+    applications,
+    provider: provider(Runtime),
+    bridgeNames: Object.keys(bridgePorts),
+    bridgePorts,
+  });
+  t.after(() => instance.dispose());
+  for (const [name, bridge] of instance.bridges) {
+    assert.equal(bridge.url, `http://127.0.0.1:${bridgePorts[name]}`);
+    const response = await fetch(`${bridge.url}/snapshot`, {
+      method: 'POST',
+      body: 'untouched native codec bytes',
+    });
+    assert.equal(response.headers.get('x-native-worker'), name);
+    assert.equal(await response.text(), 'untouched native codec bytes');
+  }
+  assert.deepEqual(
+    requests,
+    Object.keys(bridgePorts).map(name => ({
+      name,
+      input: `https://${name}.invalid/snapshot`,
+      bytes: 'untouched native codec bytes',
+    })),
+  );
+  await instance.dispose();
+  assert.equal(disposals, 1);
+  for (const bridge of instance.bridges.values())
+    await assert.rejects(fetch(bridge.url));
+});
+
+test('duplicate compiled origins fail before starting workerd', async t => {
+  const { applications } = fixtures(t);
+  class Runtime {
+    constructor() {
+      throw new Error('must not start');
+    }
+  }
+  await assert.rejects(
+    startWorkerFederationRuntime({
+      applications,
+      provider: provider(Runtime),
+      bridgeNames: ['host', 'remote-a'],
+      bridgePorts: { host: 43210, 'remote-a': 43210 },
+    }),
+    /Compiled Worker origins must be unique/,
+  );
+});
+
+test('packed execution cannot silently fall back to a source generator', async t => {
+  const { root } = fixtures(t);
+  const generatorPackageRoot = path.join(root, 'generator');
+  fs.mkdirSync(generatorPackageRoot);
+  fs.writeFileSync(
+    path.join(generatorPackageRoot, 'package.json'),
+    JSON.stringify({ name: '@modern-js/ultramodern-create', version: '3.9.0' }),
+  );
+  await assert.rejects(
+    readWorkerFederationProvider({
+      mode: 'packed',
+      generatorPackageRoot,
+      consumerRoot: root,
+    }),
+    /authenticated public generator/,
+  );
+});
+
+test('provider resolution rejects a changed Miniflare dependency pin before importing it', async t => {
+  const { root } = fixtures(t);
+  const generatorPackageRoot = path.join(root, 'generator');
+  const miniflare = path.join(generatorPackageRoot, 'node_modules/miniflare');
+  fs.mkdirSync(miniflare, { recursive: true });
+  fs.writeFileSync(
+    path.join(generatorPackageRoot, 'package.json'),
+    JSON.stringify({
+      name: '@modern-js/ultramodern-create',
+      version: '3.9.0',
+      dependencies: { miniflare: '5.0.0' },
+    }),
+  );
+  fs.writeFileSync(
+    path.join(miniflare, 'package.json'),
+    JSON.stringify({ name: 'miniflare', version: '5.0.1', main: 'index.cjs' }),
+  );
+  fs.writeFileSync(
+    path.join(miniflare, 'index.cjs'),
+    'throw new Error("must not execute");',
+  );
+  await assert.rejects(
+    readWorkerFederationProvider({
+      mode: 'source',
+      generatorPackageRoot,
+      consumerRoot: root,
+    }),
+    error => {
+      assert.equal(error.actual, '5.0.1');
+      assert.equal(error.expected, '5.0.0');
+      return true;
+    },
+  );
+});

@@ -1,5 +1,6 @@
 import type { DataHandlerInput } from '@modern-js/renderer-core/data';
 import { deferData } from '@modern-js/renderer-core/data';
+import { observedLater } from '../data/acceptance-lifecycle';
 import { later } from '../data/late';
 
 export function loader({ request }: DataHandlerInput) {
@@ -7,7 +8,11 @@ export function loader({ request }: DataHandlerInput) {
   if (scenario === 'deferred')
     return deferData(
       { message: 'Native critical value' },
-      { late: later('Native late value') },
+      {
+        late: request.headers.has('x-solid-acceptance-request')
+          ? observedLater('Native late value', request)
+          : later('Native late value'),
+      },
     );
   if (scenario === 'not-found')
     throw new Response('Native route not found', { status: 404 });

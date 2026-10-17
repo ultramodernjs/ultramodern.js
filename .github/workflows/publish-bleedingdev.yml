@@ -715,6 +715,7 @@ jobs:
       - reconcile-sidecars
     uses: ./.github/workflows/ultramodern-release-acceptance.yml
     with:
+      required_renderer_features: true
       producer_artifact_identity: ${{ needs.prepare-release.outputs.producer_artifact_identity }}
       producer_run_attempt: ${{ needs.prepare-release.outputs.producer_run_attempt }}
       producer_run_identity: ${{ needs.prepare-release.outputs.producer_run_identity }}
@@ -1213,6 +1214,16 @@ jobs:
         run: |
           node scripts/ultramodern-publish/workflow.mjs create-published-identity
 
+      - name: Verify accepted renderer features before publication
+        env:
+          PRODUCER_RUN_IDENTITY: ${{ needs.accept-release.outputs.producer_run_identity }}
+        run: |
+          node scripts/ultramodern-renderers/verify-feature-receipt.mjs \
+            --manifest "$BLEEDINGDEV_RELEASE_MANIFEST" \
+            --receipt "$BLEEDINGDEV_RELEASE_DIR/acceptance-receipt.renderer-features.json" \
+            --acceptance-receipt "$BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT" \
+            --run-identity "$PRODUCER_RUN_IDENTITY"
+
       - name: Publish only the accepted tarballs
         env:
           PUBLISH_VERSION: ${{ inputs.version }}
@@ -1239,6 +1250,7 @@ jobs:
             .modern/bleedingdev-publish/tarballs/*.tgz
             .modern/bleedingdev-publish/acceptance-receipt.json
             .modern/bleedingdev-publish/acceptance-receipt.operational-independence.json
+            .modern/bleedingdev-publish/acceptance-receipt.renderer-features.json
             .modern/bleedingdev-publish/release-identity.json
           if-no-files-found: error
           include-hidden-files: true
@@ -1247,14 +1259,13 @@ jobs:
   # public here; this job immediately verifies the registry bytes in the same
   # workflow. It does not approve a staged cohort or roll publication back.
   # accept-release already built and ran the exact tarballs npm now serves.
-  # This job builds and runs nothing: it scaffolds ERP-10 from npm, resolves
-  # the lock, and requires the source receipt's closure. A closure drift fails
-  # here and names every package that moved.
+  # ERP resolution must reproduce the source receipt closure, then all three
+  # renderer feature proofs run again using registry-resolved installed bytes.
   accept-published:
     name: Accept the exact published registry cohort
     # Use the same Depot selection and fallback as accept-release.
     runs-on: ${{ vars.DEPOT_LINUX_RUNNER || fromJSON(vars.BLEEDINGDEV_ACCEPT_RUNNER_LABELS || '"ubuntu-latest"') }}
-    timeout-minutes: 30
+    timeout-minutes: 180
     if: >-
       always() &&
       cancelled() == false &&
@@ -1318,24 +1329,6 @@ jobs:
         run: |
           node scripts/ultramodern-publish/workflow.mjs verify-published-identity
 
-      # The cohort wait only reads the registry and the downloaded bundle (the
-      # publish scripts import node: builtins and the committed vendored semver
-      # only), so it runs in the background while the install below fetches
-      # node_modules. A wait-loop failure therefore surfaces after that install
-      # instead of before it, in "Await the exact registry cohort" — deliberate,
-      # and the only ordering this trades away.
-      - name: Start the exact registry cohort wait
-        id: registry-cohort-wait
-        background: true
-        env:
-          PUBLISH_CONCURRENCY: ${{ env.BLEEDINGDEV_PUBLISH_CONCURRENCY }}
-          PUBLISH_TAG: ${{ env.BLEEDINGDEV_PUBLISH_TAG }}
-          PUBLISH_VERSION: ${{ inputs.version }}
-        run: |
-          bash scripts/ultramodern-publish/wait-for-registry-cohort.sh \
-            "$BLEEDINGDEV_RELEASE_DIR" "$PUBLISH_CONCURRENCY" \
-            "$PUBLISH_VERSION" "$PUBLISH_TAG"
-
       - name: Resolve pnpm store path
         id: pnpm-store
         run: echo "path=$(mise exec -- pnpm store path)" >> "$GITHUB_OUTPUT"
@@ -1350,11 +1343,34 @@ jobs:
           restore-keys: |
             pnpm-store-accept-${{ runner.os }}-
 
-      - name: Install published acceptance runner dependencies
-        run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts --filter @scripts/ultramodern-production-readiness
-
-      - name: Await the exact registry cohort
-        wait: registry-cohort-wait
+      - name: Install published acceptance tools and await the registry cohort
+        timeout-minutes: 20
+        env:
+          PUBLISH_CONCURRENCY: ${{ env.BLEEDINGDEV_PUBLISH_CONCURRENCY }}
+          PUBLISH_TAG: ${{ env.BLEEDINGDEV_PUBLISH_TAG }}
+          PUBLISH_VERSION: ${{ inputs.version }}
+        run: |
+          registry_pid=''
+          cleanup_registry_wait() {
+            if [[ -n "$registry_pid" ]]; then
+              kill "$registry_pid" 2>/dev/null || true
+              wait "$registry_pid" 2>/dev/null || true
+            fi
+          }
+          trap cleanup_registry_wait EXIT
+          trap 'exit 130' INT TERM
+          timeout --signal=TERM --kill-after=15s 15m \
+            bash scripts/ultramodern-publish/wait-for-registry-cohort.sh \
+            "$BLEEDINGDEV_RELEASE_DIR" "$PUBLISH_CONCURRENCY" \
+            "$PUBLISH_VERSION" "$PUBLISH_TAG" > "$RUNNER_TEMP/registry-cohort-wait.log" 2>&1 &
+          registry_pid=$!
+          mise exec -- pnpm install --frozen-lockfile --ignore-scripts \
+            --filter @scripts/ultramodern-production-readiness --filter modern-js-monorepo --filter tests
+          status=0
+          wait "$registry_pid" || status=$?
+          registry_pid=''
+          cat "$RUNNER_TEMP/registry-cohort-wait.log"
+          exit "$status"
 
       - name: Run published ERP-10 acceptance
         env:
@@ -1372,6 +1388,39 @@ jobs:
             --receipt "$BLEEDINGDEV_PUBLISHED_ACCEPTANCE_RECEIPT" \
             --run-identity "$PRODUCER_RUN_IDENTITY"
 
+      - name: Resolve installed-renderer browser runtime
+        id: renderer-browser-runtime
+        run: mise exec -- node scripts/lib/browser-provisioning.js --resolve --runtime tests
+
+      - name: Install installed-renderer browser runtime
+        run: >-
+          mise exec -- node scripts/lib/browser-provisioning.js --install --runtime tests
+          --version ${{ steps.renderer-browser-runtime.outputs.version }}
+
+      - name: Run registry-byte installed renderer features
+        env:
+          PRODUCER_RUN_IDENTITY: ${{ needs.accept-release.outputs.producer_run_identity }}
+        run: |
+          feature_work="$(mktemp -d "$RUNNER_TEMP/renderer-features-XXXXXX")"
+          OWNED_TEMP_DIR="$feature_work" mise exec -- node scripts/ultramodern-renderers/release.mjs \
+            --cohort-dir "$BLEEDINGDEV_RELEASE_DIR" --renderers octane --with '' \
+            --work-dir "$feature_work" --required-features \
+            --acceptance-mode published --registry-url https://registry.npmjs.org/ \
+            --source-feature-receipt "$BLEEDINGDEV_RELEASE_DIR/acceptance-receipt.renderer-features.json" \
+            --source-acceptance-receipt "$BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT" \
+            --acceptance-receipt "$BLEEDINGDEV_PUBLISHED_ACCEPTANCE_RECEIPT" \
+            --feature-receipt "$BLEEDINGDEV_RELEASE_DIR/published-acceptance-receipt.renderer-features.json" \
+            --run-identity "$PRODUCER_RUN_IDENTITY"
+
+      - name: Preserve renderer feature runtime evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: renderer-feature-published-runtime-${{ needs.accept-release.outputs.producer_artifact_identity }}-publication-attempt-${{ needs.publish.outputs.publication_run_attempt }}
+          path: ${{ runner.temp }}/renderer-features-*/logs/feature-*
+          if-no-files-found: error
+          include-hidden-files: true
+
       - name: Upload published acceptance evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -1379,6 +1428,7 @@ jobs:
           name: ${{ env.BLEEDINGDEV_PUBLISHED_ACCEPTANCE_ARTIFACT }}-${{ needs.accept-release.outputs.producer_artifact_identity }}-publication-attempt-${{ needs.publish.outputs.publication_run_attempt }}
           path: |
             .modern/bleedingdev-publish/published-acceptance-receipt.json
+            .modern/bleedingdev-publish/published-acceptance-receipt.renderer-features.json
           if-no-files-found: error
           include-hidden-files: true
 
@@ -1578,7 +1628,9 @@ jobs:
             .modern/bleedingdev-publish/sidecar-tarballs/*.tgz
             .modern/bleedingdev-publish/acceptance-receipt.json
             .modern/bleedingdev-publish/acceptance-receipt.operational-independence.json
+            .modern/bleedingdev-publish/acceptance-receipt.renderer-features.json
             .modern/bleedingdev-publish/published-acceptance-receipt.json
+            .modern/bleedingdev-publish/published-acceptance-receipt.renderer-features.json
             .modern/bleedingdev-publish/tractor-downstream-acceptance.json
             .modern/bleedingdev-publish/publish-outcome.json
           if-no-files-found: error
