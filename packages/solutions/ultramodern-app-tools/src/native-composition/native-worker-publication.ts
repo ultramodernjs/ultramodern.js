@@ -69,6 +69,10 @@ export class NativeWorkerFederationPublicationPlugin {
         async () => {
           const plan = this.readPlan();
           if (!plan) return;
+          // Native compiler artifact producers skip invalid compilations. Keep
+          // their original resolver/transform error instead of replacing it
+          // with a secondary missing-artifact error from this later stage.
+          if (compilation.errors.length) return;
           if (!compilation.hash)
             throw new Error(
               'Native Worker publication requires its actual client compilation hash.',

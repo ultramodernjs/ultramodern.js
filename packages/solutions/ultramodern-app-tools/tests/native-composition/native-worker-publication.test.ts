@@ -56,6 +56,7 @@ async function compile(
     duplicatePublication?: boolean;
     reorderedRenderer?: boolean;
     conflictingRenderer?: boolean;
+    compilerError?: boolean;
     publicPath?: string;
     manifestAssetName?: string;
   } = {},
@@ -136,7 +137,7 @@ async function compile(
     target: 'webworker',
     entry: './entry.mjs',
     output: { path: output, filename: 'main.js' },
-    optimization: { minimize: false },
+    optimization: { minimize: false, emitOnErrors: false },
     plugins: [
       {
         apply(compiler: Rspack.Compiler) {
@@ -151,6 +152,12 @@ async function compile(
                     1,
                 },
                 () => {
+                  if (options.compilerError) {
+                    compilation.errors.push(
+                      new Error('Native source dependency did not resolve'),
+                    );
+                    return;
+                  }
                   if (!options.missingClientArtifact)
                     compilation.emitAsset(
                       artifacts.clientManifestFile('main'),
@@ -223,6 +230,18 @@ async function compile(
 }
 
 describe('native Worker client publication emission', () => {
+  it('preserves an earlier compiler error when native artifacts were not emitted', async () => {
+    const result = await compile({ compilerError: true });
+    expect(result.error).toBeNull();
+    expect(result.stats?.hasErrors()).toBe(true);
+    const failure = result.stats?.toString({ all: false, errors: true });
+    expect(failure).toContain('Native source dependency did not resolve');
+    expect(failure).not.toContain('completed client artifact');
+    expect(result.validationContexts).toEqual([]);
+    expect(result.emitted).toBe(false);
+    expect(fs.existsSync(result.output)).toBe(false);
+  });
+
   it('binds the validated native CLIENT hash after artifacts finish, independent of renderer source identity', async () => {
     const result = await compile();
     expect(result.error).toBeNull();
