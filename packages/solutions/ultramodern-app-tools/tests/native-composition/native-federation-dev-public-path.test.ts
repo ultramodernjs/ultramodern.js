@@ -137,7 +137,9 @@ describe('native federation immutable graph publicPath', () => {
   it('routes only native HMR deltas back to the live compiler', () => {
     for (const file of [
       'main.ab1234.hot-update.json',
+      'remote.ab1234.hot-update.json.mjs',
       'lazy.ab1234.hot-update.js',
+      'lazy.ab1234.hot-update.mjs',
     ])
       expect(
         nativeFederationDevHotUpdateTarget(
@@ -151,6 +153,9 @@ describe('native federation immutable graph publicPath', () => {
     '/assets/__ultramodern_mf__/ab1234/remoteEntry.js',
     '/assets/__ultramodern_mf__/ab1234/mf-manifest.json',
     '/assets/__ultramodern_mf__/ab1234/main.hot-update.js.map',
+    '/assets/__ultramodern_mf__/ab1234/main.hot-update.json.mjs.map',
+    '/assets/__ultramodern_mf__/ab1234/main.hot-update.json.mjs.extra',
+    '/assets/__ultramodern_mf__/ab1234/%2fmain.hot-update.json.mjs',
     '/assets/__ultramodern_mf__/ab1234/x/../main.hot-update.js',
     '/assets/__ultramodern_mf__/ab1234/%2e%2e/main.hot-update.js',
     '/assets/__ultramodern_mf__/ab1234/%2fmain.hot-update.js',

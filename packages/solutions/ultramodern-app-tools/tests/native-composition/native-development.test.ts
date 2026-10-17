@@ -324,6 +324,7 @@ async function replacementApp(
   module: boolean,
   federation = false,
   manualContainerHmr = false,
+  browserModule = false,
 ) {
   const root = temporaryRoot('replacement-dev-');
   fs.writeFileSync(
@@ -414,6 +415,7 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
   };
   let poison = false;
   let serverCompilation: Rspack.Compilation | undefined;
+  let clientCompilation: Rspack.Compilation | undefined;
   let compilationFailure: Error | undefined;
   let clientCompiler: Rspack.Compiler | undefined;
   let beforeAggregateCompile: (() => Promise<void>) | undefined;
@@ -452,6 +454,9 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
         serverCompilation = ('stats' in stats ? stats.stats : [stats]).find(
           result => result.compilation.name === 'server',
         )?.compilation;
+        clientCompilation = ('stats' in stats ? stats.stats : [stats]).find(
+          result => result.compilation.name === 'client',
+        )?.compilation;
         const callback = beforeAggregateCompile;
         beforeAggregateCompile = undefined;
         await callback?.();
@@ -472,8 +477,15 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
               name: 'test_remote',
               filename: 'remoteEntry.js',
               library: {
-                type: environment.name === 'server' ? 'commonjs-module' : 'var',
-                name: 'test_remote',
+                type:
+                  environment.name === 'server'
+                    ? 'commonjs-module'
+                    : browserModule
+                      ? 'module'
+                      : 'var',
+                ...(environment.name === 'server' || !browserModule
+                  ? { name: 'test_remote' }
+                  : {}),
               },
               exposes: { './Widget': widget },
               shared: {
@@ -557,7 +569,7 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
                             remoteEntry: {
                               name: 'remoteEntry.js',
                               path: '',
-                              type: 'global',
+                              type: browserModule ? 'module' : 'global',
                             },
                           },
                         }),
@@ -611,6 +623,7 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
           source: { entry: { main: clientEntry } },
           output: {
             target: 'web',
+            module: browserModule,
             assetPrefix: '/replacement-assets/',
             distPath: {
               root: nativeDevelopmentOutputDirectory(
@@ -646,6 +659,13 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
       if (!serverCompilation)
         throw new Error('No completed server compilation');
       return serverCompilation;
+    },
+    browserHotUpdateManifests() {
+      if (!clientCompilation)
+        throw new Error('No completed client compilation');
+      return clientCompilation
+        .getAssets()
+        .filter(asset => asset.name.endsWith('.hot-update.json.mjs'));
     },
     removeFederatedImport() {
       fs.writeFileSync(widget, 'export const marker = "second-remote";\n');
@@ -738,6 +758,40 @@ describe('native development asset headers', () => {
 });
 
 describe('native development', () => {
+  it('serves the live Rspack ESM hot manifest through an immutable container URL', async () => {
+    const app = await replacementApp(false, true, true, true);
+    await until(app, 'first:replacement-compiler');
+    const manifestUrl = new URL(
+      '/replacement-assets/mf-manifest.json',
+      app.address,
+    );
+    const initial = await (await fetch(manifestUrl)).json();
+    expect(initial.metaData.publicPath).toContain('/__ultramodern_mf__/');
+    const completed = Promise.withResolvers<void>();
+    app.afterNextAggregateCompile(() => completed.resolve());
+    app.editRemoteLazy('REMOTE_LAZY_ESM_HOT_APPLY');
+    await completed.promise;
+    const manifests = app.browserHotUpdateManifests();
+    expect(manifests.length).toBeGreaterThan(0);
+    for (const manifest of manifests) {
+      const expected = Buffer.from(manifest.source.source()).toString();
+      expect(expected).toContain('export default');
+      const live = await fetch(
+        new URL(`/replacement-assets/${manifest.name}`, app.address),
+      );
+      expect(live.status).toBe(200);
+      expect(await live.text()).toBe(expected);
+      const namespaced = await fetch(
+        new URL(manifest.name, initial.metaData.publicPath),
+      );
+      expect(namespaced.status).toBe(200);
+      expect(namespaced.headers.get('Cache-Control') ?? '').not.toContain(
+        'immutable',
+      );
+      expect(await namespaced.text()).toBe(expected);
+    }
+  }, 300_000);
+
   it('refreshes stable browser federation files and publishes the completed server graph revision', async () => {
     const app = await replacementApp(false, true);
     await until(app, 'first:replacement-compiler');

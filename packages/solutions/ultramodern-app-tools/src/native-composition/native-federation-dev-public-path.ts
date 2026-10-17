@@ -108,9 +108,10 @@ export function nativeFederationDevHotUpdateTarget(
   )
     return;
   const relative = url.pathname.slice(prefix.pathname.length);
-  const match = /^[a-f0-9]+\/(.+\.hot-update\.(?:json|[cm]?js))$/iu.exec(
-    relative,
-  );
+  const match =
+    /^[a-f0-9]+\/(.+\.hot-update\.(?:json(?:\.mjs)?|[cm]?js))$/iu.exec(
+      relative,
+    );
   if (!match) return;
   try {
     if (
