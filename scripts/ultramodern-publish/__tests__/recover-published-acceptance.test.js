@@ -231,6 +231,7 @@ test('registry verification keeps the original signed invocation and refuses mis
     repository,
     runId,
     runAttempt: attempt,
+    exactAttempt: true,
   });
   assert.equal(expectation.source.commit, sourceCommit);
   assert.equal(environment.GITHUB_RUN_ID, '999');
@@ -250,6 +251,207 @@ test('registry verification keeps the original signed invocation and refuses mis
   states.delete(packages[1].targetName);
   assert.throws(() =>
     api.assertCompletePublishedRegistry(states, { packages }),
+  );
+  const existing = new Map(
+    packages.map(item => [item.targetName, { exists: true }]),
+  );
+  await assert.rejects(
+    api.verifyOriginalPublicationProvenance({ packages }, existing, {
+      ...expectation,
+      source: { repository },
+    }),
+    /Original signed source commit/,
+  );
+  await assert.rejects(
+    api.verifyOriginalPublicationProvenance({ packages }, existing, {
+      ...expectation,
+      invocation: { ...expectation.invocation, exactAttempt: false },
+    }),
+    /Original signed attempt must be exact/,
+  );
+});
+
+async function verifyAttestedRecovery({
+  change = statement => statement,
+  originalAttempt = attempt,
+  rejectSignature = false,
+} = {}) {
+  const { api, release, expected } = await fixture();
+  const { npmPackagePurl, slsaProvenanceV1, githubActionsBuildType } =
+    await import('../lib/prepare-bleedingdev-packages/provenance.mjs');
+  const packages = ['a', 'b'].map(name => ({
+    targetName: `@bleedingdev/${name}`,
+    version: release.release.version,
+    integrity: `sha512-${Buffer.alloc(64, 1).toString('base64')}`,
+  }));
+  const states = new Map(
+    packages.map(item => [
+      item.targetName,
+      {
+        exists: true,
+        dist: {
+          attestations: { provenance: { predicateType: slsaProvenanceV1 } },
+        },
+      },
+    ]),
+  );
+  const expectation = api.originalRegistryExpectation(
+    release,
+    {
+      GITHUB_REPOSITORY: repository,
+      GITHUB_RUN_ID: '999',
+      GITHUB_RUN_ATTEMPT: '2',
+    },
+    { ...expected, attempt: originalAttempt },
+  );
+  const visited = [];
+  const result = await api.verifyOriginalPublicationProvenance(
+    { ...release, packages },
+    states,
+    expectation,
+    {
+      fetchImpl: async url => {
+        const item = packages.find(candidate =>
+          decodeURIComponent(url).endsWith(
+            `${candidate.targetName}@${candidate.version}`,
+          ),
+        );
+        assert(
+          item,
+          'The real verifier must request the pinned npm attestation endpoint',
+        );
+        visited.push(item.targetName);
+        let statement = {
+          _type: 'https://in-toto.io/Statement/v1',
+          predicateType: slsaProvenanceV1,
+          subject: [
+            {
+              name: npmPackagePurl(item.targetName, item.version),
+              digest: { sha512: Buffer.alloc(64, 1).toString('hex') },
+            },
+          ],
+          predicate: {
+            buildDefinition: {
+              buildType: githubActionsBuildType,
+              externalParameters: {
+                workflow: {
+                  repository: `https://github.com/${repository}`,
+                  path: '.github/workflows/publish-bleedingdev.yml',
+                  ref: 'refs/heads/main-ultramodern',
+                },
+              },
+              resolvedDependencies: [
+                {
+                  uri: `git+https://github.com/${repository}@refs/heads/main-ultramodern`,
+                  digest: { gitCommit: sourceCommit },
+                },
+              ],
+            },
+            runDetails: {
+              metadata: {
+                invocationId: `https://github.com/${repository}/actions/runs/${runId}/attempts/${originalAttempt}`,
+              },
+            },
+          },
+        };
+        // Only the second package drifts: checking the first package cannot
+        // accidentally qualify the complete cohort.
+        if (item.targetName === '@bleedingdev/b') statement = change(statement);
+        return {
+          ok: true,
+          json: async () => ({
+            attestations: [
+              {
+                predicateType: slsaProvenanceV1,
+                bundle: {
+                  dsseEnvelope: {
+                    payloadType: 'application/vnd.in-toto+json',
+                    payload: Buffer.from(JSON.stringify(statement)).toString(
+                      'base64',
+                    ),
+                  },
+                },
+              },
+            ],
+          }),
+        };
+      },
+      // Unit seam substitutes only cryptographic verification. Subject, signed
+      // source, workflow and invocation use the production attestation parser.
+      bundleVerifier: async (_bundle, authenticated) => {
+        if (rejectSignature) throw new Error('Invalid attestation signature');
+        return {
+          certificateIdentity: authenticated.certificateIdentity,
+          issuer: authenticated.issuer,
+          verifierVersion: 'unit-fixture',
+        };
+      },
+    },
+  );
+  assert.deepEqual(
+    visited.sort(),
+    packages.map(item => item.targetName),
+  );
+  return result;
+}
+
+test('recovery authenticates every signed original source/run/attempt instead of historical equivalence', async () => {
+  const result = await verifyAttestedRecovery();
+  assert.equal(result.length, 2);
+  assert(result.every(item => item.sourceCommit === sourceCommit));
+  await assert.rejects(
+    verifyAttestedRecovery({
+      change: statement => {
+        statement.predicate.buildDefinition.resolvedDependencies[0].digest.gitCommit =
+          'f'.repeat(40);
+        return statement;
+      },
+    }),
+    /source commit.*does not match accepted commit/,
+  );
+  await assert.rejects(
+    verifyAttestedRecovery({
+      change: statement => {
+        statement.predicate.runDetails.metadata.invocationId = `https://github.com/${repository}/actions/runs/999/attempts/1`;
+        return statement;
+      },
+    }),
+    /workflow run 999, expected 39078116263/,
+  );
+  await assert.rejects(
+    verifyAttestedRecovery({
+      originalAttempt: '2',
+      change: statement => {
+        statement.predicate.runDetails.metadata.invocationId = `https://github.com/${repository}/actions/runs/${runId}/attempts/1`;
+        return statement;
+      },
+    }),
+    /does not match fresh producer attempt 2/,
+  );
+  await assert.rejects(
+    verifyAttestedRecovery({
+      change: statement => {
+        statement.subject[0].digest.sha512 = Buffer.alloc(64, 2).toString(
+          'hex',
+        );
+        return statement;
+      },
+    }),
+    /does not match the accepted tarball integrity/,
+  );
+  await assert.rejects(
+    verifyAttestedRecovery({
+      change: statement => {
+        statement.predicate.buildDefinition.externalParameters.workflow.path =
+          '.github/workflows/recover-bleedingdev-acceptance.yml';
+        return statement;
+      },
+    }),
+    /workflow path.*does not match trusted path/,
+  );
+  await assert.rejects(
+    verifyAttestedRecovery({ rejectSignature: true }),
+    /Invalid attestation signature/,
   );
 });
 

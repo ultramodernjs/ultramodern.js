@@ -10,7 +10,9 @@ import { isDirectRun } from './lib/direct-run.mjs';
 import {
   createRegistryProvenanceExpectation,
   preflightRegistryPackages,
+  verifyRegistryProvenance,
 } from './lib/prepare-bleedingdev-packages/registry.mjs';
+import { mapWithConcurrency } from './lib/prepare-bleedingdev-packages/registry-read.mjs';
 import { readReleaseManifest } from './lib/source-create-proof/release-manifest.mjs';
 import {
   createPublishOutcome,
@@ -121,7 +123,7 @@ export function assertRecoverablePublication(run, jobs, artifacts, expected) {
 }
 
 export function originalRegistryExpectation(release, environment, context) {
-  return createRegistryProvenanceExpectation(release, {
+  const expectation = createRegistryProvenanceExpectation(release, {
     ...environment,
     GITHUB_RUN_ID: positive(context.runId, 'Original publication run'),
     GITHUB_RUN_ATTEMPT: positive(
@@ -129,6 +131,10 @@ export function originalRegistryExpectation(release, environment, context) {
       'Original publication attempt',
     ),
   });
+  return {
+    ...expectation,
+    invocation: { ...expectation.invocation, exactAttempt: true },
+  };
 }
 
 export function assertCompletePublishedRegistry(states, release) {
@@ -140,6 +146,37 @@ export function assertCompletePublishedRegistry(states, release) {
       `Recovery cannot publish missing ${item.targetName}`,
     );
   }
+}
+
+export async function verifyOriginalPublicationProvenance(
+  release,
+  states,
+  expectation,
+  { fetchImpl, bundleVerifier } = {},
+) {
+  assertCompletePublishedRegistry(states, release);
+  assert.match(
+    expectation.source?.commit,
+    /^[a-f0-9]{40}$/u,
+    'Original signed source commit is required',
+  );
+  assert.equal(
+    expectation.invocation?.exactAttempt,
+    true,
+    'Original signed attempt must be exact',
+  );
+  // The publisher's general preflight permits an earlier equivalent producer.
+  // Acceptance recovery instead requires the original signed source/run/attempt.
+  // Feed its complete expectation directly to the authenticated SLSA verifier.
+  return mapWithConcurrency(release.packages, 8, item =>
+    verifyRegistryProvenance(
+      item,
+      states.get(item.targetName).dist,
+      expectation,
+      fetchImpl,
+      bundleVerifier,
+    ),
+  );
 }
 
 export function assertOriginalPublishedIdentity(identity, release, expected) {
@@ -381,7 +418,7 @@ export async function main(command, environment = process.env) {
       },
       expectation,
     );
-    assertCompletePublishedRegistry(states, release);
+    await verifyOriginalPublicationProvenance(release, states, expectation);
     return;
   }
   assert.equal(command, 'outcome', 'Unknown acceptance recovery command');
