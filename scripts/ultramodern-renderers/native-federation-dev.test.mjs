@@ -16,11 +16,39 @@ function observations() {
     routerKey: 'initial',
   };
   const lifecycle = {
-    mounts: 1,
+    owners: 1,
+    activations: 1,
     cleanups: 0,
-    instances: [{ id: 1, cleanups: 0 }],
+    currentOwner: 1,
+    effects: [{ id: 1, ownerId: 1, cleanups: 0 }],
   };
-  const snapshot = version => ({
+  const activate = (
+    before,
+    { newOwner = false, count = 1, unmount = false } = {},
+  ) => {
+    const next = structuredClone(before);
+    for (let index = 0; index < count; index++) {
+      if (next.currentOwner !== null) {
+        next.effects.at(-1).cleanups++;
+        next.cleanups++;
+      }
+      if (newOwner) next.owners++;
+      next.currentOwner = next.owners;
+      next.effects.push({
+        id: ++next.activations,
+        ownerId: next.currentOwner,
+        cleanups: 0,
+      });
+    }
+    if (unmount) {
+      next.effects.at(-1).cleanups++;
+      next.cleanups++;
+      next.currentOwner = null;
+    }
+    return next;
+  };
+  const initialAfter = activate(lifecycle);
+  const snapshot = (version, state = lifecycle) => ({
     version,
     remoteCount: 'Count 3',
     hostCount: 'Host count 2',
@@ -29,7 +57,7 @@ function observations() {
     remoteRoots: 1,
     remoteFallbacks: 0,
     fallbackEverSeen: false,
-    lifecycle: structuredClone(lifecycle),
+    lifecycle: structuredClone(state),
   });
   const ssr = (version, before, after) => ({
     status: 200,
@@ -47,7 +75,7 @@ function observations() {
     verdict: 'PASS',
     initialCompatibleUpdate: {
       before: structuredClone(lifecycle),
-      after: structuredClone(lifecycle),
+      after: initialAfter,
       remoteCountBefore: 'Count 2',
       remoteCountAfter: 'Count 2',
       documentBefore: document,
@@ -85,37 +113,31 @@ function observations() {
       registeredArtifactCount: 6,
       releasedArtifactCount: 6,
     },
-    hmr: {
-      nativeCleanup: {
-        mounts: 3,
-        cleanups: 3,
-        instances: [1, 2, 3].map(id => ({ id, cleanups: 1 })),
-      },
-    },
+    hmr: {},
   };
+  let previousLifecycle = initialAfter;
   for (const [name, version] of [
     ['componentAndDependencyRefresh', 'Remote native v3'],
     ['burstRefresh', 'Remote native v5'],
     ['burstStableRefresh', 'Remote native v5'],
     ['reconnectedRefresh', 'Remote native v6'],
-  ])
+  ]) {
+    const nextLifecycle = activate(previousLifecycle, {
+      count:
+        name === 'burstStableRefresh' ? 0 : name === 'burstRefresh' ? 2 : 1,
+    });
     data.refreshes[name] = {
-      before: snapshot(version),
-      after: snapshot(version),
+      before: snapshot(version, previousLifecycle),
+      after: snapshot(version, nextLifecycle),
       document: structuredClone(document),
     };
+    previousLifecycle = nextLifecycle;
+  }
   const shapeAfter = snapshot('Remote native v6');
   shapeAfter.remoteCount = 'Count 0';
-  shapeAfter.lifecycle = {
-    mounts: 2,
-    cleanups: 1,
-    instances: [
-      { id: 1, cleanups: 1 },
-      { id: 2, cleanups: 0 },
-    ],
-  };
+  shapeAfter.lifecycle = activate(previousLifecycle, { newOwner: true });
   data.incompatibleUpdate = {
-    before: snapshot('Remote native v6'),
+    before: snapshot('Remote native v6', previousLifecycle),
     after: shapeAfter,
     renderedShape: 'expanded',
     countAfterClick: 'Count 1',
@@ -123,7 +145,7 @@ function observations() {
   };
   data.incompatibleRefresh.shapes = ['expanded'];
   data.refreshes.incompatibleRefresh = {
-    before: snapshot('Remote native v6'),
+    before: snapshot('Remote native v6', previousLifecycle),
     after: shapeAfter,
     document: structuredClone(document),
   };
@@ -132,15 +154,9 @@ function observations() {
   removalBefore.remoteCount = 'Count 1';
   const removalAfter = structuredClone(removalBefore);
   removalAfter.remoteCount = 'Count 0';
-  removalAfter.lifecycle = {
-    mounts: 3,
-    cleanups: 2,
-    instances: [
-      { id: 1, cleanups: 1 },
-      { id: 2, cleanups: 1 },
-      { id: 3, cleanups: 0 },
-    ],
-  };
+  removalAfter.lifecycle = activate(removalBefore.lifecycle, {
+    newOwner: true,
+  });
   data.incompatibleRemovalUpdate = {
     before: removalBefore,
     after: removalAfter,
@@ -153,7 +169,10 @@ function observations() {
     after: removalAfter,
     document: structuredClone(document),
   };
-  const beforeOutage = snapshot('Remote native v5');
+  const beforeOutage = snapshot(
+    'Remote native v5',
+    data.refreshes.burstStableRefresh.after.lifecycle,
+  );
   data.outageRecovery = {
     before: beforeOutage,
     server: {
@@ -167,6 +186,13 @@ function observations() {
       observation: structuredClone(beforeOutage),
       document: structuredClone(document),
     })),
+  };
+  const removed = activate(removalAfter.lifecycle, { count: 0, unmount: true });
+  const returned = activate(removed, { newOwner: true });
+  data.hmr = {
+    removedLifecycle: removed,
+    beforeFinalCleanup: returned,
+    nativeCleanup: activate(returned, { count: 0, unmount: true }),
   };
   return data;
 }
@@ -201,13 +227,14 @@ for (const [name, corrupt] of [
   [
     'compatible remount',
     data => {
-      data.refreshes.componentAndDependencyRefresh.after.lifecycle.mounts++;
+      data.refreshes.componentAndDependencyRefresh.after.lifecycle.owners++;
     },
   ],
   [
     'incompatible update without a remount',
     data => {
-      data.incompatibleUpdate.after.lifecycle.mounts = 1;
+      data.incompatibleUpdate.after.lifecycle.currentOwner =
+        data.incompatibleUpdate.before.lifecycle.currentOwner;
     },
   ],
   [
@@ -256,7 +283,7 @@ for (const [name, corrupt] of [
   [
     'duplicate native cleanup',
     data => {
-      data.hmr.nativeCleanup.instances[0].cleanups = 2;
+      data.hmr.nativeCleanup.effects[0].cleanups = 2;
     },
   ],
 ])

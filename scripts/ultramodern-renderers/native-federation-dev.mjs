@@ -3,6 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
+import {
+  assertLifecycle,
+  compatibleActivationDeltas,
+} from '../../tests/ultramodern-renderers/octane-federation/lifecycle.mjs';
 import { fileEvidence } from '../lib/file-evidence.mjs';
 import { readCohort } from './installed-cohort.mjs';
 import { runPackedNativeFederationProof } from './native-federation-packed.mjs';
@@ -57,8 +61,50 @@ export function validateNativeDevRefreshObservations(observations) {
     ...outage.samples.map(value => value.document),
     shape.document,
   ];
-  const shapeBefore = shape.before.lifecycle;
-  const shapeAfter = shape.after.lifecycle;
+  assertLifecycle(initial.before);
+  assertLifecycle(initial.after, {
+    previous: initial.before,
+    transition: 'compatible',
+    activations: [1, 1],
+  });
+  let previousLifecycle = initial.after;
+  for (const name of compatibleNames) {
+    const refresh = refreshes[name];
+    assert.deepEqual(refresh.before.lifecycle, previousLifecycle);
+    assertLifecycle(refresh.after.lifecycle, {
+      previous: refresh.before.lifecycle,
+      transition: 'compatible',
+      activations: compatibleActivationDeltas[name],
+    });
+    previousLifecycle = refresh.after.lifecycle;
+  }
+  assert.deepEqual(shape.before.lifecycle, previousLifecycle);
+  assertLifecycle(shape.after.lifecycle, {
+    previous: shape.before.lifecycle,
+    transition: 'new-owner',
+    activations: [1, 1],
+  });
+  assert.deepEqual(removal.before.lifecycle, shape.after.lifecycle);
+  assertLifecycle(removal.after.lifecycle, {
+    previous: removal.before.lifecycle,
+    transition: 'new-owner',
+    activations: [1, 1],
+  });
+  assertLifecycle(observations.hmr.removedLifecycle, {
+    previous: removal.after.lifecycle,
+    transition: 'unmounted',
+    activations: [0, 0],
+  });
+  assertLifecycle(observations.hmr.beforeFinalCleanup, {
+    previous: observations.hmr.removedLifecycle,
+    transition: 'new-owner',
+    activations: [1, 1],
+  });
+  assertLifecycle(nativeCleanup, {
+    previous: observations.hmr.beforeFinalCleanup,
+    transition: 'unmounted',
+    activations: [0, 0],
+  });
   const nativeNavigation =
     navigation.away.sentinel === baseline.sentinel &&
     navigation.back.sentinel === baseline.sentinel &&
@@ -116,11 +162,8 @@ export function validateNativeDevRefreshObservations(observations) {
       ) && shape.after.label === shape.before.label,
     retainedCompatibleRemoteState:
       initial.remoteCountAfter === initial.remoteCountBefore &&
-      same(initial.before, initial.after) &&
       compatible.every(
-        value =>
-          value.after.remoteCount === value.before.remoteCount &&
-          same(value.after.lifecycle, value.before.lifecycle),
+        value => value.after.remoteCount === value.before.remoteCount,
       ),
     currentSameHostSsr: currentSsr && changedRevisions,
     nativeServerOwnership: ssr.every(
@@ -173,28 +216,12 @@ export function validateNativeDevRefreshObservations(observations) {
       shape.renderedShape === 'expanded' &&
       observations.incompatibleRefresh.shapes.includes('expanded') &&
       shape.after.remoteCount === 'Count 0' &&
-      shape.countAfterClick === 'Count 1' &&
-      shapeAfter.mounts === shapeBefore.mounts + 1 &&
-      shapeAfter.cleanups === shapeBefore.cleanups + 1 &&
-      shapeAfter.instances.length === shapeBefore.instances.length + 1 &&
-      shapeAfter.instances
-        .slice(0, -1)
-        .every(instance => instance.cleanups === 1) &&
-      shapeAfter.instances.at(-1).cleanups === 0,
+      shape.countAfterClick === 'Count 1',
     incompatibleDeclarationRemoval:
       removal.renderedShape === null &&
       observations.incompatibleRemoval.shapes.length === 0 &&
       removal.after.remoteCount === 'Count 0' &&
-      removal.countAfterClick === 'Count 1' &&
-      removal.after.lifecycle.mounts === removal.before.lifecycle.mounts + 1 &&
-      removal.after.lifecycle.cleanups ===
-        removal.before.lifecycle.cleanups + 1 &&
-      removal.after.lifecycle.instances.length ===
-        removal.before.lifecycle.instances.length + 1 &&
-      removal.after.lifecycle.instances
-        .slice(0, -1)
-        .every(instance => instance.cleanups === 1) &&
-      removal.after.lifecycle.instances.at(-1).cleanups === 0,
+      removal.countAfterClick === 'Count 1',
     nativeRouterNavigationAfterRefresh: nativeNavigation,
     ownedResourcesRetired:
       cleanup.errorCount === 0 &&
@@ -203,12 +230,22 @@ export function validateNativeDevRefreshObservations(observations) {
         group => group.alive === false && group.inspectionError === undefined,
       ) &&
       cleanup.releasedArtifactCount > 0 &&
-      cleanup.releasedArtifactCount === cleanup.registeredArtifactCount &&
-      nativeCleanup.mounts === nativeCleanup.cleanups &&
-      nativeCleanup.instances.length === nativeCleanup.mounts &&
-      nativeCleanup.instances.every(instance => instance.cleanups === 1) &&
-      new Set(nativeCleanup.instances.map(instance => instance.id)).size ===
-        nativeCleanup.mounts,
+      cleanup.releasedArtifactCount === cleanup.registeredArtifactCount,
+    retainedNativeHookOwnership:
+      initial.after.currentOwner === initial.before.currentOwner &&
+      compatible.every(
+        value =>
+          value.after.lifecycle.currentOwner ===
+          value.before.lifecycle.currentOwner,
+      ) &&
+      shape.after.lifecycle.currentOwner !==
+        shape.before.lifecycle.currentOwner &&
+      removal.after.lifecycle.currentOwner !==
+        removal.before.lifecycle.currentOwner,
+    exactEffectCleanup:
+      nativeCleanup.currentOwner === null &&
+      nativeCleanup.activations === nativeCleanup.cleanups &&
+      nativeCleanup.effects.every(effect => effect.cleanups === 1),
   };
   for (const [name, passed] of Object.entries(checks))
     assert.equal(passed, true, `Native dev refresh failed ${name}`);

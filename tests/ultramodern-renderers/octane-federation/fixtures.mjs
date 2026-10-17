@@ -136,11 +136,14 @@ export default function Layout() { return <main><Outlet /></main>; }
 `;
   const lifecycle = development
     ? `
+  const [hookOwner] = useState<{ id: number | null }>(() => ({ id: null }));
   useEffect(() => {
-    const lifecycle = (globalThis.__octaneMFRemoteLifecycle ??= { mounts: 0, cleanups: 0, instances: [] });
-    const instance = { id: ++lifecycle.mounts, cleanups: 0 };
-    lifecycle.instances.push(instance);
-    return () => { instance.cleanups++; lifecycle.cleanups++; };
+    const lifecycle = (globalThis.__octaneMFRemoteLifecycle ??= { owners: 0, activations: 0, cleanups: 0, currentOwner: null, effects: [] });
+    hookOwner.id ??= ++lifecycle.owners;
+    lifecycle.currentOwner = hookOwner.id;
+    const activation = { id: ++lifecycle.activations, ownerId: hookOwner.id, cleanups: 0 };
+    lifecycle.effects.push(activation);
+    return () => { activation.cleanups++; lifecycle.cleanups++; lifecycle.currentOwner = null; };
   }, []);`
     : '';
   const widget = `import { useEffect, useState } from 'octane';
@@ -255,7 +258,7 @@ export default function Page() {
 }
 `,
       'src/components/Widget.css': `.remote-widget { color: rgb(1, 2, 3); }\n`,
-      'src/env.d.ts': `declare module '*.css';\n${development ? 'declare var __octaneMFRemoteLifecycle: { mounts: number; cleanups: number; instances: { id: number; cleanups: number }[] } | undefined;\n' : ''}`,
+      'src/env.d.ts': `declare module '*.css';\n${development ? 'declare var __octaneMFRemoteLifecycle: { owners: number; activations: number; cleanups: number; currentOwner: number | null; effects: { id: number; ownerId: number; cleanups: number }[] } | undefined;\n' : ''}`,
       'src/components/Widget.tsx': widget,
     },
     host: host('octane-mf-proof-host', true),

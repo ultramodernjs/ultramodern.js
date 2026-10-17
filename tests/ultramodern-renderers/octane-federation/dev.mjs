@@ -15,6 +15,7 @@ import {
   decodeOctaneSSRDocument,
   linkOctaneFederationDependencies,
 } from './fixtures.mjs';
+import { assertLifecycle, compatibleActivationDeltas } from './lifecycle.mjs';
 import { createSSRMarkerProxy } from './marker-proxy.mjs';
 
 const execute = promisify(execFile);
@@ -821,9 +822,7 @@ export default function Away() { const router = useRouter(); return <section dat
     'native router publishes its history key',
   );
   const before = await evaluate('globalThis.__octaneMFRemoteLifecycle');
-  assert.equal(before.mounts, 1);
-  assert.equal(before.cleanups, 0);
-  assert.deepEqual(before.instances, [{ id: 1, cleanups: 0 }]);
+  assertLifecycle(before);
   process.stdout.write(
     `${JSON.stringify({ stage: 'hydrated-before-edit', retainedServerNode: true, owner: 'host-owned', hostCount: 2, remoteCount: 2, label: 'relabelled' })}\n`,
   );
@@ -903,16 +902,11 @@ export default function Away() { const router = useRouter(); return <section dat
     '1',
   );
   const edited = await evaluate('globalThis.__octaneMFRemoteLifecycle');
-  assert.equal(
-    edited.mounts - edited.cleanups,
-    1,
-    'HMR leaves one live remote mount',
-  );
-  assert.deepEqual(
-    edited,
-    before,
-    'compatible component edits preserve the remote mount and cleanup counts',
-  );
+  assertLifecycle(edited, {
+    previous: before,
+    transition: 'compatible',
+    activations: [1, 1],
+  });
   results.initialCompatibleUpdate = {
     before,
     after: edited,
@@ -921,15 +915,6 @@ export default function Away() { const router = useRouter(); return <section dat
     documentBefore: sentinel,
     documentAfter: await documentState(),
   };
-  assert.equal(edited.instances.length, edited.mounts);
-  assert.equal(
-    new Set(edited.instances.map(instance => instance.id)).size,
-    edited.mounts,
-  );
-  assert.ok(
-    edited.instances.every(instance => instance.cleanups <= 1),
-    'HMR cleans each previous remote mount at most once',
-  );
   let retained = await browserObservation();
   results.refreshes = {};
   const assertRetainedUpdate = async (
@@ -986,11 +971,11 @@ export default function Away() { const router = useRouter(); return <section dat
         baseline.remoteCount,
         `${key} preserves compatible remote state`,
       );
-      assert.deepEqual(
-        observation.lifecycle,
-        baseline.lifecycle,
-        `${key} does not remount a compatible remote`,
-      );
+      assertLifecycle(observation.lifecycle, {
+        previous: baseline.lifecycle,
+        transition: 'compatible',
+        activations: compatibleActivationDeltas[key],
+      });
     }
     retained = observation;
     return observation;
@@ -1131,18 +1116,11 @@ export default function Away() { const router = useRouter(); return <section dat
     'Count 0',
     'incompatible native shape remount starts with initial remote state',
   );
-  assert.equal(shapeAfter.lifecycle.mounts, shapeBefore.lifecycle.mounts + 1);
-  assert.equal(
-    shapeAfter.lifecycle.cleanups,
-    shapeBefore.lifecycle.cleanups + 1,
-  );
-  assert.equal(
-    shapeAfter.lifecycle.instances.length,
-    shapeBefore.lifecycle.instances.length + 1,
-  );
-  for (const instance of shapeAfter.lifecycle.instances.slice(0, -1))
-    assert.equal(instance.cleanups, 1);
-  assert.equal(shapeAfter.lifecycle.instances.at(-1).cleanups, 0);
+  assertLifecycle(shapeAfter.lifecycle, {
+    previous: shapeBefore.lifecycle,
+    transition: 'new-owner',
+    activations: [1, 1],
+  });
   await click('remote-increment');
   const shapeCountAfterClick = await text('remote-increment');
   assert.equal(
@@ -1174,21 +1152,11 @@ export default function Away() { const router = useRouter(); return <section dat
     { compatible: false, shape: null },
   );
   assert.equal(removalAfter.remoteCount, 'Count 0');
-  assert.equal(
-    removalAfter.lifecycle.mounts,
-    removalBefore.lifecycle.mounts + 1,
-  );
-  assert.equal(
-    removalAfter.lifecycle.cleanups,
-    removalBefore.lifecycle.cleanups + 1,
-  );
-  assert.equal(
-    removalAfter.lifecycle.instances.length,
-    removalBefore.lifecycle.instances.length + 1,
-  );
-  for (const instance of removalAfter.lifecycle.instances.slice(0, -1))
-    assert.equal(instance.cleanups, 1);
-  assert.equal(removalAfter.lifecycle.instances.at(-1).cleanups, 0);
+  assertLifecycle(removalAfter.lifecycle, {
+    previous: removalBefore.lifecycle,
+    transition: 'new-owner',
+    activations: [1, 1],
+  });
   await click('remote-increment');
   const removalCountAfterClick = await text('remote-increment');
   assert.equal(removalCountAfterClick, 'Count 1');
@@ -1206,16 +1174,11 @@ export default function Away() { const router = useRouter(); return <section dat
     'normal Octane remote removal',
   );
   const removed = await evaluate('globalThis.__octaneMFRemoteLifecycle');
-  assert.equal(
-    removed.cleanups,
-    removed.mounts,
-    'each remote mount cleans up exactly once',
-  );
-  assert.equal(removed.instances.length, removed.mounts);
-  assert.ok(
-    removed.instances.every(instance => instance.cleanups === 1),
-    'each individual remote mount cleans up exactly once',
-  );
+  assertLifecycle(removed, {
+    previous: removalAfter.lifecycle,
+    transition: 'unmounted',
+    activations: [0, 0],
+  });
   assert.equal(await text('host-increment'), 'Host count 2');
   const navigationBefore = await documentState();
   await click('host-away');
@@ -1238,6 +1201,12 @@ export default function Away() { const router = useRouter(); return <section dat
     'native router return after HMR',
   );
   const navigationBack = await documentState();
+  const navigationBackBrowser = await browserObservation();
+  assertLifecycle(navigationBackBrowser.lifecycle, {
+    previous: removed,
+    transition: 'new-owner',
+    activations: [1, 1],
+  });
   assert.equal(new URL(navigationBack.location).pathname, '/');
   assert.equal(navigationBack.routerPath, '/');
   assert.equal(navigationBack.sentinel, sentinel.sentinel);
@@ -1257,10 +1226,15 @@ export default function Away() { const router = useRouter(); return <section dat
     'returned route remote removal',
   );
   const finalCleanup = await evaluate('globalThis.__octaneMFRemoteLifecycle');
-  assert.equal(finalCleanup.mounts, finalCleanup.cleanups);
-  assert.ok(finalCleanup.instances.every(instance => instance.cleanups === 1));
+  assertLifecycle(finalCleanup, {
+    transition: 'unmounted',
+    previous: navigationBackBrowser.lifecycle,
+    activations: [0, 0],
+  });
   results.hmr = {
     nativeCleanup: finalCleanup,
+    beforeFinalCleanup: navigationBackBrowser.lifecycle,
+    removedLifecycle: removed,
     documentBefore: sentinel,
     documentAfterUpdates: results.incompatibleUpdate.document,
     hostCountAfterUpdates: shapeAfter.hostCount,
