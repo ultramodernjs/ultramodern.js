@@ -938,6 +938,38 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
       application.manifest.metaData.ultramodernRenderer,
     );
     assertRendererFederationCompatibility(hostContract, contract);
+    const worker =
+      application.role === 'remote'
+        ? readWorkerFederationPublication(
+            application.manifest.metaData.ultramodernWorkerFederation,
+            contract.identities,
+          )
+        : undefined;
+    const publisherEntries = worker
+      ? new Set(
+          [
+            ...plan.routes.flatMap(route =>
+              route.expected
+                .filter(expected => expected.remote === application.remote)
+                .map(expected => expected.expose),
+            ),
+            ...plan.hops
+              .filter(hop => hop.to === application.remote)
+              .map(hop => hop.expose),
+          ].map(expose => {
+            assert(
+              worker.exposes[expose],
+              `No native publisher for ${expose}.`,
+            );
+            return worker.exposes[expose].entryName;
+          }),
+        )
+      : undefined;
+    if (publisherEntries)
+      assert(
+        publisherEntries.size,
+        'The remote needs observed expose publishers.',
+      );
     const resource = await readNativeRendererWorkerResources(
       application.buildRoot,
       {
@@ -947,7 +979,13 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
     );
     assert(resource, 'The compiler did not emit native Worker resources.');
     resources.set(application.wrangler.name, resource);
+    for (const entryName of publisherEntries ?? [])
+      assert(
+        resource.entries[entryName],
+        `Missing native publisher entry ${entryName}.`,
+      );
     const counterCandidates = [];
+    const nativeEntrySamples = [];
     const sources = Object.entries(resource.entries).flatMap(
       ([entryName, entry]) => {
         const native = validateOctaneModuleManifest(
@@ -955,6 +993,18 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
           contract.identities[entryName],
           entry.hydrationBuildId,
         );
+        nativeEntrySamples.push({
+          entryName,
+          sourceModuleCount: native.sourceModules.length,
+          sourceModules: native.sourceModules.slice(0, 32).map(source => ({
+            resource: source.resource,
+            transformKind: source.transformKind,
+            canonicalId: source.canonicalId,
+            assets: source.assets,
+          })),
+          assetCount: native.assets.length,
+          assets: native.assets.slice(0, 16).map(asset => asset.file),
+        });
         for (const source of native.sourceModules) {
           if (
             source.resource.toLowerCase().includes('counter') ||
@@ -971,13 +1021,21 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
               ),
             });
         }
-        return native.sourceModules.filter(source =>
+        const compiledCounter = native.sourceModules.filter(source =>
           isSharedCounterCompilation(
             source,
             application.appRoot,
             sharedCounter,
           ),
         );
+        if (publisherEntries?.has(entryName))
+          assert(
+            compiledCounter.length,
+            `Observed expose publisher ${entryName} in ${application.wrangler.name} did not compile the shared Counter. ${JSON.stringify(nativeEntrySamples.at(-1))}`,
+          );
+        return publisherEntries && !publisherEntries.has(entryName)
+          ? []
+          : compiledCounter;
       },
     );
     assert(
@@ -992,6 +1050,8 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
             .split(path.sep)
             .join('/'),
           counterCandidates,
+          nativeEntrySamples,
+          federationExposes: application.manifest.exposes,
         },
         null,
         2,
@@ -1007,10 +1067,6 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
       ...evidence[0],
     });
     if (application.role === 'remote') {
-      const worker = readWorkerFederationPublication(
-        application.manifest.metaData.ultramodernWorkerFederation,
-        contract.identities,
-      );
       assert.equal(worker.remote, application.remote);
       const resourceRenderer = readRendererFederationContract(
         resource.workerFederation.renderer,

@@ -107,6 +107,29 @@ class OctaneCompilerManifestPlugin {
           sources.sort((left, right) =>
             left.resource.localeCompare(right.resource),
           );
+          // Module Federation publishes exposed native modules through a
+          // separate container entry in this same compilation. Its browser
+          // closure belongs to this application's publication, even when the
+          // document itself never imports an exposed component.
+          const containerChunks = new Set();
+          for (const [entryName, entry] of compilation.entries) {
+            if (
+              !entry.dependencies.some(
+                dependency => dependency.type === 'container entry',
+              )
+            )
+              continue;
+            const container = compilation.entrypoints.get(entryName);
+            if (!container)
+              throw new Error(
+                `Octane compiler has no federation container entry for ${entryName}.`,
+              );
+            for (const chunk of container.chunks) {
+              containerChunks.add(chunk);
+              for (const referenced of chunk.getAllReferencedChunks())
+                containerChunks.add(referenced);
+            }
+          }
           const identities = this.options.rendererIdentities();
           if (!identities || !Object.keys(identities).length) {
             throw new Error(
@@ -129,7 +152,10 @@ class OctaneCompilerManifestPlugin {
               throw new Error(
                 `Octane compiler has no client entry for ${entryName}.`,
               );
-            const entryChunks = new Set(entrypoint.chunks);
+            const entryChunks = new Set([
+              ...entrypoint.chunks,
+              ...containerChunks,
+            ]);
             for (const chunk of entrypoint.chunks) {
               for (const referenced of chunk.getAllReferencedChunks())
                 entryChunks.add(referenced);
