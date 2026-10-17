@@ -212,6 +212,8 @@ patchedDependencies:
   '@module-federation/rspack@2.9.2': 06641dcd38197ccc8831f0dca7f6ff37b05ee2e771686816cc3d3f3c57c0e8af
   '@module-federation/runtime-core@2.9.2': 8f844e9c948e1e0b8fa183bf3e8c87f9e7fa9d9abbab91cdf0aeb708123b574e
   '@module-federation/sdk@2.9.2': fb4b0dfd33a0588ad3821f1d56e2316044ae0b721c515a69080d7d9d9de72e3e
+  '@tanstack/router-core@1.171.34': 0e526bc0a1fd038c459fbf45b2b62da81f7f2516176b585f41fed7098ac4abbb
+  '@tanstack/router-core@1.171.37': 6ffa70914ed338f3cb56d3cd1f526e35286e09f287ecf48ee6dbc1aa18305458
   braces@3.0.3: e14af28f138a243a283deed5e9f26275891ad6eedc02e964d8ec7ae7efc6783a
 
 importers:
@@ -2201,7 +2203,7 @@ importers:
         version: 1.170.44(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@tanstack/router-core':
         specifier: 1.171.37
-        version: 1.171.37
+        version: 1.171.37(patch_hash=6ffa70914ed338f3cb56d3cd1f526e35286e09f287ecf48ee6dbc1aa18305458)
     devDependencies:
       '@modern-js/app-tools':
         specifier: workspace:*
@@ -2452,7 +2454,7 @@ importers:
         version: 1.162.5
       '@tanstack/router-core':
         specifier: 1.171.37
-        version: 1.171.37
+        version: 1.171.37(patch_hash=6ffa70914ed338f3cb56d3cd1f526e35286e09f287ecf48ee6dbc1aa18305458)
       isbot:
         specifier: 5.2.2
         version: 5.2.2
@@ -23550,7 +23552,7 @@ snapshots:
   '@octanejs/tanstack-router@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-d5988dd93614/octanejs-tanstack-router-0.2.10.tgz(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-d5988dd93614/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
       '@tanstack/history': 1.162.4
-      '@tanstack/router-core': 1.171.34
+      '@tanstack/router-core': 1.171.34(patch_hash=0e526bc0a1fd038c459fbf45b2b62da81f7f2516176b585f41fed7098ac4abbb)
       '@tanstack/store': 0.9.3
       isbot: 5.2.2
       octane: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-d5988dd93614/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -25587,7 +25589,7 @@ snapshots:
     dependencies:
       '@tanstack/history': 1.162.5
       '@tanstack/react-store': 0.11.2(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      '@tanstack/router-core': 1.171.37
+      '@tanstack/router-core': 1.171.37(patch_hash=6ffa70914ed338f3cb56d3cd1f526e35286e09f287ecf48ee6dbc1aa18305458)
       isbot: 5.2.2
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
@@ -25599,14 +25601,14 @@ snapshots:
       react-dom: 19.3.1(react@19.3.1)
       use-sync-external-store: 1.7.0(react@19.3.1)
 
-  '@tanstack/router-core@1.171.34':
+  '@tanstack/router-core@1.171.34(patch_hash=0e526bc0a1fd038c459fbf45b2b62da81f7f2516176b585f41fed7098ac4abbb)':
     dependencies:
       '@tanstack/history': 1.162.4
       cookie-es: 3.1.1
       seroval: 1.6.9
       seroval-plugins: 1.6.9(seroval@1.6.9)
 
-  '@tanstack/router-core@1.171.37':
+  '@tanstack/router-core@1.171.37(patch_hash=6ffa70914ed338f3cb56d3cd1f526e35286e09f287ecf48ee6dbc1aa18305458)':
     dependencies:
       '@tanstack/history': 1.162.5
       cookie-es: 3.1.1

@@ -66,6 +66,8 @@ allowBuilds:
   workerd: true
 
 patchedDependencies:
+  '@tanstack/router-core@1.171.34': patches/@tanstack__router-core@1.171.34.patch
+  '@tanstack/router-core@1.171.37': patches/@tanstack__router-core@1.171.37.patch
   'braces@3.0.3': patches/braces@3.0.3.patch
   '@module-federation/bridge-react@2.9.2': patches/@module-federation__bridge-react@2.9.2.patch
   '@module-federation/dts-plugin@2.9.2': patches/@module-federation__dts-plugin@2.9.2.patch

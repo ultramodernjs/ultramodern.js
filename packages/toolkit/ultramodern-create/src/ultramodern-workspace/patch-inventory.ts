@@ -1,5 +1,25 @@
 export default [
   {
+    packageName: '@tanstack/router-core',
+    version: '1.171.34',
+    path: 'patches/@tanstack__router-core@1.171.34.patch',
+    sha256: '0e526bc0a1fd038c459fbf45b2b62da81f7f2516176b585f41fed7098ac4abbb',
+    repository: true,
+    workspace: null,
+    reason:
+      'Let native localized masks inherit the canonical resolved search without rerunning middleware or validation, including public types and emitted CJS/ESM source maps. Applies only to the accepted Octane router-core 1.171.34 closure during local qualification. Generated workspaces remain patch-free; retire when their mature accepted router sidecar or upstream release supplies the same runtime and declaration contract.',
+  },
+  {
+    packageName: '@tanstack/router-core',
+    version: '1.171.37',
+    path: 'patches/@tanstack__router-core@1.171.37.patch',
+    sha256: '6ffa70914ed338f3cb56d3cd1f526e35286e09f287ecf48ee6dbc1aa18305458',
+    repository: true,
+    workspace: null,
+    reason:
+      'Let native localized masks inherit the canonical resolved search without rerunning middleware or validation, preserving current location caching and SSR rewrite behavior, public types and emitted CJS/ESM source maps. Applies only to Modern router-core 1.171.37 during local qualification. Generated workspaces remain patch-free; retire when their mature accepted router sidecar or upstream release supplies the same runtime and declaration contract.',
+  },
+  {
     packageName: 'ultracite',
     version: '8.0.1',
     path: 'patches/ultracite@8.0.1.patch',

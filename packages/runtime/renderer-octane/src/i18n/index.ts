@@ -22,11 +22,7 @@ export {
 } from '@modern-js/i18n-runtime-extensions/urlRewrite';
 export { I18nContext } from './context';
 export { I18nProvider, type I18nProviderProps } from './I18nProvider';
-export {
-  LocalizedLink,
-  type LocalizedLinkProps,
-  useIsLocalizedActive,
-} from './LocalizedLink';
+export { LocalizedLink, type LocalizedLinkProps } from './LocalizedLink';
 export {
   type OctaneLatestLanguageSyncOptions,
   useLatestLanguageSync,

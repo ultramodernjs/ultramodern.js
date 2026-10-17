@@ -16,12 +16,14 @@ export function useNavigate<
 }): UseNavigateResult<TDefaultFrom> {
   const router = useRouter();
 
-  return ((options: NavigateOptions) => {
+  const navigate: UseNavigateResult<TDefaultFrom> = options => {
+    const from = options.from ?? _defaultOpts?.from;
     return router.navigate({
       ...options,
-      from: options.from ?? _defaultOpts?.from,
+      ...(from === undefined ? {} : { from }),
     });
-  }) as UseNavigateResult<TDefaultFrom>;
+  };
+  return navigate;
 }
 
 export function Navigate<
