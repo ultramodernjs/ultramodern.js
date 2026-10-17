@@ -7,6 +7,73 @@ const json = value => `${JSON.stringify(value, null, 2)}\n`;
 export function createWorkerFederationFaultHandler() {
   let mode = 'pass';
   const evidence = { requests: [], cancellations: 0, active: 0 };
+  let diagnostics = 0;
+  // Observe rejected native responses without consuming or delaying the body
+  // returned to the transport. This independent budget affects logging only.
+  const inspectFailure = async (response, request, record) => {
+    const limit = 1024;
+    const bytes = new Uint8Array(limit);
+    let length = 0;
+    let reader;
+    let interrupted;
+    let rejectInterrupted;
+    const interruption = new Promise((_resolve, reject) => {
+      rejectInterrupted = reject;
+    });
+    void interruption.catch(() => {});
+    const stop = reason => {
+      interrupted ??= reason;
+      rejectInterrupted(interrupted);
+    };
+    const onAbort = () =>
+      stop(request.signal.reason ?? new Error('Diagnostic request aborted'));
+    const expires = performance.now() + 200;
+    const timer = setTimeout(
+      () => stop(new Error('Diagnostic read budget exceeded')),
+      200,
+    );
+    request.signal.addEventListener('abort', onAbort, { once: true });
+    try {
+      if (request.signal.aborted) onAbort();
+      reader = response.clone().body?.getReader();
+      while (reader && length < limit) {
+        if (interrupted) throw interrupted;
+        if (performance.now() >= expires)
+          throw new Error('Diagnostic read budget exceeded');
+        const chunk = await Promise.race([reader.read(), interruption]);
+        if (chunk.done) break;
+        const selected = chunk.value.subarray(0, limit - length);
+        bytes.set(selected, length);
+        length += selected.byteLength;
+      }
+    } catch (error) {
+      record.diagnosticError = String(error?.message ?? error).slice(0, 160);
+    } finally {
+      clearTimeout(timer);
+      request.signal.removeEventListener('abort', onAbort);
+      if (reader) {
+        void reader.cancel().catch(() => {});
+        try {
+          reader.releaseLock();
+        } catch {}
+      }
+      record.diagnostic = new TextDecoder().decode(bytes.subarray(0, length));
+      record.diagnosticTruncated = length === limit;
+      console.error(
+        'Worker native response diagnostic:',
+        JSON.stringify({
+          method: record.method.slice(0, 16),
+          path: record.path.slice(0, 256),
+          status: record.status,
+          body: record.diagnostic,
+          truncated: record.diagnosticTruncated,
+          ...(record.diagnosticError
+            ? { interrupted: record.diagnosticError }
+            : {}),
+        }),
+      );
+    }
+  };
   const modes = new Set([
     'pass',
     'unavailable',
@@ -26,7 +93,7 @@ export function createWorkerFederationFaultHandler() {
     'foreign-native-echo',
   ]);
   return {
-    async fetch(request, env) {
+    async fetch(request, env, context) {
       const url = new URL(request.url);
       if (url.pathname === '/__proof/control') {
         if (request.method === 'POST') {
@@ -111,6 +178,11 @@ export function createWorkerFederationFaultHandler() {
       }
       const response = await env.TARGET.fetch(request);
       record.status = response.status;
+      if (selected === 'pass' && !response.ok && diagnostics++ < 8) {
+        const diagnostic = inspectFailure(response, request, record);
+        if (context?.waitUntil) context.waitUntil(diagnostic);
+        else void diagnostic;
+      }
       if (networkFault && fault === 'body-hang') {
         const reader = response.body.getReader();
         const first = await reader.read();

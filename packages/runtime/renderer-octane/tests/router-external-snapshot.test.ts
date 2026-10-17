@@ -14,11 +14,16 @@ import {
   disposeRouterRenderSnapshot,
   getRouterRenderProfile,
   matchContext,
+  type RouteComponent,
+  RouterProvider,
   registerRouterRenderProfile,
   restoreRouterRenderSnapshot,
   routerContext,
+  useMatch,
 } from '@octanejs/tanstack-router';
-import * as nativeHistory from '@octanejs/tanstack-router/history';
+import * as actualHistory from '@octanejs/tanstack-router/history' with {
+  rstest: 'importActual',
+};
 import { afterEach, describe, expect, rs, test } from '@rstest/core';
 import {
   createElement,
@@ -47,6 +52,26 @@ import {
   useOctaneWorkerContextKeys,
 } from '../src/worker-federation-contexts';
 
+const { historyDisposals } = rs.hoisted(() => ({
+  historyDisposals: [] as Array<() => number>,
+}));
+
+// Mock the public module itself: replacing a re-export's namespace property
+// does not intercept the native snapshot producer's direct history import.
+rs.mock('@octanejs/tanstack-router/history', () => {
+  return {
+    ...actualHistory,
+    createMemoryHistory(
+      options: Parameters<typeof actualHistory.createMemoryHistory>[0],
+    ) {
+      const history = actualHistory.createMemoryHistory(options);
+      const destroy = rs.spyOn(history, 'destroy');
+      historyDisposals.push(() => destroy.mock.calls.length);
+      return history;
+    },
+  };
+});
+
 const identity = {
   renderer: 'octane',
   appId: 'catalog-host',
@@ -63,12 +88,14 @@ let profileSequence = 0;
 afterEach(() => {
   for (const router of restoredRouters) disposeRouterRenderSnapshot(router);
   for (const router of hosts) {
-    router.cancelMatches();
+    for (const match of router.state.matches) match.abortController.abort();
+    router.clearCache();
     router.history.destroy();
   }
   for (const release of releases.splice(0).reverse()) release();
   hosts.clear();
   restoredRouters.clear();
+  historyDisposals.length = 0;
   rs.restoreAllMocks();
 });
 
@@ -79,6 +106,7 @@ function fixture(
     validateSearch?: (
       search: Record<string, unknown>,
     ) => Record<string, unknown>;
+    component?: RouteComponent;
   } = {},
 ) {
   const privateContext = { credential: 'HOST_PRIVATE_CREDENTIAL' };
@@ -98,9 +126,16 @@ function fixture(
       },
       { id: 'about', path: 'about', children: [] },
     ],
-    routeModules: options.validateSearch
-      ? { product: { search: { validateSearch: options.validateSearch } } }
-      : {},
+    routeModules: {
+      product: {
+        ...(options.validateSearch
+          ? { search: { validateSearch: options.validateSearch } }
+          : {}),
+        ...(options.component
+          ? { component: { default: options.component } }
+          : {}),
+      },
+    },
     dataModules: {},
   };
   const router = createNativeRouter(
@@ -160,7 +195,7 @@ function provideRouter(router: AnyRouter, child: unknown, nearest = false) {
   return createElement(routerContext, {
     value: router,
     children: nearest
-      ? createElement(matchContext, { value: match.id, children: child })
+      ? createElement(matchContext, { value: match.routeId, children: child })
       : child,
   });
 }
@@ -305,7 +340,7 @@ describe('generated Octane router Worker snapshots', () => {
       expect(value).toEqual({
         appId: identity.appId,
         buildId: identity.buildId,
-        matchId: host.router.state.matches.at(-1)?.id,
+        matchId: host.router.state.matches.at(-1)?.routeId,
       });
     expect(result.html).toContain('catalog-host:main:host-logical-build');
     expect(host.loaderInputs).toHaveLength(1);
@@ -324,6 +359,7 @@ describe('generated Octane router Worker snapshots', () => {
         },
       },
     });
+    await host.router.load();
     expect(() => captureOctaneRouterSnapshot(host.router)).toThrow(
       'Generated Worker router origin changed',
     );
@@ -335,6 +371,7 @@ describe('generated Octane router Worker snapshots', () => {
     host.router.update({
       context: { ...publicContext, sessionToken: 'PRIVATE_TOKEN' },
     });
+    await host.router.load();
     expect(() => captureOctaneRouterSnapshot(host.router)).toThrow(
       'Unknown Worker router context field',
     );
@@ -487,8 +524,95 @@ describe('actual native Worker provider selection', () => {
 });
 
 describe('native selected match admission before expose loading', () => {
+  test('admits the actual RouterProvider route context and preserves native useMatch in the remote', async () => {
+    releases.push(registerOctaneRouterWorkerContexts());
+    const authority = {
+      publisherBuildId: 'native-route-provider-publisher',
+      runtimeABI: 1,
+    } as const;
+    const failures: unknown[] = [];
+    const hostContextValues: unknown[] = [];
+    const remoteMatches: Array<{ id: string; routeId: string }> = [];
+    function Exposed() {
+      const match = useMatch({ strict: false });
+      remoteMatches.push({ id: match.id, routeId: match.routeId });
+      return createElement('p', {
+        children: `native restored route:${match.routeId}:${match.params.id}`,
+      });
+    }
+    const Remote = externalSnapshotBoundary({
+      authority,
+      component: Exposed,
+      contextKeys: [
+        OCTANE_WORKER_CONTEXT_KEYS.router,
+        OCTANE_WORKER_CONTEXT_KEYS.match,
+      ],
+      async snapshot(request, signal) {
+        try {
+          const prepared = await prepareExternalSnapshotRequest(
+            serializeExternalSnapshotRequest(request),
+            { authority, signal },
+          );
+          try {
+            return await renderExternalSnapshot(Exposed, prepared);
+          } finally {
+            await releasePreparedExternalSnapshotRequest(prepared);
+          }
+        } catch (error) {
+          failures.push(error);
+          throw error;
+        }
+      },
+    });
+    function Product() {
+      hostContextValues.push(useContext(matchContext));
+      return createElement(Remote);
+    }
+    const host = fixture({ component: Product });
+    await host.router.load();
+    const actualMatch = host.router.state.matches.at(-1);
+    if (!actualMatch) throw new Error('Missing genuinely loaded product route');
+    expect(actualMatch.routeId).not.toBe(actualMatch.id);
+    const result = await prerender(
+      () => createElement(RouterProvider, { router: host.router }),
+      {},
+      {
+        externalSnapshots: { documentId: 'native-router-provider-admission' },
+        onError() {},
+      },
+    );
+    expect(hostContextValues.length).toBeGreaterThan(0);
+    expect(
+      hostContextValues.every(value => value === actualMatch.routeId),
+    ).toBe(true);
+    expect(failures).toEqual([]);
+    expect(remoteMatches.length).toBeGreaterThan(0);
+    expect(
+      remoteMatches.every(
+        match =>
+          match.id === actualMatch.id && match.routeId === actualMatch.routeId,
+      ),
+    ).toBe(true);
+    expect(result.html).toContain(
+      `native restored route:${actualMatch.routeId}:7`,
+    );
+  });
+
   test.each([
     { kind: 'unknown selected match', router: true, match: true, valid: false },
+    {
+      kind: 'match identity instead of native route key',
+      router: true,
+      match: true,
+      valid: false,
+    },
+    { kind: 'stale native route', router: true, match: true, valid: false },
+    {
+      kind: 'foreign actual router route',
+      router: true,
+      match: true,
+      valid: false,
+    },
     {
       kind: 'selected match without router',
       router: false,
@@ -503,10 +627,30 @@ describe('native selected match admission before expose loading', () => {
     await host.router.load();
     const hostMatch = host.router.state.matches.at(-1);
     if (!hostMatch) throw new Error('Expected a genuinely loaded native match');
-    const matchId =
-      scenario.kind === 'unknown selected match'
-        ? 'UNKNOWN_NATIVE_MATCH'
-        : hostMatch.id;
+    let matchId = hostMatch.routeId;
+    if (scenario.kind === 'unknown selected match') {
+      matchId = 'UNKNOWN_NATIVE_MATCH';
+    } else if (scenario.kind === 'match identity instead of native route key') {
+      expect(hostMatch.id).not.toBe(hostMatch.routeId);
+      matchId = hostMatch.id;
+    } else if (scenario.kind === 'stale native route') {
+      host.router.history.replace('/app/about');
+      await host.router.load();
+      const nextMatch = host.router.state.matches.at(-1);
+      if (!nextMatch)
+        throw new Error('Expected the genuinely loaded next route');
+      expect(nextMatch.routeId).not.toBe(matchId);
+    } else if (scenario.kind === 'foreign actual router route') {
+      const foreign = fixture({ path: '/app/about' });
+      await foreign.router.load();
+      const foreignMatch = foreign.router.state.matches.at(-1);
+      if (!foreignMatch)
+        throw new Error('Expected the genuinely loaded foreign route');
+      matchId = foreignMatch.routeId;
+      expect(
+        host.router.state.matches.some(match => match.routeId === matchId),
+      ).toBe(false);
+    }
     const keys = [
       ...(scenario.router ? [OCTANE_WORKER_CONTEXT_KEYS.router] : []),
       ...(scenario.match ? [OCTANE_WORKER_CONTEXT_KEYS.match] : []),
@@ -518,22 +662,15 @@ describe('native selected match admission before expose loading', () => {
     const admitted: ExternalSnapshotRequest[] = [];
     const failures: unknown[] = [];
     const diagnostics: unknown[] = [];
-    const historyDisposals: Array<() => number> = [];
-    const actualCreateHistory = nativeHistory.createMemoryHistory;
-    rs.spyOn(nativeHistory, 'createMemoryHistory').mockImplementation(
-      options => {
-        const history = actualCreateHistory(options);
-        const destroy = rs.spyOn(history, 'destroy');
-        historyDisposals.push(() => destroy.mock.calls.length);
-        return history;
-      },
-    );
+    // Only subsequently reconstructed remote routers belong to this proof.
+    historyDisposals.length = 0;
     function Exposed() {
       const router = useContext(routerContext);
       if (!router)
         throw new Error('Missing actual reconstructed native router');
       expect(matches(router)).toEqual(matches(host.router));
-      if (scenario.match) expect(useContext(matchContext)).toBe(hostMatch.id);
+      if (scenario.match)
+        expect(useContext(matchContext)).toBe(hostMatch.routeId);
       return createElement(IdentityConsumer);
     }
     const expose = {
@@ -672,15 +809,19 @@ describe('optional owning native i18n rewrite bridge', () => {
     });
     await host.router.load();
     expect(captureOctaneRouterSnapshot(host.router).i18n?.language).toBe('cs');
+    expect(host.loaderInputs).toHaveLength(1);
     language = 'en';
+    host.router.history.replace('/app/en/products/7');
+    await host.router.load();
     const snapshot = captureOctaneRouterSnapshot(host.router);
     expect(snapshot.i18n?.language).toBe('en');
+    expect(snapshot.routing.publicHref).toBe('/app/en/products/7');
     const restored = await restore(snapshot);
     expect(
       restored.buildLocation({ to: '/products/$id', params: { id: '9' } })
         .publicHref,
     ).toBe('/app/en/products/9');
-    expect(host.loaderInputs).toHaveLength(1);
+    expect(host.loaderInputs).toHaveLength(2);
   });
 
   test('rejects replaced rewrite provenance through public router.update', async () => {

@@ -481,6 +481,102 @@ test('the fault Worker pass mode preserves the native Request and Response objec
   );
 });
 
+test('native failure diagnostics preserve the original Response and report bounded status and body', async t => {
+  const logs = [];
+  t.mock.method(console, 'error', (...args) => logs.push(args));
+  const handler = createWorkerFederationFaultHandler();
+  const jobs = [];
+  const original = new Response('Native context admission rejected', {
+    status: 400,
+    headers: { 'x-native': 'preserved' },
+  });
+  const response = await handler.fetch(
+    new Request('https://remote.invalid/_mf/widget'),
+    { TARGET: { fetch: async () => original } },
+    { waitUntil: job => jobs.push(job) },
+  );
+  assert.equal(response, original);
+  assert.equal(response.bodyUsed, false);
+  assert.equal(response.headers.get('x-native'), 'preserved');
+  assert.equal(await response.text(), 'Native context admission rejected');
+  await Promise.all(jobs);
+  assert.equal(logs.length, 1);
+  assert.deepEqual(JSON.parse(logs[0][1]), {
+    method: 'GET',
+    path: '/_mf/widget',
+    status: 400,
+    body: 'Native context admission rejected',
+    truncated: false,
+  });
+});
+
+test('native failure diagnostics truncate at 1024 bytes without truncating the original Response', async t => {
+  const logs = [];
+  t.mock.method(console, 'error', (...args) => logs.push(args));
+  const handler = createWorkerFederationFaultHandler();
+  const jobs = [];
+  const body = 'x'.repeat(4096);
+  const original = new Response(body, { status: 400 });
+  const response = await handler.fetch(
+    new Request('https://remote.invalid/_mf/widget'),
+    { TARGET: { fetch: async () => original } },
+    { waitUntil: job => jobs.push(job) },
+  );
+  assert.equal(response, original);
+  assert.equal(await response.text(), body);
+  await Promise.all(jobs);
+  const diagnostic = JSON.parse(logs[0][1]);
+  assert.equal(diagnostic.body, body.slice(0, 1024));
+  assert.equal(diagnostic.truncated, true);
+});
+
+for (const stop of ['abort', 'budget']) {
+  test(`native failure diagnostics release a never-yielding reader on ${stop}`, {
+    timeout: 1000,
+  }, async t => {
+    const logs = [];
+    t.mock.method(console, 'error', (...args) => logs.push(args));
+    const handler = createWorkerFederationFaultHandler();
+    const jobs = [];
+    const controller = new AbortController();
+    let canceled = 0;
+    const original = new Response(
+      new ReadableStream({
+        cancel() {
+          canceled++;
+          return new Promise(() => {});
+        },
+      }),
+      { status: 400 },
+    );
+    const response = await handler.fetch(
+      new Request('https://remote.invalid/_mf/widget', {
+        signal: controller.signal,
+      }),
+      { TARGET: { fetch: async () => original } },
+      { waitUntil: job => jobs.push(job) },
+    );
+    assert.equal(response, original);
+    assert.equal(response.bodyUsed, false);
+    if (stop === 'abort')
+      controller.abort(new Error('Owned diagnostic request stopped'));
+    await Promise.all(jobs);
+    const diagnostic = JSON.parse(logs[0][1]);
+    assert.match(
+      diagnostic.interrupted,
+      stop === 'abort'
+        ? /Owned diagnostic request stopped/
+        : /Diagnostic read budget exceeded/,
+    );
+    assert.equal(diagnostic.body, '');
+    // A tee cancels its underlying body once both owners have canceled. The
+    // diagnostic owner must already have canceled without awaiting this body.
+    void response.body.cancel().catch(() => {});
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(canceled, 1);
+  });
+}
+
 test('a snapshot 503 keeps manifest forwarding healthy and recovers in the same fault Worker', async () => {
   const handler = createWorkerFederationFaultHandler();
   let forwards = 0;

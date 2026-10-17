@@ -71,6 +71,135 @@ const installedOwner = (request, name) => {
   }
 };
 
+/** Read-only, bounded diagnostics from the actual completed install and build. */
+async function printSourceWorkerDispatchDiagnostics({
+  applications,
+  apps,
+  run,
+  workRoot,
+}) {
+  const host = applications.find(application => application.role === 'host');
+  const hostApp = apps[applications.indexOf(host)];
+  const request = createRequire(path.join(host.appRoot, 'package.json'));
+  const toolingRequest = createRequire(
+    request.resolve('@modern-js/ultramodern-app-tools'),
+  );
+  const { NATIVE_RENDERER_WORKER_RESOURCES_FILE } = toolingRequest(
+    '@modern-js/app-tools-extensions/cloudflare/native-renderer',
+  );
+  const print = (label, value) =>
+    process.stdout.write(
+      `Source Worker diagnostic (${label}): ${JSON.stringify(value)}\n`,
+    );
+  const selectedLines = filename => {
+    const source = fs.readFileSync(filename, 'utf8');
+    const lines = source.split('\n');
+    return {
+      path: fs.realpathSync(filename),
+      sha256: createHash('sha256').update(source).digest('hex'),
+      lines: lines
+        .flatMap((line, index) =>
+          /workerFederation|WorkerFederation|dispatchNativeWorkerRequest|createNativeWorkerFederationRuntime|runtime\.transport|entry-server|handlers\.worker|federation\.worker|from ['"]octane|worker-federation-context/u.test(
+            line,
+          )
+            ? [{ line: index + 1, source: line.slice(0, 1000) }]
+            : [],
+        )
+        .slice(0, 16),
+    };
+  };
+  for (const application of applications) {
+    const filename = path.join(
+      application.buildRoot,
+      NATIVE_RENDERER_WORKER_RESOURCES_FILE,
+    );
+    const resource = readJson(filename);
+    print('native-resources', {
+      path: fs.realpathSync(filename),
+      application: application.remote ?? 'host',
+      renderer: resource.renderer,
+      publication: resource.workerFederation && {
+        renderer: resource.workerFederation.renderer,
+        remote: resource.workerFederation.worker?.remote,
+        exposes: resource.workerFederation.worker?.exposes,
+      },
+      manifestUrl: resource.workerFederationManifestUrl,
+      services: resource.workerFederationServices?.slice(0, 8).map(service => ({
+        remote: service.remote,
+        alias: service.alias,
+        binding: service.binding,
+        manifestUrl: service.manifestUrl,
+        fragments: service.fragments?.slice(0, 8),
+      })),
+      entries: Object.entries(resource.entries).map(([entryName, entry]) => ({
+        entryName,
+        hydrationBuildId: entry.hydrationBuildId,
+        serverConfig: entry.serverConfig,
+      })),
+    });
+    if (application !== host) continue;
+    // The real authored public Cloudflare preset owns this exact tempDir; the
+    // entry names come from its actual emitted native-resource manifest.
+    for (const entryName of Object.keys(resource.entries)) {
+      const directory = confinedPath(
+        host.appRoot,
+        `node_modules/.modern-js-${hostApp.id}-cloudflare/octane/${entryName}`,
+      );
+      for (const name of [
+        'index.worker.ts',
+        'handlers.worker.ts',
+        'federation.worker.ts',
+      ]) {
+        const generated = path.join(directory, name);
+        print(
+          'generated-entry',
+          fs.existsSync(generated)
+            ? selectedLines(generated)
+            : { path: generated, missing: true },
+        );
+      }
+    }
+  }
+  // Resolve both Node conditions from the actual host, without importing any
+  // renderer runtime or writing into the clean authored workspace. These are
+  // resolution facts, not a claim about the bundler's selected condition.
+  const resolutionScript = String.raw`
+import fs from 'node:fs';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+const request=createRequire(import.meta.url);
+const rows=[];
+for(const specifier of ['@modern-js/renderer-octane/entry-server','@modern-js/renderer-octane/federation','octane','octane/server']) {
+ const esm=fs.realpathSync(fileURLToPath(import.meta.resolve(specifier)));
+ const cjs=fs.realpathSync(request.resolve(specifier));
+ const row={specifier,esm,cjs};
+ if(specifier.startsWith('@modern-js/renderer-octane/')) row.entryImports=[esm,cjs].map(entry=>({entry,imports:fs.readFileSync(entry,'utf8').split('\n').filter(line=>/octane|from |require\(/.test(line)).slice(0,18).map(line=>line.slice(0,600))}));
+ if(specifier.startsWith('@modern-js/renderer-octane/')) {
+  row.contexts=[esm,cjs].map(entry=>{
+   const context=path.join(path.dirname(entry),'worker-federation-context'+path.extname(entry));
+   const source=fs.readFileSync(context,'utf8');
+   const local=createRequire(context);
+   return {entry,context:fs.realpathSync(context),octane:fs.realpathSync(local.resolve('octane')),octaneServer:fs.realpathSync(local.resolve('octane/server')),imports:source.split('\n').filter(line=>/worker-federation-context|octane|createContext|WorkerFederationContext/.test(line)).slice(0,12).map(line=>line.slice(0,600))};
+  });
+ }
+ rows.push(row);
+}
+process.stdout.write(JSON.stringify(rows)+'\n');
+`;
+  const label = 'worker-conditional-resolution-diagnostic';
+  await run(
+    process.execPath,
+    ['--input-type=module', '--eval', resolutionScript],
+    host.appRoot,
+    label,
+  );
+  print(
+    'node-import-require-resolution',
+    readJson(path.join(workRoot, `${label}.log`)),
+  );
+}
+
 /** Resolve authored topology projections through the installed config owners. */
 async function finalizeAuthoredSourceTopology(workspaceRoot) {
   const filename = path.join(workspaceRoot, 'topology/reference-topology.json');
@@ -660,6 +789,12 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
       ...(input.browserExecutable
         ? { browserExecutable: input.browserExecutable }
         : {}),
+    });
+    await printSourceWorkerDispatchDiagnostics({
+      applications,
+      apps,
+      run,
+      workRoot,
     });
     result = await runWorkerFixtureProof(readWorkerFixturePlan(planPath), {
       signal: cancellation.signal,

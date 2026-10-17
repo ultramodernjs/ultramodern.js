@@ -266,10 +266,17 @@ export function registerOctaneRouterWorkerContexts(): () => void {
         decode: nonempty,
         validate: (value, readContext) => {
           const selected = readContext(routerContext);
+          const router = selected.present ? selected.value : undefined;
+          // Native Match and useMatch share the active route store key, not
+          // the location-specific match identity (which includes parameters).
+          const current = router?.state.matches.find(
+            match => match.routeId === value,
+          );
           if (
-            !selected.present ||
-            !selected.value ||
-            !selected.value.state.matches.some(match => match.id === value)
+            !router ||
+            !current ||
+            typeof value !== 'string' ||
+            router.stores.getMatchStore(value).get() !== current
           )
             throw new TypeError(
               'Worker match context requires its selected native router and a current match',
