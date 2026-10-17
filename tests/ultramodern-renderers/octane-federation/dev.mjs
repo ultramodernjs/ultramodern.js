@@ -37,6 +37,18 @@ const packedContext = packedHelpers
       'octane',
     )
   : undefined;
+assert(
+  !(packedContext && process.env.ULTRAMODERN_MF_SOURCE_DEV_CONTEXT),
+  'Source dev validation cannot claim a packed release cohort.',
+);
+const sourceHelpers = process.env.ULTRAMODERN_MF_SOURCE_DEV_CONTEXT
+  ? await import('./source-dev.mjs')
+  : undefined;
+const sourceContext = sourceHelpers
+  ? sourceHelpers.readSourceDevContext(
+      process.env.ULTRAMODERN_MF_SOURCE_DEV_CONTEXT,
+    )
+  : undefined;
 if (packedContext)
   assert.equal(path.resolve(temporary), path.resolve(packedContext.workRoot));
 const owner = `octane-mf-dev-${process.pid}`;
@@ -57,6 +69,8 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'])
 async function registerArtifact(directory, kind) {
   cancellation.signal.throwIfAborted();
   await fs.mkdir(directory, { recursive: true });
+  // An interrupted guardian command may already have registered this owner.
+  artifacts.add(directory);
   await guardianCommand(
     [
       'register',
@@ -72,7 +86,6 @@ async function registerArtifact(directory, kind) {
     ],
     cancellation.signal,
   );
-  artifacts.add(directory);
   cancellation.signal.throwIfAborted();
 }
 
@@ -111,6 +124,13 @@ async function writeApp(directory, files) {
       registerArtifact,
       signal: cancellation.signal,
     });
+  else if (sourceContext)
+    await sourceHelpers.prepareSourceDevApp({
+      directory,
+      context: sourceContext,
+      registerArtifact,
+      signal: cancellation.signal,
+    });
   else
     await linkOctaneFederationDependencies({
       root,
@@ -126,10 +146,12 @@ async function startDev(directory, port) {
     [
       packedContext
         ? packedHelpers.installedBin(directory)
-        : path.join(
-            root,
-            'packages/solutions/ultramodern-app-tools/bin/ultramodern.mjs',
-          ),
+        : sourceContext
+          ? sourceHelpers.installedBin(directory)
+          : path.join(
+              root,
+              'packages/solutions/ultramodern-app-tools/bin/ultramodern.mjs',
+            ),
       'dev',
     ],
     {
@@ -163,6 +185,20 @@ async function startDev(directory, port) {
           packedContext.workRoot,
           'process-witnesses',
           `${child.pid}.json`,
+        ),
+        child.pid,
+      );
+    } catch (error) {
+      await stopChild(child);
+      throw error;
+    }
+  }
+  if (sourceContext && child.pid) {
+    try {
+      sourceHelpers.recordPackedNativeFederationProcess(
+        path.join(
+          sourceContext.workRoot,
+          `source-dev-process-${child.pid}.json`,
         ),
         child.pid,
       );
@@ -521,6 +557,9 @@ async function browser(...args) {
       ...process.env,
       AGENT_BROWSER_SESSION: owner,
       AGENT_BROWSER_HEADED: 'false',
+      ...(sourceContext
+        ? { AGENT_BROWSER_EXECUTABLE_PATH: sourceContext.browserExecutable }
+        : {}),
     },
     maxBuffer: 8 * 1024 * 1024,
     timeout: 180_000,
@@ -543,6 +582,10 @@ const browserObservation = () =>
 
 let failure;
 try {
+  if (sourceContext) {
+    results.mode = 'source-installed';
+    results.installedConsumers = sourceContext.installations;
+  }
   const remotePort = await freePort();
   const hostPort = await freePort();
   const proxyPort = await freePort();
@@ -1373,6 +1416,9 @@ export default function Away() { const router = useRouter(); return <section dat
         ...process.env,
         AGENT_BROWSER_SESSION: owner,
         AGENT_BROWSER_HEADED: 'false',
+        ...(sourceContext
+          ? { AGENT_BROWSER_EXECUTABLE_PATH: sourceContext.browserExecutable }
+          : {}),
       },
       timeout: 15_000,
     }).catch(error => cleanupErrors.push(error));
@@ -1382,6 +1428,13 @@ export default function Away() { const router = useRouter(); return <section dat
       processesRetired = false;
       cleanupErrors.push(error);
     });
+  if (sourceContext)
+    await sourceHelpers
+      .retireSourceDevInstallers(sourceContext)
+      .catch(error => {
+        processesRetired = false;
+        cleanupErrors.push(error);
+      });
   await proxy?.().catch(error => cleanupErrors.push(error));
   let releasedArtifactCount = 0;
   if (processesRetired)
@@ -1408,6 +1461,13 @@ export default function Away() { const router = useRouter(); return <section dat
     registeredArtifactCount: artifacts.size,
     errorCount: cleanupErrors.length,
   };
+  if (sourceContext && processesRetired && cleanupErrors.length === 0)
+    try {
+      sourceHelpers.cleanupSourceDevContext(sourceContext);
+    } catch (error) {
+      cleanupErrors.push(error);
+      results.resourceCleanup.errorCount = cleanupErrors.length;
+    }
   if (cleanupErrors.length) {
     results.verdict = 'FAIL';
     results.cleanupErrors = cleanupErrors.map(String);
