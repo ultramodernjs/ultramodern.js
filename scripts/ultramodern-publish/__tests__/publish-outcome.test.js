@@ -236,6 +236,81 @@ function createOptions(fixture, artifactName, dryRun) {
 const outcomeArtifactName = api =>
   api.publishOutcomeArtifactName({ runAttempt: outcomeRunAttempt, runId });
 
+test('acceptance recovery preserves publication identity and binds only the new Tractor executor', async t => {
+  const api = await outcomeApi();
+  const fixture = await createEvidenceFixture();
+  t.after(() => fs.rmSync(fixture.root, { force: true, recursive: true }));
+  const options = createOptions(fixture, outcomeArtifactName(api), false);
+  const recovery = {
+    runId: '456',
+    runAttempt: 2,
+    tractorRunAttempt: 1,
+    sourceCommit: '2'.repeat(40),
+  };
+  const original = api.createPublishOutcome(options);
+  const recovered = api.createPublishOutcome({
+    ...options,
+    acceptanceRecovery: recovery,
+  });
+  assert.equal(recovered.schemaVersion, 7);
+  assert.equal(
+    recovered.artifactName,
+    'bleedingdev-recovered-publish-outcome-run-456-attempt-2',
+  );
+  for (const key of [
+    'source',
+    'release',
+    'workflowRun',
+    'publication',
+    'producer',
+    'evidence',
+  ]) {
+    assert.deepEqual(
+      recovered[key],
+      original[key],
+      `Recovery cannot relabel ${key}`,
+    );
+  }
+  assert.deepEqual(recovered.acceptanceRecovery, {
+    result: 'tractor-downstream',
+    sourceCommit: recovery.sourceCommit,
+    tractorRunAttempt: 1,
+    workflowRun: { id: '456', attempt: 2 },
+  });
+  for (const patch of [
+    { runId },
+    { runAttempt: 0 },
+    { tractorRunAttempt: 3 },
+    { sourceCommit: 'unqualified' },
+  ]) {
+    assert.throws(() =>
+      api.createPublishOutcome({
+        ...options,
+        acceptanceRecovery: { ...recovery, ...patch },
+      }),
+    );
+  }
+  assert.throws(
+    () =>
+      api.createPublishOutcome({
+        ...createOptions(fixture, outcomeArtifactName(api), true),
+        acceptanceRecovery: recovery,
+      }),
+    /separate live acceptance run/,
+  );
+  // A recovery still needs a real passing Tractor report bound to these bytes.
+  const report = JSON.parse(fs.readFileSync(fixture.tractorReportPath, 'utf8'));
+  report.mode = 'source';
+  fs.writeFileSync(fixture.tractorReportPath, JSON.stringify(report));
+  assert.throws(() =>
+    api.createPublishOutcome({
+      ...options,
+      tractorReportSha256: digest(fs.readFileSync(fixture.tractorReportPath)),
+      acceptanceRecovery: recovery,
+    }),
+  );
+});
+
 test('a dry run never claims published acceptance evidence', async t => {
   const api = await outcomeApi();
   const name = outcomeArtifactName(api);

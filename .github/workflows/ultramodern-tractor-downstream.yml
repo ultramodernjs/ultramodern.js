@@ -167,7 +167,7 @@ jobs:
 
       - name: Provision Tractor acceptance dependencies
         working-directory: modernjs
-        run: node scripts/ultramodern-publish/provision-tractor-acceptance.mjs
+        run: '"$ULTRAMODERN_ACCEPTANCE_NODE" scripts/ultramodern-publish/provision-tractor-acceptance.mjs'
 
       # One acceptance implementation for both lanes. `published` names the real
       # registry; `source` names none, because the runner starts its own
@@ -205,7 +205,7 @@ jobs:
         working-directory: modernjs
         env:
           TRACTOR_REF: ${{ steps.baseline.outputs.revision }}
-        run: node scripts/ultramodern-publish/bind-tractor-acceptance-evidence.mjs
+        run: '"$ULTRAMODERN_ACCEPTANCE_NODE" scripts/ultramodern-publish/bind-tractor-acceptance-evidence.mjs'
 
       - name: Upload Tractor acceptance evidence
         if: always() && inputs.mode == 'published'
