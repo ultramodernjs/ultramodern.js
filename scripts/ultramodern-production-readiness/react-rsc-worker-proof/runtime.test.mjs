@@ -5,6 +5,7 @@ import { EventEmitter, once } from 'node:events';
 import http from 'node:http';
 import test from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
+import { reservePort } from '../renderer-mf-lifecycle-proof/runtime.mjs';
 import {
   assertNativeSsrHtml,
   browserProof,
@@ -946,6 +947,128 @@ async function openResponse(t, url, { body, ...options } = {}) {
   request.end(body);
   return { request, response: await response };
 }
+
+test('HTTP bridge uses the compiled origin port and releases it after native forwarding', {
+  timeout: 5000,
+}, async t => {
+  const port = await reservePort();
+  const nativeSnapshot = '{"native":"opaque snapshot bytes"}';
+  let dispatchCalls = 0;
+  const bridge = await startBridge(
+    {
+      dispatchFetch(url, options) {
+        dispatchCalls++;
+        assert.equal(
+          url,
+          'https://octane-worker-proof.invalid/snapshot?locale=en',
+        );
+        assert.equal(options.method, 'POST');
+        assert.equal(Buffer.from(options.body).toString(), nativeSnapshot);
+        assert.equal(
+          options.headers['x-native-authority'],
+          'compiled-publisher',
+        );
+        return new Response(nativeSnapshot, {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    },
+    'octane-worker-proof',
+    { port },
+  );
+  let closed = false;
+  t.after(async () => {
+    if (!closed) await bridge.close();
+  });
+  assert.equal(bridge.url, `http://127.0.0.1:${port}`);
+  const { response } = await openResponse(
+    t,
+    `${bridge.url}/snapshot?locale=en`,
+    {
+      method: 'POST',
+      headers: { 'x-native-authority': 'compiled-publisher' },
+      body: nativeSnapshot,
+    },
+  );
+  assert.equal(response.statusCode, 202);
+  assert.equal(
+    Buffer.concat(await Array.fromAsync(response)).toString(),
+    nativeSnapshot,
+  );
+  assert.equal(dispatchCalls, 1);
+  assert.equal(bridge.evidence[0].path, '/snapshot?locale=en');
+  await bridge.close();
+  closed = true;
+  await assert.rejects(openResponse(t, bridge.url), { code: 'ECONNREFUSED' });
+  const replacement = http.createServer();
+  await new Promise((resolve, reject) => {
+    replacement.once('error', reject);
+    replacement.listen(port, '127.0.0.1', resolve);
+  });
+  await new Promise((resolve, reject) =>
+    replacement.close(error => (error ? reject(error) : resolve())),
+  );
+});
+
+test('HTTP bridge rejects invalid compiled origin ports before dispatch', async t => {
+  for (const port of [-1, 65536, 1.5, NaN, Infinity, '8080', null]) {
+    let unexpectedBridge;
+    t.after(async () => {
+      if (unexpectedBridge) await unexpectedBridge.close();
+    });
+    await assert.rejects(
+      async () => {
+        unexpectedBridge = await startBridge(
+          {
+            dispatchFetch() {
+              assert.fail('An invalid port must not dispatch');
+            },
+          },
+          'octane-worker-proof',
+          { port },
+        );
+      },
+      { code: 'ERR_ASSERTION' },
+    );
+  }
+});
+
+test('HTTP bridge refuses an occupied compiled port without dispatching', {
+  timeout: 5000,
+}, async t => {
+  const owner = http.createServer();
+  await new Promise((resolve, reject) => {
+    owner.once('error', reject);
+    owner.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(
+    () =>
+      new Promise((resolve, reject) =>
+        owner.close(error => (error ? reject(error) : resolve())),
+      ),
+  );
+  const port = owner.address().port;
+  let unexpectedBridge;
+  t.after(async () => {
+    if (unexpectedBridge) await unexpectedBridge.close();
+  });
+  await assert.rejects(
+    async () => {
+      unexpectedBridge = await startBridge(
+        {
+          dispatchFetch() {
+            throw new Error('must not dispatch');
+          },
+        },
+        'octane-worker-proof',
+        { port },
+      );
+    },
+    { code: 'EADDRINUSE' },
+  );
+  assert.equal(owner.listening, true);
+});
 
 test('HTTP bridge preserves binary action requests and native response metadata', {
   timeout: 5000,

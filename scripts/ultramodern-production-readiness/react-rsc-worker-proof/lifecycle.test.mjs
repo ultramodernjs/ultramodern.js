@@ -1,9 +1,17 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { registerOwnedRoot } from './lifecycle.mjs';
+import { promisify } from 'node:util';
+import {
+  registerOwnedRoot as registerRoot,
+  retryMaintenanceOperation,
+  validateRunnerJobLease,
+} from './lifecycle.mjs';
+
+const registerOwnedRoot = (proof, configuration) =>
+  registerRoot(proof, { env: {}, ...configuration });
 
 const markerName = '.disk-guardian-owner';
 const lockReason = 'another maintenance operation holds the lock';
@@ -68,6 +76,407 @@ function failedRegistration(error) {
     throw error;
   };
 }
+
+function runnerJob(t) {
+  const root = ownedDirectory(t);
+  fs.chmodSync(root, 0o700);
+  const workflow = path.join(root, '_github_workflow');
+  fs.mkdirSync(workflow);
+  const eventPath = path.join(workflow, 'event.json');
+  fs.writeFileSync(
+    eventPath,
+    JSON.stringify({ repository: { full_name: 'owner/repo', id: 1234 } }),
+  );
+  const workspace = ownedDirectory(t);
+  const env = {
+    GITHUB_ACTIONS: 'true',
+    RUNNER_ENVIRONMENT: 'github-hosted',
+    RUNNER_OS: 'Linux',
+    GITHUB_SERVER_URL: 'https://github.com',
+    GITHUB_REPOSITORY: 'owner/repo',
+    GITHUB_REPOSITORY_ID: '1234',
+    GITHUB_RUN_ID: '2345',
+    GITHUB_RUN_ATTEMPT: '2',
+    GITHUB_JOB: 'installed-renderer-features',
+    GITHUB_SHA: 'a'.repeat(40),
+    GITHUB_WORKFLOW_SHA: 'b'.repeat(40),
+    GITHUB_WORKFLOW_REF:
+      'owner/repo/.github/workflows/native.yml@refs/pull/1/merge',
+    GITHUB_WORKSPACE: workspace,
+    GITHUB_EVENT_PATH: eventPath,
+    RUNNER_TEMP: root,
+  };
+  return {
+    root,
+    env,
+    proof: options(root),
+    configuration: {
+      env,
+      platform: 'linux',
+      registerImpl: () =>
+        assert.fail('A runner job lease is not guardian registration'),
+    },
+  };
+}
+
+test('hosted runner owns only its job temporary descendant and records cleanup provenance', t => {
+  const job = runnerJob(t);
+  const result = registerOwnedRoot(job.proof, job.configuration);
+  assert.equal(result.status, 'runner-job-lease');
+  assert.equal(result.enclosingLease.provider, 'github-actions');
+  assert.equal(result.enclosingLease.assurance, 'runner-environment-asserted');
+  assert.equal(result.enclosingLease.attested, false);
+  assert.equal(result.enclosingLease.runId, '2345');
+  assert.equal(result.enclosingLease.runAttempt, '2');
+  assert.equal(result.enclosingLease.job, job.env.GITHUB_JOB);
+  assert.equal(result.enclosingLease.repositoryId, '1234');
+  assert.equal(result.enclosingLease.sourceRevision, 'a'.repeat(40));
+  assert.equal(result.enclosingLease.workflowRevision, 'b'.repeat(40));
+  assert.equal(result.enclosingLease.cleanupOwner, 'github-hosted-runner');
+  assert.equal(
+    result.enclosingLease.rootIdentity.inode,
+    fs.statSync(job.root).ino,
+  );
+  assert.equal(
+    fs.readFileSync(path.join(job.proof.workDir, markerName), 'utf8'),
+    `${job.proof.owner}\n`,
+  );
+  assert.deepEqual(registerOwnedRoot(job.proof, job.configuration), result);
+});
+
+test('runner lease rejects incomplete or mismatched job identity before creating a proof', t => {
+  for (const [override, expected] of [
+    [{ GITHUB_RUN_ID: '' }, /Invalid runner GITHUB_RUN_ID/u],
+    [{ GITHUB_RUN_ATTEMPT: '0' }, /Invalid runner GITHUB_RUN_ATTEMPT/u],
+    [{ GITHUB_JOB: 'bad/job' }, /Invalid runner job/u],
+    [{ GITHUB_REPOSITORY_ID: '9999' }, /Runner event repository ID changed/u],
+    [
+      { GITHUB_REPOSITORY: 'foreign/repo' },
+      /Runner workflow must belong to its repository/u,
+    ],
+    [{ GITHUB_SHA: 'unknown' }, /Invalid runner GITHUB_SHA/u],
+    [{ GITHUB_WORKFLOW_SHA: '' }, /Invalid runner GITHUB_WORKFLOW_SHA/u],
+    [
+      {
+        GITHUB_WORKFLOW_REF:
+          'foreign/repo/.github/workflows/native.yml@refs/heads/main',
+      },
+      /Runner workflow must belong to its repository/u,
+    ],
+    [{ RUNNER_OS: 'macOS' }, /Runner job OS must be Linux/u],
+    [
+      { GITHUB_SERVER_URL: 'https://untrusted.invalid' },
+      /Runner server must be GitHub/u,
+    ],
+  ]) {
+    const job = runnerJob(t);
+    Object.assign(job.env, override);
+    assert.throws(
+      () => registerOwnedRoot(job.proof, job.configuration),
+      expected,
+    );
+    assert(!fs.existsSync(job.proof.workDir));
+  }
+});
+
+test('runner lease cannot replace local or self-hosted artifact ownership', t => {
+  const job = runnerJob(t);
+  for (const [override, expected] of [
+    [{ GITHUB_ACTIONS: 'false' }, /A GitHub Actions job is required/u],
+    [
+      { RUNNER_ENVIRONMENT: 'self-hosted' },
+      /Runner job leases require a GitHub-hosted job/u,
+    ],
+  ]) {
+    assert.throws(
+      () =>
+        validateRunnerJobLease(job.proof, {
+          env: { ...job.env, ...override },
+          platform: 'linux',
+          allowMissing: true,
+        }),
+      expected,
+    );
+  }
+  assert.throws(
+    () =>
+      registerOwnedRoot(job.proof, {
+        ...job.configuration,
+        platform: 'darwin',
+      }),
+    /hosted Linux/u,
+  );
+  assert(!fs.existsSync(job.proof.workDir));
+});
+
+test('runner lease rejects escaping roots and symlinked parent, event, and workspace paths', t => {
+  const job = runnerJob(t);
+  const outside = ownedDirectory(t);
+  for (const workDir of [job.root, outside, path.join(outside, 'escape')]) {
+    assert.throws(
+      () => registerOwnedRoot({ ...job.proof, workDir }, job.configuration),
+      /proper descendant of RUNNER_TEMP/u,
+    );
+  }
+  const link = path.join(job.root, 'link');
+  fs.symlinkSync(outside, link);
+  assert.throws(
+    () =>
+      registerOwnedRoot(
+        { ...job.proof, workDir: path.join(link, 'proof') },
+        job.configuration,
+      ),
+    /Owned temporary path is not ordinary/u,
+  );
+  assert(!fs.existsSync(path.join(outside, 'proof')));
+  const eventLink = path.join(job.root, '_github_workflow', 'event-link.json');
+  fs.symlinkSync(job.env.GITHUB_EVENT_PATH, eventLink);
+  assert.throws(
+    () =>
+      registerOwnedRoot(job.proof, {
+        ...job.configuration,
+        env: { ...job.env, GITHUB_EVENT_PATH: eventLink },
+      }),
+    /Runner event must be physical/u,
+  );
+  assert.throws(
+    () =>
+      registerOwnedRoot(job.proof, {
+        ...job.configuration,
+        env: { ...job.env, GITHUB_WORKSPACE: link },
+      }),
+    /Owned temporary path is not ordinary/u,
+  );
+  assert(!fs.existsSync(job.proof.workDir));
+});
+
+test('runner event repository binding is checked independently from workflow identity', t => {
+  const job = runnerJob(t);
+  fs.writeFileSync(
+    job.env.GITHUB_EVENT_PATH,
+    JSON.stringify({
+      repository: { full_name: 'foreign/repo', id: 1234 },
+    }),
+  );
+  assert.throws(
+    () => registerOwnedRoot(job.proof, job.configuration),
+    /Runner event repository name changed/u,
+  );
+  assert(!fs.existsSync(job.proof.workDir));
+});
+
+test('runner event cannot come from outside its leased temporary directory', t => {
+  const job = runnerJob(t);
+  const outside = ownedDirectory(t);
+  const eventPath = path.join(outside, 'event.json');
+  fs.copyFileSync(job.env.GITHUB_EVENT_PATH, eventPath);
+  assert.throws(
+    () =>
+      registerOwnedRoot(job.proof, {
+        ...job.configuration,
+        env: { ...job.env, GITHUB_EVENT_PATH: eventPath },
+      }),
+    /proper descendant of RUNNER_TEMP/u,
+  );
+  assert(!fs.existsSync(job.proof.workDir));
+});
+
+for (const [statKey, identityKey] of [
+  ['dev', 'device'],
+  ['ino', 'inode'],
+]) {
+  test(`runner root ${identityKey} cannot change between registration validations`, t => {
+    const job = runnerJob(t);
+    const original = fs.lstatSync;
+    let inspections = 0;
+    t.mock.method(fs, 'lstatSync', target => {
+      const stat = original(target);
+      if (target !== job.root || ++inspections <= 2) return stat;
+      return Object.assign(Object.create(Object.getPrototypeOf(stat)), stat, {
+        [statKey]: stat[statKey] + 1,
+      });
+    });
+    assert.throws(
+      () => registerOwnedRoot(job.proof, job.configuration),
+      new RegExp(
+        `Runner temporary ${identityKey} changed between validations`,
+        'u',
+      ),
+    );
+    assert(!fs.existsSync(job.proof.workDir));
+  });
+}
+
+test('runner lease uses the injected owner snapshot while enforcing same-UID ownership', t => {
+  const job = runnerJob(t);
+  const inspected = [];
+  registerOwnedRoot(job.proof, {
+    ...job.configuration,
+    ownerSnapshotImpl: pid => {
+      inspected.push(pid);
+      return `${pid} ${process.getuid()} S\n`;
+    },
+  });
+  assert.deepEqual(inspected, [process.pid, process.pid]);
+  assert.throws(
+    () =>
+      registerOwnedRoot(job.proof, {
+        ...job.configuration,
+        ownerSnapshotImpl: pid => `${pid} ${process.getuid() + 1} S\n`,
+      }),
+    /Runner proof requires a live same-UID owner/u,
+  );
+});
+
+test('runner lease rejects writable temporary roots and preserves existing evidence', t => {
+  const job = runnerJob(t);
+  fs.chmodSync(job.root, 0o777);
+  assert.throws(
+    () => registerOwnedRoot(job.proof, job.configuration),
+    /externally writable/u,
+  );
+  fs.chmodSync(job.root, 0o700);
+  registerOwnedRoot(job.proof, job.configuration);
+  const evidence = path.join(job.proof.workDir, 'receipt.json');
+  fs.writeFileSync(evidence, 'immutable evidence');
+  assert.throws(
+    () => registerOwnedRoot(job.proof, job.configuration),
+    /prior evidence is immutable/u,
+  );
+  assert.equal(fs.readFileSync(evidence, 'utf8'), 'immutable evidence');
+});
+
+test('maintenance retry accepts only the exact async guardian lock failure', async () => {
+  let clock = 0;
+  const attempts = [];
+  const lock = registrationFailure({ status: undefined, code: 1 });
+  const result = await retryMaintenanceOperation(
+    async remaining => {
+      attempts.push(remaining);
+      if (attempts.length === 1) throw lock;
+      return 'registered';
+    },
+    {
+      timeoutMs: 100,
+      retryDelayMs: 25,
+      now: () => clock,
+      sleep: async duration => {
+        clock += duration;
+      },
+    },
+  );
+  assert.equal(result, 'registered');
+  assert.deepEqual(attempts, [100, 75]);
+});
+
+test('maintenance retry handles real async command errors and retains exact arguments', async () => {
+  const execute = promisify(execFile);
+  const args = ['release', '/private/tmp/owned-only', '--owner', 'proof-owner'];
+  let attempts = 0;
+  const result = await retryMaintenanceOperation(
+    timeout =>
+      execute(
+        process.execPath,
+        [
+          '-e',
+          ++attempts === 1
+            ? `process.stdout.write(${JSON.stringify(JSON.stringify({ status: 'failed', reason: lockReason }))}); process.exit(1);`
+            : 'process.stdout.write(JSON.stringify(process.argv.slice(1)))',
+          '--',
+          ...args,
+        ],
+        { timeout },
+      ),
+    { retryDelayMs: 1 },
+  );
+  assert.equal(attempts, 2);
+  assert.deepEqual(JSON.parse(result.stdout), args);
+});
+
+test('maintenance retry keeps the original lock error when its total deadline expires', async () => {
+  let clock = 0;
+  const attempts = [];
+  const lock = registrationFailure({ status: undefined, code: 1 });
+  await assert.rejects(
+    retryMaintenanceOperation(
+      async remaining => {
+        attempts.push(remaining);
+        throw lock;
+      },
+      {
+        timeoutMs: 60,
+        retryDelayMs: 25,
+        now: () => clock,
+        sleep: async duration => {
+          clock += duration;
+        },
+      },
+    ),
+    error => error === lock,
+  );
+  assert.deepEqual(attempts, [60, 35, 10]);
+  assert.equal(clock, 60);
+});
+
+test('maintenance retry includes command execution in its total deadline', async () => {
+  let clock = 0;
+  const lock = registrationFailure({ status: undefined, code: 1 });
+  let attempts = 0;
+  await assert.rejects(
+    retryMaintenanceOperation(
+      async remaining => {
+        attempts++;
+        assert.equal(remaining, 50);
+        clock += 50;
+        throw lock;
+      },
+      {
+        timeoutMs: 50,
+        now: () => clock,
+        sleep: () => assert.fail('An exhausted deadline must not wait'),
+      },
+    ),
+    error => error === lock,
+  );
+  assert.equal(attempts, 1);
+});
+
+test('maintenance retry immediately preserves every nonexact failure', async () => {
+  for (const error of [
+    registrationFailure({ status: undefined, code: 'ENOENT' }),
+    registrationFailure({ status: undefined, code: 2 }),
+    registrationFailure({ status: 2, code: 1 }),
+    registrationFailure({ signal: 'SIGTERM' }),
+    registrationFailure({ killed: true }),
+    registrationFailure({ status: undefined, code: 'ABORT_ERR' }),
+    registrationFailure({ stderr: 'additional failure' }),
+    registrationFailure({ stdout: 'malformed lock response' }),
+    registrationFailure({
+      stdout: JSON.stringify({
+        status: 'failed',
+        reason: 'owner or identity mismatch',
+      }),
+    }),
+    registrationFailure({
+      stdout: `${registrationFailure().stdout}\n${registrationFailure().stdout}`,
+    }),
+    new Error('Acceptance assertion failed'),
+    null,
+  ]) {
+    let attempts = 0;
+    await assert.rejects(
+      retryMaintenanceOperation(
+        async () => {
+          attempts++;
+          throw error;
+        },
+        { sleep: () => assert.fail('Nonexact failures must not wait') },
+      ),
+      observed => observed === error,
+    );
+    assert.equal(attempts, 1);
+  }
+});
 
 function assertRejectedWithoutResidue(proofOptions, configuration, expected) {
   assert.throws(

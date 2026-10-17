@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { setTimeout } from 'node:timers/promises';
 
 const maintenanceLockReason = 'another maintenance operation holds the lock';
 const markerName = '.disk-guardian-owner';
@@ -21,6 +22,40 @@ export function maintenanceLockFailure(error) {
     );
   } catch {
     return false;
+  }
+}
+
+/** Retries only guardian lock contention; each command gets its remaining budget. */
+export async function retryMaintenanceOperation(
+  operation,
+  {
+    timeoutMs = 30_000,
+    retryDelayMs = 250,
+    now = () => performance.now(),
+    sleep = setTimeout,
+  } = {},
+) {
+  assert(Number.isFinite(timeoutMs) && timeoutMs > 0);
+  assert(Number.isFinite(retryDelayMs) && retryDelayMs > 0);
+  const deadline = now() + timeoutMs;
+  while (true) {
+    try {
+      return await operation(Math.max(1, Math.ceil(deadline - now())));
+    } catch (error) {
+      const lock =
+        error !== null &&
+        typeof error === 'object' &&
+        maintenanceLockFailure({
+          status: error.status ?? error.code,
+          signal: error.signal || (error.killed ? 'killed' : null),
+          stdout: error.stdout,
+          stderr: error.stderr,
+        });
+      const remaining = deadline - now();
+      if (!lock || remaining <= 0) throw error;
+      await sleep(Math.min(retryDelayMs, remaining));
+      if (now() >= deadline) throw error;
+    }
   }
 }
 
@@ -78,6 +113,142 @@ function ordinaryOwnedDirectory(directory, uid) {
     'Owned temporary path must be physical',
   );
   return stat;
+}
+
+function runnerOwnedPath(root, target, uid, { allowMissing = false } = {}) {
+  assert(path.isAbsolute(target) && path.resolve(target) === target);
+  const relative = path.relative(root, target);
+  assert(
+    relative && relative !== '..' && !relative.startsWith(`..${path.sep}`),
+    'Runner proof resource must be a proper descendant of RUNNER_TEMP',
+  );
+  const parts = relative.split(path.sep);
+  for (let index = 0; index < parts.length; index += 1) {
+    const current = path.join(root, ...parts.slice(0, index + 1));
+    try {
+      ordinaryOwnedDirectory(current, uid);
+    } catch (error) {
+      if (allowMissing && error.code === 'ENOENT') return;
+      throw error;
+    }
+  }
+}
+
+/** GitHub owns RUNNER_TEMP for this hosted job; this is not a guardian lease. */
+export function validateRunnerJobLease(
+  options,
+  {
+    env = process.env,
+    platform = process.platform,
+    allowMissing = false,
+    ownerSnapshotImpl = ownerSnapshot,
+  } = {},
+) {
+  assert.equal(platform, 'linux', 'Runner job leases require hosted Linux');
+  assert.equal(env.GITHUB_ACTIONS, 'true', 'A GitHub Actions job is required');
+  assert.equal(
+    env.RUNNER_ENVIRONMENT,
+    'github-hosted',
+    'Runner job leases require a GitHub-hosted job',
+  );
+  assert.equal(env.RUNNER_OS, 'Linux', 'Runner job OS must be Linux');
+  assert.equal(
+    env.GITHUB_SERVER_URL,
+    'https://github.com',
+    'Runner server must be GitHub',
+  );
+  for (const name of [
+    'GITHUB_RUN_ID',
+    'GITHUB_RUN_ATTEMPT',
+    'GITHUB_REPOSITORY_ID',
+  ])
+    assert(/^[1-9]\d*$/u.test(env[name] ?? ''), `Invalid runner ${name}`);
+  assert(/^[A-Za-z0-9_-]+$/u.test(env.GITHUB_JOB ?? ''), 'Invalid runner job');
+  assert(
+    /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(env.GITHUB_REPOSITORY ?? ''),
+    'Invalid runner repository',
+  );
+  for (const name of ['GITHUB_SHA', 'GITHUB_WORKFLOW_SHA'])
+    assert(/^[a-f0-9]{40}$/u.test(env[name] ?? ''), `Invalid runner ${name}`);
+  assert(
+    env.GITHUB_WORKFLOW_REF?.startsWith(
+      `${env.GITHUB_REPOSITORY}/.github/workflows/`,
+    ) && /\.ya?ml@refs\/.+/u.test(env.GITHUB_WORKFLOW_REF),
+    'Runner workflow must belong to its repository',
+  );
+  const uid = process.getuid();
+  assert.equal(
+    inspectOwnerProcess(options.ownerPid, ownerSnapshotImpl).uid,
+    uid,
+    'Runner proof requires a live same-UID owner',
+  );
+  const root = env.RUNNER_TEMP;
+  assert(
+    typeof root === 'string' &&
+      path.isAbsolute(root) &&
+      path.resolve(root) === root,
+    'RUNNER_TEMP must be absolute and canonical',
+  );
+  const rootStat = ordinaryOwnedDirectory(root, uid);
+  assert.equal(
+    rootStat.mode & 0o022,
+    0,
+    'RUNNER_TEMP must not be externally writable',
+  );
+  assert(
+    typeof env.GITHUB_WORKSPACE === 'string' &&
+      path.isAbsolute(env.GITHUB_WORKSPACE) &&
+      path.resolve(env.GITHUB_WORKSPACE) === env.GITHUB_WORKSPACE,
+    'Runner workspace must be absolute and canonical',
+  );
+  ordinaryOwnedDirectory(env.GITHUB_WORKSPACE, uid);
+  const eventPath = env.GITHUB_EVENT_PATH;
+  assert(typeof eventPath === 'string' && path.isAbsolute(eventPath));
+  runnerOwnedPath(root, path.dirname(eventPath), uid);
+  assert.equal(
+    fs.realpathSync(eventPath),
+    eventPath,
+    'Runner event must be physical',
+  );
+  const eventStat = fs.lstatSync(eventPath);
+  assert(
+    eventStat.isFile() && eventStat.uid === uid,
+    'Runner event must be an owned file',
+  );
+  assert(eventStat.size <= 4 * 1024 * 1024, 'Runner event is too large');
+  const event = JSON.parse(fs.readFileSync(eventPath, 'utf8'));
+  assert.equal(
+    event.repository?.full_name,
+    env.GITHUB_REPOSITORY,
+    'Runner event repository name changed',
+  );
+  assert.equal(
+    String(event.repository?.id),
+    env.GITHUB_REPOSITORY_ID,
+    'Runner event repository ID changed',
+  );
+  runnerOwnedPath(root, options.workDir, uid, { allowMissing });
+  const current = ordinaryOwnedDirectory(root, uid);
+  assert.equal(current.dev, rootStat.dev, 'Runner temporary device changed');
+  assert.equal(current.ino, rootStat.ino, 'Runner temporary directory changed');
+  return {
+    provider: 'github-actions',
+    assurance: 'runner-environment-asserted',
+    attested: false,
+    lifecycle: 'hosted-job-temporary-directory',
+    root,
+    repository: env.GITHUB_REPOSITORY,
+    repositoryId: env.GITHUB_REPOSITORY_ID,
+    runId: env.GITHUB_RUN_ID,
+    runAttempt: env.GITHUB_RUN_ATTEMPT,
+    job: env.GITHUB_JOB,
+    sourceRevision: env.GITHUB_SHA,
+    workflowRef: env.GITHUB_WORKFLOW_REF,
+    workflowRevision: env.GITHUB_WORKFLOW_SHA,
+    eventPath,
+    rootIdentity: { device: rootStat.dev, inode: rootStat.ino, uid },
+    cleanupOwner: 'github-hosted-runner',
+  };
 }
 
 function enclosingLease(options, ownedTempDir, ownerSnapshotImpl) {
@@ -176,6 +347,8 @@ export function registerOwnedRoot(
     registerImpl = execFileSync,
     ownedTempDir = process.env.OWNED_TEMP_DIR,
     ownerSnapshotImpl = ownerSnapshot,
+    env = process.env,
+    platform = process.platform,
   } = {},
 ) {
   assert(Number.isSafeInteger(options.ownerPid) && options.ownerPid > 0);
@@ -189,6 +362,16 @@ export function registerOwnedRoot(
     options.workDir,
     'Proof work directory must be canonical',
   );
+  const hostedJob =
+    env.GITHUB_ACTIONS === 'true' && env.RUNNER_ENVIRONMENT === 'github-hosted';
+  const initialRunnerLease = hostedJob
+    ? validateRunnerJobLease(options, {
+        env,
+        platform,
+        allowMissing: true,
+        ownerSnapshotImpl,
+      })
+    : undefined;
   const rootExisted = fs.existsSync(options.workDir);
   fs.mkdirSync(options.workDir, { recursive: true });
   const rootIdentity = fs.lstatSync(options.workDir);
@@ -213,6 +396,23 @@ export function registerOwnedRoot(
     } else {
       fs.writeFileSync(marker, `${options.owner}\n`, { flag: 'wx' });
       markerIdentity = fs.lstatSync(marker);
+    }
+    if (hostedJob) {
+      const lease = validateRunnerJobLease(options, {
+        env,
+        platform,
+        ownerSnapshotImpl,
+      });
+      for (const key of ['device', 'inode'])
+        assert.equal(
+          lease.rootIdentity[key],
+          initialRunnerLease.rootIdentity[key],
+          `Runner temporary ${key} changed between validations`,
+        );
+      return {
+        status: 'runner-job-lease',
+        enclosingLease: lease,
+      };
     }
     const isTemp =
       options.workDir.startsWith('/private/tmp/') ||

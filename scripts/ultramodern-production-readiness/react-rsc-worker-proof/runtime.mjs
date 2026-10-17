@@ -170,7 +170,8 @@ export async function retireOwnedProcessGroup(
   }
 }
 
-export async function startBridge(runtime, workerName) {
+export async function startBridge(runtime, workerName, { port = 0 } = {}) {
+  assert(Number.isSafeInteger(port) && port >= 0 && port <= 65535);
   const evidence = [];
   const server = http.createServer(async (incoming, outgoing) => {
     const controller = new AbortController();
@@ -223,7 +224,7 @@ export async function startBridge(runtime, workerName) {
   });
   await new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
+    server.listen(port, '127.0.0.1', resolve);
   });
   return {
     url: `http://127.0.0.1:${server.address().port}`,
