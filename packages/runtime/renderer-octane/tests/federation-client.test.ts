@@ -1,4 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { stripTypeScriptTypes } from 'node:module';
+import path from 'node:path';
+import { loadFederatedModule } from '@modern-js/renderer-core/federation';
 import type { RendererIdentity } from '@modern-js/renderer-core/identity';
+import * as native from 'octane';
 import {
   createContext,
   createElement,
@@ -13,6 +18,10 @@ import {
 } from 'octane';
 import { mountOctaneApplication } from '../src/client';
 import { federatedComponent } from '../src/federation';
+import { FederationContext } from '../src/federation-context';
+import { I18nContext } from '../src/i18n/context';
+import { WorkerFederationContext } from '../src/worker-federation-context';
+import { useOctaneWorkerContextKeys } from '../src/worker-federation-contexts';
 
 const identity: RendererIdentity = {
   renderer: 'octane',
@@ -79,6 +88,102 @@ test('native Suspense shows the fallback and then the remote with host props and
   } finally {
     application.dispose();
     container.remove();
+  }
+});
+
+test('the uncompiled library wrapper registers and retires each mounted publisher independently', async () => {
+  // The source test compiler also transforms imported library files. Evaluate the
+  // actual library source with only Node's type stripping so this exercises the
+  // same manual hook contract as the normally published, uncompiled wrapper.
+  const source = stripTypeScriptTypes(
+    readFileSync(path.join(__dirname, '../src/federation.ts'), 'utf8'),
+  )
+    .replace(
+      /import\s*\{([^}]*)\}\s*from\s*['"]octane['"];?/u,
+      'const {$1} = native;',
+    )
+    .replace(/^import[\s\S]*?;\r?$/gmu, '')
+    .replace(
+      'export function federatedComponent',
+      'function federatedComponent',
+    );
+  const libraryFederatedComponent: typeof federatedComponent = new Function(
+    'native',
+    'loadFederatedModule',
+    'FederationContext',
+    'I18nContext',
+    'WorkerFederationContext',
+    'useOctaneWorkerContextKeys',
+    `${source}\nreturn federatedComponent;`,
+  )(
+    native,
+    loadFederatedModule,
+    FederationContext,
+    I18nContext,
+    WorkerFederationContext,
+    useOctaneWorkerContextKeys,
+  );
+  const registrations: ReturnType<typeof rstest.fn>[] = [];
+  const register = rstest.fn(() => {
+    const cleanup = rstest.fn();
+    registrations.push(cleanup);
+    return cleanup;
+  });
+  const Remote = (props: { label: string }) =>
+    createElement('button', null, props.label);
+  const instance = {
+    loadRemote: rstest.fn(async () => ({ default: Remote })),
+    [Symbol.for('ultramodern.federation.browser-dev-boundary.v1')]: register,
+  };
+  const Widget = libraryFederatedComponent<{ label: string }>('remote/Widget');
+  const App = (props: { first: boolean; label: string }) => [
+    props.first && createElement(Widget, { key: 'first', label: props.label }),
+    createElement(Widget, { key: 'second', label: 'second' }),
+  ];
+  const container = document.createElement('div');
+  const errors: unknown[] = [];
+  const handle = await mountOctaneApplication({
+    container,
+    identity,
+    nativeHydrationBuildId: 'native-build',
+    federation: { instance: () => instance },
+    options: { onUncaughtError: error => errors.push(error) },
+    load: async () => ({
+      default: App,
+      props: { first: true, label: 'first' },
+    }),
+  });
+  try {
+    await waitFor(() => {
+      expect(errors).toEqual([]);
+      expect(container.textContent).toBe('firstsecond');
+      expect(register).toHaveBeenCalledTimes(2);
+    });
+    const buttons = [...container.querySelectorAll('button')];
+    expect(register.mock.calls.map(call => call.slice(0, 2))).toEqual([
+      ['remote/Widget', Remote],
+      ['remote/Widget', Remote],
+    ]);
+    handle.update({ default: App, props: { first: true, label: 'updated' } });
+    await waitFor(() => expect(container.textContent).toBe('updatedsecond'));
+    expect([...container.querySelectorAll('button')]).toEqual(buttons);
+    expect(register).toHaveBeenCalledTimes(2);
+    expect(registrations.map(cleanup => cleanup.mock.calls.length)).toEqual([
+      0, 0,
+    ]);
+    handle.update({ default: App, props: { first: false, label: 'updated' } });
+    await waitFor(() => expect(container.textContent).toBe('second'));
+    expect(registrations.map(cleanup => cleanup.mock.calls.length)).toEqual([
+      1, 0,
+    ]);
+    expect(container.querySelector('button')).toBe(buttons[1]);
+    handle.dispose();
+    expect(registrations.map(cleanup => cleanup.mock.calls.length)).toEqual([
+      1, 1,
+    ]);
+    expect(errors).toEqual([]);
+  } finally {
+    handle.dispose();
   }
 });
 

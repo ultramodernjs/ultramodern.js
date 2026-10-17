@@ -4,6 +4,7 @@ import {
   createElement,
   decodeExternalSnapshot,
   externalSnapshotBoundary,
+  hookSlots,
   lazy,
   type OctaneNode,
   preinit,
@@ -66,6 +67,9 @@ function withTimeout<T>(
     );
   });
 }
+
+// This library wrapper is published as plain JavaScript, outside app compilation.
+const publisherRegistrationEffectSlot = Symbol(hookSlots(1));
 
 /**
  * Render a native Octane remote by its `remote/Expose` id or a browser loader.
@@ -241,15 +245,19 @@ export function federatedComponent<P extends object = Record<string, never>>(
             // A development runtime installs this hook on the actual owning
             // host. Registration follows the native mounted lifetime; routing
             // alone grants no replacement authority to a remote name.
-            useEffect(() => {
-              if (context.server || !id || !context.instance) return;
-              const register = Reflect.get(
-                context.instance,
-                Symbol.for('ultramodern.federation.browser-dev-boundary.v1'),
-              );
-              if (typeof register !== 'function') return;
-              return register(id, module.default, component);
-            }, []);
+            useEffect(
+              () => {
+                if (context.server || !id || !context.instance) return;
+                const register = Reflect.get(
+                  context.instance,
+                  Symbol.for('ultramodern.federation.browser-dev-boundary.v1'),
+                );
+                if (typeof register !== 'function') return;
+                return register(id, module.default, component);
+              },
+              [],
+              publisherRegistrationEffectSlot,
+            );
             // Resource APIs require an active native render. Late styles travel
             // in Octane's resource carrier ahead of the remote's HTML segment.
             for (const href of assets?.css ?? []) {
