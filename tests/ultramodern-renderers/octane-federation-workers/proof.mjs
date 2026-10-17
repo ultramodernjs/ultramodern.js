@@ -26,6 +26,23 @@ const inside = (root, filename) => {
   );
 };
 
+/** Called only after validating the native manifest and its entry identity. */
+export function isSharedCounterCompilation(source, appRoot, sharedCounter) {
+  if (source.transformKind !== 'compile') return false;
+  assert(
+    !path.isAbsolute(source.resource),
+    'Native source resources must be relative to the actual application.',
+  );
+  try {
+    return (
+      fs.realpathSync(path.resolve(appRoot, source.resource)) === sharedCounter
+    );
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return false;
+    throw error;
+  }
+}
+
 /** The caller builds ordinary apps first, using these reserved origin ports. */
 export function readWorkerFixturePlan(
   filename,
@@ -930,6 +947,7 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
     );
     assert(resource, 'The compiler did not emit native Worker resources.');
     resources.set(application.wrangler.name, resource);
+    const counterCandidates = [];
     const sources = Object.entries(resource.entries).flatMap(
       ([entryName, entry]) => {
         const native = validateOctaneModuleManifest(
@@ -937,16 +955,47 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
           contract.identities[entryName],
           entry.hydrationBuildId,
         );
-        return native.sourceModules.filter(
-          source =>
-            source.transformKind === 'compile' &&
-            source.resource === sharedCounter,
+        for (const source of native.sourceModules) {
+          if (
+            source.resource.toLowerCase().includes('counter') ||
+            source.canonicalId.toLowerCase().includes('counter')
+          )
+            counterCandidates.push({
+              entryName,
+              resource: source.resource,
+              transformKind: source.transformKind,
+              canonicalId: source.canonicalId,
+              resolvedResource: path.resolve(
+                application.appRoot,
+                source.resource,
+              ),
+            });
+        }
+        return native.sourceModules.filter(source =>
+          isSharedCounterCompilation(
+            source,
+            application.appRoot,
+            sharedCounter,
+          ),
         );
       },
     );
     assert(
       sources.length > 0,
-      'Every Worker must compile the same physical Counter source.',
+      `Every Worker must compile the same physical Counter source. ${JSON.stringify(
+        {
+          worker: application.wrangler.name,
+          appRoot: application.appRoot,
+          expectedResource: sharedCounter,
+          expectedRelativeResource: path
+            .relative(application.appRoot, sharedCounter)
+            .split(path.sep)
+            .join('/'),
+          counterCandidates,
+        },
+        null,
+        2,
+      )}`,
     );
     const evidence = sources.map(source => ({
       canonicalId: source.canonicalId,

@@ -18,8 +18,68 @@ import {
   createWorkerFederationFaultHandler,
   workerFederationFaultSource,
 } from './fixtures.mjs';
-import { readWorkerFixturePlan } from './proof.mjs';
+import { isSharedCounterCompilation, readWorkerFixturePlan } from './proof.mjs';
 import { sourceWorkerGitignore } from './source.mjs';
+
+test('compiled Counter resources resolve from the application to the same physical source', t => {
+  const root = fs.realpathSync(
+    fs.mkdtempSync(
+      path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'worker-counter-'),
+    ),
+  );
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const appRoot = path.join(root, 'verticals/remote-a');
+  const sharedRoot = path.join(root, 'shared');
+  fs.mkdirSync(appRoot, { recursive: true });
+  fs.mkdirSync(sharedRoot);
+  const sharedCounter = path.join(sharedRoot, 'Counter.tsx');
+  fs.writeFileSync(sharedCounter, 'export default () => 3;\n');
+  const source = {
+    resource: '../../shared/Counter.tsx',
+    transformKind: 'compile',
+  };
+  assert.equal(
+    isSharedCounterCompilation(source, appRoot, sharedCounter),
+    true,
+  );
+  const workspacePackages = path.join(appRoot, 'node_modules/@authored-worker');
+  fs.mkdirSync(workspacePackages, { recursive: true });
+  fs.symlinkSync(sharedRoot, path.join(workspacePackages, 'shared-counter'));
+  assert.equal(
+    isSharedCounterCompilation(
+      {
+        ...source,
+        resource: 'node_modules/@authored-worker/shared-counter/Counter.tsx',
+      },
+      appRoot,
+      sharedCounter,
+    ),
+    true,
+  );
+  fs.copyFileSync(sharedCounter, path.join(appRoot, 'Counter.tsx'));
+  for (const candidate of [
+    { ...source, resource: 'Counter.tsx' },
+    { ...source, resource: '../shared/Counter.tsx' },
+    { ...source, resource: '../../shared/missing.tsx' },
+    { ...source, resource: '../../shared/Counter.tsx?facade' },
+    { ...source, transformKind: 'slots' },
+    { ...source, transformKind: 'client-only-stub' },
+  ])
+    assert.equal(
+      isSharedCounterCompilation(candidate, appRoot, sharedCounter),
+      false,
+      JSON.stringify(candidate),
+    );
+  assert.throws(
+    () =>
+      isSharedCounterCompilation(
+        { ...source, resource: sharedCounter },
+        appRoot,
+        sharedCounter,
+      ),
+    /relative to the actual application/u,
+  );
+});
 
 test('authored source ignores temporary compiler configs while retaining source changes', t => {
   const root = fs.mkdtempSync(
