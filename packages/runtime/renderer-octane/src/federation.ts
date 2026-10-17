@@ -2,17 +2,27 @@ import { loadFederatedModule } from '@modern-js/renderer-core/federation';
 import {
   type ComponentBody,
   createElement,
+  decodeExternalSnapshot,
+  externalSnapshotBoundary,
   lazy,
   type OctaneNode,
   preinit,
   publisherBoundary,
   Suspense,
+  serializeExternalSnapshotRequest,
   useContext,
 } from 'octane';
 import {
   FederationContext,
   type OctaneFederationScope,
 } from './federation-context';
+
+import { I18nContext } from './i18n/context';
+import {
+  type OctaneWorkerFederationScope,
+  WorkerFederationContext,
+} from './worker-federation-context';
+import { useOctaneWorkerContextKeys } from './worker-federation-contexts';
 
 /** The native component shape exposed by a same-renderer Octane remote. */
 export interface FederatedModule<P extends object> {
@@ -24,6 +34,8 @@ export interface FederatedComponentOptions {
   readonly fallback?: () => OctaneNode;
   /** A positive load limit; the server defaults to 3000ms. */
   readonly timeout?: number;
+  /** Explicit registered server projections required by an application remote. */
+  readonly contextKeys?: readonly string[];
 }
 
 function withTimeout<T>(
@@ -88,11 +100,33 @@ export function federatedComponent<P extends object = Record<string, never>>(
   };
   // Native lazy caches its module. Scope the cache to one application/response,
   // so two hosts using the same component definition cannot share a remote.
-  const components = new WeakMap<OctaneFederationScope, ComponentBody<P>>();
+  const components = new WeakMap<object, ComponentBody<P>>();
+  const workerOwners = new WeakMap<
+    OctaneFederationScope,
+    WeakMap<OctaneWorkerFederationScope, Map<string, object>>
+  >();
 
   return props => {
     const context = useContext(FederationContext) ?? standalone;
-    let Remote = components.get(context);
+    const worker = useContext(WorkerFederationContext);
+    const language = worker
+      ? (useContext(I18nContext)?.language ?? worker.locale)
+      : undefined;
+    const contextKeys = worker
+      ? useOctaneWorkerContextKeys(options.contextKeys)
+      : undefined;
+    let owner: object = context;
+    if (worker) {
+      let scopes = workerOwners.get(context);
+      if (!scopes) workerOwners.set(context, (scopes = new WeakMap()));
+      let variants = scopes.get(worker);
+      if (!variants) scopes.set(worker, (variants = new Map()));
+      const key = JSON.stringify([language, contextKeys]);
+      let variant = variants.get(key);
+      if (!variant) variants.set(key, (variant = {}));
+      owner = variant;
+    }
+    let Remote = components.get(owner);
     if (!Remote) {
       Remote = lazy(async () => {
         try {
@@ -100,6 +134,80 @@ export function federatedComponent<P extends object = Record<string, never>>(
             throw new Error(
               'A federatedComponent loader renders in the browser only; use a remote id to server-render it',
             );
+          }
+          if (worker) {
+            if (!id || !language) {
+              throw new Error(
+                'Worker federation requires a remote id and the owning entry locale',
+              );
+            }
+            const separator = id.indexOf('/');
+            const remoteName = id.slice(0, separator);
+            const expose = `./${id.slice(separator + 1)}`;
+            const controller = new AbortController();
+            const signal = worker.signal
+              ? AbortSignal.any([worker.signal, controller.signal])
+              : controller.signal;
+            const timeout =
+              options.timeout ?? (context.server ? 3000 : undefined);
+            let admitted;
+            try {
+              admitted = await withTimeout(
+                worker.transport.admit({
+                  remote: remoteName,
+                  expose,
+                  locale: language,
+                  signal,
+                }),
+                timeout,
+                id,
+              );
+            } finally {
+              // Release this admission waiter, including after its own deadline.
+              controller.abort();
+            }
+            const BrowserRemote = lazy(async () => {
+              const { module, assets } = await loadFederatedModule<
+                FederatedModule<P>
+              >(context.instance, id);
+              if (typeof module?.default !== 'function') {
+                throw new TypeError(
+                  'A federated Octane module must default-export a native component',
+                );
+              }
+              const component = module.default;
+              const Loaded: ComponentBody<P> = (props, scope, extra) => {
+                for (const href of assets?.css ?? []) {
+                  preinit(href, {
+                    as: 'style',
+                    precedence: 'federated',
+                    ...(context.nonce === undefined
+                      ? {}
+                      : { nonce: context.nonce }),
+                  });
+                }
+                return component(props, scope, extra);
+              };
+              return { default: Loaded };
+            });
+            return {
+              default: externalSnapshotBoundary({
+                authority: admitted.coordinate.native,
+                component: BrowserRemote,
+                contextKeys,
+                timeoutMs: timeout,
+                async snapshot(request, signal) {
+                  const response = await worker.transport.request({
+                    remote: remoteName,
+                    expose,
+                    locale: language,
+                    payload: serializeExternalSnapshotRequest(request),
+                    signal,
+                  });
+                  return decodeExternalSnapshot(response.payload);
+                },
+              }),
+            };
           }
           const { module, assets } = await withTimeout(
             Promise.resolve().then(() =>
@@ -145,11 +253,11 @@ export function federatedComponent<P extends object = Record<string, never>>(
           return { default: Loaded };
         } catch (error) {
           // A later mount or ErrorBoundary reset may retry a failed load.
-          if (!context.server) components.delete(context);
+          if (!context.server) components.delete(owner);
           throw error;
         }
       });
-      components.set(context, Remote);
+      components.set(owner, Remote);
     }
     return createElement(Suspense, {
       fallback: options.fallback,

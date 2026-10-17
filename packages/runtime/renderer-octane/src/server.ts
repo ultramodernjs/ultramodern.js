@@ -187,15 +187,19 @@ export async function renderOctaneApplication<Bindings extends object>(
                 : input.App,
           })
       : input.App;
-    const workerFederation = input.workerFederation;
+    // Native SSR retries the application while lazy boundaries settle. Keep
+    // their request-owned context identity stable across those render passes.
+    const workerFederation = input.workerFederation
+      ? {
+          transport: input.workerFederation,
+          locale: input.workerFederationLocale ?? 'default',
+          signal: session.signal,
+        }
+      : undefined;
     const NativeApp = workerFederation
       ? () =>
           createElement(WorkerFederationRoot, {
-            scope: {
-              transport: workerFederation,
-              locale: input.workerFederationLocale ?? 'default',
-              signal: session.signal,
-            },
+            scope: workerFederation,
             children:
               typeof App === 'function' ? createElement(App, input.props) : App,
           })

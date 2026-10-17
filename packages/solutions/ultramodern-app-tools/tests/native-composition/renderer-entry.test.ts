@@ -321,7 +321,7 @@ describe('native owning entry generation', () => {
     }
   });
 
-  it('emits a native Worker entry without the Node federation binding', async () => {
+  it('keeps Worker SSR transport-only and binds its browser to the compiler federation host', async () => {
     const generation = await context('octane');
     await fs.writeFile(
       path.join(generation.appDirectory, 'module-federation.config.mjs'),
@@ -350,8 +350,10 @@ describe('native owning entry generation', () => {
     expect(client).toContain('createWorkerFederationTransport');
     expect(client).toContain('workerFederation,');
     expect(client).not.toContain('external-snapshot');
-    expect(client).not.toContain('__webpack_require__');
-    expect(client).not.toContain('federation:');
+    expect(client).toContain(
+      'federation: { instance: () => __webpack_require__.federation.instance },',
+    );
+    expect(client).not.toContain('hydrationModule:');
     await expectValidNativeSource(client);
   });
 

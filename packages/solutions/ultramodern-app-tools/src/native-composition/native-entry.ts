@@ -175,9 +175,10 @@ export const { ${nativeServerHandlers.join(', ')} } = createNativeServerEntry({
   return {
     async client(context) {
       const identity = resolveNativeEntryIdentity(context, renderer);
+      // Worker SSR uses service snapshots, but its browser compilation owns
+      // the same native MF host used to hydrate the admitted remote component.
       const federated = Boolean(
-        !context.workerFederation &&
-          findNativeFederationConfig(context.appDirectory),
+        findNativeFederationConfig(context.appDirectory),
       );
       const { routed } = await emitNativeEntryApplication(context, 'client');
       const fields = {

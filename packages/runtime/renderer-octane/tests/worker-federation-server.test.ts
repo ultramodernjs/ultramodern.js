@@ -117,6 +117,10 @@ test('a real native exposed component loads a native federated child through its
       const response = await childRuntime.handleRequest(request);
       if (!response)
         throw new Error('The child snapshot endpoint was not selected');
+      if (!response.ok)
+        throw new Error(
+          `Child native snapshot rejected (${response.status}): ${await response.text()}`,
+        );
       return response;
     },
   };
@@ -173,6 +177,10 @@ test('a real native exposed component loads a native federated child through its
           const response = await parentRuntime.handleRequest(request);
           if (!response)
             throw new Error('The parent snapshot endpoint was not selected');
+          if (!response.ok)
+            throw new Error(
+              `Parent native snapshot rejected (${response.status}): ${await response.text()}`,
+            );
           return response;
         },
       },
@@ -184,6 +192,11 @@ test('a real native exposed component loads a native federated child through its
     platform: { kind: 'worker', bindings: {} },
   });
   const Parent = federatedComponent<{ label: string }>('parent/Widget');
+  const loadLocalRemote = rstest.fn(async () => {
+    throw new Error(
+      'Worker SSR must use its request transport, not the local MF host',
+    );
+  });
   const response = await renderOctaneApplication({
     session,
     document: {
@@ -192,6 +205,7 @@ test('a real native exposed component loads a native federated child through its
     },
     workerFederation: transport,
     workerFederationLocale: 'en',
+    federation: { instance: () => ({ loadRemote: loadLocalRemote }) },
     App: () => createElement(Parent, { label: 'Nested native props' }),
   });
   const html = await response.text();
@@ -209,6 +223,7 @@ test('a real native exposed component loads a native federated child through its
   ]);
   expect(parentExecution).toEqual(['admitting', 'admitted', 'import']);
   expect(childExecution).toEqual(['admitting', 'admitted', 'import']);
+  expect(loadLocalRemote).not.toHaveBeenCalled();
   expect(parentSnapshots).toHaveLength(1);
   expect(childSnapshots).toHaveLength(1);
   const window = new Window();
@@ -258,4 +273,74 @@ test('a real native exposed component loads a native federated child through its
   );
   expect(rejectedResponse?.status).toBe(400);
   expect(rejectedExecution).toEqual(['admitting']);
+});
+
+test('Worker SSR rejects a publisher without native metadata before requesting its expose', async () => {
+  const remote = publication('missing-native');
+  Reflect.deleteProperty(
+    remote.manifest.metaData.ultramodernWorkerFederation.exposes['./Widget'],
+    'native',
+  );
+  const methods: string[] = [];
+  const transport = createWorkerFederationTransport({
+    admitRendererContract,
+    services: [
+      {
+        remote: 'missing-native',
+        manifestUrl: remote.resources.workerFederationManifestUrl!,
+        fragments: [
+          {
+            expose: './Widget',
+            boundaryId: 'missing-nativeContainer',
+            paths: remote.worker.exposes['./Widget'].paths,
+          },
+        ],
+        async fetch(request) {
+          methods.push(request.method);
+          if (request.method !== 'GET')
+            throw new Error('Unadmitted publisher reached its expose');
+          return Response.json(remote.manifest);
+        },
+      },
+    ],
+  });
+  const session = createRequestSession({
+    identity: remote.renderer.identities.index,
+    request: new Request('https://host.test/'),
+    platform: { kind: 'worker', bindings: {} },
+  });
+  const Widget = federatedComponent('missing-native/Widget', {
+    fallback: () =>
+      createElement(
+        'p',
+        { 'data-native-admission-fallback': '' },
+        'Publisher rejected',
+      ),
+  });
+  const loadLocalRemote = rstest.fn(async () => {
+    throw new Error(
+      'Invalid native publishers must not fall back to the local MF host',
+    );
+  });
+  const logged = rstest.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    const response = await renderOctaneApplication({
+      session,
+      document: {
+        documentId: 'missing-native-document',
+        nativeHydrationBuildId: 'host-native-client',
+      },
+      workerFederation: transport,
+      workerFederationLocale: 'en',
+      federation: { instance: () => ({ loadRemote: loadLocalRemote }) },
+      App: () => createElement(Widget),
+    });
+    expect(await response.text()).toContain('Publisher rejected');
+    expect((await session.completion).fallback).toBe(true);
+    expect(methods).toEqual(['GET']);
+    expect(loadLocalRemote).not.toHaveBeenCalled();
+  } finally {
+    logged.mockRestore();
+    transport.dispose();
+  }
 });
