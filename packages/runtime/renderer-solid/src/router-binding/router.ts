@@ -9,6 +9,7 @@ import type {
 import { RouterCore } from '@tanstack/router-core';
 import { isServer } from '@tanstack/router-core/isServer';
 import {
+  assertNativeSerializationOptions,
   installPublicContextPublication,
   primeRouterFromRegistry,
 } from './registryTransfer';
@@ -104,6 +105,7 @@ export class Router<
       TDehydrated
     >,
   ) {
+    assertNativeSerializationOptions(options);
     super(options, getStoreFactory);
     installPublicContextPublication(this);
     // The hydration-claiming boot (see registryTransfer). Router creation is

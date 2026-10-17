@@ -165,7 +165,11 @@ export function createRouteAction(options: RouteActionOptions): RouteAction {
     assertRendererIdentity(options.rendererIdentity, configuredIdentity);
   }
   const identity = Object.freeze({ ...options.rendererIdentity });
-  const client = createDataClient(routeId, identity, { fetch: options.fetch });
+  const client = createDataClient(
+    routeId,
+    identity,
+    options.fetch ? { fetch: options.fetch } : {},
+  );
   // Capture the request while the native SSR request scope is active.
   const requestURL = getRequestEvent()?.request.url;
   const url = () => {

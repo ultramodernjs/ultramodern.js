@@ -1,5 +1,6 @@
 import { DataProtocolError } from '@modern-js/renderer-core/data';
-import { type JSX, useHead } from '@solidjs/web';
+import type { RequestSession } from '@modern-js/renderer-core/session';
+import { getRequestEvent, type JSX, useHead } from '@solidjs/web';
 import type { AnyRouter, RegisteredRouter } from '@tanstack/router-core';
 import { ownApplicationRouteData } from './route-completion';
 import { toHeadTags, useTags } from './router-binding/headContentUtils';
@@ -22,10 +23,15 @@ export function ApplicationRouter<
   TRouter extends AnyRouter = RegisteredRouter,
   TDehydrated extends Record<string, unknown> = Record<string, unknown>,
 >(props: Omit<RouterProps<TRouter, TDehydrated>, 'context'>): JSX.Element {
-  if (Object.hasOwn(props, 'context'))
-    throw new DataProtocolError(
+  if (Object.hasOwn(props, 'context')) {
+    const error = new DataProtocolError(
       'Set public Solid router context in createApplicationRouter; ApplicationRouter context overrides are unsupported',
     );
+    const session: RequestSession | undefined =
+      getRequestEvent()?.locals.session;
+    session?.fail(error);
+    throw error;
+  }
   const { router, ...rest } = props;
   ownApplicationRouteData(router);
   return (

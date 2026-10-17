@@ -133,7 +133,7 @@ export class RouteApi<
     return useNavigate({ from: router.routesById[this.id as string].fullPath });
   };
 
-  notFound = (opts?: NotFoundError) => {
+  override notFound = (opts?: NotFoundError) => {
     return notFound({ routeId: this.id as string, ...opts });
   };
 

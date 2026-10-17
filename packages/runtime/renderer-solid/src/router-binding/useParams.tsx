@@ -61,9 +61,7 @@ export function useParams<
   ThrowOrOptional<UseParamsResult<TRouter, TFrom, TStrict, TSelected>, TThrow>
 > {
   return useMatch({
-    from: opts.from!,
-    strict: opts.strict,
-    shouldThrow: opts.shouldThrow,
+    ...opts,
     select: match => {
       const params = opts.strict === false ? match.params : match._strictParams;
       return opts.select ? opts.select(params) : params;

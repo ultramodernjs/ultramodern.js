@@ -1,18 +1,16 @@
 import type { JSX } from '@solidjs/web';
-import type {
-  AnyRouter,
-  RegisteredRouter,
-  RouterOptions,
-} from '@tanstack/router-core';
+import type { AnyRouter, RegisteredRouter } from '@tanstack/router-core';
 import { isServer } from '@tanstack/router-core/isServer';
 import * as Solid from 'solid-js';
 import { setupFlightDataConsumer } from './flightData';
 import { Matches } from './Matches';
 import {
+  assertNativeSerializationOptions,
   requireManagedPublicRouter,
   serializeMatchTransfer,
 } from './registryTransfer';
 import { routerContext } from './routerContext';
+import type { RouterOptions } from './routerOptions';
 import { SafeFragment } from './SafeFragment';
 
 const RouterContext = routerContext as unknown as Solid.Component<{
@@ -30,6 +28,7 @@ export function RouterContextProvider<
 }: RouterProps<TRouter, TDehydrated> & {
   children: () => JSX.Element;
 }) {
+  assertNativeSerializationOptions(rest);
   requireManagedPublicRouter(router);
   if (Object.keys(rest).length > 0) {
     Solid.runWithOwner(null, () => {

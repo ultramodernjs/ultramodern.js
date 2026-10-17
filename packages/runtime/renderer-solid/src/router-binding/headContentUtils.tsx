@@ -154,7 +154,9 @@ export const useTags = (assetCrossOrigin?: AssetCrossOriginConfig) => {
           ...manifest.inlineStyle.attrs,
           nonce,
         },
-        children: manifest.inlineStyle.children,
+        ...(manifest.inlineStyle.children !== undefined
+          ? { children: manifest.inlineStyle.children }
+          : {}),
         inlineCss: true,
       });
     }
@@ -192,7 +194,7 @@ export const useTags = (assetCrossOrigin?: AssetCrossOriginConfig) => {
           ...attrs,
           nonce,
         },
-        children: children as string | undefined,
+        ...(children != null ? { children: String(children) } : {}),
       })) satisfies Array<RouterManagedTag>;
   });
 
@@ -206,7 +208,7 @@ export const useTags = (assetCrossOrigin?: AssetCrossOriginConfig) => {
           ...attrs,
           nonce,
         },
-        children: children as string | undefined,
+        ...(children != null ? { children: String(children) } : {}),
       })) satisfies Array<RouterManagedTag>;
   });
 

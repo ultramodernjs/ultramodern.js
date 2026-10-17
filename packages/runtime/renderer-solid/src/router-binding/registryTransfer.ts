@@ -78,8 +78,21 @@ export function registerPublicRouteDataOwner(
   });
 }
 
+/** Managed match transfer uses the immutable public-data contract, not custom adapters. */
+export function assertNativeSerializationOptions(options: object): void {
+  if ('serializationAdapters' in options) {
+    const error = new DataProtocolError(
+      'Solid serializationAdapters are unsupported by the immutable public-data profile; return public records, arrays and scalars instead',
+    );
+    const owner: RequestSession | undefined = getRequestEvent()?.locals.session;
+    owner?.fail(error);
+    throw error;
+  }
+}
+
 /** Framework SSR accepts only routers that passed its public-data factory boundary. */
 export function requireManagedPublicRouter(router: AnyRouter): void {
+  assertNativeSerializationOptions(router.options);
   const owner: RequestSession | undefined = getRequestEvent()?.locals.session;
   if (
     !owner ||
@@ -268,6 +281,11 @@ export function primeRouterFromRegistry(router: AnyRouter): boolean {
   try {
     for (const [index, match] of matches.entries()) {
       const entry = entries[index]!;
+      const beforeLoadContext = preparePublicContextData(
+        entry.beforeLoadContext,
+        owner,
+        privateContexts,
+      ) as Record<string, unknown> | undefined;
       const checked: TransferredMatch = {
         ...entry,
         loaderData: prepareHydratedLoaderData(
@@ -275,11 +293,7 @@ export function primeRouterFromRegistry(router: AnyRouter): boolean {
           owner,
           privateContexts,
         ),
-        beforeLoadContext: preparePublicContextData(
-          entry.beforeLoadContext,
-          owner,
-          privateContexts,
-        ) as Record<string, unknown> | undefined,
+        ...(beforeLoadContext !== undefined ? { beforeLoadContext } : {}),
         error: preparePublicContextData(entry.error, owner, privateContexts),
       };
       entries[index] = checked;
@@ -356,7 +370,10 @@ function applyTransferredMatch(
     __beforeLoadContext: entry.beforeLoadContext,
   } as AnyRouteMatch;
   if ('loaderData' in entry) next.loaderData = entry.loaderData;
-  if ('ssr' in entry) next.ssr = entry.ssr;
+  if ('ssr' in entry) {
+    if (entry.ssr === undefined) delete next.ssr;
+    else next.ssr = entry.ssr;
+  }
   return next;
 }
 

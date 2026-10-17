@@ -79,16 +79,16 @@ function MatchesInner() {
         getResetKey={() => router.stores.matches.get()}
         render={matchContent}
         errorComponent={ErrorComponent}
-        onCatch={
-          process.env.NODE_ENV !== 'production'
-            ? error => {
+        {...(process.env.NODE_ENV !== 'production'
+          ? {
+              onCatch: (error: Error) => {
                 console.warn(
                   `Warning: The following error wasn't caught by any route! At the very least, consider setting an 'errorComponent' in your RootRoute!`,
                 );
                 console.warn(`Warning: ${error.message || error.toString()}`);
-              }
-            : undefined
-        }
+              },
+            }
+          : {})}
       />
     </NearestMatchContext>
   );
@@ -126,10 +126,10 @@ export function useMatchRoute<TRouter extends AnyRouter = RegisteredRouter>() {
       router.stores.resolvedLocation.get();
       router.stores.status.get();
       return router.matchRoute(rest as any, {
-        pending,
-        caseSensitive,
-        fuzzy,
-        includeSearch,
+        ...(pending !== undefined ? { pending } : {}),
+        ...(caseSensitive !== undefined ? { caseSensitive } : {}),
+        ...(fuzzy !== undefined ? { fuzzy } : {}),
+        ...(includeSearch !== undefined ? { includeSearch } : {}),
       });
     });
   };

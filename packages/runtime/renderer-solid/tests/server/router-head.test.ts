@@ -8,6 +8,7 @@ import {
   createFileSystemRouteTree,
   createMemoryHistory,
 } from '../../src/router';
+import { Asset } from '../../src/router-binding/Asset';
 import { renderApplication, renderDocumentApplication } from '../../src/server';
 
 const nonce = 'route-head-nonce';
@@ -62,7 +63,19 @@ async function routerAt(path: string) {
             { title: `Item ${params.itemId}` },
             { name: 'description', content: `Description ${params.itemId}` },
           ],
-          scripts: [{ src: '/route-head.js', type: 'module' }],
+          styles: [
+            { 'data-head-number': '', children: 42 },
+            { 'data-head-array': '', children: ['a', 'b'] },
+          ],
+          scripts: [
+            { src: '/route-head.js', type: 'module' },
+            { type: 'application/json', 'data-head-number': '', children: 42 },
+            {
+              type: 'application/json',
+              'data-head-array': '',
+              children: ['a', 'b'],
+            },
+          ],
         }),
       },
       other: {
@@ -105,6 +118,37 @@ describe('native router document head', () => {
     expect(html.match(/window\._\$HY\|\|/g)).toHaveLength(1);
     expect(html.match(/id="__ULTRAMODERN_RENDERER__"/g)).toHaveLength(1);
     expect((await session.completion).state).toBe('completed');
+  });
+
+  test('native head registry preserves numeric and array style and script children', async () => {
+    const router = await routerAt('/items/42');
+    const html = await (
+      await renderDocumentApplication({
+        session: sessionAt('/items/42'),
+        document: { nonce, renderId: 'head-values:' },
+        view: () => createComponent(ApplicationRouter, { router }),
+      })
+    ).text();
+    const head = html.slice(html.indexOf('<head>'), html.indexOf('</head>'));
+    expect(head).toMatch(/<style\b[^>]*data-head-number[^>]*>42<\/style>/);
+    expect(head).toMatch(/<style\b[^>]*data-head-array[^>]*>a,b<\/style>/);
+    expect(head).toMatch(/<script\b[^>]*data-head-number[^>]*>42<\/script>/);
+    expect(head).toMatch(/<script\b[^>]*data-head-array[^>]*>a,b<\/script>/);
+  });
+
+  test('managed Asset style children override an incoming innerHTML attribute when absent', async () => {
+    const html = await (
+      await renderApplication({
+        session: sessionAt('/asset'),
+        view: () =>
+          createComponent(Asset, {
+            tag: 'style',
+            attrs: { innerHTML: 'unmanaged-style-text' },
+          }),
+      })
+    ).text();
+    expect(html).toContain('<style');
+    expect(html).not.toContain('unmanaged-style-text');
   });
 
   test('native fragment rendering forwards route metadata through its own onHead callback', async () => {

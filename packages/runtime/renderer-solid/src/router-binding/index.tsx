@@ -26,7 +26,6 @@ export type {
   AnyRouterWithContext,
   AnyRouteWithContext,
   AnySchema,
-  AnySerializationAdapter,
   AnyValidator,
   AnyValidatorAdapter,
   AnyValidatorFn,
@@ -153,7 +152,6 @@ export type {
   RouterEvents,
   RouterListener,
   RouterManagedTag,
-  RouterOptions,
   RouterState,
   RoutesById,
   RoutesByPath,
@@ -163,7 +161,6 @@ export type {
   SearchSchemaInput,
   SearchSerializer,
   SerializableExtensions,
-  SerializationAdapter,
   StaticDataRouteOption,
   StringifyParamsFn,
   ToMaskOptions,
@@ -197,7 +194,6 @@ export {
   cleanPath,
   composeRewrites,
   createControlledPromise,
-  createSerializationAdapter,
   DEFAULT_PROTOCOL_ALLOWLIST,
   deepEqual,
   defaultParseSearch,
@@ -291,6 +287,7 @@ export {
   rootRouteWithContext,
 } from './route';
 export { createRouter, Router } from './router';
+export type { RouterOptions } from './routerOptions';
 export { ScriptOnce } from './ScriptOnce';
 export { Scripts } from './Scripts';
 export {

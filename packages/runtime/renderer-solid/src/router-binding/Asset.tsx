@@ -62,7 +62,7 @@ function InlineCssStyle({
   attrs,
   children,
 }: {
-  attrs?: Record<string, any>;
+  attrs: Record<string, any> | undefined;
   children?: RouterManagedTag['children'];
 }) {
   const isInlineCssPlaceholder = children === undefined;
@@ -85,7 +85,7 @@ function InlineCssStyle({
 
 function HeadElement(props: {
   tag: 'meta' | 'link' | 'style';
-  attrs?: Record<string, any>;
+  attrs: Record<string, any> | undefined;
   children?: unknown;
 }): JSX.Element | null {
   // Each branch must live in its own `case` block so the Solid compiler emits
@@ -101,11 +101,12 @@ function HeadElement(props: {
   let element: Element;
   switch (props.tag) {
     case 'style': {
-      const attrs = {
-        ...props.attrs,
-        innerHTML:
-          typeof props.children === 'string' ? props.children : undefined,
-      };
+      const attrs = { ...props.attrs };
+      // The managed child text owns this field, including when it is absent.
+      delete attrs.innerHTML;
+      if (typeof props.children === 'string') {
+        attrs.innerHTML = props.children;
+      }
       element = (<style {...attrs} />) as unknown as Element;
       break;
     }
@@ -125,7 +126,7 @@ function HeadElement(props: {
 }
 
 function Title(props: {
-  attrs?: Record<string, any>;
+  attrs: Record<string, any> | undefined;
   children?: unknown;
 }): JSX.Element | null {
   let el: HTMLTitleElement | undefined;
@@ -158,7 +159,7 @@ function Title(props: {
 }
 
 function Script(props: {
-  attrs?: Record<string, any>;
+  attrs: Record<string, any> | undefined;
   children?: unknown;
 }): JSX.Element | null {
   const router = useRouter();

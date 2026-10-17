@@ -41,10 +41,11 @@ export function useLoaderData<
   opts: UseLoaderDataOptions<TRouter, TFrom, TStrict, TSelected>,
 ): Accessor<UseLoaderDataResult<TRouter, TFrom, TStrict, TSelected>> {
   return useMatch({
-    from: opts.from!,
-    strict: opts.strict,
+    ...opts,
     select: match => {
-      return opts.select ? opts.select(match.loaderData) : match.loaderData;
+      // The hook reads the rendered match; router-core also types pending
+      // matches, where loaderData is optional, in this shared match shape.
+      return opts.select ? opts.select(match.loaderData!) : match.loaderData;
     },
   }) as any;
 }

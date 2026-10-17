@@ -77,11 +77,11 @@ export interface FileSystemRouteModule {
   pendingComponent?: RouteComponent;
   errorComponent?: ErrorRouteComponent;
   notFoundComponent?: NotFoundRouteComponent;
-  head?: AnyRoute['options']['head'];
+  head?: NonNullable<AnyRoute['options']['head']>;
   /** Explicit returned context becomes immutable public native route context. */
-  beforeLoad?: AnyRoute['options']['beforeLoad'];
+  beforeLoad?: NonNullable<AnyRoute['options']['beforeLoad']>;
   /** Native synchronous context contributions are checked before composition. */
-  context?: AnyRoute['options']['context'];
+  context?: NonNullable<AnyRoute['options']['context']>;
   validateSearch?: (search: Record<string, unknown>) => Record<string, unknown>;
 }
 

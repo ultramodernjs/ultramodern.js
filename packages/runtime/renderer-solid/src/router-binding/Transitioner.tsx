@@ -162,9 +162,14 @@ export function Rendered() {
   Solid.onSettled(() => {
     const resolvedLocation = getResolvedLocation(router);
     if (resolvedLocation) {
+      const { fromLocation, ...changeInfo } = getLocationChangeInfo(
+        resolvedLocation,
+        resolvedLocation,
+      );
       router.emit({
         type: 'onRendered',
-        ...getLocationChangeInfo(resolvedLocation, resolvedLocation),
+        ...changeInfo,
+        ...(fromLocation !== undefined ? { fromLocation } : {}),
       });
     }
   });

@@ -505,9 +505,9 @@ export function useLinkProps<
   }
 
   const defineGetters = (getters: Record<string, () => any>) => {
-    for (const key of Object.keys(getters)) {
+    for (const [key, get] of Object.entries(getters)) {
       Object.defineProperty(linkProps, key, {
-        get: getters[key],
+        get,
         enumerable: true,
         configurable: true,
       });

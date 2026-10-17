@@ -10,7 +10,10 @@ import {
   preparePublicContextData,
   useMatch,
 } from './router-binding/index';
-import { registerPublicRouteDataOwner } from './router-binding/registryTransfer';
+import {
+  assertNativeSerializationOptions,
+  registerPublicRouteDataOwner,
+} from './router-binding/registryTransfer';
 
 interface CompletionRecord {
   readonly failure: Accessor<{ reason: unknown } | undefined>;
@@ -52,6 +55,7 @@ export function registerRouteCompletionScope(
 }
 
 export const createApplicationRouter: CreateRouterFn = options => {
+  assertNativeSerializationOptions(options);
   const scope = options.routeTree
     ? routeScopes.get(options.routeTree)
     : undefined;

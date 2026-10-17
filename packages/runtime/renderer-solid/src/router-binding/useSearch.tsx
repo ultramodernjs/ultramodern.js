@@ -61,9 +61,7 @@ export function useSearch<
   ThrowOrOptional<UseSearchResult<TRouter, TFrom, TStrict, TSelected>, TThrow>
 > {
   return useMatch({
-    from: opts.from!,
-    strict: opts.strict,
-    shouldThrow: opts.shouldThrow,
+    ...opts,
     select: match => {
       const search = match.search;
       return opts.select ? opts.select(search) : search;

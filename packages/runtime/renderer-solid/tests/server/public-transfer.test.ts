@@ -183,6 +183,114 @@ const mutableContainers: Array<readonly [string, () => unknown]> = [
 ];
 
 describe('native public match transfer', () => {
+  test('a caught application context override still fails before commitment', async () => {
+    const session = createSession();
+    const router = await loadedRouter(session, { critical: 'public value' });
+    const originalContext = router.options.context;
+    let reads = 0;
+    const props = Object.defineProperty({ router }, 'context', {
+      get() {
+        reads++;
+        return { private: privateMarker };
+      },
+    });
+    await expect(
+      renderDocumentApplication({
+        session,
+        view: () => {
+          try {
+            return createComponent(ApplicationRouter, props);
+          } catch {
+            return ssr('<main>caught context fallback</main>');
+          }
+        },
+      }),
+    ).rejects.toThrow(/ApplicationRouter context overrides are unsupported/);
+    expect(reads).toBe(0);
+    expect(router.options.context).toBe(originalContext);
+    expect(session.committedPolicy).toBeUndefined();
+    expect((await session.completion).state).toBe('failed');
+  });
+
+  test('a caught adapter rejection still fails its owning request', async () => {
+    const session = createSession();
+    const router = await loadedRouter(session, { critical: 'public value' });
+    Object.defineProperty(router.options, 'serializationAdapters', {
+      value: [],
+    });
+    await expect(
+      renderDocumentApplication({
+        session,
+        view: () => {
+          try {
+            serializeMatchTransfer(router);
+          } catch {
+            return ssr('<main>caught fallback</main>');
+          }
+          return ssr('<main>unexpected success</main>');
+        },
+      }),
+    ).rejects.toThrow(/serializationAdapters.*unsupported/);
+    expect(session.committedPolicy).toBeUndefined();
+    expect((await session.completion).state).toBe('failed');
+  });
+
+  test.each([
+    ['native', createRouter],
+    ['application', createApplicationRouter],
+  ] as const)(
+    '%s router rejects JavaScript serialization adapters during construction',
+    (_name, factory) => {
+      const options = { routeTree: createRootRoute(), isServer: true };
+      Object.defineProperty(options, 'serializationAdapters', { value: [] });
+      expect(() => factory(options)).toThrow(
+        /serializationAdapters.*unsupported/,
+      );
+    },
+  );
+
+  test.each(['provider', 'mutated-router'] as const)(
+    '%s rejects unused serialization adapters before document commitment',
+    async entry => {
+      const session = createSession();
+      const router = await loadedRouter(session, {
+        critical: 'valid public data',
+      });
+      let adapterCalls = 0;
+      const adapters = [
+        {
+          key: 'custom',
+          test: () => {
+            adapterCalls += 1;
+            return true;
+          },
+          toSerializable: () => 'custom',
+          fromSerializable: () => 'custom',
+        },
+      ];
+      const props = { router };
+      Object.defineProperty(
+        entry === 'provider' ? props : router.options,
+        'serializationAdapters',
+        { value: adapters, enumerable: true },
+      );
+      await expect(
+        renderDocumentApplication({
+          session,
+          view: () => {
+            if (entry === 'provider')
+              return createComponent(ApplicationRouter, props);
+            serializeMatchTransfer(router);
+            return ssr('<main>valid public data</main>');
+          },
+        }),
+      ).rejects.toThrow(/serializationAdapters.*unsupported/);
+      expect(session.committedPolicy).toBeUndefined();
+      expect((await session.completion).state).toBe('failed');
+      expect(adapterCalls).toBe(0);
+    },
+  );
+
   test.each(['provider', 'writer'] as const)(
     'the native %s rejects an unmanaged raw router inside an UltraModern document request',
     async entry => {
