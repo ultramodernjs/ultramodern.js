@@ -27,9 +27,13 @@ import {
   collectNativeFederationDevAssets,
   NATIVE_FEDERATION_DEV_REVISION_HEADER,
   type NativeDevelopmentAsset,
+  type NativeFederationDevGraph,
+  nativeFederationDevGraph,
   nativeFederationDevRevision,
   resolveNativeFederationDevAsset,
+  retainNativeFederationDevAssets,
 } from './native-federation-dev-assets';
+import { nativeFederationDevHotUpdateTarget } from './native-federation-dev-public-path';
 import type { NativeDevelopmentSnapshot } from './native-server-plugin';
 import type { RendererBuildProfile } from './renderer-profile';
 import { resolveNativeRendererAdapter } from './renderer-registration';
@@ -170,6 +174,12 @@ export class NativeDevelopment {
   private federationAssets: ReadonlyMap<string, NativeDevelopmentAsset> =
     new Map();
   private federationRevision: string | undefined;
+  private federationGraph: NativeFederationDevGraph | undefined;
+  /** Immutable remote closures stay available to already-open hosts. */
+  private retainedFederationAssets: ReadonlyMap<
+    string,
+    NativeDevelopmentAsset
+  > = new Map();
   private readonly mutableClientAssets = new Set(['renderer-assets.json']);
   private readonly adapter: NativeRendererAdapter;
   private readonly compilerArtifacts: NativeCompilerArtifacts;
@@ -233,10 +243,24 @@ export class NativeDevelopment {
               )?.pathname;
               const protocol =
                 request.socket instanceof TLSSocket ? 'https:' : 'http:';
+              const origin = `${protocol}//${request.headers.host}`;
+              const hotUpdate =
+                this.federationGraph &&
+                nativeFederationDevHotUpdateTarget(
+                  this.federationGraph.publicPath,
+                  request.url ?? '/',
+                  origin,
+                );
+              if (hotUpdate) {
+                // Native check/apply still consumes the live compiler's actual
+                // deltas. They are never admitted to immutable graph storage.
+                request.url = hotUpdate;
+                return next();
+              }
               const federationAsset = resolveNativeFederationDevAsset(
                 this.federationAssets,
                 request.url ?? '/',
-                `${protocol}//${request.headers.host}`,
+                origin,
               );
               const revision = this.federationRevision;
               const asset =
@@ -249,12 +273,48 @@ export class NativeDevelopment {
               ).then(() => {
                 response.setHeader('Content-Type', asset.contentType);
                 response.setHeader('Content-Length', asset.bytes.length);
-                response.setHeader('Cache-Control', 'no-store');
-                if (federationAsset && revision)
-                  response.setHeader(
-                    NATIVE_FEDERATION_DEV_REVISION_HEADER,
-                    revision,
-                  );
+                response.setHeader(
+                  'Cache-Control',
+                  asset.immutable
+                    ? 'public, max-age=31536000, immutable'
+                    : 'no-store',
+                );
+                if (federationAsset) {
+                  const graphManifest =
+                    asset.graphManifest ??
+                    this.federationGraph?.immutableManifest;
+                  if (graphManifest)
+                    response.setHeader(
+                      'Link',
+                      `<${graphManifest}>; rel="ultramodern-completed-graph"`,
+                    );
+                  const graphRevision = asset.revision ?? revision;
+                  if (graphRevision)
+                    response.setHeader(
+                      NATIVE_FEDERATION_DEV_REVISION_HEADER,
+                      graphRevision,
+                    );
+                  if (api.getNormalizedConfig().server.cors) {
+                    const previous = response.getHeader(
+                      'Access-Control-Expose-Headers',
+                    );
+                    const exposed = new Set(
+                      [
+                        ...(Array.isArray(previous)
+                          ? previous
+                          : String(previous ?? '').split(',')),
+                        'Link',
+                        NATIVE_FEDERATION_DEV_REVISION_HEADER,
+                      ]
+                        .map(value => value.trim())
+                        .filter(Boolean),
+                    );
+                    response.setHeader(
+                      'Access-Control-Expose-Headers',
+                      [...exposed].join(','),
+                    );
+                  }
+                }
                 response.end(
                   request.method === 'HEAD' ? undefined : asset.bytes,
                 );
@@ -333,8 +393,14 @@ export class NativeDevelopment {
           try {
             const publication = await this.publish(stats);
             if (this.closed || epoch !== this.epoch) return;
-            this.federationAssets = publication.federationAssets;
+            this.retainedFederationAssets =
+              publication.retainedFederationAssets;
+            this.federationAssets = new Map([
+              ...publication.federationAssets,
+              ...this.retainedFederationAssets,
+            ]);
             this.federationRevision = publication.federationRevision;
+            this.federationGraph = publication.federationGraph;
             this.ready = publication.entries;
             this.failure = undefined;
             this.notify();
@@ -407,6 +473,11 @@ export class NativeDevelopment {
     readonly entries: ReadonlyMap<string, NativeDevelopmentSnapshot>;
     readonly federationAssets: ReadonlyMap<string, NativeDevelopmentAsset>;
     readonly federationRevision: string | undefined;
+    readonly federationGraph: NativeFederationDevGraph | undefined;
+    readonly retainedFederationAssets: ReadonlyMap<
+      string,
+      NativeDevelopmentAsset
+    >;
   }> {
     const results = 'stats' in stats ? stats.stats : [stats];
     const client = results.find(result => result.compilation.name === 'client');
@@ -418,10 +489,30 @@ export class NativeDevelopment {
       );
     const session = this.options.getSessionIdentities();
     const entryNames = Object.keys(session.identities);
-    const federationAssets = await collectNativeFederationDevAssets(
-      server,
-      entryNames,
-      name => emittedBytes(server, name),
+    const federationAssets = new Map([
+      ...(await collectNativeFederationDevAssets(server, entryNames, name =>
+        emittedBytes(server, name),
+      )),
+      ...(await collectNativeFederationDevAssets(client, entryNames, name =>
+        emittedBytes(client, name),
+      )),
+    ]);
+    const federationGraph = nativeFederationDevGraph(client);
+    const federationRevision = federationAssets.size
+      ? nativeFederationDevRevision(federationAssets)
+      : undefined;
+    const retainedFederationAssets = retainNativeFederationDevAssets(
+      this.retainedFederationAssets,
+      new Map(
+        [...federationAssets].map(([url, asset]) => [
+          url,
+          {
+            ...asset,
+            revision: federationRevision,
+            graphManifest: federationGraph?.immutableManifest,
+          },
+        ]),
+      ),
     );
     const publicPath = client.compilation.outputOptions.publicPath;
     const prefix =
@@ -537,9 +628,9 @@ export class NativeDevelopment {
     return {
       entries,
       federationAssets,
-      federationRevision: federationAssets.size
-        ? nativeFederationDevRevision(federationAssets)
-        : undefined,
+      federationGraph,
+      federationRevision,
+      retainedFederationAssets,
     };
   }
 
@@ -551,6 +642,8 @@ export class NativeDevelopment {
     this.retained.clear();
     this.federationAssets = new Map();
     this.federationRevision = undefined;
+    this.federationGraph = undefined;
+    this.retainedFederationAssets = new Map();
     if (this.manifestFile) await fs.rm(this.manifestFile, { force: true });
   }
 }

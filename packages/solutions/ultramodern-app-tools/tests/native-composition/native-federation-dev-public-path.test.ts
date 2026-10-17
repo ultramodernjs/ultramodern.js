@@ -1,5 +1,9 @@
 import { describe, expect, it } from '@rstest/core';
-import { resolveNativeFederationDevPublicPath } from '../../src/native-composition/native-federation-dev-public-path';
+import {
+  nativeFederationDevGraphPublicPath,
+  nativeFederationDevHotUpdateTarget,
+  resolveNativeFederationDevPublicPath,
+} from '../../src/native-composition/native-federation-dev-public-path';
 
 const server = { hostname: 'localhost', port: 43123, https: false };
 
@@ -111,5 +115,65 @@ describe('native federation development publicPath', () => {
     expect(() =>
       resolveNativeFederationDevPublicPath('file:///remote/', server),
     ).toThrow('HTTP or HTTPS');
+  });
+});
+
+describe('native federation immutable graph publicPath', () => {
+  const prefix = 'http://localhost:43123/assets/';
+  it('uses the native compiler hash as a URL namespace without changing the server prefix', () => {
+    expect(nativeFederationDevGraphPublicPath(prefix, 'ab1234')).toBe(
+      'http://localhost:43123/assets/__ultramodern_mf__/ab1234/',
+    );
+    expect(nativeFederationDevGraphPublicPath(prefix)).toBe(
+      'http://localhost:43123/assets/__ultramodern_mf__/',
+    );
+    expect(nativeFederationDevGraphPublicPath(prefix, 'cd5678')).not.toBe(
+      nativeFederationDevGraphPublicPath(prefix, 'ab1234'),
+    );
+    expect(() =>
+      nativeFederationDevGraphPublicPath(prefix, '../foreign'),
+    ).toThrow('compiler full hash');
+  });
+  it('routes only native HMR deltas back to the live compiler', () => {
+    for (const file of [
+      'main.ab1234.hot-update.json',
+      'lazy.ab1234.hot-update.js',
+    ])
+      expect(
+        nativeFederationDevHotUpdateTarget(
+          prefix,
+          `/assets/__ultramodern_mf__/ab1234/${file}?native=1`,
+          'http://localhost:43123',
+        ),
+      ).toBe(`/assets/${file}?native=1`);
+  });
+  it.each([
+    '/assets/__ultramodern_mf__/ab1234/remoteEntry.js',
+    '/assets/__ultramodern_mf__/ab1234/mf-manifest.json',
+    '/assets/__ultramodern_mf__/ab1234/main.hot-update.js.map',
+    '/assets/__ultramodern_mf__/ab1234/x/../main.hot-update.js',
+    '/assets/__ultramodern_mf__/ab1234/%2e%2e/main.hot-update.js',
+    '/assets/__ultramodern_mf__/ab1234/%2fmain.hot-update.js',
+    '/assets/__ultramodern_mf__/ab1234/%5cmain.hot-update.js',
+    '/assets/__ultramodern_mf__/bad-hash/main.hot-update.json',
+    '/foreign/__ultramodern_mf__/ab1234/main.hot-update.json',
+    '//foreign/assets/__ultramodern_mf__/ab1234/main.hot-update.json',
+  ])('does not reroute immutable or unsafe graph request %s', target => {
+    expect(
+      nativeFederationDevHotUpdateTarget(
+        prefix,
+        target,
+        'http://localhost:43123',
+      ),
+    ).toBeUndefined();
+  });
+  it('does not reroute an alternate origin', () => {
+    expect(
+      nativeFederationDevHotUpdateTarget(
+        prefix,
+        '/assets/__ultramodern_mf__/ab1234/main.hot-update.json',
+        'http://foreign.example:43123',
+      ),
+    ).toBeUndefined();
   });
 });

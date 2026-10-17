@@ -3,6 +3,7 @@ import {
   type NativeDevelopmentAsset,
   nativeFederationDevRevision,
   resolveNativeFederationDevAsset,
+  retainNativeFederationDevAssets,
 } from '../../src/native-composition/native-federation-dev-assets';
 
 const origin = 'http://localhost:43123';
@@ -88,5 +89,82 @@ describe('native federation development asset lookup', () => {
     expect(
       resolveNativeFederationDevAsset(assets, target, origin),
     ).toBeUndefined();
+  });
+});
+
+describe('native federation immutable graph retention', () => {
+  const firstUrl = `${origin}/__ultramodern_mf__/a1/remoteEntry.js`;
+  const secondUrl = `${origin}/__ultramodern_mf__/b2/remoteEntry.js`;
+  const first = { ...asset, immutable: true };
+  const second = {
+    ...asset,
+    bytes: Buffer.from('second completed graph'),
+    immutable: true,
+  };
+  const cost = (url: string, value: NativeDevelopmentAsset) =>
+    Buffer.byteLength(url) + value.bytes.length;
+
+  it('admits only immutable assets and reuses the existing accepted bytes', () => {
+    const retained = new Map([[firstUrl, first]]);
+    const candidate = new Map([
+      [firstUrl, { ...first, bytes: Buffer.from(first.bytes) }],
+      [`${origin}/mf-manifest.json`, { ...asset, immutable: false }],
+      [secondUrl, second],
+    ]);
+    const next = retainNativeFederationDevAssets(
+      retained,
+      candidate,
+      cost(firstUrl, first) + cost(secondUrl, second),
+    );
+    expect(next.size).toBe(2);
+    expect(next.get(firstUrl)).toBe(first);
+    expect(next.get(secondUrl)).toBe(second);
+    expect(retained.size).toBe(1);
+    expect(retained.has(secondUrl)).toBe(false);
+  });
+
+  it('rejects the entire next publication without losing any admitted graph', () => {
+    const retained = new Map([[firstUrl, first]]);
+    const thirdUrl = `${origin}/__ultramodern_mf__/c3/remoteEntry.js`;
+    const candidate = new Map([
+      [secondUrl, second],
+      [thirdUrl, second],
+    ]);
+    expect(() =>
+      retainNativeFederationDevAssets(
+        retained,
+        candidate,
+        cost(firstUrl, first) + cost(secondUrl, second),
+      ),
+    ).toThrow('restart the development server');
+    expect([...retained]).toEqual([[firstUrl, first]]);
+    expect(
+      resolveNativeFederationDevAsset(
+        retained,
+        new URL(firstUrl).pathname,
+        origin,
+      ),
+    ).toBe(first);
+    expect(retained.has(secondUrl)).toBe(false);
+    expect(retained.has(thirdUrl)).toBe(false);
+  });
+
+  it('does not replace accepted bytes at an existing immutable URL', () => {
+    const retained = new Map([[firstUrl, first]]);
+    expect(() =>
+      retainNativeFederationDevAssets(retained, new Map([[firstUrl, second]])),
+    ).toThrow('immutable graph changed');
+    expect(retained.get(firstUrl)).toBe(first);
+  });
+
+  it('charges empty assets for their URL instead of creating zero-cost history', () => {
+    const empty = { ...asset, bytes: Buffer.alloc(0), immutable: true };
+    expect(() =>
+      retainNativeFederationDevAssets(
+        new Map(),
+        new Map([[firstUrl, empty]]),
+        0,
+      ),
+    ).toThrow('graph budget exceeded');
   });
 });

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import vm from 'node:vm';
 import {
   type RendererBuildIdentities,
   resolveRendererBuildIdentities,
@@ -77,6 +78,7 @@ interface DevApp {
   readonly authority: NativeDevelopment;
   readonly address: URL;
   edit(marker: string): void;
+  compilationFailure?(): Error | undefined;
 }
 
 async function startDevServer(
@@ -140,6 +142,8 @@ async function until(app: DevApp, marker: string) {
       }
       last = html;
     } catch (error) {
+      const compilationFailure = app.compilationFailure?.();
+      if (compilationFailure) throw compilationFailure;
       last = error;
     }
     if (Date.now() > deadline)
@@ -315,7 +319,11 @@ async function nativeApp(renderer: 'solid' | 'octane', module: boolean) {
 }
 
 /** A compiler outside the registry that owns its own manifest ABI. */
-async function replacementApp(module: boolean, federation = false) {
+async function replacementApp(
+  module: boolean,
+  federation = false,
+  manualContainerHmr = false,
+) {
   const root = temporaryRoot('replacement-dev-');
   fs.writeFileSync(
     path.join(root, 'package.json'),
@@ -340,7 +348,7 @@ async function replacementApp(module: boolean, federation = false) {
   if (federation) {
     fs.writeFileSync(
       widget,
-      'import { shared } from "fixture-shared"; import image from "./widget.png"; import font from "./widget.woff2"; import wasm from "./widget.wasm"; import sourceMap from "./widget.js.map"; import config from "./private.config.ts?raw"; export const resources = { image, font, wasm, sourceMap, config }; export const marker = "first-remote" + shared; export const lazy = () => import("./remote-lazy.js");\n',
+      'import { shared } from "fixture-shared"; import image from "./widget.png"; import font from "./widget.woff2"; import wasm from "./widget.wasm"; import sourceMap from "./widget.js.map"; import config from "./private.config.ts?raw"; export const resources = { image, font, wasm, sourceMap, config }; export const marker = "first-remote" + shared; export const lazy = () => import("./remote-lazy.js"); export const hotUpdate = () => import.meta.webpackHot.check(true); import.meta.webpackHot.accept();\n',
     );
     fs.writeFileSync(
       path.join(root, 'remote-lazy.js'),
@@ -405,6 +413,7 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
   };
   let poison = false;
   let serverCompilation: Rspack.Compilation | undefined;
+  let compilationFailure: Error | undefined;
   let clientCompiler: Rspack.Compiler | undefined;
   let beforeAggregateCompile: (() => Promise<void>) | undefined;
   let afterAggregateCompile: (() => void) | undefined;
@@ -434,6 +443,11 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
         },
       });
       api.onDevCompileDone(async ({ stats }) => {
+        compilationFailure = stats.hasErrors()
+          ? new Error(
+              stats.toString({ all: false, errors: true, errorDetails: true }),
+            )
+          : undefined;
         serverCompilation = ('stats' in stats ? stats.stats : [stats]).find(
           result => result.compilation.name === 'server',
         )?.compilation;
@@ -442,15 +456,18 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
         await callback?.();
       });
       api.modifyRspackConfig((config, { environment }) => {
-        if (federation && environment.name === 'server') {
-          config.target = 'async-node';
+        if (federation) {
           config.output ??= {};
-          config.output.publicPath = `http://${api.context.devServer!.hostname}:${api.context.devServer!.port}/bundles/`;
+          config.output.publicPath = `http://${api.context.devServer!.hostname}:${api.context.devServer!.port}/${environment.name === 'server' ? 'bundles' : 'replacement-assets'}/`;
+          if (environment.name === 'server') config.target = 'async-node';
         }
         if (federation) {
           config.plugins ??= [];
+          if (manualContainerHmr && environment.name === 'client')
+            config.plugins.push(new rspack.HotModuleReplacementPlugin());
           config.plugins.push(
-            new rspack.container.ModuleFederationPlugin({
+            // This fixture exercises native container assets, without the enhanced runtime.
+            new rspack.container.ModuleFederationPluginV1({
               name: 'test_remote',
               filename: 'remoteEntry.js',
               library: {
@@ -467,10 +484,14 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
               },
             }),
           );
-          if (environment.name === 'server')
-            config.plugins.push(
-              new NativeFederationDevAssetsPlugin('test_remote'),
-            );
+          config.plugins.push(
+            new NativeFederationDevAssetsPlugin(
+              'test_remote',
+              environment.name === 'client'
+                ? { browserManifest: 'mf-manifest.json' }
+                : {},
+            ),
+          );
           config.module ??= {};
           config.module.rules ??= [];
           config.module.rules.push({
@@ -526,7 +547,19 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
                     current.emitAsset(
                       'mf-manifest.json',
                       new rspack.sources.RawSource(
-                        JSON.stringify({ compilationHash: current.hash }),
+                        JSON.stringify({
+                          compilationHash: current.hash,
+                          metaData: {
+                            name: 'test_remote',
+                            publicPath: current.outputOptions.publicPath,
+                            ssrPublicPath: `http://${api.context.devServer!.hostname}:${api.context.devServer!.port}/bundles/`,
+                            remoteEntry: {
+                              name: 'remoteEntry.js',
+                              path: '',
+                              type: 'global',
+                            },
+                          },
+                        }),
                       ),
                       { immutable: false },
                     );
@@ -565,7 +598,9 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
       dev: {
         assetPrefix: '/replacement-assets/',
         writeToDisk: false,
-        hmr: true,
+        // The native-container control manually drives public hot.check;
+        // avoid injecting Rsbuild's unrelated browser WebSocket/overlay client.
+        hmr: !manualContainerHmr,
         liveReload: false,
       },
       output: { minify: false, sourceMap: false },
@@ -605,6 +640,7 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
   );
   return {
     ...app,
+    compilationFailure: () => compilationFailure,
     serverCompilation() {
       if (!serverCompilation)
         throw new Error('No completed server compilation');
@@ -716,7 +752,33 @@ describe('native development', () => {
     const first = await fetch(entryUrl, { method: 'HEAD' });
     const revision = first.headers.get(NATIVE_FEDERATION_DEV_REVISION_HEADER);
     expect(revision).toMatch(/^[a-f0-9]{64}$/u);
-    const firstManifest = await (await fetch(manifestUrl)).text();
+    const discovered = await fetch(manifestUrl, {
+      headers: { Origin: 'http://another-host.invalid' },
+    });
+    expect(discovered.headers.get('Cache-Control')).toBe('no-store');
+    const link = discovered.headers.get('Link');
+    expect(link).toMatch(
+      /^<https?:\/\/[^>]+\/__ultramodern_mf__\/[a-f0-9]+\/mf-manifest\.json>; rel="ultramodern-completed-graph"$/u,
+    );
+    const immutableManifestUrl = /^<([^>]+)>/u.exec(link!)![1];
+    const firstManifest = await discovered.text();
+    const frozenManifest = await fetch(immutableManifestUrl);
+    expect(frozenManifest.headers.get('Cache-Control')).toBe(
+      'public, max-age=31536000, immutable',
+    );
+    expect(await frozenManifest.text()).toBe(firstManifest);
+    const metadata = JSON.parse(firstManifest).metaData;
+    expect(metadata.ssrPublicPath).toBe(new URL('/bundles/', app.address).href);
+    const immutableEntryUrl = new URL(
+      metadata.remoteEntry.name,
+      metadata.publicPath,
+    );
+    const immutableEntry = await fetch(immutableEntryUrl);
+    expect(immutableEntry.status).toBe(200);
+    const immutableEntryBytes = await immutableEntry.text();
+    const immutableRevision = frozenManifest.headers.get(
+      NATIVE_FEDERATION_DEV_REVISION_HEADER,
+    );
     const firstBrowserEntry = await (await fetch(browserEntryUrl)).text();
     const completed = Promise.withResolvers<void>();
     app.afterNextAggregateCompile(() => completed.resolve());
@@ -733,10 +795,140 @@ describe('native development', () => {
         NATIVE_FEDERATION_DEV_REVISION_HEADER,
       ),
     ).toBe(latestRevision);
-    expect(await (await fetch(manifestUrl)).text()).not.toBe(firstManifest);
+    const nextManifest = await fetch(manifestUrl);
+    expect(await nextManifest.text()).not.toBe(firstManifest);
+    expect(nextManifest.headers.get('Link')).not.toBe(link);
+    const retainedManifest = await fetch(immutableManifestUrl);
+    expect(await retainedManifest.text()).toBe(firstManifest);
+    expect(
+      retainedManifest.headers.get(NATIVE_FEDERATION_DEV_REVISION_HEADER),
+    ).toBe(immutableRevision);
+    expect(await (await fetch(immutableEntryUrl)).text()).toBe(
+      immutableEntryBytes,
+    );
     expect(await (await fetch(browserEntryUrl)).text()).not.toBe(
       firstBrowserEntry,
     );
+  }, 300_000);
+
+  it('advances the immutable container graph on hot apply before its first lazy import', async () => {
+    const app = await replacementApp(false, true, true);
+    await until(app, 'first:replacement-compiler');
+    const manifestUrl = new URL(
+      '/replacement-assets/mf-manifest.json',
+      app.address,
+    );
+    const initialManifest = await (await fetch(manifestUrl)).json();
+    const initialPublicPath = initialManifest.metaData.publicPath;
+    const entryUrl = new URL('remoteEntry.js', initialPublicPath);
+    const entryBytes = await (await fetch(entryUrl)).text();
+    const scripts: { url: string; source: string }[] = [];
+    const pending = new Set<ReturnType<typeof setTimeout>>();
+    interface ScriptElement {
+      src: string;
+      parentNode?: { removeChild(element: ScriptElement): void };
+      onload?: (event: { type: string; target: ScriptElement }) => void;
+      onerror?: (event: {
+        type: string;
+        target: ScriptElement;
+        error: unknown;
+      }) => void;
+      setAttribute(name: string, value: string): void;
+      getAttribute(name: string): string | undefined;
+    }
+    const elements: ScriptElement[] = [];
+    const context = vm.createContext({
+      console,
+      URL,
+      fetch,
+      setTimeout: (callback: () => void, delay: number) => {
+        const timer = setTimeout(() => {
+          pending.delete(timer);
+          callback();
+        }, delay);
+        pending.add(timer);
+        return timer;
+      },
+      clearTimeout: (timer: ReturnType<typeof setTimeout>) => {
+        pending.delete(timer);
+        clearTimeout(timer);
+      },
+    });
+    // Only browser script transport is supplied here. Container loading and
+    // check/apply are the unmodified emitted Rspack runtime over real HTTP.
+    context.self = context;
+    context.document = {
+      getElementsByTagName: (tag: string) => (tag === 'script' ? elements : []),
+      createElement: () => {
+        const attributes = new Map<string, string>();
+        return {
+          src: '',
+          setAttribute: (name: string, value: string) =>
+            attributes.set(name, value),
+          getAttribute: (name: string) => attributes.get(name),
+        };
+      },
+      head: {
+        appendChild: (element: ScriptElement) => {
+          elements.push(element);
+          element.parentNode = context.document.head;
+          void fetch(element.src)
+            .then(async response => {
+              if (!response.ok)
+                throw new Error(
+                  `Script ${element.src}: HTTP ${response.status}`,
+                );
+              const source = await response.text();
+              scripts.push({ url: element.src, source });
+              vm.runInContext(source, context, { filename: element.src });
+              element.onload?.({ type: 'load', target: element });
+            })
+            .catch(error =>
+              element.onerror?.({ type: 'error', target: element, error }),
+            );
+        },
+        removeChild: (element: ScriptElement) => {
+          const index = elements.indexOf(element);
+          if (index >= 0) elements.splice(index, 1);
+          element.parentNode = undefined;
+        },
+      },
+    };
+    try {
+      vm.runInContext(entryBytes, context, { filename: entryUrl.href });
+      // Native split/shared startup may publish a promise for the container.
+      // Await it before public init/get and before test-owned transport closes.
+      const container = await context.test_remote;
+      await container.init({});
+      const widget = (await container.get('./Widget'))();
+      expect(widget.marker).toBe('first-remotePUBLIC_SHARED_CHUNK');
+      expect(
+        scripts.some(script => script.source.includes('REMOTE_LAZY_CHUNK')),
+      ).toBe(false);
+      const completed = Promise.withResolvers<void>();
+      app.afterNextAggregateCompile(() => completed.resolve());
+      app.editRemoteLazy('REMOTE_LAZY_AFTER_HOT_APPLY');
+      await completed.promise;
+      const nextManifest = await (await fetch(manifestUrl)).json();
+      const nextPublicPath = nextManifest.metaData.publicPath;
+      expect(nextPublicPath).not.toBe(initialPublicPath);
+      expect(await widget.hotUpdate()).not.toBeNull();
+      const beforeLazy = scripts.length;
+      expect((await widget.lazy()).default).toBe('REMOTE_LAZY_AFTER_HOT_APPLY');
+      const lazyScripts = scripts.slice(beforeLazy);
+      expect(lazyScripts.length).toBeGreaterThan(0);
+      expect(
+        lazyScripts.every(script => script.url.startsWith(nextPublicPath)),
+      ).toBe(true);
+      expect(
+        lazyScripts.some(script =>
+          script.source.includes('REMOTE_LAZY_AFTER_HOT_APPLY'),
+        ),
+      ).toBe(true);
+      expect(await (await fetch(entryUrl)).text()).toBe(entryBytes);
+    } finally {
+      for (const timer of pending) clearTimeout(timer);
+    }
   }, 300_000);
 
   it('discards an old aggregate done callback after a sibling starts another compile', async () => {

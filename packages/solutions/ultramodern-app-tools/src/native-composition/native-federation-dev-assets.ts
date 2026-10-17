@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { mime } from '@modern-js/utils';
-import type { Rspack } from '@rsbuild/core';
+import { type Rspack, rspack } from '@rsbuild/core';
+import { nativeFederationDevGraphPublicPath } from './native-federation-dev-public-path';
 
 export interface NativeDevelopmentAsset {
   readonly bytes: Buffer;
   readonly contentType: string;
+  readonly immutable?: boolean;
+  readonly revision?: string;
+  readonly graphManifest?: string;
 }
 
 export const NATIVE_FEDERATION_DEV_REVISION_HEADER =
@@ -25,17 +29,169 @@ export function nativeFederationDevRevision(
   return hash.digest('hex');
 }
 
+const retainedFederationBudget = 256 * 1024 * 1024;
+
+/** Prepare atomically. Old hosts retain their admitted graphs; exceeding the
+ * budget refuses the next publication rather than evicting an unknown reader. */
+export function retainNativeFederationDevAssets(
+  retained: ReadonlyMap<string, NativeDevelopmentAsset>,
+  candidate: ReadonlyMap<string, NativeDevelopmentAsset>,
+  budget = retainedFederationBudget,
+): ReadonlyMap<string, NativeDevelopmentAsset> {
+  if (!Number.isSafeInteger(budget) || budget < 0)
+    throw new Error(
+      'Native federation graph retention requires a nonnegative byte budget',
+    );
+  const next = new Map(retained);
+  // Include URL bytes so even an empty emitted asset has a bounded cost.
+  let bytes = [...retained].reduce(
+    (total, [url, asset]) =>
+      total + Buffer.byteLength(url) + asset.bytes.length,
+    0,
+  );
+  for (const [url, asset] of candidate) {
+    if (!asset.immutable) continue;
+    const existing = next.get(url);
+    if (existing) {
+      if (
+        existing.contentType !== asset.contentType ||
+        !existing.bytes.equals(asset.bytes)
+      )
+        throw new Error(
+          `Native federation immutable graph changed at ${url}; restart the development server before publishing it`,
+        );
+      continue;
+    }
+    bytes += Buffer.byteLength(url) + asset.bytes.length;
+    if (bytes > budget)
+      throw new Error(
+        `Native federation retained graph budget exceeded (${bytes} > ${budget} bytes); restart the development server to release old graphs before publishing another build`,
+      );
+    next.set(url, asset);
+  }
+  return next;
+}
+
+interface NativeFederationContainer {
+  readonly name: string;
+  readonly browserManifest?: string;
+}
+
+export interface NativeFederationDevGraph {
+  readonly publicPath: string;
+  readonly manifest: string;
+  readonly immutableManifest: string;
+}
+
 /** The native MF owner marks its container, rather than exposing server output. */
-const containers = new WeakMap<Rspack.Compilation, string>();
+const containers = new WeakMap<Rspack.Compilation, NativeFederationContainer>();
+
+export function nativeFederationDevGraph(
+  result: Rspack.Stats,
+): NativeFederationDevGraph | undefined {
+  const compilation = result.compilation;
+  const descriptor = containers.get(compilation);
+  if (!descriptor?.browserManifest) return;
+  const publicPath = compilation.outputOptions.publicPath;
+  if (typeof publicPath !== 'string' || !compilation.fullHash)
+    throw new Error(
+      'Native development federation requires a completed browser publicPath and full hash',
+    );
+  return {
+    publicPath,
+    manifest: new URL(
+      descriptor.browserManifest,
+      publicPath.endsWith('/') ? publicPath : `${publicPath}/`,
+    ).href,
+    immutableManifest: new URL(
+      descriptor.browserManifest,
+      nativeFederationDevGraphPublicPath(publicPath, compilation.fullHash),
+    ).href,
+  };
+}
 
 export class NativeFederationDevAssetsPlugin {
-  constructor(private readonly container: string) {}
+  constructor(
+    private readonly container: string,
+    private readonly options: { readonly browserManifest?: string } = {},
+  ) {}
 
   apply(compiler: Rspack.Compiler): void {
-    compiler.hooks.thisCompilation.tap(
-      'UltraModernFederationDevAssets',
-      compilation => containers.set(compilation, this.container),
-    );
+    const name = 'UltraModernFederationDevAssets';
+    compiler.hooks.thisCompilation.tap(name, compilation => {
+      containers.set(compilation, { name: this.container, ...this.options });
+      const manifestFile = this.options.browserManifest;
+      if (!manifestFile) return;
+      if (!safeAssetPathname(`/${manifestFile}`))
+        throw new Error('Unsafe native development federation manifest path');
+      const publicPath = compilation.outputOptions.publicPath;
+      if (typeof publicPath !== 'string')
+        throw new Error(
+          'Native development federation requires an explicit browser publicPath',
+        );
+      const graphPrefix = nativeFederationDevGraphPublicPath(publicPath);
+      class GraphPublicPathRuntimeModule extends rspack.RuntimeModule {
+        constructor() {
+          super(
+            'native federation graph publicPath',
+            rspack.RuntimeModule.STAGE_ATTACH,
+          );
+          // Participate in Rspack's full-hash runtime regeneration so hot apply
+          // also advances publicPath before a previously unloaded chunk loads.
+          this.fullHash = true;
+        }
+        generate() {
+          // Rspack generates once before its full hash exists, then regenerates
+          // fullHash modules during final hashing. Keep the native hash getter
+          // in the executable path; the completed hash changes this module's
+          // source so HMR includes and re-executes it on every changed graph.
+          return `/* graph ${this.compilation?.fullHash ?? 'pending'} */\n${rspack.RuntimeGlobals.publicPath} = ${JSON.stringify(graphPrefix)} + ${rspack.RuntimeGlobals.getFullHash}() + "/";`;
+        }
+      }
+      compilation.hooks.additionalTreeRuntimeRequirements.tap(
+        name,
+        (chunk, requirements) => {
+          if (chunk.name !== this.container) return;
+          requirements.add(rspack.RuntimeGlobals.getFullHash);
+          requirements.add(rspack.RuntimeGlobals.publicPath);
+          compilation.addRuntimeModule(
+            chunk,
+            new GraphPublicPathRuntimeModule(),
+          );
+        },
+      );
+      // MF emits its manifest at OPTIMIZE_TRANSFER. Publish its final browser
+      // graph prefix afterwards, preserving the independently owned Node URL.
+      compilation.hooks.processAssets.tap(
+        { name, stage: rspack.Compilation.PROCESS_ASSETS_STAGE_REPORT + 1 },
+        () => {
+          const asset = compilation.getAsset(manifestFile);
+          if (!asset || !compilation.fullHash)
+            throw new Error(
+              'Native development federation browser manifest was not emitted by a completed compilation',
+            );
+          const manifest = JSON.parse(asset.source.source().toString());
+          if (
+            !manifest ||
+            typeof manifest !== 'object' ||
+            !manifest.metaData ||
+            typeof manifest.metaData !== 'object' ||
+            manifest.metaData.name !== this.container
+          )
+            throw new Error(
+              'Native development federation manifest belongs to another container',
+            );
+          manifest.metaData.publicPath = nativeFederationDevGraphPublicPath(
+            publicPath,
+            compilation.fullHash,
+          );
+          compilation.updateAsset(
+            manifestFile,
+            new rspack.sources.RawSource(JSON.stringify(manifest)),
+          );
+        },
+      );
+    });
   }
 }
 
@@ -59,8 +215,9 @@ export async function collectNativeFederationDevAssets(
 ): Promise<ReadonlyMap<string, NativeDevelopmentAsset>> {
   const assets = new Map<string, NativeDevelopmentAsset>();
   const compilation = result.compilation;
-  const container = containers.get(compilation);
-  if (!container) return assets;
+  const descriptor = containers.get(compilation);
+  if (!descriptor) return assets;
+  const container = descriptor.name;
   if (privateEntries.includes(container))
     throw new Error(
       'Native development federation container conflicts with an application entry',
@@ -70,7 +227,13 @@ export async function collectNativeFederationDevAssets(
     throw new Error(
       `Native development federation container ${container} was not emitted`,
     );
-  const publicPath = compilation.outputOptions.publicPath;
+  const graph = nativeFederationDevGraph(result);
+  const publicPath = graph
+    ? nativeFederationDevGraphPublicPath(
+        graph.publicPath,
+        compilation.fullHash!,
+      )
+    : compilation.outputOptions.publicPath;
   const prefix = typeof publicPath === 'string' ? URL.parse(publicPath) : null;
   if (
     !prefix ||
@@ -107,6 +270,7 @@ export async function collectNativeFederationDevAssets(
       )
         files.add(name);
     }
+  if (descriptor.browserManifest) files.add(descriptor.browserManifest);
   for (const name of files) {
     if (privateFiles.has(name) || /\.hot-update\./u.test(name)) continue;
     const asset = compilation.getAsset(name);
@@ -117,7 +281,8 @@ export async function collectNativeFederationDevAssets(
     if (
       asset.info.hotModuleReplacement ||
       asset.info.development ||
-      (asset.info.sourceFilename &&
+      (name !== descriptor.browserManifest &&
+        asset.info.sourceFilename &&
         /\.(?:map|json|[cm]?[jt]sx?|g[jt]s|ya?ml|toml)$|(?:^|[/\\])\.env(?:\.|$)/u.test(
           asset.info.sourceFilename.split(/[?#]/u)[0],
         ))
@@ -136,11 +301,15 @@ export async function collectNativeFederationDevAssets(
       name.split('/').map(encodeURIComponent).join('/'),
       prefix,
     );
-    assets.set(url.href, {
+    const published = {
       bytes: await readAsset(name),
       contentType:
         mime.contentType(path.extname(name)) || 'application/octet-stream',
-    });
+      ...(graph ? { immutable: true } : {}),
+    };
+    assets.set(url.href, published);
+    if (graph && name === descriptor.browserManifest)
+      assets.set(graph.manifest, { ...published, immutable: false });
   }
   return assets;
 }
