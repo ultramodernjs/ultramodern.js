@@ -37,7 +37,7 @@ function fixture(
     manifest?: unknown;
     render?: (request: Request) => Promise<Response>;
     requestTimeout?: number;
-    fetchManifest?: () => Promise<Response>;
+    fetchManifest?: (request: Request) => Promise<Response>;
     signal?: AbortSignal;
   } = {},
 ) {
@@ -64,9 +64,9 @@ function fixture(
     admitRendererContract,
     requestTimeout: options.requestTimeout,
     signal: options.signal,
-    async fetchManifest() {
+    async fetchManifest(request) {
       manifestRequests++;
-      if (options.fetchManifest) return options.fetchManifest();
+      if (options.fetchManifest) return options.fetchManifest(request);
       return Response.json(options.manifest ?? manifestFixture());
     },
   });
@@ -84,7 +84,7 @@ test('admits publication before POST and returns the native codec string unchang
         'https://tractor.example/en/_mf/fragment/widget',
       );
       expect(request.method).toBe('POST');
-      expect(request.redirect).toBe('error');
+      expect(request.redirect).toBe('manual');
       const envelope = (await request.json()) as Record<string, unknown>;
       expect(envelope.payload).toBe(nativePayload);
       return responseFor(envelope);
@@ -98,6 +98,88 @@ test('admits publication before POST and returns the native codec string unchang
   expect(result.admitted.identity.buildId).toBe('built-remote');
   expect(counts()).toEqual([1, 1]);
 });
+
+test('supports Worker Request redirect modes without following manifest or snapshot redirects', async () => {
+  const NativeRequest = globalThis.Request;
+  const observed: { method: string; redirect: RequestRedirect }[] = [];
+  class WorkerRequest extends NativeRequest {
+    constructor(
+      input: ConstructorParameters<typeof NativeRequest>[0],
+      init?: RequestInit,
+    ) {
+      if (init?.redirect === 'error')
+        throw new TypeError(
+          'Invalid redirect value, must be follow or manual.',
+        );
+      super(input, init);
+      observed.push({ method: this.method, redirect: this.redirect });
+    }
+  }
+  globalThis.Request = WorkerRequest;
+  try {
+    const { transport, counts } = fixture();
+    expect(
+      (await transport.request({ ...coordinate, payload: nativePayload }))
+        .payload,
+    ).toBe(nativePayload);
+    expect(observed).toEqual([
+      { method: 'GET', redirect: 'manual' },
+      { method: 'POST', redirect: 'manual' },
+    ]);
+    expect(counts()).toEqual([1, 1]);
+  } finally {
+    globalThis.Request = NativeRequest;
+  }
+});
+
+test.each([
+  ...[301, 302, 303, 307, 308].map(status => ({ phase: 'manifest', status })),
+  ...[301, 302, 303, 307, 308].map(status => ({ phase: 'snapshot', status })),
+])(
+  'rejects $phase redirect $status and cancels its body without following Location',
+  async ({ phase, status }) => {
+    let canceled = false;
+    const redirect = (body: unknown) =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(JSON.stringify(body)));
+          },
+          cancel() {
+            canceled = true;
+            return new Promise(() => {});
+          },
+        }),
+        {
+          status,
+          headers: { location: 'https://foreign.example/redirect-target' },
+        },
+      );
+    const { transport, counts } = fixture({
+      async fetchManifest(request) {
+        expect(request.url).toBe(requestCoordinate.manifestUrl);
+        expect(request.redirect).toBe('manual');
+        return phase === 'manifest'
+          ? redirect(manifestFixture())
+          : Response.json(manifestFixture());
+      },
+      async render(request) {
+        expect(request.redirect).toBe('manual');
+        const envelope = await request.json();
+        return redirect({
+          ...envelope,
+          schema: 'ultramodern.worker-federation-response',
+          payload: nativePayload,
+        });
+      },
+    });
+    await expect(
+      transport.request({ ...coordinate, payload: nativePayload }),
+    ).rejects.toThrow(`publication request failed (${status})`);
+    expect(canceled).toBe(true);
+    expect(counts()).toEqual([1, phase === 'manifest' ? 0 : 1]);
+  },
+);
 
 test.each(['admission', 'snapshot'] as const)(
   'a reused admission or repeated snapshot cannot return after its caller deadline (%s)',

@@ -75,6 +75,9 @@ async function readResponseJson(
     cancelBody();
     throw error;
   }
+  // Workers support manual redirects, not redirect: 'error'. A terminal 3xx
+  // response is not OK: reject and cancel it here, never follow its Location.
+  // Also reject a binding that ignored manual mode and followed a redirect.
   if (
     !response.ok ||
     response.redirected ||
@@ -181,6 +184,11 @@ export function createWorkerFederationTransport(options: {
   let retired: { reason: unknown } | undefined;
   const onOwnerAbort = () => dispose(workerAbortReason(options.signal!));
 
+  // Read the live closure state at each use, including after awaited work.
+  function checkDocumentLiveness(): void {
+    if (retired) throw retired.reason;
+  }
+
   function dispose(
     reason: unknown = new DOMException(
       'The Worker federation document was disposed',
@@ -220,7 +228,7 @@ export function createWorkerFederationTransport(options: {
     deadlineAt = performance.now() + timeout,
     retainFulfilled = true,
   ): Promise<Value> {
-    if (retired) throw retired.reason;
+    checkDocumentLiveness();
     if (signal?.aborted) throw workerAbortReason(signal);
     let pending = cache.get(key);
     if (!pending) {
@@ -262,7 +270,7 @@ export function createWorkerFederationTransport(options: {
       const value = await (signal
         ? workerAbortable(captured.promise, signal)
         : captured.promise);
-      if (retired) throw retired.reason;
+      checkDocumentLiveness();
       // A fulfilled document cache still belongs to this caller's lease.
       checkWorkerFederationDeadline(deadlineAt, signal);
       return value;
@@ -299,7 +307,7 @@ export function createWorkerFederationTransport(options: {
       async (signal, checkDeadline) => {
         checkDeadline();
         const request = new Request(service.manifestUrl, {
-          redirect: 'error',
+          redirect: 'manual',
           signal,
         });
         const manifest = await fetchJson(
@@ -339,7 +347,7 @@ export function createWorkerFederationTransport(options: {
     admit: options => admitWithin(options).promise,
     async request({ remote, expose, locale, payload, signal }) {
       const deadlineAt = performance.now() + timeout;
-      if (retired) throw retired.reason;
+      checkDocumentLiveness();
       if (signal?.aborted) throw workerAbortReason(signal);
       const { service } = serviceCoordinate(remote, expose, locale);
       if (typeof payload === 'string') assertWorkerFederationBodySize(payload);
@@ -381,7 +389,7 @@ export function createWorkerFederationTransport(options: {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
                 body,
-                redirect: 'error',
+                redirect: 'manual',
                 signal,
               }),
               signal,
