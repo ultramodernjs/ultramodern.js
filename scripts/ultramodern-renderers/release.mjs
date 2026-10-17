@@ -7,6 +7,7 @@
 //     node scripts/ultramodern-renderers/release.mjs \
 //       (--version <x.y.z-ultramodern.N> | --cohort-dir <dir>) \
 //       [--renderers react,solid,octane] [--with worker,rsc,mf]
+//       [--browser-dependency-root <existing installed Playwright owner>]
 //       [--tractor-source <tractor demo checkout> [--tractor-revision <rev>]]
 //
 // For each renderer: generate a workspace with the packed create CLI,
@@ -40,6 +41,7 @@ import { runWorkerDispatchProbe } from '../ultramodern-production-readiness/rend
 import { readReleaseManifest } from '../ultramodern-publish/lib/source-create-proof/release-manifest.mjs';
 import { startEphemeralRegistry } from '../ultramodern-publish/lib/source-create-proof/runtime-proof/registry.mjs';
 import { defaultReleaseAgePolicyPath } from '../ultramodern-publish/run-release-acceptance.mjs';
+import { resolveBrowserDependencyRoot } from './browser-dependencies.mjs';
 import {
   assertRendererFeatureRow,
   rendererFeatureBinding,
@@ -72,6 +74,7 @@ const { values: opts } = parseArgs({
     'tractor-source': { type: 'string' },
     'tractor-revision': { type: 'string' },
     'browser-executable': { type: 'string' },
+    'browser-dependency-root': { type: 'string' },
     'work-dir': { type: 'string' },
     'required-features': { type: 'boolean', default: false },
     'acceptance-mode': { type: 'string', default: 'source' },
@@ -405,8 +408,8 @@ function browserExecutable() {
   if (process.env.PUPPETEER_EXECUTABLE_PATH)
     return process.env.PUPPETEER_EXECUTABLE_PATH;
   // The same Playwright Chromium the shared renderer specs launch.
-  const executable = createRequire(path.join(root, 'tests/package.json'))(
-    'playwright',
+  const executable = createRequire(path.join(playwrightRoot(), 'package.json'))(
+    'playwright-core',
   ).chromium.executablePath();
   if (!fs.existsSync(executable))
     throw new Error(
@@ -417,12 +420,9 @@ function browserExecutable() {
 
 /** A directory that resolves the workspace's playwright-core (MF runner). */
 function playwrightRoot() {
-  const store = path.join(root, 'node_modules/.pnpm');
-  const entry = fs
-    .readdirSync(store)
-    .find(name => name.startsWith('playwright-core@'));
-  if (!entry) throw new Error('playwright-core is not installed');
-  return path.join(store, entry);
+  return resolveBrowserDependencyRoot(
+    opts['browser-dependency-root'] ?? path.join(root, 'tests'),
+  );
 }
 
 async function main() {
