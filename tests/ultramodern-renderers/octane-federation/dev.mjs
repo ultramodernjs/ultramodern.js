@@ -2,7 +2,7 @@
 // Run through owned-temp-dir. This proof edits only its disposable remote app.
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
@@ -10,6 +10,10 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { retryMaintenanceOperation } from '../../../scripts/ultramodern-production-readiness/react-rsc-worker-proof/lifecycle.mjs';
 import { inspectOwnedProcessGroup } from '../../../scripts/ultramodern-production-readiness/react-rsc-worker-proof/runtime.mjs';
+import {
+  installBrowserErrorDiagnosticsViaCDP,
+  ownedBrowserInvocation,
+} from './browser-errors.mjs';
 import {
   createOctaneFederationFixtures,
   decodeOctaneSSRDocument,
@@ -53,11 +57,23 @@ const sourceContext = sourceHelpers
 if (packedContext)
   assert.equal(path.resolve(temporary), path.resolve(packedContext.workRoot));
 const owner = `octane-mf-dev-${process.pid}`;
+const browserSession = `mfdev-${process.pid}-${randomUUID().slice(0, 8)}`;
+const browserConfig = path.join(temporary, `${browserSession}.json`);
+const browserInvocation = ownedBrowserInvocation({
+  env: process.env,
+  configPath: browserConfig,
+  executable:
+    sourceContext?.browserExecutable ??
+    packedContext?.browserExecutable ??
+    process.env.AGENT_BROWSER_EXECUTABLE_PATH,
+  session: browserSession,
+});
 const cancellation = new AbortController();
 const children = [];
 const artifacts = new Set();
 const results = {};
 let browserOpened = false;
+let disposeBrowserDiagnostics;
 let proxy;
 let developmentURLs;
 let remoteWidgetFile;
@@ -553,19 +569,16 @@ async function markingProxy(target, port, allowedEntrySources) {
 
 async function browser(...args) {
   if (args[0] === 'open') browserOpened = true;
-  const { stdout } = await execute('agent-browser', args, {
-    env: {
-      ...process.env,
-      AGENT_BROWSER_SESSION: owner,
-      AGENT_BROWSER_HEADED: 'false',
-      ...(sourceContext
-        ? { AGENT_BROWSER_EXECUTABLE_PATH: sourceContext.browserExecutable }
-        : {}),
+  const { stdout } = await execute(
+    'agent-browser',
+    [...browserInvocation.args, ...args],
+    {
+      env: browserInvocation.env,
+      maxBuffer: 8 * 1024 * 1024,
+      timeout: 180_000,
+      signal: cancellation.signal,
     },
-    maxBuffer: 8 * 1024 * 1024,
-    timeout: 180_000,
-    signal: cancellation.signal,
-  });
+  );
   return stdout.trim();
 }
 const evaluate = async source =>
@@ -583,6 +596,7 @@ const browserObservation = () =>
 
 let failure;
 try {
+  await fs.writeFile(browserConfig, '{}\n', { flag: 'wx' });
   if (sourceContext) {
     results.mode = 'source-installed';
     results.installedConsumers = sourceContext.installations;
@@ -747,7 +761,13 @@ export default function Away() { const router = useRouter(); return <section dat
   assert.ok(allowedEntrySources.length > 0);
   proxy = await markingProxy(nativeHostOrigin, proxyPort, allowedEntrySources);
   results.entryBarrier = proxy.proof;
-  await browser('open', 'about:blank');
+  const startupDiagnosticTarget = `about:blank#${browserSession}`;
+  await browser('open', startupDiagnosticTarget);
+  disposeBrowserDiagnostics = await installBrowserErrorDiagnosticsViaCDP({
+    browser,
+    targetURL: startupDiagnosticTarget,
+    signal: cancellation.signal,
+  });
   await browser('network', 'requests', '--clear');
   await browser('open', `http://127.0.0.1:${proxyPort}`);
   await waitFor(
@@ -1282,6 +1302,9 @@ export default function Away() { const router = useRouter(); return <section dat
       resources: performance.getEntriesByType('resource').map(entry => ({ name: entry.name, initiator: entry.initiatorType, responseEnd: entry.responseEnd, transferSize: entry.transferSize }))
     })`).catch(String);
     results.pageErrors = await browser('errors').catch(String);
+    results.rawBrowserErrors = disposeBrowserDiagnostics
+      ? await disposeBrowserDiagnostics.snapshot().catch(String)
+      : 'Startup diagnostics were not installed.';
     results.console = await browser('console').catch(String);
     results.html = await browser('get', 'html', 'body').catch(String);
     if (
@@ -1330,6 +1353,9 @@ export default function Away() { const router = useRouter(); return <section dat
       } catch (error) {
         results.directHostControl = { hydrated: false, error: String(error) };
       }
+      results.directHostRawErrors = disposeBrowserDiagnostics
+        ? await disposeBrowserDiagnostics.snapshot().catch(String)
+        : 'Startup diagnostics were not installed.';
       // Initial hydration failure must not hide same-process server freshness.
       // Keep the original failure verdict while measuring the real native edit.
       try {
@@ -1390,16 +1416,10 @@ export default function Away() { const router = useRouter(); return <section dat
   );
 } finally {
   const cleanupErrors = [];
+  await disposeBrowserDiagnostics?.().catch(error => cleanupErrors.push(error));
   if (browserOpened)
-    await execute('agent-browser', ['close'], {
-      env: {
-        ...process.env,
-        AGENT_BROWSER_SESSION: owner,
-        AGENT_BROWSER_HEADED: 'false',
-        ...(sourceContext
-          ? { AGENT_BROWSER_EXECUTABLE_PATH: sourceContext.browserExecutable }
-          : {}),
-      },
+    await execute('agent-browser', [...browserInvocation.args, 'close'], {
+      env: browserInvocation.env,
       timeout: 15_000,
     }).catch(error => cleanupErrors.push(error));
   let processesRetired = true;

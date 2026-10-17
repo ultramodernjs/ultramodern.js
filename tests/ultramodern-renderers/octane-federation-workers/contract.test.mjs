@@ -18,8 +18,114 @@ import {
   createWorkerFederationFaultHandler,
   workerFederationFaultSource,
 } from './fixtures.mjs';
-import { isSharedCounterCompilation, readWorkerFixturePlan } from './proof.mjs';
+import {
+  isSharedCounterCompilation,
+  readWorkerFixturePlan,
+  verifyWorkerCompositionRoutes,
+} from './proof.mjs';
 import { sourceWorkerGitignore } from './source.mjs';
+
+for (const inspectionFails of [false, true]) {
+  test(`Worker composition failure diagnostics retain the original assertion and cleanup (inspectionFails=${inspectionFails})`, async t => {
+    const original = new Error('Original SSR CSS assertion failure');
+    const listeners = new Map();
+    const cleanup = [];
+    const logs = [];
+    t.mock.method(console, 'error', (...args) => logs.push(args));
+    const browserObservation = {
+      observed: { style: { borderTopColor: 'rgb(0, 0, 0)' } },
+      stylesheets: [
+        { href: 'http://127.0.0.1/remote.css', sheetPresent: false },
+      ],
+    };
+    const page = {
+      setDefaultTimeout(value) {
+        assert.equal(value, 15_000);
+      },
+      on(name, handler) {
+        listeners.set(name, handler);
+      },
+      async route() {},
+      async goto() {
+        listeners.get('console')({
+          type: () => 'error',
+          text: () => 'e'.repeat(1024),
+        });
+        for (let index = 0; index < 30; index++) {
+          const request = { resourceType: () => 'stylesheet' };
+          listeners.get('response')({
+            request: () => request,
+            url: () => `http://127.0.0.1/remote-${index}.css`,
+            status: () => 404,
+          });
+        }
+        listeners.get('requestfailed')({
+          url: () => 'http://127.0.0.1/remote.css',
+          resourceType: () => 'stylesheet',
+          failure: () => ({ errorText: 'net::ERR_CONNECTION_RESET' }),
+        });
+        return { status: () => 200 };
+      },
+      locator() {
+        return {
+          async waitFor() {},
+          async count() {
+            return 1;
+          },
+        };
+      },
+      async waitForFunction() {
+        throw original;
+      },
+      async evaluate() {
+        if (inspectionFails) throw new Error('Browser inspection unavailable');
+        return browserObservation;
+      },
+      async unrouteAll(options) {
+        cleanup.push(['unroute', options]);
+      },
+      async close() {
+        cleanup.push(['close']);
+      },
+    };
+    const expected = {
+      remote: 'remote-a',
+      expose: './Widget',
+      selector: '[data-worker-remote="a"]',
+      contextSelector: '[data-host-context]',
+    };
+    await assert.rejects(
+      verifyWorkerCompositionRoutes(
+        {
+          async newPage() {
+            return page;
+          },
+        },
+        'http://127.0.0.1:9999',
+        [{ path: '/en', expected: [expected] }],
+        'host',
+      ),
+      error => error === original,
+    );
+    assert.deepEqual(cleanup, [['unroute', { behavior: 'wait' }], ['close']]);
+    assert.equal(logs.length, 1);
+    const detail = JSON.parse(logs[0][1]);
+    assert.equal(logs[0][0], 'Worker composition failure diagnostic:');
+    assert.equal(detail.route, '/en');
+    assert.deepEqual(detail.expected, expected);
+    assert.equal(detail.phase, 'SSR stylesheet application');
+    assert.equal(detail.resourceEvents.length, 24);
+    assert.equal(detail.resourceEvents[0].url, 'http://127.0.0.1/remote-6.css');
+    assert.equal(detail.requestFailures[0].error, 'net::ERR_CONNECTION_RESET');
+    assert.equal(detail.errors[0].length, 512);
+    if (inspectionFails)
+      assert.match(
+        detail.browser.inspectionError,
+        /Browser inspection unavailable/,
+      );
+    else assert.deepEqual(detail.browser, browserObservation);
+  });
+}
 
 test('compiled Counter resources resolve from the application to the same physical source', t => {
   const root = fs.realpathSync(

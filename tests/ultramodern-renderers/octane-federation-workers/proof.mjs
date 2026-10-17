@@ -188,6 +188,80 @@ export function readWorkerFixturePlan(
   return { ...plan, root, applications };
 }
 
+async function reportWorkerCompositionFailure(page, detail) {
+  let timer;
+  try {
+    const inspection = page.evaluate(
+      ({ selector }) => {
+        const bounded = value => String(value ?? '').slice(0, 512);
+        const node = selector ? document.querySelector(selector) : null;
+        const style = node ? getComputedStyle(node) : null;
+        return {
+          url: bounded(location.href),
+          readyState: document.readyState,
+          observed: node
+            ? {
+                tag: node.tagName,
+                className: bounded(node.className),
+                style: {
+                  borderTopColor: style.borderTopColor,
+                  borderTopStyle: style.borderTopStyle,
+                  borderTopWidth: style.borderTopWidth,
+                  display: style.display,
+                  visibility: style.visibility,
+                },
+              }
+            : null,
+          stylesheets: [
+            ...document.querySelectorAll(
+              'link[rel~="stylesheet"],link[as="style"]',
+            ),
+          ]
+            .slice(0, 24)
+            .map(link => ({
+              href: bounded(link.href),
+              rel: bounded(link.rel),
+              as: bounded(link.as),
+              media: bounded(link.media),
+              disabled: link.disabled,
+              sheetPresent: link.sheet !== null,
+            })),
+          resourceTimings: performance
+            .getEntriesByType('resource')
+            .slice(-24)
+            .map(entry => ({
+              url: bounded(entry.name),
+              initiatorType: entry.initiatorType,
+              duration: entry.duration,
+              transferSize: entry.transferSize,
+            })),
+        };
+      },
+      { selector: detail.expected?.selector ?? null },
+    );
+    // Observability only: a broken page cannot indefinitely delay the original
+    // failure or its existing browser/resource cleanup.
+    const browser = await Promise.race([
+      inspection.catch(error => ({
+        inspectionError: String(error).slice(0, 512),
+      })),
+      new Promise(resolve => {
+        timer = setTimeout(
+          () =>
+            resolve({ inspectionError: 'Browser diagnostic exceeded 1000ms.' }),
+          1000,
+        );
+      }),
+    ]);
+    console.error(
+      'Worker composition failure diagnostic:',
+      JSON.stringify({ ...detail, browser }),
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Each declared composition coordinate has its own direct server document. */
 export async function verifyWorkerCompositionRoutes(
   context,
@@ -211,6 +285,38 @@ export async function verifyWorkerCompositionRoutes(
     page.on('console', message => {
       if (message.type() === 'error') errors.push(message.text());
     });
+    const resourceEvents = [];
+    const requestFailures = [];
+    const bounded = value => String(value ?? '').slice(0, 512);
+    const append = (records, event) => {
+      if (records.length === 24) records.shift();
+      records.push(event);
+    };
+    page.on('response', response => {
+      const request = response.request();
+      append(resourceEvents, {
+        event: 'response',
+        url: bounded(response.url()),
+        type: request.resourceType(),
+        status: response.status(),
+      });
+    });
+    page.on('request', request => {
+      append(resourceEvents, {
+        event: 'request',
+        url: bounded(request.url()),
+        type: request.resourceType(),
+      });
+    });
+    page.on('requestfailed', request => {
+      append(requestFailures, {
+        url: bounded(request.url()),
+        type: request.resourceType(),
+        error: bounded(request.failure()?.errorText),
+      });
+    });
+    let expectedCoordinate;
+    let phase = 'navigation';
     let release;
     const gate = new Promise(resolve => {
       release = resolve;
@@ -226,6 +332,8 @@ export async function verifyWorkerCompositionRoutes(
       assert.equal(response.status(), 200);
       const observed = [];
       for (const expected of route.expected) {
+        expectedCoordinate = expected;
+        phase = 'SSR visibility';
         const element = page.locator(expected.selector);
         await element.waitFor({ state: 'visible' });
         assert.equal(
@@ -233,12 +341,14 @@ export async function verifyWorkerCompositionRoutes(
           1,
           'A composition expose has ambiguous SSR markup.',
         );
+        phase = 'SSR stylesheet application';
         await page.waitForFunction(selector => {
           const node = document.querySelector(selector);
           return (
             node && getComputedStyle(node).borderTopColor === 'rgb(13, 117, 83)'
           );
         }, expected.selector);
+        phase = 'SSR context assertions';
         const contextHost = page.locator(expected.contextSelector);
         assert.equal(
           await contextHost.count(),
@@ -352,6 +462,7 @@ export async function verifyWorkerCompositionRoutes(
           'The nested Worker received the layout match instead of the page match.',
         );
       release();
+      phase = 'browser hydration adoption';
       await page.waitForFunction(
         ids =>
           ids.every(id => globalThis.__octaneWorkerProof?.mounts[id] === 1),
@@ -515,6 +626,27 @@ export async function verifyWorkerCompositionRoutes(
         adopted: true,
         nestedDisposed: Boolean(nestedMatch),
       });
+    } catch (error) {
+      try {
+        await reportWorkerCompositionFailure(page, {
+          route: bounded(route.path),
+          expected: expectedCoordinate
+            ? {
+                remote: bounded(expectedCoordinate.remote),
+                expose: bounded(expectedCoordinate.expose),
+                selector: bounded(expectedCoordinate.selector),
+                contextSelector: bounded(expectedCoordinate.contextSelector),
+              }
+            : null,
+          phase,
+          resourceEvents,
+          requestFailures,
+          errors: errors.slice(-16).map(bounded),
+        });
+      } catch {
+        // Diagnostics cannot replace the original assertion or browser error.
+      }
+      throw error;
     } finally {
       release();
       await page.unrouteAll({ behavior: 'wait' });
