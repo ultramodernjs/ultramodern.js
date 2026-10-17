@@ -176,6 +176,51 @@ test('ordinary fixtures retain public generator identity and share one native si
     ...options,
     hostServiceSource: 'topology',
   });
+  const packageFixture = createOctaneWorkerFederationFixtures({
+    ...options,
+    sharedCounterPackage: '@authored-worker/shared-counter',
+    dependencies: {
+      ...dependencies,
+      '@authored-worker/shared-counter': 'workspace:*',
+    },
+  });
+  assert.equal(
+    packageFixture.shared['Counter.tsx'],
+    fixture.shared['Counter.tsx'],
+  );
+  for (const { app, files } of packageFixture.applications) {
+    const source =
+      files[
+        app === host ? 'src/components/Shell.tsx' : 'src/components/widget.tsx'
+      ];
+    assert.match(
+      source,
+      /import Counter from '@authored-worker\/shared-counter'/u,
+    );
+    assert.equal(
+      JSON.parse(files['package.json']).dependencies[
+        '@authored-worker/shared-counter'
+      ],
+      'workspace:*',
+    );
+    assert.deepEqual(JSON.parse(files['tsconfig.json']).include, [
+      'src',
+      '*.config.ts',
+      'node_modules/.modern-js',
+    ]);
+    assert.equal(
+      Object.keys(files).filter(name => name.endsWith('Counter.tsx')).length,
+      0,
+    );
+  }
+  assert.throws(
+    () =>
+      createOctaneWorkerFederationFixtures({
+        ...options,
+        sharedCounterPackage: '@authored-worker/shared-counter',
+      }),
+    /workspace:\*/u,
+  );
   assert.doesNotMatch(
     presetFixture.applications[0].files['modern.config.ts'],
     /"services":/u,

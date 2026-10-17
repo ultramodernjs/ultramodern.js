@@ -245,12 +245,18 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
   );
   const workspaceRoot = path.join(workRoot, 'workspace');
   fs.mkdirSync(workspaceRoot);
-  const requests = input.packageRequests;
+  const requests = {
+    ...input.packageRequests,
+    '@modern-js/federation-runtime':
+      input.packageRequests?.['@modern-js/federation-runtime'] ??
+      input.frameworkOverrides?.['@modern-js/federation-runtime'],
+  };
   assert(requests && typeof requests === 'object');
   for (const name of [
     '@modern-js/ultramodern-app-tools',
     '@modern-js/renderer-octane',
     '@modern-js/renderer-core',
+    '@modern-js/federation-runtime',
     '@modern-js/i18n-runtime-extensions',
     '@modern-js/ultramodern-create',
     'octane',
@@ -352,7 +358,11 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
     services: apps.slice(1).map(service),
     remoteServices: { 'remote-a': [service(apps[2])] },
     hostServiceSource: 'topology',
-    dependencies: requests,
+    sharedCounterPackage: '@authored-worker/shared-counter',
+    dependencies: {
+      ...requests,
+      '@authored-worker/shared-counter': 'workspace:*',
+    },
   });
   writeJson(path.join(workspaceRoot, 'package.json'), {
     name: 'authored-source-workers',
@@ -364,7 +374,7 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
   });
   const policyPath = path.join(workspaceRoot, 'pnpm-workspace.yaml');
   writeJson(policyPath, {
-    packages: ['apps/*', 'verticals/*'],
+    packages: ['apps/*', 'verticals/*', 'shared'],
     minimumReleaseAge: 1440,
     minimumReleaseAgeStrict: true,
     minimumReleaseAgeIgnoreMissingTime: false,
@@ -389,6 +399,14 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
     },
   );
   writeFiles(path.join(workspaceRoot, 'shared'), fixture.shared);
+  writeJson(path.join(workspaceRoot, 'shared/package.json'), {
+    name: '@authored-worker/shared-counter',
+    version: '0.0.0',
+    private: true,
+    type: 'module',
+    exports: { '.': { types: './Counter.tsx', default: './Counter.tsx' } },
+    dependencies: { octane: requests.octane },
+  });
   for (const { app, files } of fixture.applications)
     writeFiles(path.join(workspaceRoot, app.directory), files);
   const environment = {
@@ -429,6 +447,24 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
       printCommandFailure(label, log, error);
       throw error;
     }
+  };
+  const assertCleanSource = async label => {
+    const statusLabel = `${label}-source-status`;
+    await run(
+      'git',
+      ['status', '--porcelain', '--untracked-files=all'],
+      workspaceRoot,
+      statusLabel,
+    );
+    const status = fs.readFileSync(
+      path.join(workRoot, `${statusLabel}.log`),
+      'utf8',
+    );
+    assert.equal(
+      status,
+      '',
+      `Authored Worker sources changed after ${label}:\n${status}`,
+    );
   };
   const registrations = [];
   const artifactOwner = `source-worker-${process.pid}`;
@@ -547,6 +583,7 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
       workspaceRoot,
       'source-git-commit',
     );
+    await assertCleanSource('source-git-commit');
     for (const [index, app] of apps.entries()) {
       const request = createRequire(
         path.join(workspaceRoot, app.path, 'package.json'),
@@ -562,9 +599,8 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
         assert.equal(actual.name, name);
         assert.equal(actual.version, version);
       }
-      // The enclosing registered owned-temp-dir lease owns dist-cloudflare.
-      // It is not a separately registrable DiskGuardian build basename.
-      await artifact(path.join(workspaceRoot, app.path, '.output'), 'build');
+      // The enclosing owned-temp-dir lease owns both dist-cloudflare and
+      // .output. Deploy replaces .output, so a nested inode lease is invalid.
       assert.equal(ports[index], Number(new URL(origins[index]).port));
     }
     const applications = apps.map((app, index) => ({
@@ -588,7 +624,7 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
       for (const [operation, args] of [
         ['build', ['build']],
         ['deploy', ['deploy', '--skip-build']],
-      ])
+      ]) {
         await run(
           process.execPath,
           [installedBin(application.appRoot), ...args],
@@ -596,6 +632,8 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
           `${label}-${operation}`,
           env,
         );
+        await assertCleanSource(`${label}-${operation}`);
+      }
       if (application.role === 'remote')
         closeServers.push(
           await serveAssets(application.clientRoot, application.origin),

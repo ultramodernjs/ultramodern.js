@@ -225,11 +225,16 @@ export function createOctaneWorkerFederationFixtures({
   services,
   remoteServices,
   hostServiceSource = 'authored',
+  sharedCounterPackage,
   dependencies,
   host,
   remotes,
 }) {
   assert(['authored', 'topology'].includes(hostServiceSource));
+  if (sharedCounterPackage !== undefined) {
+    assert.match(sharedCounterPackage, /^@[a-z0-9-]+\/[a-z0-9-]+$/u);
+    assert.equal(dependencies[sharedCounterPackage], 'workspace:*');
+  }
   assert.equal(
     remoteOrigins.length,
     2,
@@ -268,6 +273,7 @@ export function createOctaneWorkerFederationFixtures({
   ])
     assert(dependencies[name], `Missing native fixture dependency ${name}.`);
   const counterImport = app =>
+    sharedCounterPackage ??
     path.posix.relative(
       path.posix.join(app.directory, 'src/components'),
       'shared/Counter',
@@ -291,7 +297,9 @@ export function createOctaneWorkerFederationFixtures({
       tsrx: { compiler: 'octane/compiler/volar', platform: 'web' },
       include: [
         'src',
-        `${path.posix.relative(app.directory, 'shared')}/Counter.tsx`,
+        ...(sharedCounterPackage
+          ? []
+          : [`${path.posix.relative(app.directory, 'shared')}/Counter.tsx`]),
         '*.config.ts',
         'node_modules/.modern-js',
       ],
