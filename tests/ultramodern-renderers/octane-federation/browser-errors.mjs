@@ -117,6 +117,7 @@ export async function installBrowserErrorDiagnosticsViaCDP({
   const socket = new WebSocketImpl(endpoint.href);
   let sequence = 0;
   let sessionId;
+  let targetId;
   let disposed = false;
   const wait = (subscribe, label) =>
     new Promise((resolve, reject) => {
@@ -212,10 +213,14 @@ export async function installBrowserErrorDiagnosticsViaCDP({
     );
     if (targets.length !== 1)
       throw new Error('The exact owned diagnostic target is not unique.');
+    targetId = targets[0].targetId;
     ({ sessionId } = await command('Target.attachToTarget', {
-      targetId: targets[0].targetId,
+      targetId,
       flatten: true,
     }));
+    // This is a separate CDP attachment: the CLI enabling its own Page domain
+    // does not activate new-document scripts registered on this session.
+    await command('Page.enable', {}, sessionId);
     await command(
       'Page.addScriptToEvaluateOnNewDocument',
       { source: browserErrorDiagnosticsSource },
@@ -250,8 +255,18 @@ export async function installBrowserErrorDiagnosticsViaCDP({
       throw new Error(
         `Diagnostic snapshot failed: ${JSON.stringify(observed.exceptionDetails)}`,
       );
-    if (!Array.isArray(observed.result?.value))
-      throw new Error('The owned diagnostic snapshot is not an error list.');
+    if (!Array.isArray(observed.result?.value)) {
+      let observedURL = '<unavailable>';
+      try {
+        const { frameTree } = await command('Page.getFrameTree', {}, sessionId);
+        observedURL = frameTree?.frame?.url ?? '<missing frame URL>';
+      } catch (error) {
+        observedURL = `<unavailable: ${error.message}>`;
+      }
+      throw new Error(
+        `The owned diagnostic snapshot is not an error list (target ${targetId}, observed URL ${observedURL}).`,
+      );
+    }
     return observed.result.value;
   };
   return dispose;

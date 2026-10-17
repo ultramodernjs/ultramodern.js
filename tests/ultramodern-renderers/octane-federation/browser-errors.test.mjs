@@ -107,10 +107,12 @@ function cdp({
   diagnosticErrors = [],
   evaluationError = false,
   missingObserver = false,
+  pageEnableError = false,
 } = {}) {
   const commands = [];
   let closes = 0;
   let socket;
+  let pageEnabled = false;
   const targetURL = 'about:blank#owned-native-startup-proof';
   class Socket extends EventTarget {
     static OPEN = 1;
@@ -126,6 +128,8 @@ function cdp({
     send(encoded) {
       const command = JSON.parse(encoded);
       commands.push(command);
+      if (command.method === 'Page.enable' && !pageEnableError)
+        pageEnabled = true;
       const result =
         command.method === 'Target.getTargets'
           ? {
@@ -156,12 +160,19 @@ function cdp({
                       ),
                     },
                   }
-              : {};
+              : command.method === 'Page.getFrameTree'
+                ? { frameTree: { frame: { url: 'http://localhost:62271/' } } }
+                : {};
       const response =
-        scriptError &&
-        command.method === 'Page.addScriptToEvaluateOnNewDocument'
-          ? { id: command.id, error: { message: 'script installation failed' } }
-          : { id: command.id, result };
+        command.method === 'Page.enable' && pageEnableError
+          ? { id: command.id, error: { message: 'Page domain refused' } }
+          : (scriptError || !pageEnabled) &&
+              command.method === 'Page.addScriptToEvaluateOnNewDocument'
+            ? {
+                id: command.id,
+                error: { message: 'script installation failed' },
+              }
+            : { id: command.id, result };
       queueMicrotask(() =>
         this.dispatchEvent(
           new MessageEvent('message', { data: JSON.stringify(response) }),
@@ -197,13 +208,15 @@ test('installs only in the exact owned CDP page and retains its session until di
     [
       'Target.getTargets',
       'Target.attachToTarget',
+      'Page.enable',
       'Page.addScriptToEvaluateOnNewDocument',
     ],
   );
   assert.equal(control.commands[1].params.targetId, 'owned');
   assert.equal(control.commands[2].sessionId, 'owned-session');
+  assert.equal(control.commands[3].sessionId, 'owned-session');
   assert.equal(
-    control.commands[2].params.source,
+    control.commands[3].params.source,
     browserErrorDiagnosticsSource,
   );
   assert.equal(control.closes(), 0);
@@ -274,9 +287,32 @@ test('snapshot reports an evaluation failure instead of inventing an empty error
 test('snapshot rejects an absent observer instead of reporting an empty error list', async () => {
   const control = cdp({ missingObserver: true });
   const dispose = await installBrowserErrorDiagnosticsViaCDP(control.input);
-  await assert.rejects(dispose.snapshot(), /snapshot is not an error list/);
+  await assert.rejects(
+    dispose.snapshot(),
+    /snapshot is not an error list \(target owned, observed URL http:\/\/localhost:62271\/\)/,
+  );
+  assert.equal(control.commands.at(-1).method, 'Page.getFrameTree');
   assert.equal(control.commands.at(-1).sessionId, 'owned-session');
   await dispose();
+});
+
+test('a refused Page domain aborts registration and detaches only the owned session', async () => {
+  const control = cdp({ pageEnableError: true });
+  await assert.rejects(
+    installBrowserErrorDiagnosticsViaCDP(control.input),
+    /Page domain refused/,
+  );
+  assert.deepEqual(
+    control.commands.map(command => command.method),
+    [
+      'Target.getTargets',
+      'Target.attachToTarget',
+      'Page.enable',
+      'Target.detachFromTarget',
+    ],
+  );
+  assert.equal(control.commands[2].sessionId, 'owned-session');
+  assert.equal(control.closes(), 1);
 });
 
 test('failed script installation detaches its owned session and preserves the original error', async () => {
