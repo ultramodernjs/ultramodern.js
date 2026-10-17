@@ -772,17 +772,49 @@ export function nativeFederationRuntimePluginSource(
   server?: {
     readonly requestTimeout?: number;
   },
+  browserDev = false,
 ): string {
   const requestTimeout = server?.requestTimeout ?? 3000;
   if (server && (!Number.isSafeInteger(requestTimeout) || requestTimeout <= 0))
     throw federationError('server requestTimeout must be a positive integer.');
-  return `const remotes = ${JSON.stringify(remotes)};
+  return `${
+    browserDev
+      ? `import { ModuleFederation } from '@module-federation/enhanced/runtime';
+import { preparePublisherBoundaryReplacement } from 'octane';
+import { createNativeBrowserDevRuntimePlugin } from '@modern-js/federation-runtime/native-browser-dev-runtime-plugin';
+import { prepareNativeBrowserDevClient, releaseNativeBrowserDevClient } from '@modern-js/federation-runtime/native-browser-dev-client';
+`
+      : ''
+  }const remotes = ${JSON.stringify(remotes)};
 ${
   server
     ? `const requestTimeout = ${requestTimeout};
 `
     : ''
 }export default function ultramodernNativeFederation() {
+  ${
+    browserDev
+      ? `const browser = createNativeBrowserDevRuntimePlugin({
+    remotes,
+    prepareReplacement: preparePublisherBoundaryReplacement,
+    createHost(options) {
+      // Normal beforeInit can append sibling remotes to the mutable options.
+      // This attempt owns only the immutable remotes passed before construction.
+      const ownedRemotes = (options.remotes ?? []).map(remote => ({ ...remote }));
+      const leases = [];
+      const host = new ModuleFederation(options);
+      return { host, prepareFactory() {
+        for (const remote of ownedRemotes)
+          leases.push(prepareNativeBrowserDevClient(remote.name, remote.entry));
+      }, release() {
+        for (const release of leases.splice(0)) release();
+        for (const remote of ownedRemotes)
+          releaseNativeBrowserDevClient(remote.name, remote.entry);
+      } };
+    },
+  });`
+      : ''
+  }
   return {
     name: 'ultramodern-native-federation',${
       server
@@ -813,9 +845,48 @@ ${
         ...registered,
         ...remotes.filter(remote => !known.has(remote.alias)).map(remote => ({ ...remote })),
       ];
+      ${browserDev ? 'browser.beforeInit(args);' : ''}
       return args;
     },
   };
+}
+`;
+}
+
+/** Replace only this Octane remote's Rsbuild client through normal aliasing. */
+export function nativeFederationDevClientSource(remoteName: string): string {
+  return `import { startNativeBrowserDevClient } from '@modern-js/federation-runtime/native-browser-dev-client';
+let overlay;
+export function registerOverlay(create, clear) { overlay = { create, clear }; }
+export function init(token, config, serverHost, serverPort, serverBase, liveReload, browserLogs, logLevel, resolveWebSocketUrl) {
+  const dispose = startNativeBrowserDevClient({
+    remoteName: ${JSON.stringify(remoteName)},
+    buildId: ULTRAMODERN_BUILD_MARKER,
+    revisionHeader: ${JSON.stringify(NATIVE_FEDERATION_DEV_REVISION_HEADER)},
+    token, config, serverHost, serverPort, serverBase, liveReload, browserLogs, logLevel, resolveWebSocketUrl,
+    hot: import.meta.webpackHot,
+    hash: () => import.meta.rspackHash,
+    overlay: () => overlay,
+    installCustomListeners(listeners) {
+      const interceptor = ({ module }) => {
+        const owned = new Map();
+        module.hot.on = (event, callback) => {
+          listeners.set(event, [...(listeners.get(event) ?? []), callback]);
+          owned.set(event, [...(owned.get(event) ?? []), callback]);
+        };
+        module.hot.dispose(() => {
+          for (const [event, callbacks] of owned)
+            listeners.set(event, (listeners.get(event) ?? []).filter(callback => !callbacks.includes(callback)));
+        });
+      };
+      __webpack_require__.i.push(interceptor);
+      return () => {
+        const index = __webpack_require__.i.indexOf(interceptor);
+        if (index !== -1) __webpack_require__.i.splice(index, 1);
+      };
+    },
+  });
+  import.meta.webpackHot?.dispose(dispose);
 }
 `;
 }
@@ -1051,10 +1122,51 @@ export function nativeModuleFederationPlugin(
           );
           return;
         }
+        const browserDev =
+          api.getAppContext().command === 'dev' && renderer === 'octane';
         const runtimePlugin = await writeRuntimePlugin(
           'native-runtime.mjs',
-          nativeFederationRuntimePluginSource(remotes),
+          nativeFederationRuntimePluginSource(remotes, undefined, browserDev),
         );
+        if (browserDev && exposesNativeModules(authored)) {
+          const client = await writeRuntimePlugin(
+            'native-dev-client.mjs',
+            nativeFederationDevClientSource(String(authored.name)),
+          );
+          // App-tools runs as this composition's dependency. Applications may
+          // install only the composition, including through a package alias.
+          // Resolve the client from the same selected builder owner.
+          const appToolsRequire = createRequire(
+            createRequire(import.meta.url).resolve('@modern-js/app-tools'),
+          );
+          const hmr = path.join(
+            path.dirname(appToolsRequire.resolve('@rsbuild/core')),
+            'client/hmr.js',
+          );
+          if (!fs.existsSync(hmr))
+            throw federationError(
+              'the selected Rsbuild HMR client cannot be resolved.',
+            );
+          chain.resolve.alias.set(`${hmr}$`, client);
+          const manifest = record(authored.manifest) ? authored.manifest : {};
+          const filename =
+            typeof manifest.fileName === 'string' && manifest.fileName
+              ? manifest.fileName.endsWith('.json')
+                ? manifest.fileName
+                : `${manifest.fileName}.json`
+              : 'mf-manifest.json';
+          chain
+            .plugin('ultramodern-federation-dev-browser-assets')
+            .use(NativeFederationDevAssetsPlugin, [
+              String(authored.name),
+              {
+                browserManifest: path.posix.join(
+                  String(manifest.filePath ?? '').replace(/\\/gu, '/'),
+                  filename,
+                ),
+              },
+            ]);
+        }
         chain
           .plugin(NATIVE_FEDERATION_CHAIN_KEY)
           .use(

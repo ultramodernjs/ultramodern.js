@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
@@ -829,6 +830,7 @@ describe('native Module Federation plugin', () => {
 
   function chain(entries: Record<string, string[]> = {}) {
     const uses: unknown[][] = [];
+    const aliases = new Map<string, string>();
     const entry = (name: string) => ({
       values: () => entries[name],
       clear: () => {
@@ -838,8 +840,16 @@ describe('native Module Federation plugin', () => {
     });
     return {
       uses,
+      aliases,
       entries,
       chain: {
+        resolve: {
+          alias: {
+            set(key: string, value: string) {
+              aliases.set(key, value);
+            },
+          },
+        },
         plugin: (key: string) => ({
           use: (Plugin: unknown, args: unknown[]) =>
             uses.push([key, Plugin, args]),
@@ -1009,6 +1019,70 @@ describe('native Module Federation plugin', () => {
       ).toBe(false);
     },
   );
+
+  it('stages only its immutable remote when actual MF initialization appends a configured sibling', () => {
+    const appToolsRequire = createRequire(
+      path.resolve(__dirname, '../../package.json'),
+    );
+    const runtimeRequire = createRequire(
+      appToolsRequire.resolve('@rsbuild/core'),
+    );
+    const remote = {
+      name: 'recovery_remote',
+      alias: 'remote',
+      entry:
+        'https://remote.example/__ultramodern_mf__/abc123/mf-manifest.json',
+    };
+    const sibling = {
+      name: 'static_sibling',
+      alias: 'sibling',
+      entry: 'https://sibling.example/mf-manifest.json',
+    };
+    // The hydration control above temporarily replaces __FEDERATION__. Run the
+    // real constructor in a fresh realm rather than altering its cached global
+    // state or replacing any constructor/container behavior in this control.
+    const source = nativeFederationRuntimePluginSource(
+      [remote, sibling],
+      undefined,
+      true,
+    )
+      .replace(/^import[^\n]+;\n/gmu, '')
+      .replace('export default function', 'return function');
+    const result = JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          '-e',
+          `
+      const { ModuleFederation } = require(process.argv[1]);
+      const prepared = [], retired = [];
+      let releaseLease = 0, stageOptions;
+      const createPlugin = new Function('ModuleFederation', 'createNativeBrowserDevRuntimePlugin', 'prepareNativeBrowserDevClient', 'releaseNativeBrowserDevClient', 'preparePublisherBoundaryReplacement', process.argv[2])(
+        ModuleFederation,
+        options => { stageOptions = options; return { beforeInit: args => args }; },
+        (...args) => { prepared.push(args); return () => { releaseLease++; }; },
+        (...args) => { retired.push(args); },
+        () => { throw new Error('The stage-construction control must not replace a mounted publisher.'); }
+      );
+      const plugin = createPlugin();
+      const input = { name: 'recovery_glue_proof', remotes: [JSON.parse(process.argv[3])], plugins: [plugin] };
+      const stage = stageOptions.createHost(input);
+      stage.prepareFactory();
+      stage.release();
+      process.stdout.write(JSON.stringify({ remoteNames: input.remotes.map(remote => remote.name), prepared, releaseLease, retired }));
+    `,
+          runtimeRequire.resolve('@module-federation/runtime-tools/runtime'),
+          source,
+          JSON.stringify(remote),
+        ],
+        { encoding: 'utf8' },
+      ),
+    );
+    expect(result.remoteNames).toEqual(['recovery_remote', 'static_sibling']);
+    expect(result.prepared).toEqual([[remote.name, remote.entry]]);
+    expect(result.releaseLease).toBe(1);
+    expect(result.retired).toEqual([[remote.name, remote.entry]]);
+  });
 
   it('rejects a Solid Worker without a native snapshot transport', async () => {
     const root = app({
@@ -1260,6 +1334,104 @@ describe('native Module Federation plugin', () => {
       expect(fs.readFileSync(bootstrap, 'utf8')).toBe(
         `import(${JSON.stringify(generated)});\n`,
       );
+    },
+  );
+
+  it.each([
+    ['octane', 'dev', true],
+    ['octane', 'build', false],
+    ['solid', 'dev', false],
+  ] as const)(
+    'selects its builder-owned Rsbuild client with only an aliased composition installed (%s/%s)',
+    async (renderer, command, replacement) => {
+      const root = app({
+        'package.json': JSON.stringify({
+          dependencies: {
+            'selected-tools': 'npm:@modern-js/ultramodern-app-tools@3.8.3',
+          },
+        }),
+        'module-federation.config.mjs': `export default { name: 'remote', exposes: { './Widget': './Widget.tsx' }, manifest: { filePath: 'browser/meta', fileName: 'graph.json' } };`,
+      });
+      installPackages(root, false, renderer);
+      fs.symlinkSync(
+        path.resolve(__dirname, '../..'),
+        path.join(root, 'node_modules/selected-tools'),
+      );
+      // Rstest instruments module resolution in its worker. Verify the actual
+      // installed alias and the missing canonical app dependency in plain Node.
+      const installed = JSON.parse(
+        execFileSync(
+          process.execPath,
+          [
+            '-e',
+            `
+const assert = require('node:assert/strict');
+const { createRequire } = require('node:module');
+const path = require('node:path');
+const applicationRequire = createRequire(path.join(process.argv[1], 'package.json'));
+assert.throws(() => applicationRequire.resolve('@modern-js/app-tools'), { code: 'MODULE_NOT_FOUND' });
+const selected = applicationRequire.resolve('selected-tools');
+const appToolsRequire = createRequire(createRequire(selected).resolve('@modern-js/app-tools'));
+const hmr = path.join(path.dirname(appToolsRequire.resolve('@rsbuild/core')), 'client/hmr.js');
+process.stdout.write(JSON.stringify({ selected, hmr }));
+`,
+            root,
+          ],
+          {
+            encoding: 'utf8',
+            env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '' },
+          },
+        ),
+      );
+      expect(installed.selected).toContain(
+        fs.realpathSync(path.resolve(__dirname, '../..')),
+      );
+      const hooks = setup(renderer, root, {}, { command });
+      const client = chain();
+      await hooks.modifyBundlerChain(client.chain, {
+        environment: { name: 'client' },
+      });
+      const marker = client.uses.find(
+        ([key]) => key === 'ultramodern-federation-dev-browser-assets',
+      );
+      if (replacement) {
+        const generatedClient = path.join(
+          root,
+          'node_modules/.modern-js/federation/native-dev-client.mjs',
+        );
+        expect([...client.aliases]).toEqual([
+          [`${installed.hmr}$`, generatedClient],
+        ]);
+        expect(fs.readFileSync(generatedClient, 'utf8')).toContain(
+          'remoteName: "remote"',
+        );
+        expect(marker?.[2]).toEqual([
+          'remote',
+          { browserManifest: 'browser/meta/graph.json' },
+        ]);
+        const runtime = fs.readFileSync(
+          path.join(
+            root,
+            'node_modules/.modern-js/federation/native-runtime.mjs',
+          ),
+          'utf8',
+        );
+        expect(runtime).toContain('new ModuleFederation(options)');
+        expect(runtime).toContain(
+          'prepareNativeBrowserDevClient(remote.name, remote.entry)',
+        );
+      } else {
+        expect([...client.aliases]).toEqual([]);
+        expect(marker).toBeUndefined();
+        expect(
+          fs.existsSync(
+            path.join(
+              root,
+              'node_modules/.modern-js/federation/native-dev-client.mjs',
+            ),
+          ),
+        ).toBe(false);
+      }
     },
   );
 

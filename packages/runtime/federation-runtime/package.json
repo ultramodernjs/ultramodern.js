@@ -67,6 +67,33 @@
         "import": "./dist/esm-node/module-federation/native-dev-refresh-runtime-plugin.mjs",
         "require": "./dist/cjs/module-federation/native-dev-refresh-runtime-plugin.js"
       }
+    },
+    "./native-browser-dev-refresh": {
+      "types": "./dist/types/module-federation/native-browser-dev-refresh.d.ts",
+      "modern:source": "./src/module-federation/native-browser-dev-refresh.ts",
+      "node": {
+        "import": "./dist/esm-node/module-federation/native-browser-dev-refresh.mjs",
+        "require": "./dist/cjs/module-federation/native-browser-dev-refresh.js"
+      },
+      "default": "./dist/esm/module-federation/native-browser-dev-refresh.mjs"
+    },
+    "./native-browser-dev-runtime-plugin": {
+      "types": "./dist/types/module-federation/native-browser-dev-runtime-plugin.d.ts",
+      "modern:source": "./src/module-federation/native-browser-dev-runtime-plugin.ts",
+      "node": {
+        "import": "./dist/esm-node/module-federation/native-browser-dev-runtime-plugin.mjs",
+        "require": "./dist/cjs/module-federation/native-browser-dev-runtime-plugin.js"
+      },
+      "default": "./dist/esm/module-federation/native-browser-dev-runtime-plugin.mjs"
+    },
+    "./native-browser-dev-client": {
+      "types": "./dist/types/module-federation/native-browser-dev-client.d.ts",
+      "modern:source": "./src/module-federation/native-browser-dev-client.ts",
+      "node": {
+        "import": "./dist/esm-node/module-federation/native-browser-dev-client.mjs",
+        "require": "./dist/cjs/module-federation/native-browser-dev-client.js"
+      },
+      "default": "./dist/esm/module-federation/native-browser-dev-client.mjs"
     }
   },
   "typesVersions": {
@@ -94,6 +121,18 @@
       "native-dev-refresh-runtime-plugin": [
         "./dist/types/module-federation/native-dev-refresh-runtime-plugin.d.ts",
         "./src/module-federation/native-dev-refresh-runtime-plugin.ts"
+      ],
+      "native-browser-dev-refresh": [
+        "./dist/types/module-federation/native-browser-dev-refresh.d.ts",
+        "./src/module-federation/native-browser-dev-refresh.ts"
+      ],
+      "native-browser-dev-runtime-plugin": [
+        "./dist/types/module-federation/native-browser-dev-runtime-plugin.d.ts",
+        "./src/module-federation/native-browser-dev-runtime-plugin.ts"
+      ],
+      "native-browser-dev-client": [
+        "./dist/types/module-federation/native-browser-dev-client.d.ts",
+        "./src/module-federation/native-browser-dev-client.ts"
       ]
     }
   },
@@ -190,6 +229,30 @@
           "import": "./dist/esm-node/module-federation/native-dev-refresh-runtime-plugin.mjs",
           "require": "./dist/cjs/module-federation/native-dev-refresh-runtime-plugin.js"
         }
+      },
+      "./native-browser-dev-refresh": {
+        "types": "./dist/types/module-federation/native-browser-dev-refresh.d.ts",
+        "node": {
+          "import": "./dist/esm-node/module-federation/native-browser-dev-refresh.mjs",
+          "require": "./dist/cjs/module-federation/native-browser-dev-refresh.js"
+        },
+        "default": "./dist/esm/module-federation/native-browser-dev-refresh.mjs"
+      },
+      "./native-browser-dev-runtime-plugin": {
+        "types": "./dist/types/module-federation/native-browser-dev-runtime-plugin.d.ts",
+        "node": {
+          "import": "./dist/esm-node/module-federation/native-browser-dev-runtime-plugin.mjs",
+          "require": "./dist/cjs/module-federation/native-browser-dev-runtime-plugin.js"
+        },
+        "default": "./dist/esm/module-federation/native-browser-dev-runtime-plugin.mjs"
+      },
+      "./native-browser-dev-client": {
+        "types": "./dist/types/module-federation/native-browser-dev-client.d.ts",
+        "node": {
+          "import": "./dist/esm-node/module-federation/native-browser-dev-client.mjs",
+          "require": "./dist/cjs/module-federation/native-browser-dev-client.js"
+        },
+        "default": "./dist/esm/module-federation/native-browser-dev-client.mjs"
       }
     }
   }
