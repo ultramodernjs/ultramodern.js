@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { parseSync } from '@babel/core';
+import tsgoInvocation from '../../../scripts/lib/tsgo-invocation.js';
 import {
   checkInstalledCohort,
   readCohort,
@@ -22,6 +23,12 @@ import { createAdmissionProcessScope } from './processes.mjs';
 const target = '2.0.0-rc.15';
 const sourceExtensions = /\.[cm]?tsx?$/u;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+
+export function installedCompiler(appRoot) {
+  return tsgoInvocation.resolveTsgoBin({
+    requireFrom: createRequire(path.join(appRoot, 'package.json')),
+  });
+}
 
 async function listFiles(root) {
   const files = [];
@@ -316,10 +323,9 @@ export async function checkGeneratedSolidTypes({ appRoot, execute }) {
       JSON.stringify(strictBrowserConfig(entries, environment)),
       { flag: 'wx' },
     );
-    const requireApp = createRequire(path.join(appRoot, 'package.json'));
     await execute(
       process.execPath,
-      [requireApp.resolve('typescript/bin/tsc'), '-p', config],
+      [installedCompiler(appRoot), '-p', config],
       {
         cwd: appRoot,
         env: cleanConsumerEnv(),

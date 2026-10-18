@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 import {
   cleanConsumerEnv,
   generatedBrowserEntries,
+  installedCompiler,
   nativeClientCall,
   strictBrowserConfig,
 } from './generated-consumer.mjs';
@@ -99,6 +100,19 @@ test('removes inherited Node hooks from every consumer command', () => {
   assert.equal(env.KEEP, 'yes');
 });
 
+test('executes the installed native compiler through its public bin metadata despite private subpath exports', async () => {
+  const requireApp = createRequire(path.join(root, 'package.json'));
+  assert.throws(() => requireApp.resolve('typescript/bin/tsc'), {
+    code: 'ERR_PACKAGE_PATH_NOT_EXPORTED',
+  });
+  const { stdout } = await execute(
+    process.execPath,
+    [installedCompiler(root), '--version'],
+    { env: cleanConsumerEnv(), timeout: 30_000 },
+  );
+  assert.match(stdout, /Version 7\.0\.2\b/u);
+});
+
 test('the authored Solid build diagnostics compile under strict consumer types', async () => {
   await temporary(async directory => {
     const fixture = path.join(root, 'tests/integration/renderer-solid');
@@ -137,11 +151,9 @@ test('the authored Solid build diagnostics compile under strict consumer types',
         files: [path.join(fixture, 'modern.config.ts')],
       }),
     );
-    await execute(
-      process.execPath,
-      [path.join(root, 'node_modules/typescript/bin/tsc'), '-p', config],
-      { timeout: 30_000 },
-    );
+    await execute(process.execPath, [installedCompiler(root), '-p', config], {
+      timeout: 30_000,
+    });
   });
 });
 
@@ -158,7 +170,7 @@ test('the native compiler enforces browser globals, exact options, indexed acces
       config,
       JSON.stringify(strictBrowserConfig([source], environment)),
     );
-    const compiler = path.join(root, 'node_modules/typescript/bin/tsc');
+    const compiler = installedCompiler(root);
     const compile = () =>
       execute(process.execPath, [compiler, '-p', config], { timeout: 30_000 });
     await writeFile(
