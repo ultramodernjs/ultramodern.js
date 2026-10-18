@@ -184,3 +184,291 @@ test('missing guardian on local or self-hosted execution is a failure', async t 
     assert.equal(artifacts.snapshot()[0].released, false);
   }
 });
+
+const busyGuardian = () =>
+  Object.assign(new Error('guardian busy'), {
+    code: 1,
+    stdout: JSON.stringify({
+      status: 'failed',
+      reason: 'another maintenance operation holds the lock',
+    }),
+    stderr: '',
+  });
+
+function localFixture(t, extra = {}) {
+  const item = fixture(t, { GITHUB_ACTIONS: 'false', RUNNER_ENVIRONMENT: '' });
+  return {
+    ...item,
+    artifacts: createDevArtifactOwnership({ ...item.options, ...extra }),
+  };
+}
+
+function guardianIdentity(directory) {
+  const stat = fs.statSync(directory);
+  return {
+    owner: 'mf-proof-test',
+    owner_pid: process.pid,
+    released: null,
+    identity: [stat.dev, stat.ino, stat.uid],
+  };
+}
+
+test('remote restart reuses the same owned output without redundant registration', async t => {
+  const calls = [];
+  const { artifacts, workRoot } = localFixture(t, {
+    guardianCommand: async args => calls.push(args),
+    readGuardianRecord: guardianIdentity,
+  });
+  const directory = path.join(workRoot, 'remote', 'dist');
+  await artifacts.register(directory, 'build');
+  await artifacts.register(directory, 'build');
+  assert.equal(calls.length, 1);
+  assert.equal(artifacts.size, 1);
+  await artifacts.release(directory);
+  assert.equal(calls.length, 2);
+});
+
+test('known maintenance contention uses a truthful local lease until outer cleanup', async t => {
+  let calls = 0;
+  const { artifacts, workRoot } = localFixture(t, {
+    guardianCommand: async () => {
+      calls++;
+      throw busyGuardian();
+    },
+    readGuardianRecord: () => undefined,
+  });
+  const directory = path.join(workRoot, 'remote', 'dist');
+  await artifacts.register(directory, 'build');
+  await artifacts.register(directory, 'build');
+  assert.equal(calls, 1);
+  assert.equal(artifacts.snapshot()[0].status, 'operation-local-lease');
+  await artifacts.release(directory);
+  assert.equal(calls, 1);
+  assert.equal(artifacts.snapshot()[0].releaseMethod, 'operation-local');
+  assert.equal(artifacts.snapshot()[0].released, true);
+  assert(
+    fs.existsSync(directory),
+    'Only the outer owner deletes the proof tree',
+  );
+});
+
+test('cleanup contention or bounded timeout cannot mask completed proof with matching ownership', async t => {
+  for (const failure of [
+    busyGuardian(),
+    Object.assign(new Error('timed out'), {
+      killed: true,
+      signal: 'SIGTERM',
+      code: null,
+    }),
+  ]) {
+    const { artifacts, workRoot } = localFixture(t, {
+      guardianCommand: async args => {
+        if (args[0] === 'release') throw failure;
+      },
+      readGuardianRecord: guardianIdentity,
+    });
+    const directory = path.join(workRoot, 'dist');
+    await artifacts.register(directory, 'build');
+    await artifacts.release(directory);
+    const [record] = artifacts.snapshot();
+    assert.equal(record.status, 'registered');
+    assert.equal(record.releaseMethod, 'operation-local');
+    assert.equal(record.guardianReleaseDeferred, true);
+    assert.equal(record.released, true);
+  }
+});
+
+test('restart and release reject an output replaced after registration', async t => {
+  const { artifacts, workRoot } = localFixture(t, {
+    guardianCommand: async () => {},
+  });
+  const directory = path.join(workRoot, 'dist');
+  await artifacts.register(directory, 'build');
+  fs.renameSync(directory, `${directory}.old`);
+  fs.mkdirSync(directory);
+  await assert.rejects(
+    artifacts.register(directory, 'build'),
+    /artifact identity changed/u,
+  );
+  await assert.rejects(
+    artifacts.release(directory),
+    /artifact identity changed/u,
+  );
+  assert.equal(artifacts.snapshot()[0].released, false);
+});
+
+test('local registration rejects path escape and intermediate symlink before creating output', async t => {
+  const { artifacts, root, workRoot } = localFixture(t, {
+    guardianCommand: async () => assert.fail('must not invoke guardian'),
+  });
+  await assert.rejects(
+    artifacts.register(path.join(root, 'escape'), 'build'),
+    /proof root/u,
+  );
+  const target = path.join(workRoot, 'target');
+  fs.mkdirSync(target);
+  fs.symlinkSync(target, path.join(workRoot, 'alias'));
+  await assert.rejects(
+    artifacts.register(path.join(workRoot, 'alias', 'dist'), 'build'),
+    /ordinary directory/u,
+  );
+  assert(!fs.existsSync(path.join(target, 'dist')));
+});
+
+test('contention never borrows a different registry owner or replaced registry identity', async t => {
+  for (const change of [
+    record => ({ ...record, owner: 'another-session' }),
+    record => ({ ...record, identity: [1, 2, 3] }),
+  ]) {
+    const { artifacts, workRoot } = localFixture(t, {
+      guardianCommand: async () => {
+        throw busyGuardian();
+      },
+      readGuardianRecord: directory => change(guardianIdentity(directory)),
+    });
+    await assert.rejects(
+      artifacts.register(path.join(workRoot, 'dist'), 'build'),
+      /guardian owner|Guardian artifact identity/u,
+    );
+    assert.equal(artifacts.snapshot()[0].status, 'pending');
+  }
+});
+
+test('unexpected register errors and cleanup errors retain their failure', async t => {
+  for (const failure of [
+    Object.assign(new Error('not exact busy response'), {
+      code: 1,
+      stdout: 'another maintenance operation holds the lock',
+      stderr: '',
+    }),
+    Object.assign(new Error('registration timed out'), {
+      killed: true,
+      signal: 'SIGTERM',
+      code: null,
+    }),
+  ]) {
+    const { artifacts, workRoot } = localFixture(t, {
+      guardianCommand: async () => {
+        throw failure;
+      },
+    });
+    await assert.rejects(
+      artifacts.register(path.join(workRoot, 'dist'), 'build'),
+      error => error === failure,
+    );
+    assert.equal(artifacts.snapshot()[0].status, 'pending');
+  }
+  const unexpected = new Error('unexpected release failure');
+  const { artifacts, workRoot } = localFixture(t, {
+    guardianCommand: async args => {
+      if (args[0] === 'release') throw unexpected;
+    },
+  });
+  const directory = path.join(workRoot, 'dist');
+  await artifacts.register(directory, 'build');
+  await assert.rejects(
+    artifacts.release(directory),
+    error => error === unexpected,
+  );
+  assert.equal(artifacts.snapshot()[0].released, false);
+});
+
+test('cleanup contention rejects guardian takeover and retains the logical lease', async t => {
+  let registered = false;
+  const { artifacts, workRoot } = localFixture(t, {
+    guardianCommand: async args => {
+      if (args[0] === 'release') throw busyGuardian();
+      registered = true;
+    },
+    readGuardianRecord: directory =>
+      registered
+        ? {
+            ...guardianIdentity(directory),
+            owner: 'other-session',
+          }
+        : undefined,
+  });
+  const directory = path.join(workRoot, 'dist');
+  await artifacts.register(directory, 'build');
+  await assert.rejects(artifacts.release(directory), /another guardian owner/u);
+  assert.equal(artifacts.snapshot()[0].released, false);
+  assert(fs.existsSync(directory));
+});
+
+test('local lease cannot survive replacement of its enclosing physical root', async t => {
+  const { artifacts, workRoot } = localFixture(t, {
+    guardianCommand: async () => {
+      throw busyGuardian();
+    },
+    readGuardianRecord: () => undefined,
+  });
+  const directory = path.join(workRoot, 'dist');
+  await artifacts.register(directory, 'build');
+  fs.renameSync(workRoot, `${workRoot}.old`);
+  fs.mkdirSync(workRoot);
+  fs.mkdirSync(directory);
+  await assert.rejects(
+    artifacts.release(directory),
+    /proof root identity changed/u,
+  );
+  assert.equal(artifacts.snapshot()[0].released, false);
+});
+
+test('duplicate same-inode registration refuses a foreign guardian takeover', async t => {
+  let takeover = false;
+  let calls = 0;
+  const { artifacts, workRoot } = localFixture(t, {
+    guardianCommand: async () => {
+      calls++;
+    },
+    readGuardianRecord: directory => ({
+      ...guardianIdentity(directory),
+      owner: takeover ? 'foreign' : 'mf-proof-test',
+    }),
+  });
+  const directory = path.join(workRoot, 'dist');
+  await artifacts.register(directory, 'build');
+  takeover = true;
+  await assert.rejects(
+    artifacts.register(directory, 'build'),
+    /another guardian owner/u,
+  );
+  assert.equal(calls, 1, 'No ownership-overwriting registration is attempted');
+  assert.equal(artifacts.snapshot()[0].released, false);
+});
+
+test('initial registration never overwrites foreign or released registry ownership', async t => {
+  for (const change of [
+    record => ({ ...record, owner: 'foreign' }),
+    record => ({ ...record, released: Date.now(), identity: [1, 2, 3] }),
+  ]) {
+    let calls = 0;
+    const { artifacts, workRoot } = localFixture(t, {
+      guardianCommand: async () => {
+        calls++;
+      },
+      readGuardianRecord: directory => change(guardianIdentity(directory)),
+    });
+    await assert.rejects(
+      artifacts.register(path.join(workRoot, 'dist'), 'build'),
+      /another guardian owner/u,
+    );
+    assert.equal(calls, 0);
+  }
+});
+
+test('local lease exposes a matching guardian record as deferred at retirement', async t => {
+  const { artifacts, workRoot } = localFixture(t, {
+    guardianCommand: async () => {
+      throw busyGuardian();
+    },
+    readGuardianRecord: guardianIdentity,
+  });
+  const directory = path.join(workRoot, 'dist');
+  await artifacts.register(directory, 'build');
+  await artifacts.release(directory);
+  const [record] = artifacts.snapshot();
+  assert.equal(record.status, 'operation-local-lease');
+  assert.equal(record.guardianReleaseDeferred, true);
+  assert.equal(record.releaseMethod, 'operation-local');
+});

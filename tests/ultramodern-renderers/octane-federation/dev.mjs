@@ -8,7 +8,6 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { retryMaintenanceOperation } from '../../../scripts/ultramodern-production-readiness/react-rsc-worker-proof/lifecycle.mjs';
 import { inspectOwnedProcessGroup } from '../../../scripts/ultramodern-production-readiness/react-rsc-worker-proof/runtime.mjs';
 import { createDevArtifactOwnership } from './artifact-ownership.mjs';
 import {
@@ -84,15 +83,14 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'])
     cancellation.abort(new Error(`Received ${signal}`)),
   );
 
-const guardianCommand = (args, signal) =>
-  retryMaintenanceOperation(timeout => {
-    signal?.throwIfAborted();
-    return execute('/Users/satan/bin/disk-guardian-artifacts', args, {
-      timeout,
-      maxBuffer: 1024 * 1024,
-      signal,
-    });
+const guardianCommand = (args, signal) => {
+  signal?.throwIfAborted();
+  return execute('/Users/satan/bin/disk-guardian-artifacts', args, {
+    timeout: 10_000,
+    maxBuffer: 1024 * 1024,
+    signal,
   });
+};
 
 const artifacts = createDevArtifactOwnership({
   workRoot: temporary,
