@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { retryMaintenanceOperation } from '../../../scripts/ultramodern-production-readiness/react-rsc-worker-proof/lifecycle.mjs';
 import { inspectOwnedProcessGroup } from '../../../scripts/ultramodern-production-readiness/react-rsc-worker-proof/runtime.mjs';
+import { createDevArtifactOwnership } from './artifact-ownership.mjs';
 import {
   installBrowserErrorDiagnosticsViaCDP,
   ownedBrowserInvocation,
@@ -21,6 +22,7 @@ import {
 } from './fixtures.mjs';
 import { assertLifecycle, compatibleActivationDeltas } from './lifecycle.mjs';
 import { createSSRMarkerProxy } from './marker-proxy.mjs';
+import { createDevOutputCapture } from './process-output.mjs';
 
 const execute = promisify(execFile);
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -70,7 +72,6 @@ const browserInvocation = ownedBrowserInvocation({
 });
 const cancellation = new AbortController();
 const children = [];
-const artifacts = new Set();
 const results = {};
 let browserOpened = false;
 let disposeBrowserDiagnostics;
@@ -83,29 +84,6 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'])
     cancellation.abort(new Error(`Received ${signal}`)),
   );
 
-async function registerArtifact(directory, kind) {
-  cancellation.signal.throwIfAborted();
-  await fs.mkdir(directory, { recursive: true });
-  // An interrupted guardian command may already have registered this owner.
-  artifacts.add(directory);
-  await guardianCommand(
-    [
-      'register',
-      directory,
-      '--owner',
-      owner,
-      '--owner-pid',
-      String(process.pid),
-      '--kind',
-      kind,
-      '--grace-hours',
-      '24',
-    ],
-    cancellation.signal,
-  );
-  cancellation.signal.throwIfAborted();
-}
-
 const guardianCommand = (args, signal) =>
   retryMaintenanceOperation(timeout => {
     signal?.throwIfAborted();
@@ -115,6 +93,16 @@ const guardianCommand = (args, signal) =>
       signal,
     });
   });
+
+const artifacts = createDevArtifactOwnership({
+  workRoot: temporary,
+  owner,
+  ownerPid: process.pid,
+  guardianCommand,
+});
+
+const registerArtifact = (directory, kind) =>
+  artifacts.register(directory, kind, cancellation.signal);
 
 async function freePort() {
   const server = net.createServer();
@@ -184,9 +172,11 @@ async function startDev(directory, port) {
     },
   );
   child.log = '';
+  child.outputCapture = createDevOutputCapture();
   for (const stream of [child.stdout, child.stderr])
     stream.on('data', chunk => {
-      child.log = (child.log + chunk).slice(-128 * 1024);
+      child.outputCapture.append(chunk);
+      child.log = child.outputCapture.tail;
     });
   child.completion = new Promise(resolve => {
     child.once('error', error => {
@@ -677,6 +667,12 @@ export default function Away() { const router = useRouter(); return <section dat
       // document observable instead of aborting HTTP before that deadline.
       const response = await request(hostUrl, 10_000);
       const html = await response.text();
+      if (response.status >= 500 && !results.firstSSRFailure)
+        results.firstSSRFailure = {
+          status: response.status,
+          contentType: response.headers.get('content-type'),
+          sample: html.slice(0, 4096),
+        };
       const decoded = decodeOctaneSSRDocument(html);
       results.lastSSRResponse = {
         status: response.status,
@@ -1443,6 +1439,9 @@ export default function Away() { const router = useRouter(); return <section dat
       }
     }
   }
+  results.serverStartupLogs = children.map(child =>
+    child.outputCapture.startup(),
+  );
   results.serverLogs = children.map(child =>
     child.log.length <= 8192
       ? child.log
@@ -1472,14 +1471,14 @@ export default function Away() { const router = useRouter(); return <section dat
   await proxy?.().catch(error => cleanupErrors.push(error));
   let releasedArtifactCount = 0;
   if (processesRetired)
-    for (const directory of artifacts)
-      await guardianCommand(['release', directory, '--owner', owner]).then(
+    for (const directory of artifacts.directories)
+      await artifacts.release(directory).then(
         () => {
           releasedArtifactCount++;
         },
         error => cleanupErrors.push(error),
       );
-  else results.retainedArtifacts = [...artifacts];
+  else results.retainedArtifacts = artifacts.directories;
   const processGroups = [];
   for (const child of children) {
     try {
@@ -1493,6 +1492,7 @@ export default function Away() { const router = useRouter(); return <section dat
     processGroups,
     releasedArtifactCount,
     registeredArtifactCount: artifacts.size,
+    artifacts: artifacts.snapshot(),
     errorCount: cleanupErrors.length,
   };
   if (sourceContext && processesRetired && cleanupErrors.length === 0)
