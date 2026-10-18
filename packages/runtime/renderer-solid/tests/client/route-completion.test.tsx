@@ -10,6 +10,7 @@ import {
 } from '@modern-js/renderer-core/data';
 import type { RendererIdentity } from '@modern-js/renderer-core/identity';
 import { flush } from 'solid-js';
+import { createRouteAction, type RouteAction } from '../../src/actions';
 import { mountApplication } from '../../src/client';
 import {
   ApplicationRouter,
@@ -112,6 +113,7 @@ function fixture(
     awaitDeferred?: boolean;
     pendingComponent?: boolean;
     indexRoute?: boolean;
+    actionFetch?: typeof globalThis.fetch;
   } = {},
 ) {
   const requests: Request[] = [];
@@ -119,6 +121,7 @@ function fixture(
   const streams: ByteResponse[] = [];
   const errors: unknown[] = [];
   let resetBoundary: (() => void) | undefined;
+  let currentAction: RouteAction | undefined;
   const routeId = options.indexRoute ? 'index_page' : 'item';
   const doneId = options.indexRoute ? 'about' : 'done';
   const routeIR: FileSystemRouteIR[] = options.indexRoute
@@ -160,6 +163,16 @@ function fixture(
         [routeId]: {
           component: () => {
             const data = useLoaderData({ strict: false });
+            const action = options.actionFetch
+              ? createRouteAction({
+                  router,
+                  routeId,
+                  rendererIdentity: identity,
+                  fetch: options.actionFetch,
+                  url: 'http://localhost/',
+                })
+              : undefined;
+            currentAction = action;
             const later = () => {
               const value: unknown = data();
               if (
@@ -185,6 +198,11 @@ function fixture(
                   >
                     {value => <p data-testid="late">{String(value)}</p>}
                   </Await>
+                ) : null}
+                {action ? (
+                  <p data-testid="action-outcome">
+                    {JSON.stringify(action.outcome())}
+                  </p>
                 ) : null}
               </>
             );
@@ -242,6 +260,7 @@ function fixture(
     errors,
     mount,
     resetBoundary: () => resetBoundary?.(),
+    action: () => currentAction,
   };
 }
 
@@ -263,6 +282,137 @@ async function waitFor(
 }
 
 describe('native Solid progressive route completion', () => {
+  test('leaving an action outcome during invalidation cannot retire the next deferred generation', async () => {
+    const initial = byteResponse(
+      { critical: 'initial-index' },
+      [],
+      'index_page',
+    );
+    initial.complete();
+    let releaseInvalidation!: (response: Response) => void;
+    const invalidation = new Promise<Response>(resolve => {
+      releaseInvalidation = resolve;
+    });
+    const deferred = byteResponse(
+      { critical: 'deferred-index' },
+      ['later'],
+      'index_page',
+    );
+    const app = fixture(
+      generation => {
+        if (generation === 1) return initial.response;
+        if (generation === 2) return invalidation;
+        if (generation === 3) return deferred.response;
+        throw new Error(`Unexpected loader generation ${generation}`);
+      },
+      {
+        initialEntry: '/',
+        indexRoute: true,
+        staleTime: 0,
+        awaitDeferred: true,
+        actionFetch: async input => {
+          const request = input as Request;
+          expect(request.method).toBe('POST');
+          expect(new URL(request.url).searchParams.get('__loader')).toBe(
+            'index_page',
+          );
+          return createDataResponse(
+            {
+              kind: 'success',
+              value: { saved: 'Solid RC15 acceptance' },
+              response: {
+                status: 200,
+                statusText: 'OK',
+                headers: [],
+                cachePolicy: 'no-store',
+              },
+            },
+            identity,
+            { routeId: 'index_page', operation: 'action' },
+          );
+        },
+      },
+    );
+    await app.router.load();
+    app.mount();
+    await waitFor(
+      () =>
+        app.element.querySelector('[data-testid="critical"]')?.textContent ===
+        'initial-index',
+    );
+    const action = app.action();
+    if (!action) throw new Error('The route did not create its native action');
+    let submissionSettled = false;
+    const submission = action
+      .submit(
+        new Request('http://localhost/', {
+          method: 'POST',
+          body: new URLSearchParams({ name: 'Solid RC15 acceptance' }),
+        }),
+      )
+      .finally(() => {
+        submissionSettled = true;
+      });
+    await waitFor(
+      () =>
+        app.requests.length === 2 &&
+        app.element
+          .querySelector('[data-testid="action-outcome"]')
+          ?.textContent?.includes('Solid RC15 acceptance') === true,
+    );
+    expect(action.pending()).toBe(true);
+    expect(submissionSettled).toBe(false);
+    expect(app.signals[1]?.aborted).toBe(false);
+
+    await app.router.navigate({ href: '/about' });
+    await waitFor(() => app.element.textContent === 'complete');
+    // The action belongs to the departed component. Its ordinary cleanup may
+    // cancel the submission, but must not affect a later loader generation.
+    expect(await submission).toBeUndefined();
+    expect(action.pending()).toBe(false);
+    expect(action.error()).toBeUndefined();
+    expect(app.signals[1]?.aborted).toBe(true);
+    const stale = byteResponse(
+      { critical: 'abandoned-invalidation' },
+      [],
+      'index_page',
+    );
+    stale.complete();
+    releaseInvalidation(stale.response);
+
+    const navigation = app.router.navigate({ href: '/?case=deferred' });
+    await waitFor(
+      () => app.element.querySelector('[data-testid="pending"]') !== null,
+    );
+    expect(app.requests).toHaveLength(3);
+    expect(new URL(app.requests[2]!.url).searchParams.get('case')).toBe(
+      'deferred',
+    );
+    expect(app.signals[2]?.aborted).toBe(false);
+    deferred.resolve('later', 'action-overlap-late-value');
+    await waitFor(
+      () =>
+        app.element.querySelector('[data-testid="late"]')?.textContent ===
+        'action-overlap-late-value',
+    );
+    await navigation;
+    deferred.terminal();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    flush();
+    expect(app.signals[2]?.aborted).toBe(false);
+    expect(deferred.cancellations()).toBe(0);
+    deferred.close();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    flush();
+    expect(app.signals[2]?.aborted).toBe(false);
+    expect(deferred.cancellations()).toBe(0);
+    expect(app.requests).toHaveLength(3);
+    expect(app.errors).toEqual([]);
+    expect(app.element.querySelector('[data-testid="late"]')?.textContent).toBe(
+      'action-overlap-late-value',
+    );
+  });
+
   test('returning to an index route keeps its deferred query generation alive through EOF', async () => {
     const initial = byteResponse(
       { critical: 'initial-index' },
