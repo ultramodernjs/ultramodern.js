@@ -316,6 +316,7 @@ function validateProducer({
 }
 
 function createPublishOutcome({
+  acceptanceRecovery,
   cohortDigestPath,
   dryRun,
   manifestDigestPath,
@@ -365,6 +366,40 @@ function createPublishOutcome({
     runId: normalizedRunId,
     runAttempt: normalizedRunAttempt,
   });
+  let recovery;
+  if (acceptanceRecovery !== undefined) {
+    assertPlainObject(acceptanceRecovery, 'Acceptance recovery');
+    assertSourceCommit(
+      acceptanceRecovery.sourceCommit,
+      'Recovery tooling commit',
+    );
+    const recoveryRunId = runIdString(
+      acceptanceRecovery.runId,
+      'Recovery run id',
+    );
+    const recoveryAttempt = positiveInteger(
+      acceptanceRecovery.runAttempt,
+      'Recovery run attempt',
+    );
+    const tractorRunAttempt = positiveInteger(
+      acceptanceRecovery.tractorRunAttempt,
+      'Recovered Tractor run attempt',
+    );
+    if (tractorRunAttempt > recoveryAttempt) {
+      throw new Error('Recovered Tractor attempt cannot follow its outcome');
+    }
+    if (dryRun || recoveryRunId === normalizedRunId) {
+      throw new Error(
+        'Acceptance recovery must name a separate live acceptance run',
+      );
+    }
+    recovery = {
+      result: 'tractor-downstream',
+      sourceCommit: acceptanceRecovery.sourceCommit,
+      tractorRunAttempt,
+      workflowRun: { id: recoveryRunId, attempt: recoveryAttempt },
+    };
+  }
   const normalizedProducerAttempt = validateProducer({
     artifactIdentity: producerArtifactIdentity,
     publicationRunAttempt: normalizedPublicationAttempt ?? normalizedRunAttempt,
@@ -405,8 +440,12 @@ function createPublishOutcome({
   }
   const outcome = {
     schema: publishOutcomeSchema,
-    schemaVersion: publishOutcomeSchemaVersion,
-    artifactName: expectedArtifactName,
+    // Version 7 preserves the original publication and separately identifies
+    // the execution that supplied its missing Tractor acceptance.
+    schemaVersion: recovery ? 7 : publishOutcomeSchemaVersion,
+    artifactName: recovery
+      ? `bleedingdev-recovered-publish-outcome-run-${recovery.workflowRun.id}-attempt-${recovery.workflowRun.attempt}`
+      : expectedArtifactName,
     dryRun,
     source: { commit: sourceCommit, repository },
     release: { tag, version },
@@ -421,6 +460,7 @@ function createPublishOutcome({
       runIdentity: producerRunIdentity,
     },
     evidence,
+    ...(recovery ? { acceptanceRecovery: recovery } : {}),
   };
   fs.mkdirSync(path.dirname(path.resolve(outPath)), { recursive: true });
   fs.writeFileSync(outPath, `${JSON.stringify(outcome, null, 2)}\n`);
@@ -605,4 +645,5 @@ export {
   publishOutcomeArtifactPrefix,
   publishOutcomeSchema,
   publishOutcomeSchemaVersion,
+  readReleaseEvidence,
 };

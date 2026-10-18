@@ -1,0 +1,224 @@
+name: Recover published BleedingDev acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      original_run_id:
+        description: Completed original publication run whose only failure is published Tractor acceptance
+        required: true
+        type: string
+      original_run_attempt:
+        description: Exact latest original attempt containing the accepted published bytes
+        required: true
+        type: string
+
+# This workflow cannot publish npm packages. It reads the original accepted
+# archives and records the missing acceptance under a separate execution ID.
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: publish-bleedingdev
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  ORIGINAL_RUN_ID: ${{ inputs.original_run_id }}
+  ORIGINAL_RUN_ATTEMPT: ${{ inputs.original_run_attempt }}
+  BLEEDINGDEV_RELEASE_DIR: .modern/bleedingdev-publish
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  recover-evidence:
+    name: Verify the original published release
+    if: >-
+      github.repository == 'ultramodernjs/ultramodern.js' &&
+      github.repository_id == '1151231350' &&
+      github.ref == 'refs/heads/main-ultramodern' &&
+      github.actor == 'BleedingDev' && github.triggering_actor == 'BleedingDev'
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 25
+    outputs:
+      bundle_artifact: ${{ steps.original.outputs.bundle_artifact }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout reviewed recovery tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup accepted Node interpreter
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26.12.0'
+      - name: Bind the accepted interpreter
+        run: echo "ULTRAMODERN_ACCEPTANCE_NODE=$(command -v node)" >> "$GITHUB_ENV"
+      - name: Setup mise
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+        with:
+          version: 2026.9.18
+          cache_save: false
+      - name: Install verification CLI dependencies
+        run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts --prod --filter modern-js-monorepo --package-import-method=clone-or-copy
+      - name: Authenticate the original publication
+        id: original
+        run: '"$ULTRAMODERN_ACCEPTANCE_NODE" scripts/ultramodern-publish/recover-published-acceptance.mjs authorize'
+      - name: Download original published identity and accepted archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.original_run_id }}
+          name: ${{ steps.original.outputs.identity_artifact }}
+          path: .modern/bleedingdev-publish
+      - name: Download original source qualification
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.original_run_id }}
+          name: ${{ steps.original.outputs.qualification_artifact }}
+          path: .modern/bleedingdev-publish
+      - name: Download original successful published ERP acceptance
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.original_run_id }}
+          name: ${{ steps.original.outputs.published_artifact }}
+          path: .modern/bleedingdev-publish
+      - name: Verify every original archive, receipt and npm provenance
+        run: '"$ULTRAMODERN_ACCEPTANCE_NODE" scripts/ultramodern-publish/recover-published-acceptance.mjs verify-registry'
+      - name: Hand off the unchanged verified original bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.original.outputs.bundle_artifact }}
+          path: .modern/bleedingdev-publish/
+          if-no-files-found: error
+          include-hidden-files: true
+
+  tractor-downstream:
+    name: Recover only the missing published Tractor acceptance
+    needs: recover-evidence
+    uses: ./.github/workflows/ultramodern-tractor-downstream.yml
+    with:
+      mode: published
+      release_bundle_artifact: ${{ needs.recover-evidence.outputs.bundle_artifact }}
+      # The preceding job verified the registry against the original SLSA
+      # invocation. Re-running a publication preflight under this new ID would
+      # incorrectly demand attestations from the recovery executor.
+      wait_for_registry_cohort: false
+
+  record-recovery:
+    name: Record recovered acceptance for the original publication
+    needs: [recover-evidence, tractor-downstream]
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout reviewed recovery tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup accepted Node interpreter
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26.12.0'
+      - name: Bind the accepted interpreter
+        run: echo "ULTRAMODERN_ACCEPTANCE_NODE=$(command -v node)" >> "$GITHUB_ENV"
+      - name: Setup mise
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+        with:
+          version: 2026.9.18
+          cache_save: false
+      - name: Install verification CLI dependencies
+        run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts --prod --filter modern-js-monorepo --package-import-method=clone-or-copy
+      - name: Download unchanged original evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          name: ${{ needs.recover-evidence.outputs.bundle_artifact }}
+          path: .modern/bleedingdev-publish
+      - name: Download the successful recovered Tractor report
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          name: ${{ needs.tractor-downstream.outputs.evidence_artifact_name }}
+          path: .modern/bleedingdev-publish
+      - name: Bind original publication and recovered acceptance separately
+        id: outcome
+        env:
+          TRACTOR_REPORT_SHA256: ${{ needs.tractor-downstream.outputs.report_sha256 }}
+          TRACTOR_ARTIFACT_NAME: ${{ needs.tractor-downstream.outputs.evidence_artifact_name }}
+        run: '"$ULTRAMODERN_ACCEPTANCE_NODE" scripts/ultramodern-publish/recover-published-acceptance.mjs outcome'
+      - name: Generate original cohort notes
+        id: notes
+        env:
+          ORIGINAL_SOURCE: ${{ steps.outcome.outputs.source_commit }}
+        run: |
+          git checkout --detach "$ORIGINAL_SOURCE"
+          "$ULTRAMODERN_ACCEPTANCE_NODE" scripts/ultramodern-publish/gen-cohort-change-record.mjs \
+            --manifest "$BLEEDINGDEV_RELEASE_DIR/manifest.json" \
+            --out "$BLEEDINGDEV_RELEASE_DIR/change-record.md" \
+            --github-output "$GITHUB_OUTPUT"
+          printf '\nOriginal publication: %s/%s/actions/runs/%s\n\nRecovered Tractor acceptance: %s/%s/actions/runs/%s\n' \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$ORIGINAL_RUN_ID" \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" \
+            >> "$BLEEDINGDEV_RELEASE_DIR/change-record.md"
+      - name: Publish the release record at the original source
+        env:
+          VERSION: ${{ steps.outcome.outputs.version }}
+          ORIGINAL_SOURCE: ${{ steps.outcome.outputs.source_commit }}
+        run: |
+          TAG="ultramodern-v$VERSION"
+          SOURCE="$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" || true)"
+          if [[ "$SOURCE" != "$ORIGINAL_SOURCE" ]]; then
+            echo "::error::An owner must create $TAG at $ORIGINAL_SOURCE before this recovery; never move another tag." >&2
+            exit 1
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "@bleedingdev/modern-js-* $VERSION" \
+              --notes-file "$BLEEDINGDEV_RELEASE_DIR/change-record.md"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "@bleedingdev/modern-js-* $VERSION" \
+              --notes-file "$BLEEDINGDEV_RELEASE_DIR/change-record.md"
+          fi
+      - name: Upload the authenticated recovery outcome
+        if: ${{ !cancelled() && steps.outcome.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.outcome.outputs.artifact_name }}
+          path: |
+            .modern/bleedingdev-publish/manifest.json
+            .modern/bleedingdev-publish/manifest.json.sha256
+            .modern/bleedingdev-publish/cohort.sha256
+            .modern/bleedingdev-publish/release-identity.json
+            .modern/bleedingdev-publish/source-qualification.json
+            .modern/bleedingdev-publish/acceptance-receipt.json
+            .modern/bleedingdev-publish/acceptance-receipt.operational-independence.json
+            .modern/bleedingdev-publish/published-acceptance-receipt.json
+            .modern/bleedingdev-publish/tractor-downstream-acceptance.json
+            .modern/bleedingdev-publish/publish-outcome.json
+            .modern/bleedingdev-publish/change-record.md
+          if-no-files-found: error
+          include-hidden-files: true
