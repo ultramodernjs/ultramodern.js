@@ -209,6 +209,35 @@ async function serveCompiledAssets(application) {
   };
 }
 
+/** Carry the actual failed command output across the proof's workspace cleanup. */
+export async function runWorkerCompilationCommand(command, args, options) {
+  try {
+    return await runPackedNativeFederationCommand(command, args, options);
+  } catch (error) {
+    let descriptor;
+    let evidence;
+    try {
+      descriptor = fs.openSync(options.log, 'r');
+      const size = fs.fstatSync(descriptor).size;
+      const length = Math.min(size, 16 * 1024);
+      const bytes = Buffer.alloc(length);
+      const read = fs.readSync(descriptor, bytes, 0, length, size - length);
+      evidence = `${size > length ? '[earlier output omitted]\n' : ''}${bytes.subarray(0, read).toString('utf8')}`;
+    } catch (diagnosticError) {
+      throw new AggregateError(
+        [error, diagnosticError],
+        `Worker command failed and its log could not be read: ${options.log}`,
+      );
+    } finally {
+      if (descriptor !== undefined) fs.closeSync(descriptor);
+    }
+    throw new Error(
+      `Worker command failed: ${command} ${args.join(' ')}\nLog: ${options.log}\n${evidence}`,
+      { cause: error },
+    );
+  }
+}
+
 /** Compile actual installed apps; no fixture may substitute a fabricated output plan. */
 export async function buildCompiledWorkerApplications({
   applications,
@@ -237,7 +266,7 @@ export async function buildCompiledWorkerApplications({
         ['build', ['build']],
         ['deploy', ['deploy', '--skip-build']],
       ])
-        await runPackedNativeFederationCommand(
+        await runWorkerCompilationCommand(
           process.execPath,
           [installedBin(application.appRoot), ...args],
           {

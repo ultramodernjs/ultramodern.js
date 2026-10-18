@@ -10,10 +10,52 @@ import {
   packedWorkerDependencies,
   packedWorkerProofContext,
   runPackedNativeFederationWorkerProof,
+  runWorkerCompilationCommand,
   verifyPackedWorkerProofEnvelope,
   verifyPackedWorkerProofResult,
   verifyPrebuiltWorkerServices,
 } from './native-federation-worker.mjs';
+
+test('failed Worker commands preserve bounded compiler output after log cleanup', async t => {
+  assert(
+    process.env.OWNED_TEMP_DIR,
+    'Run filesystem tests through owned-temp-dir',
+  );
+  const directory = fs.mkdtempSync(
+    path.join(process.env.OWNED_TEMP_DIR, 'worker-command-'),
+  );
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const log = path.join(directory, 'deploy.log');
+  let failure;
+  await assert.rejects(
+    runWorkerCompilationCommand(
+      process.execPath,
+      [
+        '-e',
+        'process.stderr.write("discarded-prefix\\n" + "x".repeat(32 * 1024) + "\\nactual-deploy-diagnostic\\n"); process.exit(7)',
+      ],
+      {
+        cwd: directory,
+        env: process.env,
+        log,
+        witness: path.join(directory, 'process.json'),
+        signal: new AbortController().signal,
+      },
+    ),
+    error => {
+      failure = error;
+      return error.cause?.code === 'ERR_ASSERTION' && error.cause.actual === 7;
+    },
+  );
+  fs.rmSync(log);
+  const evidence = failure.message.slice(
+    failure.message.indexOf('[earlier output omitted]'),
+  );
+  assert.match(evidence, /actual-deploy-diagnostic/u);
+  assert.match(evidence, /earlier output omitted/u);
+  assert(!evidence.includes('discarded-prefix'));
+  assert(failure.message.length < 18 * 1024);
+});
 
 test('real SDK Octane Worker contracts preserve authored and topology service bindings', async t => {
   assert(
