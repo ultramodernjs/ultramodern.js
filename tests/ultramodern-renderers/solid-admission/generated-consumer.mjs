@@ -430,13 +430,18 @@ export async function checkGeneratedSolidBrowser({
     const entryFence = new Promise(resolve => {
       release = resolve;
     });
-    await page.route('**/*', async route => {
-      if (route.request().resourceType() === 'script' && !released) {
+    // Only emitted JavaScript participates in the SSR adoption fence. Data
+    // responses must retain Chromium's normal streaming Fetch transport.
+    const scriptUrls = /\.m?js(?:\?.*)?$/u;
+    const holdEntry = async route => {
+      assert.equal(route.request().resourceType(), 'script');
+      if (!released) {
         blocked.push(route.request().url());
         await entryFence;
       }
-      await route.continue();
-    });
+      await route.fallback();
+    };
+    await page.route(scriptUrls, holdEntry);
     let documentResponse;
     try {
       documentResponse = await page.goto(origin, { waitUntil: 'commit' });
@@ -481,8 +486,12 @@ export async function checkGeneratedSolidBrowser({
         'The first parser-inserted SSR nodes were missing, detached or replaced before entry delivery',
       );
     } finally {
-      released = true;
-      release();
+      try {
+        await page.unroute(scriptUrls, holdEntry);
+      } finally {
+        released = true;
+        release();
+      }
     }
     const initialHtml = await documentResponse.text();
     assert.match(initialHtml, /data-testid="native-layout"/);
