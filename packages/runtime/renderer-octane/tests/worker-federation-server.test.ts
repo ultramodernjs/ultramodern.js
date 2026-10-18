@@ -44,6 +44,28 @@ function publication(remote: string) {
 test('a real native exposed component loads a native federated child through its own request transport', async () => {
   const parent = publication('parent');
   const child = publication('child');
+  // Real completed MF expose assets, separate from native component styles.
+  // The Worker imports modules directly and must not start a local server MF host.
+  for (const owner of [parent, child]) {
+    const name = owner.worker.remote;
+    Object.assign(owner.manifest.metaData, {
+      publicPath: `https://${name}.test/client/`,
+    });
+    Object.assign(owner.manifest, {
+      exposes: [
+        { path: './Other', assets: { css: { sync: ['unrelated.css'] } } },
+        {
+          path: './Widget',
+          assets: {
+            css: {
+              sync: ['widget.css', 'https://cdn.example/shared.css'],
+              async: ['widget.css', `https://cdn.example/${name}-lazy.css`],
+            },
+          },
+        },
+      ],
+    });
+  }
   const childRequests: string[] = [];
   const parentRequests: string[] = [];
   const childExecution: string[] = [];
@@ -157,7 +179,9 @@ test('a real native exposed component loads a native federated child through its
       ),
     },
   );
-  const transport = createWorkerFederationTransport({
+  const transportOptions: Parameters<
+    typeof createWorkerFederationTransport
+  >[0] = {
     admitRendererContract,
     services: [
       {
@@ -185,7 +209,8 @@ test('a real native exposed component loads a native federated child through its
         },
       },
     ],
-  });
+  };
+  const transport = createWorkerFederationTransport(transportOptions);
   const session = createRequestSession({
     identity: parent.renderer.identities.index,
     request: new Request('https://host.test/'),
@@ -202,6 +227,7 @@ test('a real native exposed component loads a native federated child through its
     document: {
       documentId: 'nested-worker-document',
       nativeHydrationBuildId: 'host-native-client',
+      nonce: 'worker-css-nonce',
     },
     workerFederation: transport,
     workerFederationLocale: 'en',
@@ -212,6 +238,31 @@ test('a real native exposed component loads a native federated child through its
   expect(html).toContain('data-native-worker-parent');
   expect(html).toContain('data-native-worker-child');
   expect(html).toContain('Nested native props');
+  const expectStyles = (html: string, nonce: string) => {
+    for (const href of [
+      'https://parent.test/client/widget.css',
+      'https://cdn.example/parent-lazy.css',
+      'https://child.test/client/widget.css',
+      'https://cdn.example/child-lazy.css',
+      'https://cdn.example/shared.css',
+    ]) {
+      const sheets = (html.match(/<link\b[^>]*>/gu) ?? []).filter(tag =>
+        tag.includes(`href="${href}"`),
+      );
+      expect(sheets).toHaveLength(1);
+      expect(sheets[0]).toContain(`nonce="${nonce}"`);
+      expect(sheets[0]).toContain('data-precedence="federated"');
+      expect(html.indexOf(href)).toBeLessThan(
+        html.indexOf('data-native-worker-parent'),
+      );
+    }
+  };
+  expectStyles(html, 'worker-css-nonce');
+  expect(html).not.toContain('unrelated.css');
+  expect(
+    html.match(/href="https:\/\/cdn\.example\/shared\.css"/gu),
+  ).toHaveLength(1);
+  expect(html).toContain('nonce="worker-css-nonce"');
   expect((await session.completion).fallback).toBe(false);
   expect(parentRequests).toEqual([
     'GET https://parent.test/mf-manifest.json',
@@ -273,6 +324,35 @@ test('a real native exposed component loads a native federated child through its
   );
   expect(rejectedResponse?.status).toBe(400);
   expect(rejectedExecution).toEqual(['admitting']);
+  // A fresh document gets its own resource emission, not a process-wide cache.
+  const freshTransport = createWorkerFederationTransport(transportOptions);
+  try {
+    const freshSession = createRequestSession({
+      identity: parent.renderer.identities.index,
+      request: new Request('https://host.test/second'),
+      platform: { kind: 'worker', bindings: {} },
+    });
+    const second = await renderOctaneApplication({
+      session: freshSession,
+      document: {
+        documentId: 'nested-worker-second-document',
+        nativeHydrationBuildId: 'host-native-client',
+        nonce: 'worker-second-nonce',
+      },
+      workerFederation: freshTransport,
+      workerFederationLocale: 'en',
+      federation: { instance: () => ({ loadRemote: loadLocalRemote }) },
+      App: () =>
+        createElement(Parent, { label: 'Second document native props' }),
+    });
+    const secondHtml = await second.text();
+    expectStyles(secondHtml, 'worker-second-nonce');
+    expect(secondHtml).not.toContain('nonce="worker-css-nonce"');
+    expect((await freshSession.completion).fallback).toBe(false);
+    expect(loadLocalRemote).not.toHaveBeenCalled();
+  } finally {
+    freshTransport.dispose();
+  }
 });
 
 test('Worker SSR rejects a publisher without native metadata before requesting its expose', async () => {

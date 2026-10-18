@@ -5,6 +5,7 @@ import {
   readWorkerFederationEnvelope,
   readWorkerFederationManifestUrl,
   readWorkerFederationPath,
+  readWorkerFederationStyles,
   workerFederationEnvelope,
   workerFederationWireJson,
 } from './contract';
@@ -316,6 +317,13 @@ export function createWorkerFederationTransport(options: {
           signal,
           checkDeadline,
         );
+        // Capture browser resources from this same completed manifest before
+        // calling renderer admission, with no intervening await or callback.
+        const styles = readWorkerFederationStyles({
+          manifest,
+          manifestUrl: request.url,
+          expose,
+        });
         const admitted = admitWorkerFederationExpose({
           manifest,
           manifestUrl: request.url,
@@ -332,7 +340,7 @@ export function createWorkerFederationTransport(options: {
           throw new Error(
             'Worker federation publication conflicts with its service coordinate.',
           );
-        return admitted;
+        return Object.freeze({ ...admitted, styles });
       },
       signal,
       deadlineAt,

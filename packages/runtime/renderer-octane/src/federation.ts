@@ -195,24 +195,38 @@ export function federatedComponent<P extends object = Record<string, never>>(
               };
               return { default: Loaded };
             });
-            return {
-              default: externalSnapshotBoundary({
-                authority: admitted.coordinate.native,
-                component: BrowserRemote,
-                contextKeys,
-                timeoutMs: timeout,
-                async snapshot(request, signal) {
-                  const response = await worker.transport.request({
-                    remote: remoteName,
-                    expose,
-                    locale: language,
-                    payload: serializeExternalSnapshotRequest(request),
-                    signal,
-                  });
-                  return decodeExternalSnapshot(response.payload);
-                },
-              }),
+            const boundary = externalSnapshotBoundary({
+              authority: admitted.coordinate.native,
+              component: BrowserRemote,
+              contextKeys,
+              timeoutMs: timeout,
+              async snapshot(request, signal) {
+                const response = await worker.transport.request({
+                  remote: remoteName,
+                  expose,
+                  locale: language,
+                  payload: serializeExternalSnapshotRequest(request),
+                  signal,
+                });
+                return decodeExternalSnapshot(response.payload);
+              },
+            });
+            const Loaded: ComponentBody<P> = props => {
+              // A Worker server does not execute BrowserRemote. Register the
+              // exact admitted expose's extracted CSS in this active native
+              // render; nested snapshots carry these hints through native head.
+              for (const href of admitted.styles) {
+                preinit(href, {
+                  as: 'style',
+                  precedence: 'federated',
+                  ...(context.nonce === undefined
+                    ? {}
+                    : { nonce: context.nonce }),
+                });
+              }
+              return createElement(boundary, props);
             };
+            return { default: Loaded };
           }
           const { module, assets } = await withTimeout(
             Promise.resolve().then(() =>

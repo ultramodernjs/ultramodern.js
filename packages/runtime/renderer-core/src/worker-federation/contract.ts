@@ -44,6 +44,8 @@ export interface AdmittedWorkerFederationExpose {
   readonly path: string;
   readonly identity: Readonly<RendererIdentity>;
   readonly endpoint: string;
+  /** Browser styles captured from this exact admitted manifest/expose. */
+  readonly styles: readonly string[];
 }
 
 export interface WorkerFederationEnvelope {
@@ -271,6 +273,92 @@ function freezeWireValue<T>(value: T): T {
   return copy;
 }
 
+/** Preserve the completed MF browser publicPath/asset URL semantics. */
+export function readWorkerFederationStyles(options: {
+  manifest: unknown;
+  manifestUrl: string;
+  expose: string;
+}): readonly string[] {
+  const manifest = workerFederationRecord(options.manifest, 'manifest');
+  const metadata = workerFederationRecord(
+    manifest.metaData,
+    'manifest metadata',
+  );
+  const manifestUrl = readWorkerFederationManifestUrl(options.manifestUrl);
+  if (!Array.isArray(manifest.exposes))
+    throw new Error('Worker federation manifest exposes must be an array.');
+  const selected = manifest.exposes
+    .map(value => workerFederationRecord(value, 'manifest expose'))
+    .filter(value => value.path === options.expose);
+  if (selected.length !== 1)
+    throw new Error(
+      'Worker federation styles require one exact manifest expose.',
+    );
+  if (selected[0].assets === undefined) return Object.freeze([]);
+  const assets = workerFederationRecord(selected[0].assets, 'expose assets');
+  if (assets.css === undefined) return Object.freeze([]);
+  const css = workerFederationRecord(assets.css, 'expose CSS assets');
+  const files = ['sync', 'async'].flatMap(kind => {
+    const values = css[kind];
+    if (values === undefined) return [];
+    if (!Array.isArray(values))
+      throw new Error('Worker federation CSS assets must be string arrays.');
+    return values.map(value => requiredString(value, 'a CSS asset URL'));
+  });
+  if (files.length === 0) return Object.freeze([]);
+  if (metadata.publicPath === undefined || metadata.publicPath === 'auto')
+    throw new Error(
+      'Worker federation CSS requires a completed static publicPath; auto and getPublicPath cannot resolve styles in a Worker.',
+    );
+  const publicPath = requiredString(
+    metadata.publicPath,
+    'a completed public path',
+  );
+  const explicitScheme = /^[a-z][a-z0-9+.-]*:/iu;
+  const isHttpScheme = /^https?:/iu;
+  const assertScheme = (value: string) => {
+    // Check the authored value before concatenation. Otherwise e.g. data: or
+    // javascript: would be silently converted into an ordinary HTTP pathname.
+    if (explicitScheme.test(value) && !isHttpScheme.test(value))
+      throw new Error(
+        'Worker federation styles require an HTTP(S) publication URL.',
+      );
+  };
+  assertScheme(publicPath);
+  const publicUrl = new URL(publicPath, manifestUrl);
+  if (
+    !['http:', 'https:'].includes(publicUrl.protocol) ||
+    publicUrl.username ||
+    publicUrl.password ||
+    publicUrl.hash
+  )
+    throw new Error(
+      'Worker federation styles require an HTTP(S) publication URL.',
+    );
+  const styles = files.map(file => {
+    assertScheme(file);
+    // Match remoteBrowserAssets: a leading slash on a relative asset belongs
+    // under publicPath; absolute and protocol-relative CDN assets retain theirs.
+    const resolved = /^(?:https?:)?\/\//iu.test(file)
+      ? file
+      : `${publicPath.replace(/\/$/u, '')}/${file.replace(/^\//u, '')}`;
+    const url = new URL(resolved, manifestUrl);
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.hash
+    )
+      throw new Error(
+        'Worker federation styles require an HTTP(S) publication URL.',
+      );
+    // Resource identity must match the browser, including protocol-relative
+    // URLs, authored host casing and dot segments. URL parsing validates only.
+    return resolved;
+  });
+  return Object.freeze([...new Set(styles)]);
+}
+
 export function admitWorkerFederationExpose(options: {
   manifest: unknown;
   manifestUrl: string;
@@ -314,6 +402,9 @@ export function admitWorkerFederationExpose(options: {
     path,
     identity,
     endpoint: new URL(path, url.origin).href,
+    // Handler coordinates carry no browser assets. Transport captures those
+    // separately from its actual completed MF manifest, before renderer hooks.
+    styles: Object.freeze([]),
   });
 }
 

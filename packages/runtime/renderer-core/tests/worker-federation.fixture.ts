@@ -24,7 +24,9 @@ export function admitRendererContract(value: unknown) {
 
 export function manifestFixture() {
   return {
+    exposes: [{ path: './Widget', assets: { css: { sync: [], async: [] } } }],
     metaData: {
+      publicPath: 'https://tractor.example/assets/',
       ultramodernRenderer: {
         schema: 'ultramodern.renderer-federation',
         schemaVersion: 1,

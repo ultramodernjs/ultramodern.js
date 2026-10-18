@@ -1,5 +1,9 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import {
+  type FederationInstance,
+  remoteBrowserAssets,
+} from '../src/federation';
 import * as workerFederationContract from '../src/worker-federation/contract';
 import {
   admitWorkerFederationExpose,
@@ -867,3 +871,226 @@ test('a late old-publisher failure cannot evict the replacement publication', as
   expect(await transport.admit(coordinate)).toBe(fresh.admitted);
   expect(counts()).toEqual([2, 3]);
 });
+
+test('captures and freezes only the exact completed expose CSS with its admitted build', async () => {
+  const manifest = manifestFixture();
+  const css = {
+    sync: ['widget.css', 'https://cdn.example/native.css'],
+    async: ['widget.css', '//cdn.example/lazy.css', '/nested.css'],
+  };
+  Object.assign(manifest.metaData, {
+    publicPath: 'https://tractor.example/client/',
+  });
+  Object.assign(manifest, {
+    exposes: [
+      { path: './Other', assets: { css: { sync: ['other.css'] } } },
+      { path: './Widget', assets: { css } },
+    ],
+  });
+  const { transport } = fixture({ manifest });
+  try {
+    const result = await transport.admit(coordinate);
+    expect(result.styles).toEqual([
+      'https://tractor.example/client/widget.css',
+      'https://cdn.example/native.css',
+      '//cdn.example/lazy.css',
+      'https://tractor.example/client/nested.css',
+    ]);
+    expect(Object.isFrozen(result.styles)).toBe(true);
+    css.sync[0] = 'mutated-original.css';
+    Object.assign(manifest.metaData, { publicPath: 'https://later.example/' });
+    expect(result.styles[0]).toBe('https://tractor.example/client/widget.css');
+    expect(result.coordinate.native.publisherBuildId).toBe(
+      'native-client-build',
+    );
+    expect(result.identity.buildId).toBe('built-remote');
+  } finally {
+    transport.dispose();
+  }
+});
+
+test.each([
+  '/client/assets/',
+  'client/assets/',
+  '//CDN.Example/client/assets/',
+  'HTTPS://CDN.Example/client/../assets/',
+])(
+  'preserves the browser stylesheet identity with publicPath %s',
+  async publicPath => {
+    const css = {
+      sync: [
+        'widget.css',
+        '/nested.css',
+        'HTTPS://CDN.Example/a/../widget.css',
+      ],
+      async: ['widget.css', '//CDN.Example/lazy/../widget.css'],
+    };
+    const manifest = manifestFixture();
+    Object.assign(manifest.metaData, { publicPath });
+    Object.assign(manifest, {
+      exposes: [
+        { path: './Other', assets: { css: { sync: ['unrelated.css'] } } },
+        { path: './Widget', assets: { css } },
+      ],
+    });
+    const instance: FederationInstance = {
+      loadRemote: async () => null,
+      remoteHandler: {
+        idToRemoteMap: {
+          'tractor/Widget': { name: 'tractor', expose: './Widget' },
+        },
+      },
+      moduleCache: new Map([['tractor', { remoteInfo: {} }]]),
+      snapshotHandler: {
+        getGlobalRemoteInfo: () => ({
+          remoteSnapshot: {
+            publicPath,
+            remoteEntry: 'remoteEntry.js',
+            modules: [
+              {
+                modulePath: './Other',
+                assets: { css: { sync: ['unrelated.css'] } },
+              },
+              { modulePath: './Widget', assets: { css } },
+            ],
+          },
+        }),
+      },
+    };
+    const { transport } = fixture({ manifest });
+    try {
+      const browserStyles = remoteBrowserAssets(
+        instance,
+        'tractor/Widget',
+      )?.css;
+      expect(browserStyles).toHaveLength(4);
+      expect((await transport.admit(coordinate)).styles).toEqual(browserStyles);
+    } finally {
+      transport.dispose();
+    }
+  },
+);
+
+test.each(['auto', undefined])(
+  'rejects dynamic-only publicPath %s for completed expose CSS',
+  async publicPath => {
+    const manifest = manifestFixture();
+    Object.assign(manifest.metaData, {
+      publicPath,
+      getPublicPath: 'function () { throw new Error("must not execute"); }',
+    });
+    Object.assign(manifest.exposes[0].assets.css, { sync: ['widget.css'] });
+    const { transport } = fixture({ manifest });
+    try {
+      await expect(transport.admit(coordinate)).rejects.toThrow(
+        'completed static publicPath',
+      );
+    } finally {
+      transport.dispose();
+    }
+  },
+);
+
+test.each(['auto', undefined])(
+  'admits an expose without CSS without evaluating dynamic publicPath %s',
+  async publicPath => {
+    const manifest = manifestFixture();
+    Object.assign(manifest.metaData, {
+      publicPath,
+      getPublicPath: 'function () { throw new Error("must not execute"); }',
+    });
+    Object.assign(manifest.exposes[0].assets, { css: undefined });
+    const { transport } = fixture({ manifest });
+    try {
+      expect((await transport.admit(coordinate)).styles).toEqual([]);
+    } finally {
+      transport.dispose();
+    }
+  },
+);
+
+test.each([
+  { exposes: undefined },
+  { exposes: [{ path: './Other' }] },
+  { exposes: [{ path: './Widget' }, { path: './Widget' }] },
+  { exposes: [{ path: './Widget', assets: { css: { sync: 'bad.css' } } }] },
+  { exposes: [{ path: './Widget', assets: { css: { sync: [1] } } }] },
+  {
+    exposes: [
+      {
+        path: './Widget',
+        assets: { css: { sync: ['https://user:secret@cdn.example/a.css'] } },
+      },
+    ],
+  },
+  {
+    exposes: [
+      {
+        path: './Widget',
+        assets: { css: { sync: ['https://cdn.example/a.css#fragment'] } },
+      },
+    ],
+  },
+  { exposes: [{ path: './Widget', assets: { css: { sync: ['bad\n.css'] } } }] },
+  {
+    exposes: [
+      { path: './Widget', assets: { css: { sync: ['javascript:alert(1)'] } } },
+    ],
+  },
+  {
+    exposes: [
+      { path: './Widget', assets: { css: { sync: ['data:text/css,body{}'] } } },
+    ],
+  },
+  {
+    exposes: [
+      {
+        path: './Widget',
+        assets: { css: { sync: ['ftp://cdn.example/a.css'] } },
+      },
+    ],
+  },
+  {
+    exposes: [
+      { path: './Widget', assets: { css: { sync: ['file:/tmp/a.css'] } } },
+    ],
+  },
+])(
+  'rejects missing, ambiguous or malformed completed expose CSS %j',
+  async assets => {
+    const manifest = manifestFixture();
+    Object.assign(manifest.metaData, {
+      publicPath: 'https://tractor.example/client/',
+    });
+    Object.assign(manifest, assets);
+    const { transport } = fixture({ manifest });
+    try {
+      await expect(transport.admit(coordinate)).rejects.toThrow();
+    } finally {
+      transport.dispose();
+    }
+  },
+);
+
+test.each([
+  'javascript:alert(1)',
+  'data:text/css,body{}',
+  'ftp://cdn.example/assets/',
+  'file:/tmp/assets/',
+  'https://user:secret@cdn.example/assets/',
+  'https://cdn.example/assets/#fragment',
+  'https://cdn.example/ass\nets/',
+])(
+  'rejects unsafe completed publicPath before CSS composition %s',
+  async publicPath => {
+    const manifest = manifestFixture();
+    Object.assign(manifest.metaData, { publicPath });
+    Object.assign(manifest.exposes[0].assets.css, { sync: ['widget.css'] });
+    const { transport } = fixture({ manifest });
+    try {
+      await expect(transport.admit(coordinate)).rejects.toThrow();
+    } finally {
+      transport.dispose();
+    }
+  },
+);

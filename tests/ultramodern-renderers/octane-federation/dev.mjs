@@ -1276,7 +1276,10 @@ export default function Away() { const router = useRouter(); return <section dat
       (await browser('get', 'count', '[data-testid="remote-widget"]')) === '0',
     'returned route remote removal',
   );
-  const finalCleanup = await evaluate('globalThis.__octaneMFRemoteLifecycle');
+  const finalCleanup = await waitFor(async () => {
+    const lifecycle = await evaluate('globalThis.__octaneMFRemoteLifecycle');
+    return lifecycle.currentOwner === null ? lifecycle : false;
+  }, 'native passive cleanup after returned route removal');
   assertLifecycle(finalCleanup, {
     transition: 'unmounted',
     previous: navigationBackBrowser.lifecycle,

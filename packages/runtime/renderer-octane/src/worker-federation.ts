@@ -12,6 +12,7 @@ import {
   type ServerRenderNode,
   serializeExternalSnapshot,
 } from 'octane/server';
+import { createFederationScope, FederationContext } from './federation-context';
 import { WorkerFederationContext } from './worker-federation-context';
 
 type NativeSnapshotRequest = Awaited<
@@ -78,7 +79,11 @@ export function createNativeWorkerFederationRuntime<Bindings extends object>(
       admitNativeRequest(payload, { admitted, signal }) {
         const initializeContexts: ExternalSnapshotRenderOptions['initializeContexts'] =
           transport
-            ? provide => {
+            ? (provide, request) => {
+                provide(
+                  FederationContext,
+                  createFederationScope(undefined, true, request.nonce),
+                );
                 provide(WorkerFederationContext, {
                   transport,
                   locale: admitted.locale,
