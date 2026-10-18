@@ -8,6 +8,8 @@ import { createOctaneWorkerFederationFixtures } from '../../tests/ultramodern-re
 import {
   generatePackedWorkerWorkspace,
   packedWorkerDependencies,
+  packedWorkerProofContext,
+  runPackedNativeFederationWorkerProof,
   verifyPackedWorkerProofEnvelope,
   verifyPackedWorkerProofResult,
   verifyPrebuiltWorkerServices,
@@ -93,6 +95,9 @@ test('real SDK Octane identities drive authored Worker configs without advertisi
       }),
     /Missing native fixture dependency @tsrx\/oxc/u,
   );
+  fixtureOptions.sharedCounterPackage = '@authored-worker/shared-counter';
+  fixtureOptions.dependencies[fixtureOptions.sharedCounterPackage] =
+    'workspace:*';
   const fixture = createOctaneWorkerFederationFixtures(fixtureOptions);
   // Load the emitted config using the actual public preset, without installing
   // anything into the generated apps or mocking the public API.
@@ -112,6 +117,23 @@ test('real SDK Octane identities drive authored Worker configs without advertisi
   try {
     for (const [index, { app, files }] of fixture.applications.entries()) {
       assert.deepEqual(app.deliveryUnit, originals[index].deliveryUnit);
+      assert.equal(
+        JSON.parse(files['package.json']).dependencies[
+          fixtureOptions.sharedCounterPackage
+        ],
+        'workspace:*',
+      );
+      assert(
+        !JSON.parse(files['tsconfig.json']).include.includes(
+          '../../shared/Counter.tsx',
+        ),
+      );
+      assert(
+        Object.values(files).some(value =>
+          /from ['"]@authored-worker\/shared-counter['"]/u.test(value),
+        ),
+      );
+
       const generatedManifest = JSON.parse(
         fs.readFileSync(
           path.join(workspaceRoot, 'workspace', app.directory, 'package.json'),
@@ -396,5 +418,44 @@ test('the prebuilt host uses only genuine preset bindings and preserves the remo
   missingHop[1].wrangler.services = [];
   assert.throws(() =>
     verifyPrebuiltWorkerServices(missingHop, ['worker-a', 'worker-b']),
+  );
+});
+
+test('packed Worker API requires native archives before creating proof resources', async () => {
+  await assert.rejects(
+    runPackedNativeFederationWorkerProof({ renderer: 'octane' }),
+    /requires authenticated native archives/u,
+  );
+});
+
+test('packed Worker child context preserves each exact native archive request and integrity', () => {
+  const nativeInputs = Object.fromEntries(
+    [
+      'octane',
+      '@octanejs/tanstack-router',
+      '@octanejs/rspack-plugin',
+      '@tanstack/router-core',
+    ].map((name, index) => [
+      name,
+      {
+        request: `https://example.test/accepted-${index}.tgz`,
+        archivePath: `/owned/native-${index}.tgz`,
+        integrity: `sha512-accepted-${index}`,
+      },
+    ]),
+  );
+  const context = packedWorkerProofContext({
+    nativeInputs,
+    proofNonce: 'owned-proof',
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(context)), {
+    nativeInputs,
+    proofNonce: 'owned-proof',
+  });
+  const missing = { ...nativeInputs };
+  delete missing['@tanstack/router-core'];
+  assert.throws(
+    () => packedWorkerProofContext({ nativeInputs: missing }),
+    /missing native archive @tanstack\/router-core/u,
   );
 });

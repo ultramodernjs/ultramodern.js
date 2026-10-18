@@ -622,6 +622,196 @@ export async function preparePackedNativeFederationApp({
   return roots;
 }
 
+/** Author the existing shared-source workspace topology using exact packed requests. */
+export function writePackedNativeFederationWorkspace({
+  directory,
+  applications,
+  sharedPackage,
+  context,
+}) {
+  const workspaceRoot = fs.realpathSync(directory);
+  assert(
+    inside(context.workRoot, workspaceRoot),
+    'Packed workspace must belong to its owned temporary run',
+  );
+  const sharedRoot = path.join(workspaceRoot, 'shared');
+  assert.equal(sharedPackage.directory, sharedRoot);
+  assert.equal(sharedPackage.name, '@authored-worker/shared-counter');
+  assert.equal(typeof context.packageRequests.octane, 'string');
+  assert(
+    !fs.existsSync(sharedRoot),
+    'Shared Counter package must be newly owned',
+  );
+  fs.mkdirSync(sharedRoot);
+  for (const [filename, content] of Object.entries(sharedPackage.files)) {
+    const destination = path.resolve(sharedRoot, filename);
+    assert(
+      inside(sharedRoot, destination),
+      'Shared source must belong to its authored package',
+    );
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.writeFileSync(destination, content);
+  }
+  const sharedManifest = {
+    name: sharedPackage.name,
+    version: '0.0.0',
+    private: true,
+    type: 'module',
+    exports: { '.': { types: './Counter.tsx', default: './Counter.tsx' } },
+    dependencies: { octane: context.packageRequests.octane },
+  };
+  fs.writeFileSync(
+    path.join(sharedRoot, 'package.json'),
+    JSON.stringify(sharedManifest, null, 2),
+  );
+  for (const appRoot of applications) {
+    assert(
+      inside(workspaceRoot, fs.realpathSync(appRoot)),
+      'Packed app must belong to its workspace',
+    );
+    const filename = path.join(appRoot, 'package.json');
+    const manifest = readJson(filename);
+    assert.equal(manifest.dependencies[sharedPackage.name], 'workspace:*');
+    const { [sharedPackage.name]: shared, ...dependencies } =
+      manifest.dependencies;
+    const packed = packedNativeFederationManifest(
+      { ...manifest, dependencies },
+      context,
+    );
+    packed.dependencies[sharedPackage.name] = shared;
+    fs.writeFileSync(filename, JSON.stringify(packed, null, 2));
+  }
+  fs.writeFileSync(
+    path.join(workspaceRoot, 'package.json'),
+    JSON.stringify(
+      {
+        name: 'authored-packed-workers',
+        version: '0.0.0',
+        private: true,
+      },
+      null,
+      2,
+    ),
+  );
+  fs.writeFileSync(
+    path.join(workspaceRoot, 'pnpm-workspace.yaml'),
+    stringifyYaml({
+      packages: [
+        ...applications.map(appRoot => path.relative(workspaceRoot, appRoot)),
+        'shared',
+      ],
+      packageImportMethod: 'clone-or-copy',
+      minimumReleaseAge: 1440,
+      minimumReleaseAgeStrict: true,
+      minimumReleaseAgeIgnoreMissingTime: false,
+      minimumReleaseAgeExclude: [],
+      allowBuilds: context.allowBuilds,
+    }),
+  );
+}
+
+/** A workspace source link is allowed only for the one owned authored Counter. */
+export function verifyPackedNativeFederationWorkspace({
+  directory,
+  applications,
+  sharedPackage,
+  context,
+}) {
+  const workspaceRoot = fs.realpathSync(directory);
+  assert(
+    inside(context.workRoot, workspaceRoot),
+    'Packed workspace must belong to its owned temporary run',
+  );
+  const storeRoot = path.join(workspaceRoot, 'node_modules/.pnpm');
+  assert.equal(
+    installedStore(workspaceRoot),
+    storeRoot,
+    'Packed workspace requires its own physical pnpm store',
+  );
+  const sharedRoot = fs.realpathSync(sharedPackage.directory);
+  assert.equal(
+    sharedRoot,
+    path.join(workspaceRoot, 'shared'),
+    'Shared Counter must be the owned workspace package',
+  );
+  const sharedManifest = readJson(path.join(sharedRoot, 'package.json'));
+  assert.equal(sharedManifest.name, sharedPackage.name);
+  assert.deepEqual(sharedManifest.dependencies, {
+    octane: context.packageRequests.octane,
+  });
+  assert.deepEqual(sharedManifest.exports, {
+    '.': { types: './Counter.tsx', default: './Counter.tsx' },
+  });
+  for (const [filename, content] of Object.entries(sharedPackage.files)) {
+    const source = path.resolve(sharedRoot, filename);
+    assert(inside(sharedRoot, source));
+    assert.equal(
+      fs.realpathSync(source),
+      source,
+      'Shared Counter source must be physical',
+    );
+    assert.equal(
+      fs.readFileSync(source, 'utf8'),
+      content,
+      'Shared Counter differs from its authored source',
+    );
+  }
+  const sharedRuntime = verifyPackedNativeFederationDependencies({
+    appRoot: sharedRoot,
+    storeRoot,
+    cohort: context.cohort,
+    packageIdentities: context.packageIdentities,
+  }).octane;
+  return applications.map(appRoot => {
+    assert(
+      inside(workspaceRoot, fs.realpathSync(appRoot)),
+      'Packed app must belong to its workspace',
+    );
+    assert.equal(
+      installedStore(appRoot),
+      storeRoot,
+      'Packed app must use its workspace pnpm store',
+    );
+    const manifest = readJson(path.join(appRoot, 'package.json'));
+    assert.equal(manifest.dependencies[sharedPackage.name], 'workspace:*');
+    assert.equal(
+      fs.realpathSync(path.join(appRoot, 'node_modules', sharedPackage.name)),
+      sharedRoot,
+      'Shared Counter link must resolve to the owned workspace package',
+    );
+    const dependencyNames = Object.keys({
+      ...manifest.dependencies,
+      ...manifest.devDependencies,
+    }).filter(name => name !== sharedPackage.name);
+    const roots = verifyPackedNativeFederationDependencies({
+      appRoot,
+      storeRoot,
+      dependencyNames,
+      cohort: context.cohort,
+      packageIdentities: context.packageIdentities,
+    });
+    assert.equal(
+      roots.octane,
+      sharedRuntime,
+      'Shared Counter and app must resolve one physical Octane runtime',
+    );
+    checkInstalledCohort({ appRoot, cohort: context.cohort });
+    verifyPackedNativeFederationInputs(appRoot, context.nativeInputs);
+    return roots;
+  });
+}
+
+/** Install one explicit owned workspace, retaining standalone app isolation elsewhere. */
+export async function preparePackedNativeFederationWorkspace(options) {
+  assert(
+    options.context.nativeInputs,
+    'Packed workspace requires authenticated native archives',
+  );
+  writePackedNativeFederationWorkspace(options);
+  await installPackedNativeFederationDependencies(options);
+  return verifyPackedNativeFederationWorkspace(options);
+}
+
 /** Run the existing native behavior proof using only installed candidate packages. */
 export async function runPackedNativeFederationProof({
   renderer,

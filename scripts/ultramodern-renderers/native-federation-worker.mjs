@@ -14,11 +14,12 @@ import { confinedPath } from '../lib/file-evidence.mjs';
 import { reservePort } from '../ultramodern-production-readiness/renderer-mf-lifecycle-proof/runtime.mjs';
 import {
   installedBin,
-  preparePackedNativeFederationApp,
+  preparePackedNativeFederationWorkspace,
   readPackedNativeFederationContext,
   runPackedNativeFederationCommand,
   runPackedNativeFederationProof,
   verifyPackedNativeFederationDependencies,
+  verifyPackedNativeFederationInputs,
 } from './native-federation-packed.mjs';
 
 const readJson = filename => JSON.parse(fs.readFileSync(filename, 'utf8'));
@@ -230,6 +231,7 @@ export async function buildCompiledWorkerApplications({
         appRoot: application.appRoot,
         cohort: context.cohort,
         dependencyNames: application.dependencyNames,
+        packageIdentities: context.packageIdentities,
       });
       for (const [label, args] of [
         ['build', ['build']],
@@ -441,34 +443,45 @@ async function provePackedWorkers(context, input, signal) {
     ),
   );
   const dependencies = packedWorkerDependencies(context);
+  const sharedPackageName = '@authored-worker/shared-counter';
   const fixture = createOctaneWorkerFederationFixtures({
     host,
     remotes,
     remoteOrigins: origins.slice(1),
-    dependencies,
+    dependencies: { ...dependencies, [sharedPackageName]: 'workspace:*' },
+    sharedCounterPackage: sharedPackageName,
     services,
     remoteServices,
     deploymentSource: 'authored',
   });
-  writeFiles(path.join(workspaceRoot, 'shared'), fixture.shared);
-  const applications = [];
-  for (const [index, { app, files }] of fixture.applications.entries()) {
+  const sharedPackage = {
+    name: sharedPackageName,
+    directory: path.join(workspaceRoot, 'shared'),
+    files: fixture.shared,
+  };
+  for (const { app, files } of fixture.applications) {
     const appRoot = path.join(workspaceRoot, app.directory);
-    // This row proves ordinary authored apps. Public generation without later edits
-    // is deliberately exercised by the distinct generated Worker row.
+    // This row proves ordinary authored workspace apps. Public generation is separate.
     fs.rmSync(path.join(appRoot, 'src'), { recursive: true });
     writeFiles(appRoot, files);
-    await preparePackedNativeFederationApp({
-      directory: appRoot,
-      renderer: 'octane',
-      context,
-      installerWitnessPath: path.join(
-        context.workRoot,
-        'process-witnesses',
-        `${index}.json`,
-      ),
-      signal,
-    });
+  }
+  const installedRoots = await preparePackedNativeFederationWorkspace({
+    directory: workspaceRoot,
+    applications: fixture.applications.map(({ app }) =>
+      path.join(workspaceRoot, app.directory),
+    ),
+    sharedPackage,
+    context,
+    signal,
+    installerWitnessPath: path.join(
+      context.workRoot,
+      'process-witnesses',
+      '0.json',
+    ),
+  });
+  const applications = [];
+  for (const [index, { app }] of fixture.applications.entries()) {
+    const appRoot = path.join(workspaceRoot, app.directory);
     // Load the renderer's real native compiler, including its optional parser peer,
     // from this freshly installed app before starting any Worker compilation.
     const rendererRequire = createRequire(
@@ -487,6 +500,7 @@ async function provePackedWorkers(context, input, signal) {
     applications.push({
       role: index === 0 ? 'host' : 'remote',
       ...(index ? { remote: app.id } : {}),
+      dependencyNames: Object.keys(installedRoots[index]),
       appRoot,
       origin: origins[index],
     });
@@ -528,12 +542,11 @@ async function provePackedWorkers(context, input, signal) {
         path.join(context.workRoot, `worker-${index}-${label}-process.json`),
       ),
     ),
-    ...applications.map(application =>
-      path.join(application.appRoot, 'pnpm-lock.yaml'),
-    ),
-    ...applications.map((_, index) =>
-      path.join(context.workRoot, 'process-witnesses', `${index}.json`),
-    ),
+    path.join(workspaceRoot, 'pnpm-lock.yaml'),
+    path.join(workspaceRoot, 'pnpm-workspace.yaml'),
+    path.join(workspaceRoot, 'shared/package.json'),
+    path.join(workspaceRoot, 'shared/Counter.tsx'),
+    path.join(context.workRoot, 'process-witnesses', '0.json'),
   ];
   const evidence = files.map((filename, index) => {
     const copied = path.join(
@@ -554,6 +567,25 @@ async function provePackedWorkers(context, input, signal) {
   );
 }
 
+/** Preserve the exact authenticated native archive inputs across the child boundary. */
+export function packedWorkerProofContext(context) {
+  assert(
+    context.nativeInputs,
+    'Packed Worker proof requires authenticated native archives',
+  );
+  for (const name of [
+    'octane',
+    '@octanejs/tanstack-router',
+    '@octanejs/rspack-plugin',
+    '@tanstack/router-core',
+  ])
+    assert(
+      context.nativeInputs[name],
+      `Packed Worker proof is missing native archive ${name}`,
+    );
+  return { ...context };
+}
+
 /** The original proof and all process cleanup must pass before an acceptance receipt exists. */
 export async function runPackedNativeFederationWorkerProof({
   receiptPath,
@@ -561,9 +593,12 @@ export async function runPackedNativeFederationWorkerProof({
   generatorConsumerRoot,
   browserDependencyRoot,
   browserExecutable,
+  nativeInputs,
   ...options
 }) {
   assert.equal(options.renderer, 'octane');
+  const nativeContext = packedWorkerProofContext({ nativeInputs });
+  verifyPackedNativeFederationInputs(options.consumerRoot, nativeInputs);
   assert(
     receiptPath && binding,
     'Worker acceptance needs its release receipt binding.',
@@ -593,6 +628,7 @@ export async function runPackedNativeFederationWorkerProof({
     ...options,
     proofScript: fileURLToPath(import.meta.url),
     contextExtras: {
+      ...nativeContext,
       generatorConsumerRoot,
       browserDependencyRoot,
       browserExecutable,

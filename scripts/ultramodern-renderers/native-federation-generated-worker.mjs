@@ -203,6 +203,7 @@ export async function runPackedNativeFederationGeneratedWorkerProof(context) {
       generatorConsumerRoot: context.generatorConsumerRoot,
       browserDependencyRoot: context.browserDependencyRoot,
       browserExecutable: context.browserExecutable,
+      nativeInputs: context.nativeInputs,
       generatedWorkerResultPath: proofResultPath,
       proofEvidenceDirectory: evidenceDirectory,
       proofBinding: context.binding,

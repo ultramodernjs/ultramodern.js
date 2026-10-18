@@ -12,6 +12,8 @@ import {
   runPackedNativeFederationProof,
   verifyPackedNativeFederationDependencies,
   verifyPackedNativeFederationInputs,
+  verifyPackedNativeFederationWorkspace,
+  writePackedNativeFederationWorkspace,
 } from './native-federation-packed.mjs';
 
 assert(
@@ -308,7 +310,7 @@ test('witness directories record the actual command child PID', async () => {
   }
 });
 
-test('parent cleanup retires a detached group left by an exited proof', async () => {
+test('parent cleanup retires a workspace installer recorded at numeric witness 0.json', async () => {
   const supplied = fixture();
   const copiedWitness = path.join(supplied.root, 'child-process.json');
   try {
@@ -322,7 +324,7 @@ import { spawn } from 'node:child_process';
 import { recordPackedNativeFederationProcess } from ${JSON.stringify(new URL('./native-federation-packed.mjs', import.meta.url).href)};
 const input = JSON.parse(fs.readFileSync(process.env.ULTRAMODERN_MF_PACKED_CONTEXT, 'utf8'));
 const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 10_000)'], { detached: true, stdio: 'ignore' });
-const witness = path.join(process.env.OWNED_TEMP_DIR, 'process-witnesses', child.pid + '.json');
+const witness = path.join(process.env.OWNED_TEMP_DIR, 'process-witnesses', '0.json');
 recordPackedNativeFederationProcess(witness, child.pid);
 fs.copyFileSync(witness, input.copiedWitness);
 process.exit(0);
@@ -683,6 +685,203 @@ test('checks every supplied native byte and rejects a second physical core befor
         ),
       /one physical router core/u,
     );
+  } finally {
+    fs.rmSync(supplied.root, { recursive: true });
+  }
+});
+
+function packedWorkspaceFixture() {
+  const supplied = fixture();
+  const workspaceRoot = supplied.appRoot;
+  const runtime = externalPackage(supplied, 'octane', '0.13.8');
+  const typescript = externalPackage(supplied, 'typescript', '7.0.0-test');
+  const nodeTypes = externalPackage(supplied, '@types/node', '26.0.0');
+  const app = path.join(workspaceRoot, 'apps/host');
+  fs.mkdirSync(app, { recursive: true });
+  const name = '@authored-worker/shared-counter';
+  fs.writeFileSync(
+    path.join(app, 'package.json'),
+    JSON.stringify({
+      dependencies: {
+        [supplied.sourceName]: 'workspace:*',
+        octane: '0.13.8',
+        [name]: 'workspace:*',
+      },
+    }),
+  );
+  const options = {
+    directory: workspaceRoot,
+    applications: [app],
+    sharedPackage: {
+      name,
+      directory: path.join(workspaceRoot, 'shared'),
+      files: { 'Counter.tsx': 'export const counter = 3;\n' },
+    },
+    context: {
+      workRoot: supplied.root,
+      cohort: supplied.cohort,
+      packageRequests: {
+        octane: '0.13.8',
+        typescript: '7.0.0-test',
+        '@types/node': '26.0.0',
+      },
+      packageRoots: { typescript, '@types/node': nodeTypes },
+      packageIdentities: { octane: { name: 'octane', version: '0.13.8' } },
+    },
+  };
+  writePackedNativeFederationWorkspace(options);
+  const link = (owner, dependency, target) => {
+    const destination = path.join(owner, 'node_modules', dependency);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.symlinkSync(target, destination, 'dir');
+  };
+  link(options.sharedPackage.directory, 'octane', runtime);
+  for (const [dependency, target] of Object.entries({
+    [supplied.sourceName]: supplied.directory,
+    octane: runtime,
+    typescript,
+    '@types/node': nodeTypes,
+    [name]: options.sharedPackage.directory,
+  }))
+    link(app, dependency, target);
+  return { supplied, options, app, runtime };
+}
+
+test('authored packed workspace keeps exact aliases, strict policy and one shared physical runtime', () => {
+  const { supplied, options, app } = packedWorkspaceFixture();
+  try {
+    const roots = verifyPackedNativeFederationWorkspace(options);
+    assert.equal(roots[0][supplied.sourceName], supplied.directory);
+    assert.deepEqual(
+      Object.keys(roots[0]).toSorted(),
+      [supplied.sourceName, 'octane', 'typescript', '@types/node'].toSorted(),
+    );
+    assert.throws(
+      () =>
+        verifyPackedNativeFederationWorkspace({
+          ...options,
+          context: { ...options.context, nativeInputs: {} },
+        }),
+      /Missing exact native input: octane/u,
+    );
+
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(app, 'package.json')),
+    );
+    assert.equal(
+      manifest.dependencies[supplied.sourceName],
+      'npm:@bleedingdev/modern-js-renderer-octane@1.0.0',
+    );
+    assert.equal(
+      manifest.dependencies[options.sharedPackage.name],
+      'workspace:*',
+    );
+    const policy = fs.readFileSync(
+      path.join(options.directory, 'pnpm-workspace.yaml'),
+      'utf8',
+    );
+    assert.match(policy, /minimumReleaseAge: 1440/u);
+    assert.match(policy, /minimumReleaseAgeStrict: true/u);
+    assert.match(policy, /minimumReleaseAgeIgnoreMissingTime: false/u);
+    assert.match(policy, /minimumReleaseAgeExclude: \[\]/u);
+    assert.equal(fs.existsSync(path.join(app, 'pnpm-workspace.yaml')), false);
+  } finally {
+    fs.rmSync(supplied.root, { recursive: true });
+  }
+});
+
+test('packed workspace rejects shared source linked from an unexpected root', () => {
+  const { supplied, options, app } = packedWorkspaceFixture();
+  try {
+    const link = path.join(app, 'node_modules', options.sharedPackage.name);
+    fs.unlinkSync(link);
+    const foreign = path.join(supplied.root, 'foreign-shared');
+    fs.cpSync(options.sharedPackage.directory, foreign, { recursive: true });
+    fs.symlinkSync(foreign, link, 'dir');
+    assert.throws(
+      () => verifyPackedNativeFederationWorkspace(options),
+      /owned workspace package/u,
+    );
+  } finally {
+    fs.rmSync(supplied.root, { recursive: true });
+  }
+});
+
+test('packed workspace rejects packages from a foreign store and mutated shared source', () => {
+  const { supplied, options, app, runtime } = packedWorkspaceFixture();
+  try {
+    const link = path.join(app, 'node_modules/octane');
+    fs.unlinkSync(link);
+    const foreign = path.join(supplied.root, 'foreign-runtime');
+    fs.cpSync(runtime, foreign, { recursive: true });
+    fs.symlinkSync(foreign, link, 'dir');
+    assert.throws(
+      () => verifyPackedNativeFederationWorkspace(options),
+      /outside the packed consumer's pnpm store/u,
+    );
+    fs.unlinkSync(link);
+    fs.symlinkSync(runtime, link, 'dir');
+    fs.writeFileSync(
+      path.join(options.sharedPackage.directory, 'Counter.tsx'),
+      'export const counter = 4;\n',
+    );
+    assert.throws(
+      () => verifyPackedNativeFederationWorkspace(options),
+      /differs from its authored source/u,
+    );
+  } finally {
+    fs.rmSync(supplied.root, { recursive: true });
+  }
+});
+
+test('packed workspace rejects a second physical runtime even at the same version', () => {
+  const { supplied, options, app, runtime } = packedWorkspaceFixture();
+  try {
+    const link = path.join(app, 'node_modules/octane');
+    fs.unlinkSync(link);
+    const duplicate = path.join(
+      options.directory,
+      'node_modules/.pnpm/second-runtime/node_modules/octane',
+    );
+    fs.cpSync(runtime, duplicate, { recursive: true });
+    fs.symlinkSync(duplicate, link, 'dir');
+    assert.throws(
+      () => verifyPackedNativeFederationWorkspace(options),
+      /one physical Octane runtime/u,
+    );
+  } finally {
+    fs.rmSync(supplied.root, { recursive: true });
+  }
+});
+
+test('packed workspace verifies direct cohort request specs as well as installed bytes', () => {
+  const { supplied, options, app } = packedWorkspaceFixture();
+  try {
+    const filename = path.join(app, 'package.json');
+    const manifest = JSON.parse(fs.readFileSync(filename));
+    manifest.dependencies[supplied.sourceName] = '1.0.0';
+    fs.writeFileSync(filename, JSON.stringify(manifest));
+    assert.throws(
+      () => verifyPackedNativeFederationWorkspace(options),
+      /must depend on the packed cohort/u,
+    );
+  } finally {
+    fs.rmSync(supplied.root, { recursive: true });
+  }
+});
+
+test('packed workspace cannot write shared files through an existing symlink', () => {
+  const { supplied, options } = packedWorkspaceFixture();
+  try {
+    const foreign = path.join(supplied.root, 'foreign-empty');
+    fs.mkdirSync(foreign);
+    fs.rmSync(options.sharedPackage.directory, { recursive: true });
+    fs.symlinkSync(foreign, options.sharedPackage.directory, 'dir');
+    assert.throws(
+      () => writePackedNativeFederationWorkspace(options),
+      /must be newly owned/u,
+    );
+    assert.deepEqual(fs.readdirSync(foreign), []);
   } finally {
     fs.rmSync(supplied.root, { recursive: true });
   }

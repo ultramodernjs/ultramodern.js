@@ -869,6 +869,9 @@ async function main() {
     if (opts['required-features']) {
       const rows = {};
       const binding = rendererFeatureBinding(cohort);
+      const nativeInputs = opts['native-inputs']
+        ? readJson(path.resolve(opts['native-inputs']))
+        : undefined;
       for (const [row, renderer, module, exported] of [
         [
           'generated-solid',
@@ -908,9 +911,7 @@ async function main() {
             throw new Error(`${row} has no installed proof entrypoint`);
           activeNativeFederation = run({
             renderer,
-            ...(row === 'dev-refresh' && opts['native-inputs']
-              ? { nativeInputs: readJson(path.resolve(opts['native-inputs'])) }
-              : {}),
+            ...(renderer === 'octane' && nativeInputs ? { nativeInputs } : {}),
             consumerRoot: apps[renderer].appRoot,
             generatorConsumerRoot: createRoot,
             browserDependencyRoot: playwrightRoot(),
