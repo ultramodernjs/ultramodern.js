@@ -1,5 +1,10 @@
 import fs from 'node:fs';
-import { type IncomingHttpHeaders, request } from 'node:http';
+import {
+  type IncomingHttpHeaders,
+  type IncomingMessage,
+  request,
+  type ServerResponse,
+} from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -325,6 +330,10 @@ async function replacementApp(
   federation = false,
   manualContainerHmr = false,
   browserModule = false,
+  initialPublication?: {
+    hold(address: URL): Promise<void>;
+    manifestRequest(request: IncomingMessage, response: ServerResponse): void;
+  },
 ) {
   const root = temporaryRoot('replacement-dev-');
   fs.writeFileSync(
@@ -432,6 +441,23 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
   const owner: RsbuildPlugin = {
     name: 'test-replacement-compiler',
     setup(api) {
+      if (initialPublication) {
+        beforeAggregateCompile = () =>
+          initialPublication.hold(
+            new URL(
+              `http://${api.context.devServer!.hostname}:${api.context.devServer!.port}/`,
+            ),
+          );
+        api.onBeforeStartDevServer(({ server }) => {
+          server.httpServer?.on('request', (request, response) => {
+            if (
+              URL.parse(request.url ?? '/', 'http://fixture.invalid')
+                ?.pathname === '/replacement-assets/mf-manifest.json'
+            )
+              initialPublication.manifestRequest(request, response);
+          });
+        });
+      }
       api.onAfterCreateCompiler(({ compiler }) => {
         clientCompiler = (
           'compilers' in compiler ? compiler.compilers : [compiler]
@@ -789,6 +815,106 @@ describe('native development', () => {
         'immutable',
       );
       expect(await namespaced.text()).toBe(expected);
+    }
+  }, 300_000);
+
+  it('holds initial browser manifest discovery until its completed graph is published', async () => {
+    const publicationReached = Promise.withResolvers<URL>();
+    const resumePublication = Promise.withResolvers<void>();
+    const received = new Map(
+      ['GET', 'HEAD', 'ABORT'].map(method => [
+        method,
+        Promise.withResolvers<ServerResponse>(),
+      ]),
+    );
+    const starting = replacementApp(false, true, false, false, {
+      async hold(address) {
+        publicationReached.resolve(address);
+        await resumePublication.promise;
+      },
+      manifestRequest(request, response) {
+        received
+          .get(request.headers['x-fixture-abort'] ? 'ABORT' : request.method!)!
+          .resolve(response);
+      },
+    });
+    const abort = new AbortController();
+    let abandoned: Promise<unknown> | undefined;
+    let get: Promise<Response> | undefined;
+    let head: Promise<Response> | undefined;
+    try {
+      const address = await publicationReached.promise;
+      const manifest = new URL('/replacement-assets/mf-manifest.json', address);
+      let discovered = 0;
+      get = fetch(manifest, { signal: AbortSignal.timeout(30_000) }).then(
+        value => {
+          discovered++;
+          return value;
+        },
+      );
+      head = fetch(manifest, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(30_000),
+      }).then(value => {
+        discovered++;
+        return value;
+      });
+      abandoned = fetch(manifest, {
+        headers: { 'x-fixture-abort': '1' },
+        signal: abort.signal,
+      }).then(
+        () => {
+          throw new Error('Canceled discovery unexpectedly completed');
+        },
+        error => {
+          if (!abort.signal.aborted) throw error;
+        },
+      );
+      const [getResponse, headResponse, abandonedResponse] = await Promise.all(
+        [...received.values()].map(value => value.promise),
+      );
+      const canceled = new Promise<void>(resolve =>
+        abandonedResponse!.once('close', resolve),
+      );
+      abort.abort();
+      await abandoned;
+      await canceled;
+      // The ordinary emitted container is already available from Rsbuild;
+      // holding discovery cannot be explained by a stopped HTTP server.
+      const ordinaryEntry = await fetch(
+        new URL('/replacement-assets/remoteEntry.js', address),
+        { signal: AbortSignal.timeout(30_000) },
+      );
+      expect(ordinaryEntry.status).toBe(200);
+      await ordinaryEntry.arrayBuffer();
+      expect(discovered).toBe(0);
+      expect(getResponse!.headersSent).toBe(false);
+      expect(headResponse!.headersSent).toBe(false);
+      resumePublication.resolve();
+      const app = await starting;
+      await until(app, 'first:replacement-compiler');
+      const [discovery, metadata] = await Promise.all([get, head]);
+      expect(discovery.status).toBe(200);
+      expect(metadata.status).toBe(200);
+      const link = discovery.headers.get('Link');
+      expect(link).toMatch(
+        /^<https?:\/\/[^>]+\/__ultramodern_mf__\/[a-f0-9]+\/mf-manifest\.json>; rel="ultramodern-completed-graph"$/u,
+      );
+      const revision = discovery.headers.get(
+        NATIVE_FEDERATION_DEV_REVISION_HEADER,
+      );
+      expect(revision).toMatch(/^[a-f0-9]{64}$/u);
+      expect(metadata.headers.get('Link')).toBe(link);
+      expect(metadata.headers.get(NATIVE_FEDERATION_DEV_REVISION_HEADER)).toBe(
+        revision,
+      );
+      const frozen = await fetch(/^<([^>]+)>/u.exec(link!)![1]);
+      expect(await frozen.text()).toBe(await discovery.text());
+      expect(await metadata.text()).toBe('');
+    } finally {
+      abort.abort();
+      resumePublication.resolve();
+      await Promise.allSettled([starting, abandoned, get, head]);
     }
   }, 300_000);
 

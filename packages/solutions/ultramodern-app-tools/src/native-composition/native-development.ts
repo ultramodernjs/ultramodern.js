@@ -29,6 +29,7 @@ import {
   type NativeDevelopmentAsset,
   type NativeFederationDevGraph,
   nativeFederationDevGraph,
+  nativeFederationDevManifest,
   nativeFederationDevRevision,
   resolveNativeFederationDevAsset,
   resolveNativeFederationDevManifest,
@@ -176,6 +177,7 @@ export class NativeDevelopment {
     new Map();
   private federationRevision: string | undefined;
   private federationGraph: NativeFederationDevGraph | undefined;
+  private readonly federationCompilers = new Set<Rspack.Compiler>();
   /** Immutable remote closures stay available to already-open hosts. */
   private retainedFederationAssets: ReadonlyMap<
     string,
@@ -234,8 +236,9 @@ export class NativeDevelopment {
           const retain: NonNullable<
             NonNullable<typeof config.dev>['setupMiddlewares']
           > = middlewares => {
-            middlewares.unshift((request, response, next) => {
-              if (this.closed) return next();
+            const owner = this;
+            middlewares.unshift(function serve(request, response, next) {
+              if (owner.closed) return next();
               if (request.method !== 'GET' && request.method !== 'HEAD')
                 return next();
               const pathname = URL.parse(
@@ -245,10 +248,48 @@ export class NativeDevelopment {
               const protocol =
                 request.socket instanceof TLSSocket ? 'https:' : 'http:';
               const origin = `${protocol}//${request.headers.host}`;
+              if (
+                !owner.federationGraph &&
+                [...owner.federationCompilers].some(compiler => {
+                  const manifest = nativeFederationDevManifest(compiler);
+                  return manifest && URL.parse(manifest)?.pathname === pathname;
+                })
+              ) {
+                // Rsbuild can expose its emitted manifest before the awaited
+                // native publication has validated and retained the graph.
+                // Discovery must wait for that publication, not fall through
+                // to a manifest without its completed-graph coordinates.
+                const pending = new AbortController();
+                const aborted = () =>
+                  pending.abort(new Error('Native manifest request closed'));
+                request.once('aborted', aborted);
+                response.once('close', aborted);
+                if (request.aborted || response.destroyed) aborted();
+                const cleanup = () => {
+                  request.removeListener('aborted', aborted);
+                  response.removeListener('close', aborted);
+                };
+                void owner.waitForPublication(pending.signal).then(
+                  () => {
+                    cleanup();
+                    if (pending.signal.aborted) return;
+                    if (!owner.federationGraph)
+                      return next(
+                        new Error('Native browser manifest was not published'),
+                      );
+                    serve(request, response, next);
+                  },
+                  error => {
+                    cleanup();
+                    if (!pending.signal.aborted) next(error);
+                  },
+                );
+                return;
+              }
               const hotUpdate =
-                this.federationGraph &&
+                owner.federationGraph &&
                 nativeFederationDevHotUpdateTarget(
-                  this.federationGraph.publicPath,
+                  owner.federationGraph.publicPath,
                   request.url ?? '/',
                   origin,
                 );
@@ -260,19 +301,19 @@ export class NativeDevelopment {
               }
               const federationAsset =
                 resolveNativeFederationDevAsset(
-                  this.federationAssets,
+                  owner.federationAssets,
                   request.url ?? '/',
                   origin,
                 ) ??
-                (this.federationGraph &&
+                (owner.federationGraph &&
                   resolveNativeFederationDevManifest(
-                    this.federationAssets,
+                    owner.federationAssets,
                     request.url ?? '/',
-                    this.federationGraph.manifest,
+                    owner.federationGraph.manifest,
                   ));
-              const revision = this.federationRevision;
+              const revision = owner.federationRevision;
               const asset =
-                federationAsset || (pathname && this.retained.get(pathname));
+                federationAsset || (pathname && owner.retained.get(pathname));
               if (!asset) return next();
               applyDevServerHeaders(
                 request,
@@ -290,7 +331,7 @@ export class NativeDevelopment {
                 if (federationAsset) {
                   const graphManifest =
                     asset.graphManifest ??
-                    this.federationGraph?.immutableManifest;
+                    owner.federationGraph?.immutableManifest;
                   if (graphManifest)
                     response.setHeader(
                       'Link',
@@ -349,6 +390,7 @@ export class NativeDevelopment {
           const compilers =
             'compilers' in compiler ? compiler.compilers : [compiler];
           for (const candidate of compilers) {
+            this.federationCompilers.add(candidate);
             this.compilerVersions.set(candidate, 0);
             let runVersion = 0;
             const captureRun = () => {
@@ -462,6 +504,16 @@ export class NativeDevelopment {
         assertRendererIdentity(snapshot.manifest.rendererIdentity, identity);
         return snapshot;
       }
+      await this.waitForPublication(signal);
+    }
+  }
+
+  private async waitForPublication(signal: AbortSignal): Promise<void> {
+    for (;;) {
+      signal.throwIfAborted();
+      if (this.closed) throw new Error('Native development compiler is closed');
+      if (this.failure) throw this.failure.error;
+      if (this.ready) return;
       await new Promise<void>((resolve, reject) => {
         const resumed = () => {
           signal.removeEventListener('abort', aborted);
@@ -651,6 +703,7 @@ export class NativeDevelopment {
     this.federationAssets = new Map();
     this.federationRevision = undefined;
     this.federationGraph = undefined;
+    this.federationCompilers.clear();
     this.retainedFederationAssets = new Map();
     if (this.manifestFile) await fs.rm(this.manifestFile, { force: true });
   }

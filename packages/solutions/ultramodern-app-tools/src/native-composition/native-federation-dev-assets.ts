@@ -85,6 +85,27 @@ export interface NativeFederationDevGraph {
 
 /** The native MF owner marks its container, rather than exposing server output. */
 const containers = new WeakMap<Rspack.Compilation, NativeFederationContainer>();
+const compilerContainers = new WeakMap<
+  Rspack.Compiler,
+  NativeFederationContainer
+>();
+
+/** The configured discovery route is owned before its first graph publishes. */
+export function nativeFederationDevManifest(
+  compiler: Rspack.Compiler,
+): string | undefined {
+  const descriptor = compilerContainers.get(compiler);
+  if (!descriptor?.browserManifest) return;
+  const publicPath = compiler.options.output.publicPath;
+  if (typeof publicPath !== 'string')
+    throw new Error(
+      'Native development federation requires a browser publicPath',
+    );
+  return new URL(
+    descriptor.browserManifest,
+    publicPath.endsWith('/') ? publicPath : `${publicPath}/`,
+  ).href;
+}
 
 export function nativeFederationDevGraph(
   result: Rspack.Stats,
@@ -118,6 +139,7 @@ export class NativeFederationDevAssetsPlugin {
 
   apply(compiler: Rspack.Compiler): void {
     const name = 'UltraModernFederationDevAssets';
+    compilerContainers.set(compiler, { name: this.container, ...this.options });
     compiler.hooks.thisCompilation.tap(name, compilation => {
       containers.set(compilation, { name: this.container, ...this.options });
       const manifestFile = this.options.browserManifest;
