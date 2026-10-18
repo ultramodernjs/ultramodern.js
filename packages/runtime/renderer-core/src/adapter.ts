@@ -250,6 +250,8 @@ export function nativeRendererDependencies(
         ([name]) => !name.startsWith('@modern-js/'),
       ),
     ),
-    [profile.router.coreName]: profile.router.coreVersion,
+    [profile.router.coreName]:
+      profile.dependencies[profile.router.coreName] ??
+      profile.router.coreVersion,
   };
 }
