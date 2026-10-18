@@ -18,6 +18,10 @@ import {
 } from '../../../scripts/ultramodern-renderers/native-federation-packed.mjs';
 import { checkSolidBundleModules } from './generated-bundle.mjs';
 import { installCancellationDiagnostics } from './generated-cancellation-diagnostics.mjs';
+import {
+  observeDeferredLoaderNetwork,
+  probeRawDeferredLoader,
+} from './generated-network-diagnostics.mjs';
 import { createSolidConsumerObserver } from './generated-observer.mjs';
 import { createRequestDiagnostics } from './generated-request-diagnostics.mjs';
 import { createAdmissionProcessScope } from './processes.mjs';
@@ -381,6 +385,7 @@ export async function checkGeneratedSolidBrowser({
   try {
     signal.throwIfAborted();
     const page = await browser.newPage();
+    const nativeNetwork = await observeDeferredLoaderNetwork(page);
     const traffic = createRequestDiagnostics();
     traffic.attach(page, 'main');
     const errors = [];
@@ -775,7 +780,13 @@ export async function checkGeneratedSolidBrowser({
     assert.equal(recovery.status, 200);
     await recovery.arrayBuffer();
     let mainPageState;
+    let rawLoaderDiagnostic;
     if (errors.length) {
+      try {
+        rawLoaderDiagnostic = await probeRawDeferredLoader(browser, origin);
+      } catch (error) {
+        rawLoaderDiagnostic = { diagnosticError: String(error).slice(0, 2048) };
+      }
       let diagnosticTimer;
       try {
         mainPageState = await Promise.race([
@@ -807,7 +818,7 @@ export async function checkGeneratedSolidBrowser({
     assert.deepEqual(
       errors,
       [],
-      `The native browser raised errors or failed resources\nBrowser request lifecycle: ${JSON.stringify(traffic.snapshot())}\nMain page state: ${JSON.stringify(mainPageState)}`,
+      `The native browser raised errors or failed resources\nBrowser request lifecycle: ${JSON.stringify(traffic.snapshot())}\nMain page state: ${JSON.stringify(mainPageState)}\nNative loader network: ${JSON.stringify(nativeNetwork.snapshot())}\nApp-free Chromium loader: ${JSON.stringify(rawLoaderDiagnostic)}`,
     );
     return {
       retainedSsrNodes: true,
