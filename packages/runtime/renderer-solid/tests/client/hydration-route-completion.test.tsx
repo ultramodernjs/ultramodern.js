@@ -14,6 +14,7 @@ import {
   hydrateApplication,
   readSolidDocumentBootstrap,
 } from '../../src/client';
+import { startNativeClient } from '../../src/entry-client';
 import * as nativeRouter from '../../src/router';
 import type { AnyRouter } from '../../src/router-binding/index';
 
@@ -47,12 +48,15 @@ const routes: FileSystemRouteIR[] = [
 const applicationSource = `
 import { createSignal } from 'solid-js';
 import {
-  ActionForm, ApplicationRouter, Await, Link, Outlet, useLoaderData, useRouteAction,
+  ActionForm, ApplicationRouter, Await, Link, Outlet, useLoaderData, useRouteAction, useRouter,
 } from '@modern-js/renderer-solid/router';
+let currentRouter;
+export function getRouter() { return currentRouter; }
 export function Application(props) {
   return <ApplicationRouter router={props.router} />;
 }
 export function Layout() {
+  currentRouter = useRouter();
   return <main data-testid="layout"><nav>
     <Link to="/about" data-testid="about-link">About</Link>
     <Link to="/" search={{ case: 'deferred' }} preload={false} data-testid="deferred-link">Deferred</Link>
@@ -84,6 +88,7 @@ export function About() { return <p data-testid="about">complete</p>; }
 `;
 
 interface Views {
+  getRouter(): AnyRouter | undefined;
   Application(props: { router: AnyRouter }): JSX.Element;
   Layout(): JSX.Element;
   Page(): JSX.Element;
@@ -199,12 +204,15 @@ async function waitFor(predicate: () => boolean) {
   throw new Error('The hydrated native completion did not settle');
 }
 
-test('Solid SSR adoption and action cleanup retain the next deferred response through terminal EOF', async () => {
+async function assertHydrationCompletion(nativeEntry: boolean) {
   expect(web.isServer).toBe(false);
   const html = await renderServerDocument();
   expect(html).toContain('tsr:');
   expect(html).toContain('server-index');
   const previousHydration = Object.getOwnPropertyDescriptor(globalThis, '_$HY');
+  const previousUrl = window.location.href;
+  const previousHistoryState: unknown = window.history.state;
+  if (nativeEntry) window.history.replaceState({}, '', '/');
   const container = document.createElement('div');
   container.innerHTML = html;
   document.body.appendChild(container);
@@ -213,7 +221,15 @@ test('Solid SSR adoption and action cleanup retain the next deferred response th
   const originalLayout = root.querySelector('[data-testid="layout"]');
   const originalCritical = root.querySelector('[data-testid="critical"]');
   const nativeListeners: Parameters<Document['addEventListener']>[] = [];
+  const errors: unknown[] = [];
+  const onError = (event: ErrorEvent) =>
+    errors.push(event.error ?? event.message);
+  const onRejection = (event: PromiseRejectionEvent) =>
+    errors.push(event.reason);
+  window.addEventListener('error', onError);
+  window.addEventListener('unhandledrejection', onRejection);
   let dispose: (() => void) | undefined;
+  let router: AnyRouter | undefined;
   let releaseInvalidation!: (response: Response) => void;
   const invalidation = new Promise<Response>(resolve => {
     releaseInvalidation = resolve;
@@ -305,35 +321,62 @@ test('Solid SSR adoption and action cleanup retain the next deferred response th
     }
     const bootstrap = readSolidDocumentBootstrap(document, identity);
     const views = compileViews(false);
-    const client = createDataClient('index_page', identity);
-    const router = nativeRouter.createApplicationRouter({
-      routeTree: nativeRouter.createFileSystemRouteTree(
-        routes,
+    if (nativeEntry) {
+      // This is the generated application contract: the public entry owns
+      // browser history, its startup signal, router creation and hydration.
+      startNativeClient({
+        identity,
+        hot: { dispose: (callback: () => void) => (dispose = callback) },
+        load: async () => ({
+          basePath: '/',
+          routeIR: routes,
+          routeModules: {
+            layout: { component: { default: views.Layout } },
+            index_page: { component: { default: views.Page } },
+            about: { component: { default: views.About } },
+          },
+          dataModules: {},
+          serverDataRoutes: ['index_page'],
+        }),
+      });
+      await waitFor(() => views.getRouter() !== undefined);
+      router = views.getRouter();
+    } else {
+      const client = createDataClient('index_page', identity);
+      router = nativeRouter.createApplicationRouter({
+        routeTree: nativeRouter.createFileSystemRouteTree(
+          routes,
+          {
+            layout: { component: views.Layout },
+            index_page: { component: views.Page },
+            about: { component: views.About },
+          },
+          {
+            request: new Request('http://localhost/'),
+            loadRoute: (_route, input) => client.loader(input),
+          },
+        ),
+        history: nativeRouter.createMemoryHistory({ initialEntries: ['/'] }),
+        origin: 'http://localhost',
+        context: { ultramodern: { rendererIdentity: identity } },
+        defaultStaleTime: 0,
+        isServer: false,
+      });
+      dispose = hydrateApplication(
+        () => views.Application({ router: router! }),
+        root,
         {
-          layout: { component: views.Layout },
-          index_page: { component: views.Page },
-          about: { component: views.About },
+          renderId: bootstrap.documentId,
         },
-        {
-          request: new Request('http://localhost/'),
-          loadRoute: (_route, input) => client.loader(input),
-        },
-      ),
-      history: nativeRouter.createMemoryHistory({ initialEntries: ['/'] }),
-      origin: 'http://localhost',
-      context: { ultramodern: { rendererIdentity: identity } },
-      defaultStaleTime: 0,
-      isServer: false,
-    });
+      );
+    }
+    if (!router) throw new Error('The public application created no router');
     expect(router.options.defaultPendingMs).toBe(1000);
     expect(router.options.defaultPendingMinMs).toBe(500);
     expect(router.state.matches.at(-1)?.loaderData).toEqual({
       critical: 'server-index',
     });
     expect(loaderSignals).toHaveLength(0);
-    dispose = hydrateApplication(() => views.Application({ router }), root, {
-      renderId: bootstrap.documentId,
-    });
     await waitFor(
       () =>
         root.querySelector('[data-testid="critical"]')?.textContent ===
@@ -354,7 +397,11 @@ test('Solid SSR adoption and action cleanup retain the next deferred response th
       '[data-testid="submit"]',
     )!;
     form.dispatchEvent(
-      new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter }),
+      new SubmitEvent('submit', {
+        bubbles: true,
+        cancelable: true,
+        submitter,
+      }),
     );
     await waitFor(
       () =>
@@ -430,12 +477,24 @@ test('Solid SSR adoption and action cleanup retain the next deferred response th
       'hydrated-late-value',
     );
     expect(root.querySelector('[data-testid="layout"]')).toBe(originalLayout);
+    expect(errors).toEqual([]);
+    if (nativeEntry) {
+      expect(window.location.pathname + window.location.search).toBe(
+        '/?case=deferred',
+      );
+      expect(router.history.location.href).toBe('/?case=deferred');
+    }
   } finally {
     clearTimeout(laterTimer);
     terminal();
     dispose?.();
     solid.flush();
+    router?.history.destroy();
+    if (nativeEntry)
+      window.history.replaceState(previousHistoryState, '', previousUrl);
     transport.mockRestore();
+    window.removeEventListener('error', onError);
+    window.removeEventListener('unhandledrejection', onRejection);
     for (const [event, listener, options] of nativeListeners)
       document.removeEventListener(event, listener, options);
     container.remove();
@@ -443,4 +502,12 @@ test('Solid SSR adoption and action cleanup retain the next deferred response th
       Object.defineProperty(globalThis, '_$HY', previousHydration);
     else Reflect.deleteProperty(globalThis, '_$HY');
   }
-});
+}
+
+test.each([
+  { name: 'managed memory router', nativeEntry: false },
+  { name: 'public browser entry', nativeEntry: true },
+])(
+  'Solid SSR adoption and action cleanup retain deferred EOF: $name',
+  ({ nativeEntry }) => assertHydrationCompletion(nativeEntry),
+);
