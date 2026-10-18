@@ -148,7 +148,7 @@
     "test": "rstest run"
   },
   "dependencies": {
-    "@module-federation/sdk": "2.9.2",
+    "@module-federation/sdk": "npm:@bleedingdev/mf-sdk@2.9.2",
     "@modern-js/backend-federation-contracts": "workspace:*",
     "@modern-js/surface-resolution": "workspace:*"
   },

@@ -1773,8 +1773,8 @@ importers:
         specifier: workspace:*
         version: link:../../toolkit/surface-resolution
       '@module-federation/sdk':
-        specifier: 2.9.2
-        version: 2.9.2(patch_hash=fb4b0dfd33a0588ad3821f1d56e2316044ae0b721c515a69080d7d9d9de72e3e)
+        specifier: npm:@bleedingdev/mf-sdk@2.9.2
+        version: '@bleedingdev/mf-sdk@2.9.2'
     devDependencies:
       '@modern-js/rslib':
         specifier: workspace:*
@@ -8748,6 +8748,9 @@ packages:
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [win32]
+
+  '@bleedingdev/mf-sdk@2.9.2':
+    resolution: {integrity: sha512-khjTU7/OxdbGztjF0opTvJMmk8AXEL0Is49EbhqWZcUO//kkrHQsMSUPS597XqOyuh7U60L47cL/gUF+cqRDkw==}
 
   '@braintree/sanitize-url@7.1.2':
     resolution: {integrity: sha512-jigsZK+sMF/cuiB7sERuo9V7N9jx+dhmHHnQyDSVdpZwVutaBu7WvNYqMDLSgFgfB30n452TP3vjDAvFC973mA==}
@@ -21756,6 +21759,8 @@ snapshots:
 
   '@biomejs/cli-win32-x64@2.5.15':
     optional: true
+
+  '@bleedingdev/mf-sdk@2.9.2': {}
 
   '@braintree/sanitize-url@7.1.2': {}
 
