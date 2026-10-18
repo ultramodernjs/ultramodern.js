@@ -1,4 +1,6 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import type { FileSystemRouteIR } from '@modern-js/renderer-core/data';
@@ -183,6 +185,80 @@ describe('native filesystem route source emission', () => {
       // The application module carries data and imports, never runtime code.
       expect(source).not.toMatch(/@modern-js|function |=>/u);
     }
+  });
+
+  it('emits client and server route maps assignable to the public native application contract', async () => {
+    const directory = await fixture(['page.ts']);
+    await fs.writeFile(
+      path.join(directory, 'page.data.ts'),
+      'export async function loader() { return { title: "server" }; }',
+    );
+    await fs.writeFile(
+      path.join(directory, 'page.data.client.ts'),
+      'export async function loader() { return { title: "client" }; }',
+    );
+    const routes = await discoverNativeFileSystemRoutes({
+      routesDirectory: directory,
+      entryName: 'main',
+      extensions: ['.ts'],
+    });
+    const require = createRequire(import.meta.url);
+    const coreDirectory = path.dirname(
+      require.resolve('@modern-js/renderer-core/package.json'),
+    );
+    const destination = path.join(
+      directory,
+      'node_modules/@modern-js/renderer-core',
+    );
+    await fs.mkdir(path.dirname(destination), { recursive: true });
+    await fs.symlink(
+      coreDirectory,
+      destination,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    for (const mode of ['client', 'server'] as const) {
+      await fs.writeFile(
+        path.join(directory, `app.${mode}.ts`),
+        emitNativeApplicationModule({ routes, mode, basePath: '/' }),
+      );
+    }
+    await fs.writeFile(
+      path.join(directory, 'consumer.ts'),
+      `import type { NativeApplicationModule } from '@modern-js/renderer-core/router';
+const client: Promise<NativeApplicationModule> = import('./app.client');
+const server: Promise<NativeApplicationModule> = import('./app.server');
+void client;
+void server;
+`,
+    );
+    await fs.writeFile(
+      path.join(directory, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: {
+          strict: true,
+          noEmit: true,
+          skipLibCheck: true,
+          target: 'ES2022',
+          module: 'ESNext',
+          moduleResolution: 'Bundler',
+          types: [],
+        },
+        include: ['./*.ts'],
+      }),
+    );
+    const { createTsgoInvocation } = require(
+      path.resolve(__dirname, '../../../../../scripts/lib/tsgo-invocation.js'),
+    );
+    const invocation = createTsgoInvocation({
+      requireFrom: require,
+      args: ['--project', path.join(directory, 'tsconfig.json')],
+    });
+    const result = spawnSync(invocation.command, invocation.argv, {
+      encoding: 'utf8',
+      cwd: directory,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stdout + result.stderr).toBe(0);
   });
 
   it('keeps prototype-named route ids as own route map entries', async () => {

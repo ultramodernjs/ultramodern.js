@@ -373,16 +373,18 @@ export function emitNativeApplicationModule(
     }));
   const routeIR =
     options.mode === 'client' ? clientIR(options.routes) : options.routes;
+  // Set the prototypes after construction so TypeScript infers only route
+  // entries, rather than a null-valued `__proto__` index signature member.
   return `${imports.join('\n')}
 export const basePath = ${JSON.stringify(options.basePath)};
 export const routeIR = ${JSON.stringify(routeIR, null, 2)};
 export const routeModules = {
-  __proto__: null,
 ${routeModules.join('\n')}
 };
+Object.setPrototypeOf(routeModules, null);
 export const dataModules = {
-  __proto__: null,
 ${dataModules.join('\n')}
 };
+Object.setPrototypeOf(dataModules, null);
 ${options.mode === 'client' ? `export const serverDataRoutes = ${JSON.stringify(serverDataRoutes)};\n` : ''}`;
 }
