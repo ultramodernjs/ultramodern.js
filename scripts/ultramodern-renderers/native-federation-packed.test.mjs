@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import fs from 'node:fs';
@@ -11,6 +11,7 @@ import {
   runPackedNativeFederationCommand,
   runPackedNativeFederationProof,
   verifyPackedNativeFederationDependencies,
+  verifyPackedNativeFederationInputs,
 } from './native-federation-packed.mjs';
 
 assert(
@@ -500,6 +501,176 @@ test('uses candidate aliases and preserves maintained Octane downloads and tooli
           { ...context, packageRequests: {} },
         ),
       /missing the octane dependency pin/u,
+    );
+  } finally {
+    fs.rmSync(supplied.root, { recursive: true });
+  }
+});
+
+test('retains an explicitly supplied core archive in real host and remote fixture manifests', async () => {
+  const { createOctaneFederationFixtures } = await import(
+    '../../tests/ultramodern-renderers/octane-federation/fixtures.mjs'
+  );
+  const supplied = fixture();
+  try {
+    const typescript = externalPackage(supplied, 'typescript', '7.0.0-test');
+    const nodeTypes = externalPackage(supplied, '@types/node', '26.0.0');
+    const fixtures = createOctaneFederationFixtures({
+      remoteUrl: 'http://127.0.0.1:4101',
+      failures: false,
+      development: true,
+    });
+    for (const files of [fixtures.host, fixtures.remote]) {
+      const manifest = JSON.parse(files['package.json']);
+      const packageRequests = Object.fromEntries(
+        Object.keys(manifest.dependencies).map(name => [name, '1.0.0']),
+      );
+      const context = {
+        cohort: { artifacts: [] },
+        packageRequests: {
+          ...packageRequests,
+          typescript: '7.0.0-test',
+          '@types/node': '26.0.0',
+        },
+        packageRoots: { typescript, '@types/node': nodeTypes },
+      };
+      // Supply genuine cohort identities for the framework fixture declarations.
+      context.cohort.artifacts = Object.keys(manifest.dependencies)
+        .filter(name => name.startsWith('@modern-js/'))
+        .map(sourceName => ({
+          sourceName,
+          targetName: sourceName,
+          version: '1.0.0',
+        }));
+      const core =
+        'https://github.com/BleedingDev/router/releases/download/accepted/tanstack-router-core.tgz';
+      context.packageRequests['@tanstack/router-core'] = core;
+      assert.equal(
+        packedNativeFederationManifest(manifest, context).dependencies[
+          '@tanstack/router-core'
+        ],
+        core,
+      );
+      delete context.packageRequests['@tanstack/router-core'];
+      assert.equal(
+        Object.hasOwn(
+          packedNativeFederationManifest(manifest, context).dependencies,
+          '@tanstack/router-core',
+        ),
+        false,
+      );
+    }
+  } finally {
+    fs.rmSync(supplied.root, { recursive: true });
+  }
+});
+
+test('checks every supplied native byte and rejects a second physical core before dev starts', () => {
+  const supplied = fixture();
+  try {
+    const inputs = {};
+    const directories = {};
+    for (const name of [
+      'octane',
+      '@octanejs/tanstack-router',
+      '@octanejs/rspack-plugin',
+      '@tanstack/router-core',
+    ]) {
+      const request = `https://example.test/${encodeURIComponent(name)}.tgz`;
+      const directory = externalPackage(supplied, name, '1.0.0', request);
+      directories[name] = directory;
+      fs.writeFileSync(
+        path.join(directory, 'index.mjs'),
+        'export const native = true;\n',
+      );
+      const archiveRoot = path.join(supplied.root, encodeURIComponent(name));
+      fs.mkdirSync(archiveRoot);
+      fs.cpSync(directory, path.join(archiveRoot, 'package'), {
+        recursive: true,
+      });
+      const archivePath = path.join(archiveRoot, 'candidate.tgz');
+      execFileSync('tar', ['-czf', archivePath, '-C', archiveRoot, 'package'], {
+        env: { ...process.env, COPYFILE_DISABLE: '1' },
+      });
+      inputs[name] = {
+        request,
+        archivePath,
+        integrity: `sha512-${createHash('sha512').update(fs.readFileSync(archivePath)).digest('base64')}`,
+      };
+    }
+    const adapterModules = path.join(
+      directories['@octanejs/tanstack-router'],
+      'node_modules/@tanstack',
+    );
+    fs.mkdirSync(adapterModules, { recursive: true });
+    const coreLink = path.join(adapterModules, 'router-core');
+    fs.symlinkSync(directories['@tanstack/router-core'], coreLink, 'dir');
+    verifyPackedNativeFederationInputs(supplied.appRoot, inputs);
+    const nativeFile = path.join(directories.octane, 'index.mjs');
+    fs.writeFileSync(nativeFile, 'export const native = false;\n');
+    assert.throws(
+      () => verifyPackedNativeFederationInputs(supplied.appRoot, inputs),
+      /differs from its tarball/u,
+    );
+    fs.writeFileSync(nativeFile, 'export const native = true;\n');
+    assert.throws(
+      () =>
+        verifyPackedNativeFederationInputs(supplied.appRoot, {
+          ...inputs,
+          octane: { ...inputs.octane, integrity: `sha512-${'A'.repeat(88)}` },
+        }),
+      /supplied archive integrity/u,
+    );
+    const rendererCoreLink = path.join(
+      supplied.directory,
+      'node_modules/@tanstack/router-core',
+    );
+    fs.mkdirSync(path.dirname(rendererCoreLink), { recursive: true });
+    const rendererDuplicate = path.join(
+      supplied.root,
+      'renderer-duplicate-core',
+    );
+    fs.cpSync(directories['@tanstack/router-core'], rendererDuplicate, {
+      recursive: true,
+    });
+    fs.symlinkSync(rendererDuplicate, rendererCoreLink, 'dir');
+    const verifyInFreshProcess = () =>
+      execFileSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `import { verifyPackedNativeFederationInputs } from ${JSON.stringify(new URL('./native-federation-packed.mjs', import.meta.url).href)}; verifyPackedNativeFederationInputs(process.argv[1], JSON.parse(process.argv[2]));`,
+          supplied.appRoot,
+          JSON.stringify(inputs),
+        ],
+        { encoding: 'utf8', stdio: 'pipe' },
+      );
+    assert.throws(
+      verifyInFreshProcess,
+      /Octane renderer must resolve the application's physical @tanstack\/router-core/u,
+    );
+    fs.unlinkSync(rendererCoreLink);
+    fs.unlinkSync(coreLink);
+    const duplicate = path.join(supplied.root, 'duplicate-core');
+    fs.cpSync(directories['@tanstack/router-core'], duplicate, {
+      recursive: true,
+    });
+    fs.symlinkSync(duplicate, coreLink, 'dir');
+    assert.throws(
+      () =>
+        execFileSync(
+          process.execPath,
+          [
+            '--input-type=module',
+            '-e',
+            `import { verifyPackedNativeFederationInputs } from ${JSON.stringify(new URL('./native-federation-packed.mjs', import.meta.url).href)}; verifyPackedNativeFederationInputs(process.argv[1], JSON.parse(process.argv[2]));`,
+            supplied.appRoot,
+            JSON.stringify(inputs),
+          ],
+          { encoding: 'utf8', stdio: 'pipe' },
+        ),
+      /one physical router core/u,
     );
   } finally {
     fs.rmSync(supplied.root, { recursive: true });

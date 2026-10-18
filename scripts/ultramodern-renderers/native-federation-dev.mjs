@@ -310,6 +310,13 @@ export async function runPackedNativeFederationDevProof(context) {
     );
   await runPackedNativeFederationProof({
     ...context,
+    contextExtras: {
+      ...context.contextExtras,
+      generatorConsumerRoot: context.generatorConsumerRoot,
+      browserDependencyRoot: context.browserDependencyRoot,
+      browserExecutable: context.browserExecutable,
+      nativeInputs: context.nativeInputs,
+    },
     proofScript: fileURLToPath(
       new URL(
         '../../tests/ultramodern-renderers/octane-federation/dev.mjs',

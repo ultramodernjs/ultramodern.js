@@ -8,6 +8,7 @@
 //       (--version <x.y.z-ultramodern.N> | --cohort-dir <dir>) \
 //       [--renderers react,solid,octane] [--with worker,rsc,mf]
 //       [--browser-dependency-root <existing installed Playwright owner>]
+//       [--native-inputs <authenticated native archive inputs.json>]
 //       [--tractor-source <tractor demo checkout> [--tractor-revision <rev>]]
 //
 // For each renderer: generate a workspace with the packed create CLI,
@@ -77,6 +78,7 @@ const { values: opts } = parseArgs({
     'browser-dependency-root': { type: 'string' },
     'work-dir': { type: 'string' },
     'required-features': { type: 'boolean', default: false },
+    'native-inputs': { type: 'string' },
     'acceptance-mode': { type: 'string', default: 'source' },
     'acceptance-receipt': { type: 'string' },
     'source-feature-receipt': { type: 'string' },
@@ -906,6 +908,9 @@ async function main() {
             throw new Error(`${row} has no installed proof entrypoint`);
           activeNativeFederation = run({
             renderer,
+            ...(row === 'dev-refresh' && opts['native-inputs']
+              ? { nativeInputs: readJson(path.resolve(opts['native-inputs'])) }
+              : {}),
             consumerRoot: apps[renderer].appRoot,
             generatorConsumerRoot: createRoot,
             browserDependencyRoot: playwrightRoot(),

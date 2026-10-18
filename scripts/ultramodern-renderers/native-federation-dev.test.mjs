@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { validateNativeDevRefreshObservations } from './native-federation-dev.mjs';
 
 // Receipt-validation controls only. These fabricated observations never stand
@@ -359,3 +363,66 @@ for (const [name, corrupt] of [
     corrupt(data);
     assert.throws(() => validateNativeDevRefreshObservations(data));
   });
+
+test('current source and published release workflow commands still reach cohort validation without future native inputs', () => {
+  assert(
+    process.env.OWNED_TEMP_DIR,
+    'Run the CLI control through owned-temp-dir',
+  );
+  const work = fs.mkdtempSync(
+    path.join(process.env.OWNED_TEMP_DIR, 'native-dev-release-cli-'),
+  );
+  try {
+    for (const mode of ['source', 'published']) {
+      const commandRoot = path.join(work, mode);
+      fs.mkdirSync(commandRoot);
+      const args = [
+        fileURLToPath(new URL('./release.mjs', import.meta.url)),
+        '--cohort-dir',
+        path.join(commandRoot, 'absent-cohort'),
+        '--renderers',
+        'solid,octane',
+        '--with',
+        '',
+        '--work-dir',
+        commandRoot,
+        '--required-features',
+        '--acceptance-receipt',
+        path.join(commandRoot, 'acceptance.json'),
+        '--feature-receipt',
+        path.join(commandRoot, 'features.json'),
+        '--run-identity',
+        'workflow-cli-control',
+      ];
+      if (mode === 'published')
+        args.push(
+          '--acceptance-mode',
+          'published',
+          '--registry-url',
+          'https://registry.npmjs.org/',
+          '--source-feature-receipt',
+          path.join(commandRoot, 'source-features.json'),
+          '--source-acceptance-receipt',
+          path.join(commandRoot, 'source-acceptance.json'),
+        );
+      const child = spawnSync(process.execPath, args, {
+        env: { ...process.env, OWNED_TEMP_DIR: commandRoot },
+        encoding: 'utf8',
+        timeout: 10_000,
+      });
+      assert.equal(child.error, undefined);
+      assert.equal(child.status, 1);
+      const output = `${child.stdout}\n${child.stderr}`;
+      assert.match(
+        output,
+        /Release manifest is missing or is not a regular file/u,
+      );
+      assert.doesNotMatch(
+        output,
+        /requires authenticated native archive inputs|needs --native-inputs/u,
+      );
+    }
+  } finally {
+    fs.rmSync(work, { recursive: true });
+  }
+});
