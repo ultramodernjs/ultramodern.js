@@ -941,7 +941,12 @@ export default function Away() { const router = useRouter(); return <section dat
     version,
     previous,
     key,
-    { compatible = true, shape, requireRevisionChange = true } = {},
+    {
+      compatible = true,
+      shape,
+      requireRevisionChange = true,
+      waitForActivation = false,
+    } = {},
   ) => {
     const baseline = retained;
     const settled = await settleUpdate(
@@ -950,6 +955,11 @@ export default function Away() { const router = useRouter(); return <section dat
           const observation = await browserObservation();
           if (observation.version !== version) return false;
           if (shape !== undefined && observation.refreshShape !== shape)
+            return false;
+          if (
+            waitForActivation &&
+            observation.lifecycle.activations <= baseline.lifecycle.activations
+          )
             return false;
           return observation;
         }, `${key} browser update`),
@@ -1090,6 +1100,16 @@ export default function Away() { const router = useRouter(); return <section dat
     key: 'recoveredSsr',
     requireRevisionChange: false,
   });
+  // Restart replaces the old process's graph even though its rendered label is
+  // still v5. Settle that native transaction before editing v6, so each real
+  // graph change must install exactly one effect closure, not a combined range.
+  results.restartStability = await waitForStableCompilation(remoteUrl);
+  const restarted = await assertRetainedUpdate(
+    'Remote native v5',
+    null,
+    'restartedRefresh',
+    { requireRevisionChange: false, waitForActivation: true },
+  );
   await fs.writeFile(
     dependency,
     "export const remoteVersion = 'Remote native v6';\n",
@@ -1099,8 +1119,14 @@ export default function Away() { const router = useRouter(); return <section dat
     'Remote native v5',
     'reconnectedRefresh',
   );
+  assertLifecycle(retained.lifecycle, {
+    previous: outageBefore.lifecycle,
+    transition: 'compatible',
+    activations: [2, 2],
+  });
   results.outageRecovery = {
     before: outageBefore,
+    restarted,
     server: outageServer,
     samples: outageSamples,
     observedMs: outageObservedMs,

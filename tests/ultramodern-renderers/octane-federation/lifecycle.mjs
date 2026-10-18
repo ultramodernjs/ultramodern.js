@@ -105,6 +105,7 @@ export function assertLifecycle(
 
 export const compatibleActivationDeltas = Object.freeze({
   componentAndDependencyRefresh: [1, 1],
+  restartedRefresh: [1, 1],
   // version.ts has no accept boundary. Its update bubbles to Widget's native
   // webpack self-accept, whose retained component wrapper installs one body.
   reconnectedRefresh: [1, 1],

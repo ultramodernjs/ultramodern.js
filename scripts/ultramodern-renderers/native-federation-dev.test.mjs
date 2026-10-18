@@ -87,6 +87,7 @@ function observations() {
     burstRefresh: ssr('Remote native v5', 3, 4),
     burstStableRefresh: ssr('Remote native v5', 4, 4),
     recoveredSsr: ssr('Remote native v5', 4, 4),
+    restartedRefresh: ssr('Remote native v5', 4, 4),
     reconnectedRefresh: ssr('Remote native v6', 4, 5),
     incompatibleRefresh: ssr('Remote native v6', 5, 6),
     burstStability: {
@@ -116,10 +117,12 @@ function observations() {
     hmr: {},
   };
   let previousLifecycle = initialAfter;
+  let previousVersion = 'Remote native v2';
   for (const [name, version] of [
     ['componentAndDependencyRefresh', 'Remote native v3'],
     ['burstRefresh', 'Remote native v5'],
     ['burstStableRefresh', 'Remote native v5'],
+    ['restartedRefresh', 'Remote native v5'],
     ['reconnectedRefresh', 'Remote native v6'],
   ]) {
     const nextLifecycle = activate(previousLifecycle, {
@@ -127,11 +130,12 @@ function observations() {
         name === 'burstStableRefresh' ? 0 : name === 'burstRefresh' ? 2 : 1,
     });
     data.refreshes[name] = {
-      before: snapshot(version, previousLifecycle),
+      before: snapshot(previousVersion, previousLifecycle),
       after: snapshot(version, nextLifecycle),
       document: structuredClone(document),
     };
     previousLifecycle = nextLifecycle;
+    previousVersion = version;
   }
   const shapeAfter = snapshot('Remote native v6');
   shapeAfter.remoteCount = 'Count 0';
@@ -175,6 +179,7 @@ function observations() {
   );
   data.outageRecovery = {
     before: beforeOutage,
+    restarted: structuredClone(data.refreshes.restartedRefresh.after),
     server: {
       status: 200,
       hostDocuments: 1,
@@ -206,6 +211,31 @@ test('derives checks from complete raw observations', () => {
 });
 
 for (const [name, corrupt] of [
+  [
+    'missing restarted graph observation',
+    data => {
+      delete data.refreshes.restartedRefresh;
+    },
+  ],
+  [
+    'restart observation detached from outage state',
+    data => {
+      data.refreshes.restartedRefresh.before.remoteCount = 'Count 0';
+    },
+  ],
+  [
+    'duplicate activation within the restarted graph',
+    data => {
+      const lifecycle = data.refreshes.restartedRefresh.after.lifecycle;
+      lifecycle.effects.at(-1).cleanups = 1;
+      lifecycle.cleanups++;
+      lifecycle.effects.push({
+        id: ++lifecycle.activations,
+        ownerId: lifecycle.currentOwner,
+        cleanups: 0,
+      });
+    },
+  ],
   [
     'declaration removal without cleanup',
     data => {

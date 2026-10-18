@@ -38,6 +38,7 @@ export function validateNativeDevRefreshObservations(observations) {
     'componentAndDependencyRefresh',
     'burstRefresh',
     'burstStableRefresh',
+    'restartedRefresh',
     'reconnectedRefresh',
   ];
   const compatible = compatibleNames.map(name => refreshes[name]);
@@ -78,6 +79,17 @@ export function validateNativeDevRefreshObservations(observations) {
     });
     previousLifecycle = refresh.after.lifecycle;
   }
+  assert.deepEqual(
+    refreshes.restartedRefresh.before,
+    outage.before,
+    'restart begins with the browser state retained throughout the outage',
+  );
+  assert.deepEqual(outage.restarted, refreshes.restartedRefresh.after);
+  assertLifecycle(refreshes.reconnectedRefresh.after.lifecycle, {
+    previous: outage.before.lifecycle,
+    transition: 'compatible',
+    activations: [2, 2],
+  });
   assert.deepEqual(shape.before.lifecycle, previousLifecycle);
   assertLifecycle(shape.after.lifecycle, {
     previous: shape.before.lifecycle,
@@ -211,6 +223,7 @@ export function validateNativeDevRefreshObservations(observations) {
       observations.recoveredSsr.versions.every(
         value => value === 'Remote native v5',
       ) &&
+      refreshes.restartedRefresh.after.version === 'Remote native v5' &&
       refreshes.reconnectedRefresh.after.version === 'Remote native v6',
     incompatibleRemoteBoundaryUpdate:
       shape.renderedShape === 'expanded' &&

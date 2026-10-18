@@ -338,6 +338,36 @@ test('a restarted admitted graph hands its one socket to the new native owner wi
   expect(h.errors).not.toHaveBeenCalled();
 });
 
+test('a restarted graph executes once before its next ordinary edit, and repeated same-hash acknowledgements do no work', async () => {
+  const h = fixture();
+  h.setProcess('restarted-process');
+  h.update();
+  await settle();
+  const acceptedSocket = Socket.instances[1]!;
+  expect(h.counts()).toMatchObject({ checks: 0, executions: 1 });
+  expect(Socket.instances[0]!.closed).toBe(true);
+  for (let index = 0; index < 2; index++) {
+    acceptedSocket.message('hash', 'bb22');
+    acceptedSocket.message('ok');
+    await settle();
+  }
+  expect(h.counts()).toMatchObject({ checks: 0, executions: 1 });
+
+  h.setGraph('cc33', 'c');
+  acceptedSocket.message('hash', 'cc33');
+  acceptedSocket.message('ok');
+  await settle();
+  expect(h.counts()).toMatchObject({ checks: 1, executions: 1 });
+  acceptedSocket.message('hash', 'cc33');
+  acceptedSocket.message('ok');
+  await settle();
+  expect(h.counts()).toMatchObject({ checks: 1, executions: 1 });
+  expect(Socket.instances).toHaveLength(2);
+  expect(acceptedSocket.closed).toBe(false);
+  expect(h.reload).not.toHaveBeenCalled();
+  expect(h.errors).not.toHaveBeenCalled();
+});
+
 test('precommit failure surfaces the error, keeps the old socket and can accept a newer graph', async () => {
   const h = fixture();
   h.setProcess('restarted-process');
