@@ -382,7 +382,7 @@ async function provePackedWorkers(context, input, signal) {
     '@module-federation/node',
     'octane',
     '@octanejs/tanstack-router',
-    '@octanejs/compiler',
+    '@octanejs/rspack-plugin',
     'i18next',
   ]) {
     const artifact = context.cohort.artifacts.find(

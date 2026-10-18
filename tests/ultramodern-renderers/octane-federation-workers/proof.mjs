@@ -122,7 +122,8 @@ export function readWorkerFixturePlan(
     assert(
       typeof route.context?.pathname === 'string' &&
         route.context.pathname.startsWith('/') &&
-        route.context.publicHref === route.path &&
+        // Native localization emits canonical paths; request URLs may redirect.
+        route.context.publicHref === (route.path.replace(/\/+$/, '') || '/') &&
         typeof route.context.language === 'string' &&
         route.context.language.length > 0 &&
         typeof route.context.greeting === 'string' &&
@@ -196,9 +197,38 @@ async function reportWorkerCompositionFailure(page, detail) {
         const bounded = value => String(value ?? '').slice(0, 512);
         const node = selector ? document.querySelector(selector) : null;
         const style = node ? getComputedStyle(node) : null;
+        const retained = globalThis.__nativeWorkerRouteRefs;
         return {
           url: bounded(location.href),
           readyState: document.readyState,
+          adoption: retained
+            ? {
+                documentRetained:
+                  document.documentElement === retained.document,
+                remotes: Object.entries(retained.remotes)
+                  .slice(0, 24)
+                  .map(([id, saved]) => {
+                    const current = document.querySelector(
+                      `[data-worker-remote="${id}"]`,
+                    );
+                    return {
+                      id: bounded(id),
+                      sectionRetained: saved.node === current,
+                      inputRetained:
+                        saved.input === current?.querySelector('input'),
+                      counterRetained:
+                        saved.counter ===
+                        current?.querySelector('[data-counter]'),
+                      inputValue: bounded(
+                        current?.querySelector('input')?.value,
+                      ),
+                      expectedValue: `typed before hydration ${id}`,
+                      mounts: globalThis.__octaneWorkerProof?.mounts[id],
+                      cleanups: globalThis.__octaneWorkerProof?.cleanups[id],
+                    };
+                  }),
+              }
+            : null,
           observed: node
             ? {
                 tag: node.tagName,
@@ -754,7 +784,7 @@ export async function verifyWorkerFixtureBrowser(
         appId: hostAppId,
         owner: 'host',
         path: '/',
-        publicHref: '/en/',
+        publicHref: '/en',
         match: hostMatch,
         language: 'en',
         count: id === 'a' ? '11' : '19',
@@ -863,7 +893,7 @@ export async function verifyWorkerFixtureBrowser(
         const node = document.querySelector(`[data-worker-remote="${id}"]`);
         return (
           node?.dataset.language === 'cs' &&
-          node?.dataset.publicHref === '/cs/' &&
+          node?.dataset.publicHref === '/cs' &&
           node.querySelector('[data-remote-greeting]').textContent ===
             'Ahoj od hostitele'
         );

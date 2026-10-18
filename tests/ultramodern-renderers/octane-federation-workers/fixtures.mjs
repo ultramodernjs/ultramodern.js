@@ -419,7 +419,7 @@ export function createOctaneWorkerFederationFixtures({
         path: '/en/',
         context: {
           pathname: '/',
-          publicHref: '/en/',
+          publicHref: '/en',
           language: 'en',
           greeting: 'Hello from host',
         },

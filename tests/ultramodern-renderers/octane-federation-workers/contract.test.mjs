@@ -386,6 +386,9 @@ test('ordinary fixtures retain public generator identity and share one native si
     /ordinary Worker service binding/,
   );
   const fixture = createOctaneWorkerFederationFixtures(options);
+  assert.equal(fixture.routes[0].path, '/en/');
+  assert.equal(fixture.routes[0].context.pathname, '/');
+  assert.equal(fixture.routes[0].context.publicHref, '/en');
   const presetFixture = createOctaneWorkerFederationFixtures({
     ...options,
     hostServiceSource: 'topology',
@@ -1022,9 +1025,34 @@ test('the proof plan preserves per-route owners and confines all compiled output
       },
     ],
   };
+  // Keep a noncanonical request URL separate from the native rewrite output.
+  plan.routes.push({
+    path: '/en/',
+    context: {
+      pathname: '/',
+      publicHref: '/en',
+      language: 'en',
+      greeting: 'Hello from host',
+    },
+    expected: plan.routes[0].expected,
+  });
   const filename = path.join(root, 'plan.json');
   fs.writeFileSync(filename, JSON.stringify(plan));
   assert.deepEqual(readWorkerFixturePlan(filename, root).routes, plan.routes);
+  const rootRoute = plan.routes.at(-1);
+  for (const incorrectPublicHref of [
+    '/en/',
+    '/cs',
+    'https://foreign.test/en',
+  ]) {
+    rootRoute.context.publicHref = incorrectPublicHref;
+    fs.writeFileSync(filename, JSON.stringify(plan));
+    assert.throws(
+      () => readWorkerFixturePlan(filename, root),
+      /explicit native router and i18n expectations/,
+    );
+  }
+  rootRoute.context.publicHref = '/en';
   plan.routes[0].expected[0].contextSelector = '';
   fs.writeFileSync(filename, JSON.stringify(plan));
   assert.throws(
