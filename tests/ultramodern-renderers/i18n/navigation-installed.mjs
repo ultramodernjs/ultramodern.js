@@ -11,9 +11,19 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { rendererFeatureBinding } from '../../../scripts/ultramodern-renderers/feature-gates.mjs';
+import {
+  localizedNavigationBrowserRequest,
+  localizedNavigationInputs,
+  localizedNavigationRegistry,
+  verifyLocalizedNavigationCore,
+} from '../../../scripts/ultramodern-renderers/native-localized-navigation.mjs';
 import { assertLocalizedNavigation } from './navigation-browser.mjs';
 import { localizedNavigationFixture } from './navigation-fixtures.mjs';
-import { assertInstalledNavigationTuple } from './navigation-tuple.mjs';
+import {
+  assertInstalledNavigationTuple,
+  installedPackage,
+} from './navigation-tuple.mjs';
 
 const readJson = filename => JSON.parse(fs.readFileSync(filename, 'utf8'));
 const writeJson = (filename, value) =>
@@ -26,27 +36,35 @@ const { values } = parseArgs({
     'toolchain-root': { type: 'string' },
     'browser-executable': { type: 'string' },
     'expected-native-tuples': { type: 'string' },
+    'browser-dependency-root': { type: 'string' },
+    'proof-context': { type: 'string' },
+    'proof-result': { type: 'string' },
+    'work-dir': { type: 'string' },
     renderers: { type: 'string', default: 'solid,octane' },
   },
 });
-for (const option of [
-  'cohort-dir',
-  'store-dir',
-  'pnpm',
-  'expected-native-tuples',
-])
+for (const option of ['cohort-dir', 'store-dir', 'pnpm'])
   assert(values[option], `Missing --${option}`);
 assert(process.env.OWNED_TEMP_DIR, 'Run through owned-temp-dir');
 const temporary = fs.realpathSync(process.env.OWNED_TEMP_DIR);
-const workRoot = path.join(temporary, 'navigation-installed');
+const workRoot = path.resolve(
+  values['work-dir'] ?? path.join(temporary, 'navigation-installed'),
+);
+const relativeWork = path.relative(temporary, workRoot);
+assert(
+  relativeWork &&
+    !relativeWork.startsWith('..') &&
+    !path.isAbsolute(relativeWork),
+  'Navigation output must belong to the active release lease',
+);
 assert(!fs.existsSync(workRoot), 'Navigation proof output must be new');
 const toolchain = fs.realpathSync(
   values['toolchain-root'] ??
     fileURLToPath(new URL('../../../', import.meta.url)),
 );
 const toolRequire = createRequire(path.join(toolchain, 'package.json'));
-const browserRequire = createRequire(
-  path.join(toolchain, 'tests/package.json'),
+const browserRequire = localizedNavigationBrowserRequest(
+  values['browser-dependency-root'] ?? path.join(toolchain, 'tests'),
 );
 const harness = relative =>
   import(pathToFileURL(path.join(toolchain, relative)));
@@ -66,6 +84,8 @@ const { readCohort, checkInstalledCohort } = await harness(
 const { releaseAgeExemptions } = await harness(
   'scripts/ultramodern-production-readiness/published-create-proof/release-age-audit.mjs',
 );
+const { captureReleaseAgeExclusions, assertReleaseAgeExclusionsUnchanged } =
+  await harness('scripts/ultramodern-renderers/release-age-policy.mjs');
 const { registerOwnedRoot } = await harness(
   'scripts/ultramodern-production-readiness/react-rsc-worker-proof/lifecycle.mjs',
 );
@@ -74,6 +94,7 @@ const {
   runPackedNativeFederationCommand,
   retirePackedNativeFederationInstaller,
   recordPackedNativeFederationProcess,
+  verifyPackedNativeFederationInputs,
 } = await harness('scripts/ultramodern-renderers/native-federation-packed.mjs');
 const { launchServer, ready, reservePort } = await harness(
   'scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/runtime.mjs',
@@ -82,7 +103,17 @@ const { launchServer, ready, reservePort } = await harness(
 const renderers = values.renderers.split(',');
 // The integrator derives this input from the exact accepted native cohort.
 // Keep the separate original Solid and Octane router request identities.
-const expectedNativeTuples = readJson(values['expected-native-tuples']);
+const proofContext = values['proof-context']
+  ? readJson(values['proof-context'])
+  : undefined;
+assert(
+  proofContext || values['expected-native-tuples'],
+  'Missing --expected-native-tuples or --proof-context',
+);
+assert.equal(Boolean(values['proof-result']), Boolean(proofContext));
+const expectedNativeTuples =
+  proofContext?.expectedNativeTuples ??
+  readJson(values['expected-native-tuples']);
 assert(renderers.length > 0 && new Set(renderers).size === renderers.length);
 for (const renderer of renderers)
   assert(
@@ -94,6 +125,33 @@ const release = readReleaseManifest({
   manifestPath: path.join(releaseDir, 'manifest.json'),
 });
 const cohort = readCohort(release.manifestPath);
+if (proofContext) {
+  assert.deepEqual(proofContext.binding, rendererFeatureBinding(cohort));
+  assert.match(proofContext.nonce, /^[a-f0-9-]{36}$/u);
+  assert(['source', 'published'].includes(proofContext.mode));
+  assert.deepEqual(renderers, ['solid', 'octane']);
+  const acceptedInputs = localizedNavigationInputs(
+    release,
+    proofContext.nativeInputs,
+  );
+  assert.deepEqual(acceptedInputs.expectedNativeTuples, expectedNativeTuples);
+  assert.equal(
+    proofContext.solidUsesNativeCore,
+    acceptedInputs.solidUsesNativeCore,
+  );
+  const resultPath = path.resolve(values['proof-result']);
+  const relative = path.relative(temporary, resultPath);
+  assert(relative && !relative.startsWith('..') && !path.isAbsolute(relative));
+  assert.equal(
+    fs.realpathSync(path.dirname(resultPath)),
+    path.dirname(resultPath),
+  );
+  assert(
+    !resultPath.startsWith(`${workRoot}${path.sep}`),
+    'Navigation evidence must outlive proof cleanup',
+  );
+  assert(!fs.existsSync(resultPath), 'Navigation result must be new');
+}
 const pnpm = fs.realpathSync(values.pnpm);
 assert.equal(
   execFileSync(pnpm, ['--version'], {
@@ -147,13 +205,23 @@ const servers = [];
 let registry;
 let browser;
 let failure;
+const observations = {};
 try {
-  registry = await startEphemeralRegistry({
-    release,
-    releaseDir,
-    rootDir: path.join(workRoot, 'registry'),
-    storeDir,
-  });
+  // A release lane uses its existing source or published registry. Never replay
+  // source archives while claiming published-consumer acceptance.
+  registry = proofContext
+    ? localizedNavigationRegistry(
+        proofContext.mode,
+        proofContext.registryUrl,
+        process.env,
+        release.targetScope,
+      )
+    : await startEphemeralRegistry({
+        release,
+        releaseDir,
+        rootDir: path.join(workRoot, 'registry'),
+        storeDir,
+      });
   const env = {
     ...process.env,
     ...registry.env,
@@ -207,9 +275,19 @@ try {
       packages: ['.'],
       allowBuilds,
       packageImportMethod: 'clone-or-copy',
+      minimumReleaseAge: 1440,
+      minimumReleaseAgeStrict: true,
+      minimumReleaseAgeIgnoreMissingTime: false,
+      minimumReleaseAgeExclude: JSON.parse(
+        env.pnpm_config_minimum_release_age_exclude,
+      ),
     }),
   );
+  const generatorPolicy = captureReleaseAgeExclusions(generatorRoot, {
+    release,
+  });
   await command(pnpm, ['install'], generatorRoot, 'generator-install');
+  assertReleaseAgeExclusionsUnchanged(generatorPolicy);
   checkInstalledCohort({ appRoot: generatorRoot, cohort });
   const generatorRequire = createRequire(
     path.join(generatorRoot, 'package.json'),
@@ -288,13 +366,31 @@ try {
           i18next,
         },
       });
+      const consumerPolicy = captureReleaseAgeExclusions(workspaceRoot, {
+        release,
+      });
       await command(pnpm, ['install'], workspaceRoot, `${renderer}-install`);
+      assertReleaseAgeExclusionsUnchanged(consumerPolicy);
       checkInstalledCohort({ appRoot, cohort });
       const nativeTuple = assertInstalledNavigationTuple({
         appRoot,
         renderer,
         expected: expectedNativeTuples[renderer],
       });
+      if (proofContext && renderer === 'octane')
+        verifyPackedNativeFederationInputs(appRoot, proofContext.nativeInputs);
+      if (proofContext && renderer === 'solid') {
+        const adapter = installedPackage(appRoot, '@modern-js/renderer-solid');
+        const core = installedPackage(
+          adapter.directory,
+          '@tanstack/router-core',
+        );
+        verifyLocalizedNavigationCore(
+          core.directory,
+          proofContext.nativeInputs['@tanstack/router-core'],
+          proofContext.solidUsesNativeCore,
+        );
+      }
       process.stdout.write(
         `Installed ${renderer} navigation tuple: ${JSON.stringify(nativeTuple)}\n`,
       );
@@ -336,13 +432,25 @@ try {
       witnesses.push(witness);
       await ready(server, `${origin}/en/about`, controller.signal);
       const page = await browser.newPage();
+      let checks;
       try {
-        await assertLocalizedNavigation(page, origin);
+        checks = await assertLocalizedNavigation(page, origin);
       } finally {
         await page.close();
       }
       await server.stop();
       servers.pop();
+      assertReleaseAgeExclusionsUnchanged(consumerPolicy);
+      observations[renderer] = {
+        strictGeneratedTypes: true,
+        nativeTuple: Object.fromEntries(
+          ['routerCore', 'history'].map(key => [
+            key,
+            { name: nativeTuple[key].name, version: nativeTuple[key].version },
+          ]),
+        ),
+        checks,
+      };
       process.stdout.write(
         `PASS ${renderer}: generated candidate strict types and native localized browser navigation\n`,
       );
@@ -363,7 +471,7 @@ try {
   };
   for (const server of servers.reverse()) await attempt(() => server.stop());
   if (browser) await attempt(() => browser.close());
-  if (registry) await attempt(() => registry.stop());
+  if (registry?.stop) await attempt(() => registry.stop());
   for (const witness of witnesses)
     if (fs.existsSync(witness))
       await attempt(() =>
@@ -389,3 +497,11 @@ try {
     );
 }
 if (failure) throw failure;
+
+if (proofContext) {
+  fs.writeFileSync(
+    values['proof-result'],
+    `${JSON.stringify({ schemaVersion: 1, binding: rendererFeatureBinding(cohort), nonce: proofContext.nonce, mode: proofContext.mode, registryUrl: registry.registryUrl, renderers: observations }, null, 2)}\n`,
+    { flag: 'wx', mode: 0o600 },
+  );
+}

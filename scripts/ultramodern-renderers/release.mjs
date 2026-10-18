@@ -45,6 +45,7 @@ import { defaultReleaseAgePolicyPath } from '../ultramodern-publish/run-release-
 import { resolveBrowserDependencyRoot } from './browser-dependencies.mjs';
 import {
   assertRendererFeatureRow,
+  rendererAcceptanceRegistryUrl,
   rendererFeatureBinding,
   writeRendererFeatureReceipt,
 } from './feature-gates.mjs';
@@ -436,6 +437,7 @@ async function main() {
   let cohort;
   let storeDir;
   let createRoot;
+  let acceptanceRegistryUrl;
   const apps = {};
   const env = { ...process.env };
   try {
@@ -500,6 +502,13 @@ async function main() {
                 rootDir: path.join(workDir, 'registry'),
                 storeDir,
               });
+        acceptanceRegistryUrl = rendererAcceptanceRegistryUrl(
+          opts['acceptance-mode'],
+          {
+            sourceRegistry: registry,
+            publishedRegistryUrl: opts['registry-url'],
+          },
+        );
         // Strict release-age policy; only our own cohort is exempt.
         Object.assign(env, registry.env, {
           npm_config_store_dir: storeDir,
@@ -874,6 +883,12 @@ async function main() {
         : undefined;
       for (const [row, renderer, module, exported] of [
         [
+          'localized-navigation',
+          'octane',
+          './native-localized-navigation.mjs',
+          'runPackedLocalizedNavigationProof',
+        ],
+        [
           'generated-solid',
           'solid',
           './native-solid-generated.mjs',
@@ -914,7 +929,13 @@ async function main() {
             ...(renderer === 'octane' && nativeInputs ? { nativeInputs } : {}),
             consumerRoot: apps[renderer].appRoot,
             generatorConsumerRoot: createRoot,
-            browserDependencyRoot: playwrightRoot(),
+            acceptanceMode: opts['acceptance-mode'],
+            registryUrl: acceptanceRegistryUrl,
+            storeDir,
+            browserDependencyRoot:
+              row === 'localized-navigation'
+                ? path.join(root, 'tests')
+                : playwrightRoot(),
             browserExecutable: browserExecutable(),
             manifestPath: release.manifestPath,
             pnpmExecutable: execFileSync('which', ['pnpm'], {
@@ -961,7 +982,7 @@ async function main() {
         }
         writeRendererFeatureReceipt({
           receiptPath: path.resolve(opts['feature-receipt']),
-          registryUrl: env.npm_config_registry ?? env.pnpm_config_registry,
+          registryUrl: acceptanceRegistryUrl,
           evidenceRoot: logs,
           sourceAcceptanceReceiptPath:
             opts['source-acceptance-receipt'] &&

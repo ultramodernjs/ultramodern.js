@@ -283,3 +283,12 @@ for (const mutation of ['outside', 'empty', 'cross-row'])
       /distinct feature-row logs|nonempty/u,
     );
   });
+
+test('localized navigation for both native renderers is mandatory independently of HMR and Workers', t => {
+  const { options } = fixture(t);
+  delete options.rows['localized-navigation'];
+  assert.throws(
+    () => writeRendererFeatureReceipt(options),
+    /Every renderer feature row/u,
+  );
+});

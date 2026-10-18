@@ -1,9 +1,24 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import { BlockList, isIP } from 'node:net';
 import path from 'node:path';
 
+const loopbackAddresses = new BlockList();
+loopbackAddresses.addSubnet('127.0.0.0', 8, 'ipv4');
+loopbackAddresses.addAddress('::1', 'ipv6');
+loopbackAddresses.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
+
 export const requiredRendererFeatureRows = Object.freeze({
+  'localized-navigation': [
+    'solidNavigation',
+    'octaneNavigation',
+    'strictGeneratedTypes',
+    'acceptedNativeTuples',
+    'nativeMasks',
+    'blockers',
+    'documentLifetime',
+  ],
   'generated-solid': [
     'strictGeneratedTypes',
     'sameNativeOwner',
@@ -54,6 +69,40 @@ export function normalizeRegistryUrl(value) {
   );
   url.pathname = `${url.pathname.replace(/\/+$/u, '')}/`;
   return url.href;
+}
+/** Bind acceptance to the registry actually selected by its execution mode. */
+export function rendererAcceptanceRegistryUrl(
+  mode,
+  { sourceRegistry, publishedRegistryUrl } = {},
+) {
+  assert(
+    ['source', 'published'].includes(mode),
+    'Unknown renderer acceptance mode',
+  );
+  const selected = normalizeRegistryUrl(
+    mode === 'source' ? sourceRegistry?.registryUrl : publishedRegistryUrl,
+  );
+  const url = new URL(selected);
+  const hostname = url.hostname.startsWith('[')
+    ? url.hostname.slice(1, -1)
+    : url.hostname.replace(/\.+$/u, '');
+  const addressType = isIP(hostname);
+  const loopback =
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    Boolean(
+      addressType &&
+        loopbackAddresses.check(hostname, addressType === 4 ? 'ipv4' : 'ipv6'),
+    );
+  assert(
+    mode === 'source'
+      ? loopback && url.protocol === 'http:' && Number(url.port) >= 1024
+      : !loopback,
+    mode === 'source'
+      ? 'Source acceptance requires its loopback ephemeral registry'
+      : 'Published acceptance cannot use a loopback source registry',
+  );
+  return selected;
 }
 function assertRow(row, receipt, binding, { evidenceRoot, verifyFiles }) {
   assert(

@@ -1,10 +1,59 @@
 import assert from 'node:assert/strict';
 
+/** Capture failures across the whole navigation proof and release every listener. */
+export function observeLocalizedNavigationErrors(page, url) {
+  const errors = [];
+  const origin = new URL(url).origin;
+  const listeners = {
+    pageerror: error => errors.push(`pageerror: ${String(error)}`),
+    console: message => {
+      if (message.type() === 'error') errors.push(`console: ${message.text()}`);
+    },
+    requestfailed: request =>
+      errors.push(
+        `requestfailed: ${request.url()} ${request.failure()?.errorText ?? 'unknown failure'}`,
+      ),
+    response: response => {
+      if (response.status() >= 400 && new URL(response.url()).origin === origin)
+        errors.push(`HTTP ${response.status()}: ${response.url()}`);
+    },
+  };
+  for (const [event, listener] of Object.entries(listeners))
+    page.on(event, listener);
+  return {
+    assertClean: () =>
+      assert.deepEqual(
+        errors,
+        [],
+        'no browser, console, request or same-origin HTTP errors',
+      ),
+    stop: () => {
+      for (const [event, listener] of Object.entries(listeners))
+        page.off(event, listener);
+    },
+  };
+}
+
+/** Finish the native destination and its requests before intentionally replacing a document. */
+export async function settleLocalizedNavigation(page, { item } = {}) {
+  if (item) {
+    await page.waitForFunction(
+      expected => {
+        const rendered = document.querySelector(
+          '[data-testid="navigation-item"]',
+        )?.textContent;
+        return rendered && JSON.parse(rendered).id === expected;
+      },
+      {},
+      item,
+    );
+  } else await page.waitForSelector('[data-testid="navigation-about"]');
+  await page.waitForNetworkIdle({ idleTime: 500 });
+}
+
 /** Run against a normally generated, built and served candidate app. */
 export async function assertLocalizedNavigation(page, url) {
-  const errors = [];
-  const onError = error => errors.push(String(error));
-  page.on('pageerror', onError);
+  const errors = observeLocalizedNavigationErrors(page, url);
   const selector = name => `[data-testid="${name}"]`;
   const waitPath = pathname =>
     page.waitForFunction(
@@ -91,16 +140,20 @@ export async function assertLocalizedNavigation(page, url) {
 
     await page.click(selector('localized-replace'));
     await waitPath('/cs/polozky/blue');
+    await settleLocalizedNavigation(page, { item: 'blue' });
     await page.goBack();
     await waitPath('/en/about');
+    await settleLocalizedNavigation(page);
     await page.goForward();
     await waitPath('/cs/polozky/blue');
+    await settleLocalizedNavigation(page, { item: 'blue' });
     await assertDocument('preserved');
 
     await page.goto(`${url}/en/about`, { waitUntil: 'networkidle0' });
     await documentMarker();
     await page.click(selector('localized-relative'));
     await waitPath('/cs/polozky/relative');
+    await settleLocalizedNavigation(page, { item: 'relative' });
     await assertDocument('preserved');
 
     await page.goto(`${url}/en/blocked`, { waitUntil: 'networkidle0' });
@@ -127,12 +180,14 @@ export async function assertLocalizedNavigation(page, url) {
     );
     await page.click(selector('navigation-accept'));
     await waitPath('/cs/polozky/red');
+    await settleLocalizedNavigation(page, { item: 'red' });
     await assertDocument('preserved');
 
     await page.goto(`${url}/en/blocked`, { waitUntil: 'networkidle0' });
     await documentMarker();
     await page.click(selector('localized-bypass'));
     await waitPath('/cs/about');
+    await settleLocalizedNavigation(page);
     await assertDocument('preserved');
 
     await Promise.all([
@@ -147,8 +202,17 @@ export async function assertLocalizedNavigation(page, url) {
       undefined,
       'reloadDocument loads a new document at the advertised localized href',
     );
-    assert.deepEqual(errors, [], 'no browser runtime or hydration errors');
+    errors.assertClean();
+    return {
+      nativeMasks: true,
+      intentPreload: true,
+      history: true,
+      relativeNavigation: true,
+      blockers: true,
+      documentLifetime: true,
+      noRuntimeErrors: true,
+    };
   } finally {
-    page.off('pageerror', onError);
+    errors.stop();
   }
 }
