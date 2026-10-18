@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire, registerHooks } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { resolveUltramodernSourceRevision } from '../../packages/solutions/app-tools-extensions/src/release-identity.ts';
 import { createOctaneWorkerFederationFixtures } from '../../tests/ultramodern-renderers/octane-federation-workers/fixtures.mjs';
 import {
+  assertPackedWorkerSource,
   generatePackedWorkerWorkspace,
   packedWorkerDependencies,
   packedWorkerProofContext,
@@ -15,6 +18,101 @@ import {
   verifyPackedWorkerProofResult,
   verifyPrebuiltWorkerServices,
 } from './native-federation-worker.mjs';
+
+test('packed Worker builds derive their identity from the actual clean fixture commit', async t => {
+  assert(
+    process.env.OWNED_TEMP_DIR,
+    'Run filesystem tests through owned-temp-dir',
+  );
+  const workRoot = fs.mkdtempSync(
+    path.join(process.env.OWNED_TEMP_DIR, 'worker-source-'),
+  );
+  t.after(() => fs.rmSync(workRoot, { recursive: true, force: true }));
+  const directory = path.join(workRoot, 'workspace');
+  fs.mkdirSync(directory);
+  fs.writeFileSync(
+    path.join(directory, '.gitignore'),
+    'node_modules/\ndist-cloudflare/\n',
+  );
+  fs.writeFileSync(
+    path.join(directory, 'Widget.tsx'),
+    'export const title = "actual authored source";\n',
+  );
+  fs.writeFileSync(
+    path.join(directory, 'pnpm-lock.yaml'),
+    'lockfileVersion: 9.0\n',
+  );
+  assert.equal(
+    resolveUltramodernSourceRevision(directory, 'workspace', {}),
+    'workspace',
+  );
+
+  // Hooks may pass another checkout's Git environment. Only the child command
+  // environments are isolated; neither the caller nor its Git config changes.
+  const inheritedRevision = 'a'.repeat(40);
+  const sourceRevision = execFileSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `
+      import assert from 'node:assert/strict';
+      import { preparePackedWorkerSource } from ${JSON.stringify(new URL('./native-federation-worker.mjs', import.meta.url).href)};
+      const revision = await preparePackedWorkerSource({
+        directory: ${JSON.stringify(directory)},
+        context: { workRoot: ${JSON.stringify(workRoot)} },
+        signal: new AbortController().signal,
+      });
+      assert.equal(process.env.GIT_DIR, ${JSON.stringify(path.join(workRoot, 'foreign-git'))});
+      assert.equal(process.env.ULTRAMODERN_SOURCE_REVISION, ${JSON.stringify(inheritedRevision)});
+      process.stdout.write(revision);
+    `,
+    ],
+    {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GIT_DIR: path.join(workRoot, 'foreign-git'),
+        GIT_INDEX_FILE: path.join(workRoot, 'foreign-index'),
+        ULTRAMODERN_SOURCE_REVISION: inheritedRevision,
+      },
+    },
+  ).trim();
+  assert.match(sourceRevision, /^[a-f0-9]{40}$/u);
+  assert.equal(
+    resolveUltramodernSourceRevision(directory, 'workspace', {}),
+    sourceRevision,
+  );
+  assert.throws(
+    () => resolveUltramodernSourceRevision(directory, inheritedRevision, {}),
+    /does not match clean Git HEAD/u,
+  );
+  const options = {
+    directory,
+    context: { workRoot },
+    sourceRevision,
+    label: 'fixture',
+    signal: new AbortController().signal,
+  };
+  fs.mkdirSync(path.join(directory, 'dist-cloudflare'));
+  fs.writeFileSync(
+    path.join(directory, 'dist-cloudflare', 'worker.js'),
+    'built output',
+  );
+  assert.equal(await assertPackedWorkerSource(options), sourceRevision);
+  fs.appendFileSync(
+    path.join(directory, 'Widget.tsx'),
+    'export const changed = true;\n',
+  );
+  assert.equal(
+    resolveUltramodernSourceRevision(directory, 'workspace', {}),
+    'workspace',
+  );
+  await assert.rejects(
+    assertPackedWorkerSource({ ...options, label: 'changed-fixture' }),
+    /Authored Worker sources changed/u,
+  );
+});
 
 test('failed Worker commands preserve bounded compiler output after log cleanup', async t => {
   assert(

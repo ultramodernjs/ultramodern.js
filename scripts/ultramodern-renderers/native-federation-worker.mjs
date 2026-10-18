@@ -238,10 +238,99 @@ export async function runWorkerCompilationCommand(command, args, options) {
   }
 }
 
+const workerSourceEnvironment = () =>
+  Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([name]) => !name.toUpperCase().startsWith('GIT_'),
+    ),
+  );
+
+async function runWorkerSourceGit(args, { directory, context, label, signal }) {
+  const log = path.join(context.workRoot, `${label}.log`);
+  await runWorkerCompilationCommand('git', args, {
+    cwd: directory,
+    env: workerSourceEnvironment(),
+    log,
+    witness: path.join(context.workRoot, `${label}-process.json`),
+    signal,
+  });
+  return fs.readFileSync(log, 'utf8').trim();
+}
+
+/** The fixture's own committed sources, rather than the framework SHA, qualify deployment. */
+export async function assertPackedWorkerSource({
+  directory,
+  context,
+  label,
+  sourceRevision,
+  signal,
+}) {
+  const options = { directory, context, signal };
+  const revision = await runWorkerSourceGit(['rev-parse', 'HEAD'], {
+    ...options,
+    label: `${label}-revision`,
+  });
+  assert.match(revision, /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u);
+  if (sourceRevision) assert.equal(revision, sourceRevision);
+  const status = await runWorkerSourceGit(
+    ['status', '--porcelain', '--untracked-files=all'],
+    { ...options, label: `${label}-status` },
+  );
+  assert.equal(
+    status,
+    '',
+    `Authored Worker sources changed after ${label}:\n${status}`,
+  );
+  return revision;
+}
+
+/** Commit the actual owned app sources and installed lockfile before a promotable build. */
+export async function preparePackedWorkerSource({
+  directory,
+  context,
+  signal,
+}) {
+  const workspace = fs.realpathSync(directory);
+  const owner = fs.realpathSync(context.workRoot);
+  assert(workspace.startsWith(`${owner}${path.sep}`));
+  assert(!fs.existsSync(path.join(workspace, '.git')));
+  for (const [label, args] of [
+    ['init', ['init', '--quiet']],
+    ['add', ['add', '--all']],
+    [
+      'commit',
+      [
+        '-c',
+        'user.name=UltraModern packed Worker fixture',
+        '-c',
+        'user.email=packed-worker-fixture@invalid',
+        'commit',
+        '--quiet',
+        '-m',
+        'Record actual authored Worker sources and installed lockfile',
+      ],
+    ],
+  ])
+    await runWorkerSourceGit(args, {
+      directory: workspace,
+      context,
+      signal,
+      label: `source-git-${label}`,
+    });
+  return assertPackedWorkerSource({
+    directory: workspace,
+    context,
+    signal,
+    label: 'source-git-commit',
+  });
+}
+
 /** Compile actual installed apps; no fixture may substitute a fabricated output plan. */
 export async function buildCompiledWorkerApplications({
   applications,
   context,
+  sourceDirectory,
+  sourceRevision,
   signal,
 }) {
   assert.equal(applications.filter(app => app.role === 'host').length, 1);
@@ -265,7 +354,7 @@ export async function buildCompiledWorkerApplications({
       for (const [label, args] of [
         ['build', ['build']],
         ['deploy', ['deploy', '--skip-build']],
-      ])
+      ]) {
         await runWorkerCompilationCommand(
           process.execPath,
           [installedBin(application.appRoot), ...args],
@@ -276,7 +365,8 @@ export async function buildCompiledWorkerApplications({
             ),
             cwd: application.appRoot,
             env: {
-              ...process.env,
+              ...workerSourceEnvironment(),
+              ULTRAMODERN_SOURCE_REVISION: '',
               NODE_PATH: '',
               NODE_ENV: 'production',
               PORT: new URL(application.origin).port,
@@ -285,6 +375,14 @@ export async function buildCompiledWorkerApplications({
             signal,
           },
         );
+        await assertPackedWorkerSource({
+          directory: sourceDirectory,
+          sourceRevision,
+          context,
+          signal,
+          label: `worker-${index}-${label}-source`,
+        });
+      }
       if (application.role === 'remote')
         closeServers.push(await serveCompiledAssets(application));
     }
@@ -508,6 +606,11 @@ async function provePackedWorkers(context, input, signal) {
       '0.json',
     ),
   });
+  const sourceRevision = await preparePackedWorkerSource({
+    directory: workspaceRoot,
+    context,
+    signal,
+  });
   const applications = [];
   for (const [index, { app }] of fixture.applications.entries()) {
     const appRoot = path.join(workspaceRoot, app.directory);
@@ -537,6 +640,8 @@ async function provePackedWorkers(context, input, signal) {
   const compiled = await buildCompiledWorkerApplications({
     applications,
     context,
+    sourceDirectory: workspaceRoot,
+    sourceRevision,
     signal,
   });
   const planPath = path.join(context.workRoot, 'compiled-worker-plan.json');
@@ -563,9 +668,12 @@ async function provePackedWorkers(context, input, signal) {
     remotes.map(remote => remote.deployment.workerName),
   );
   const result = await runWorkerFixtureProof(plan, { signal });
+  result.authoredSourceRevision = sourceRevision;
   result.workerServices = workerServices;
   const files = [
     planPath,
+    path.join(context.workRoot, 'source-git-commit-revision.log'),
+    path.join(context.workRoot, 'source-git-commit-status.log'),
     ...[0, 1, 2].flatMap(index =>
       ['build', 'deploy'].map(label =>
         path.join(context.workRoot, `worker-${index}-${label}-process.json`),
