@@ -97,3 +97,54 @@ test('ERP and Tractor consume the same once-packed cohort through the release ow
   );
   assert.equal(acceptance.jobs['accept-release'].environment, undefined);
 });
+
+test('both required feature workflows stage verified native inputs before consumer execution', () => {
+  const source = readWorkflow('ultramodern-release-acceptance').jobs[
+    'accept-release'
+  ];
+  const published = readWorkflow('publish-bleedingdev').jobs[
+    'accept-published'
+  ];
+  for (const job of [source, published]) {
+    const step = job.steps.find(step =>
+      step.name.includes('installed renderer features'),
+    );
+    assert(step, 'The required installed feature step must exist');
+    const command = step.run;
+    assert.match(command, /export OWNED_TEMP_DIR="\$feature_work"/u);
+    assert.match(command, /feature_work="\$\(realpath "\$feature_work"\)"/u);
+    assert.match(
+      command,
+      /trap 'rm -rf -- "\$feature_work\/native-inputs"' EXIT/u,
+    );
+    const stage = command.indexOf('native-federation-inputs.mjs');
+    const proof = command.indexOf('ultramodern-renderers/release.mjs');
+    assert(
+      stage >= 0 && stage < proof,
+      'Verified inputs must be staged before any proof runs',
+    );
+    assert.match(
+      command,
+      /--manifest "\$BLEEDINGDEV_RELEASE_MANIFEST" --out "\$feature_work\/native-inputs"/u,
+    );
+    assert.match(
+      command,
+      /--native-inputs "\$feature_work\/native-inputs\/native-inputs\.json"/u,
+    );
+    assert.match(command, /--required-features/u);
+  }
+});
+
+test('required native PR checks run focused renderer acceptance controls', () => {
+  const controls = workflow.jobs['native-framework-contracts'].steps.find(
+    step => step.name === 'Test renderer acceptance controls',
+  );
+  assert(controls);
+  assert.match(controls.run, /OWNED_TEMP_DIR="\$controls_work" node --test/u);
+  assert.match(controls.run, /scripts\/ultramodern-renderers\/\*\.test\.mjs/u);
+  assert.match(
+    controls.run,
+    /scripts\/native-compatibility\/packed-workflows\.test\.mjs/u,
+  );
+  assert.match(controls.run, /trap 'rm -rf -- "\$controls_work"' EXIT/u);
+});

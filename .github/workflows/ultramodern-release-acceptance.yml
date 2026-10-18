@@ -180,9 +180,15 @@ jobs:
           PRODUCER_RUN_IDENTITY: ${{ inputs.producer_run_identity }}
         run: |
           feature_work="$(mktemp -d "$RUNNER_TEMP/renderer-features-XXXXXX")"
-          OWNED_TEMP_DIR="$feature_work" mise exec -- node scripts/ultramodern-renderers/release.mjs \
+          feature_work="$(realpath "$feature_work")"
+          export OWNED_TEMP_DIR="$feature_work"
+          trap 'rm -rf -- "$feature_work/native-inputs"' EXIT
+          mise exec -- node scripts/ultramodern-renderers/native-federation-inputs.mjs \
+            --manifest "$BLEEDINGDEV_RELEASE_MANIFEST" --out "$feature_work/native-inputs"
+          mise exec -- node scripts/ultramodern-renderers/release.mjs \
             --cohort-dir .modern/bleedingdev-publish --renderers solid,octane --with '' \
             --work-dir "$feature_work" --required-features \
+            --native-inputs "$feature_work/native-inputs/native-inputs.json" \
             --acceptance-receipt .modern/bleedingdev-publish/acceptance-receipt.json \
             --feature-receipt .modern/bleedingdev-publish/acceptance-receipt.renderer-features.json \
             --run-identity "$PRODUCER_RUN_IDENTITY"

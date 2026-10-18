@@ -8,7 +8,7 @@
 //       (--version <x.y.z-ultramodern.N> | --cohort-dir <dir>) \
 //       [--renderers react,solid,octane] [--with worker,rsc,mf]
 //       [--browser-dependency-root <existing installed Playwright owner>]
-//       [--native-inputs <authenticated native archive inputs.json>]
+//       [--required-features --native-inputs <authenticated native archive inputs.json>]
 //       [--tractor-source <tractor demo checkout> [--tractor-revision <rev>]]
 //
 // For each renderer: generate a workspace with the packed create CLI,
@@ -108,6 +108,7 @@ if (!['source', 'published'].includes(opts['acceptance-mode']))
 if (opts['required-features']) {
   for (const option of [
     'cohort-dir',
+    'native-inputs',
     'acceptance-receipt',
     'feature-receipt',
     'run-identity',

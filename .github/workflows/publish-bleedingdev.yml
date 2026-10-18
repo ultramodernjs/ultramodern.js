@@ -1402,9 +1402,15 @@ jobs:
           PRODUCER_RUN_IDENTITY: ${{ needs.accept-release.outputs.producer_run_identity }}
         run: |
           feature_work="$(mktemp -d "$RUNNER_TEMP/renderer-features-XXXXXX")"
-          OWNED_TEMP_DIR="$feature_work" mise exec -- node scripts/ultramodern-renderers/release.mjs \
+          feature_work="$(realpath "$feature_work")"
+          export OWNED_TEMP_DIR="$feature_work"
+          trap 'rm -rf -- "$feature_work/native-inputs"' EXIT
+          mise exec -- node scripts/ultramodern-renderers/native-federation-inputs.mjs \
+            --manifest "$BLEEDINGDEV_RELEASE_MANIFEST" --out "$feature_work/native-inputs"
+          mise exec -- node scripts/ultramodern-renderers/release.mjs \
             --cohort-dir "$BLEEDINGDEV_RELEASE_DIR" --renderers solid,octane --with '' \
             --work-dir "$feature_work" --required-features \
+            --native-inputs "$feature_work/native-inputs/native-inputs.json" \
             --acceptance-mode published --registry-url https://registry.npmjs.org/ \
             --source-feature-receipt "$BLEEDINGDEV_RELEASE_DIR/acceptance-receipt.renderer-features.json" \
             --source-acceptance-receipt "$BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT" \

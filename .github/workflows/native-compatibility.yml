@@ -61,6 +61,14 @@ jobs:
       - name: Prepare
         run: pnpm run prepare-build
 
+      - name: Test renderer acceptance controls
+        run: |
+          controls_work="$(mktemp -d "$RUNNER_TEMP/renderer-controls-XXXXXX")"
+          trap 'rm -rf -- "$controls_work"' EXIT
+          OWNED_TEMP_DIR="$controls_work" node --test \
+            scripts/native-compatibility/packed-workflows.test.mjs \
+            scripts/ultramodern-renderers/*.test.mjs
+
       - name: Resolve Playwright runtime
         id: browser-runtime
         run: node scripts/lib/browser-provisioning.js --resolve --runtime tests

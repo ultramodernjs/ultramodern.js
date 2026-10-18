@@ -364,7 +364,7 @@ for (const [name, corrupt] of [
     assert.throws(() => validateNativeDevRefreshObservations(data));
   });
 
-test('current source and published release workflow commands still reach cohort validation without future native inputs', () => {
+test('source and published required-feature commands require native inputs before cohort validation', () => {
   assert(
     process.env.OWNED_TEMP_DIR,
     'Run the CLI control through owned-temp-dir',
@@ -405,11 +405,21 @@ test('current source and published release workflow commands still reach cohort 
           '--source-acceptance-receipt',
           path.join(commandRoot, 'source-acceptance.json'),
         );
-      const child = spawnSync(process.execPath, args, {
-        env: { ...process.env, OWNED_TEMP_DIR: commandRoot },
-        encoding: 'utf8',
-        timeout: 10_000,
-      });
+      const run = () =>
+        spawnSync(process.execPath, args, {
+          env: { ...process.env, OWNED_TEMP_DIR: commandRoot },
+          encoding: 'utf8',
+          timeout: 10_000,
+        });
+      const missingInputs = run();
+      assert.equal(missingInputs.error, undefined);
+      assert.equal(missingInputs.status, 1);
+      assert.match(missingInputs.stderr, /needs --native-inputs/u);
+      args.push(
+        '--native-inputs',
+        path.join(commandRoot, 'native-inputs.json'),
+      );
+      const child = run();
       assert.equal(child.error, undefined);
       assert.equal(child.status, 1);
       const output = `${child.stdout}\n${child.stderr}`;
