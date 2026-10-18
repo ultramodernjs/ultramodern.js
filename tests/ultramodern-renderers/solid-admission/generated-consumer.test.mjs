@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -96,6 +97,52 @@ test('removes inherited Node hooks from every consumer command', () => {
   assert.equal(env.NODE_OPTIONS, undefined);
   assert.equal(env.NODE_PATH, undefined);
   assert.equal(env.KEEP, 'yes');
+});
+
+test('the authored Solid build diagnostics compile under strict consumer types', async () => {
+  await temporary(async directory => {
+    const fixture = path.join(root, 'tests/integration/renderer-solid');
+    const fixturePackage = JSON.parse(
+      await readFile(path.join(fixture, 'package.json'), 'utf8'),
+    );
+    const toolingPackage = JSON.parse(
+      await readFile(
+        path.join(
+          root,
+          'packages/solutions/ultramodern-app-tools/package.json',
+        ),
+        'utf8',
+      ),
+    );
+    assert.equal(
+      fixturePackage.devDependencies['@rsbuild/core'],
+      toolingPackage.dependencies['@rsbuild/core'],
+      'The consumer must declare the public Rsbuild types used by its diagnostics',
+    );
+    const tooling = createRequire(
+      path.join(root, 'packages/solutions/ultramodern-app-tools/package.json'),
+    );
+    const rsbuild = path.dirname(tooling.resolve('@rsbuild/core/package.json'));
+    const config = path.join(directory, 'tsconfig.json');
+    await writeFile(
+      config,
+      JSON.stringify({
+        extends: path.join(fixture, 'tsconfig.json'),
+        compilerOptions: {
+          types: ['node'],
+          typeRoots: [path.join(fixture, 'node_modules/@types')],
+          paths: { '@rsbuild/core': [path.join(rsbuild, 'dist/index.d.ts')] },
+        },
+        include: [],
+        files: [path.join(fixture, 'modern.config.ts')],
+      }),
+    );
+    await execute(
+      process.execPath,
+      [path.join(root, 'node_modules/typescript/bin/tsc'), '-p', config],
+      { timeout: 30_000 },
+    );
+  });
 });
 
 test('the native compiler enforces browser globals, exact options, indexed access and overrides', async () => {

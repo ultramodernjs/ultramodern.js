@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@modern-js/ultramodern-app-tools": "workspace:*",
+    "@rsbuild/core": "2.2.13",
     "@solidjs/compiler": "2.0.0-rc.15",
     "@types/node": "^26.6.5"
   }
