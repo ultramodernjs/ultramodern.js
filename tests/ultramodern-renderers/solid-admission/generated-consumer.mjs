@@ -18,6 +18,7 @@ import {
 } from '../../../scripts/ultramodern-renderers/native-federation-packed.mjs';
 import { checkSolidBundleModules } from './generated-bundle.mjs';
 import { createSolidConsumerObserver } from './generated-observer.mjs';
+import { createRequestDiagnostics } from './generated-request-diagnostics.mjs';
 import { createAdmissionProcessScope } from './processes.mjs';
 
 const target = '2.0.0-rc.15';
@@ -379,6 +380,8 @@ export async function checkGeneratedSolidBrowser({
   try {
     signal.throwIfAborted();
     const page = await browser.newPage();
+    const traffic = createRequestDiagnostics();
+    traffic.attach(page, 'main');
     const errors = [];
     const documentRequests = [];
     const blocked = [];
@@ -507,6 +510,7 @@ export async function checkGeneratedSolidBrowser({
       }),
       'Solid hydration replaced exact server nodes',
     );
+    traffic.phase('action');
     await page.locator('input[name="name"]').fill('Solid RC15 acceptance');
     await page.locator('[data-testid="native-submit"]').click();
     await page.waitForFunction(() =>
@@ -515,6 +519,7 @@ export async function checkGeneratedSolidBrowser({
         ?.textContent.includes('Solid RC15 acceptance'),
     );
     const requests = documentRequests.length;
+    traffic.phase('about navigation');
     await page.locator('[data-testid="nav-about"]').click();
     await page.locator('[data-testid="native-about"]').waitFor();
     assert.equal(
@@ -532,6 +537,7 @@ export async function checkGeneratedSolidBrowser({
       ),
       'Navigation replaced the document or layout',
     );
+    traffic.phase('deferred navigation');
     await page.locator('[data-testid="nav-deferred"]').click();
     await page.locator('[data-testid="native-deferred-pending"]').waitFor();
     await page.waitForFunction(
@@ -540,6 +546,7 @@ export async function checkGeneratedSolidBrowser({
           ?.textContent === 'Native late value',
     );
 
+    traffic.phase('overlapping server requests');
     const ids = [observer.requestId(), observer.requestId()];
     observer.pair(ids);
     const htmls = await Promise.all(
@@ -575,11 +582,13 @@ export async function checkGeneratedSolidBrowser({
       await observer.wait(ids[index], 'loader-released');
     }
 
+    traffic.phase('overlapping browser hydration');
     const hydrationIds = [observer.requestId(), observer.requestId()];
     observer.pair(hydrationIds);
     const isolatedPages = await Promise.all(
       [1, 10].map(async (item, index) => {
         const isolated = await browser.newPage();
+        traffic.attach(isolated, `isolated-${item}`);
         isolated.on('pageerror', error => errors.push(error.message));
         isolated.on('console', message => {
           if (message.type() === 'error') errors.push(message.text());
@@ -744,8 +753,11 @@ export async function checkGeneratedSolidBrowser({
         reader.releaseLock();
       }
     };
+    traffic.phase('server stream completion');
     const completion = await streamed(false, observer.requestId());
+    traffic.phase('server stream cancellation');
     const cancellation = await streamed(true, observer.requestId());
+    traffic.phase('server recovery');
     const recovery = await fetch(new URL('/items/3', origin), {
       signal: timeout(),
     });
@@ -754,7 +766,7 @@ export async function checkGeneratedSolidBrowser({
     assert.deepEqual(
       errors,
       [],
-      'The native browser raised errors or failed resources',
+      `The native browser raised errors or failed resources\nBrowser request lifecycle: ${JSON.stringify(traffic.snapshot())}`,
     );
     return {
       retainedSsrNodes: true,
