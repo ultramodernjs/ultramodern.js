@@ -193,14 +193,43 @@ async function reportWorkerCompositionFailure(page, detail) {
   let timer;
   try {
     const inspection = page.evaluate(
-      ({ selector }) => {
+      ({ selector, contextSelector }) => {
         const bounded = value => String(value ?? '').slice(0, 512);
         const node = selector ? document.querySelector(selector) : null;
+        const host = contextSelector
+          ? document.querySelector(contextSelector)
+          : null;
+        const contextFields = (element, greetingSelector) =>
+          element
+            ? {
+                ...Object.fromEntries(
+                  [
+                    'appId',
+                    'owner',
+                    'path',
+                    'language',
+                    'publicHref',
+                    'matchId',
+                    'matchRouteId',
+                    'matchParams',
+                    'matchSearch',
+                    'matchCurrent',
+                  ].map(name => [name, bounded(element.dataset[name])]),
+                ),
+                greeting: bounded(
+                  element.querySelector(greetingSelector)?.textContent,
+                ),
+              }
+            : null;
         const style = node ? getComputedStyle(node) : null;
         const retained = globalThis.__nativeWorkerRouteRefs;
         return {
           url: bounded(location.href),
           readyState: document.readyState,
+          context: {
+            remote: contextFields(node, '[data-remote-greeting]'),
+            host: contextFields(host, '[data-host-greeting]'),
+          },
           adoption: retained
             ? {
                 documentRetained:
@@ -267,7 +296,10 @@ async function reportWorkerCompositionFailure(page, detail) {
             })),
         };
       },
-      { selector: detail.expected?.selector ?? null },
+      {
+        selector: detail.expected?.selector ?? null,
+        contextSelector: detail.expected?.contextSelector ?? null,
+      },
     );
     // Observability only: a broken page cannot indefinitely delay the original
     // failure or its existing browser/resource cleanup.
@@ -346,6 +378,7 @@ export async function verifyWorkerCompositionRoutes(
       });
     });
     let expectedCoordinate;
+    let expectedContext;
     let phase = 'navigation';
     let release;
     const gate = new Promise(resolve => {
@@ -492,6 +525,7 @@ export async function verifyWorkerCompositionRoutes(
           'The nested Worker received the layout match instead of the page match.',
         );
       release();
+      expectedCoordinate = null;
       phase = 'browser hydration adoption';
       await page.waitForFunction(
         ids =>
@@ -515,7 +549,16 @@ export async function verifyWorkerCompositionRoutes(
         }),
         'A direct composition document replaced native SSR nodes during adoption.',
       );
-      for (const [index, expected] of route.expected.entries())
+      phase = 'browser context adoption';
+      for (const [index, expected] of route.expected.entries()) {
+        expectedCoordinate = expected;
+        expectedContext = {
+          selector: expected.selector,
+          contextSelector: expected.contextSelector,
+          canonical: route.context,
+          appId: hostAppId,
+          retainedMatch: observed[index].match,
+        };
         await page.waitForFunction(
           ({ selector, contextSelector, canonical, appId, retainedMatch }) => {
             const node = document.querySelector(selector);
@@ -546,15 +589,13 @@ export async function verifyWorkerCompositionRoutes(
                 canonical.greeting
             );
           },
-          {
-            selector: expected.selector,
-            contextSelector: expected.contextSelector,
-            canonical: route.context,
-            appId: hostAppId,
-            retainedMatch: observed[index].match,
-          },
+          expectedContext,
         );
+      }
+      expectedContext = undefined;
+      expectedCoordinate = null;
       if (nestedMatch) {
+        phase = 'nested boundary interaction';
         await page.locator('[data-counter="b-hop"]').click();
         await page.waitForFunction(
           () =>
@@ -576,6 +617,7 @@ export async function verifyWorkerCompositionRoutes(
             await page.locator(`[data-global-counter="${id}"]`).textContent(),
             '3',
           );
+        phase = 'nested boundary disposal';
         await page.locator('[data-host-nested-home]').click();
         await page.waitForFunction(() =>
           ['a-hop', 'b-hop'].every(
@@ -619,6 +661,7 @@ export async function verifyWorkerCompositionRoutes(
           ),
           'Disposing the second-hop boundary disturbed a surviving native owner.',
         );
+        phase = 'surviving boundary interaction';
         await page.locator('[data-global-counter="b"]').click();
         await page.waitForFunction(
           () =>
@@ -644,6 +687,7 @@ export async function verifyWorkerCompositionRoutes(
           ),
         );
       }
+      phase = 'browser error assertions';
       assert.deepEqual(
         errors,
         [],
@@ -669,6 +713,28 @@ export async function verifyWorkerCompositionRoutes(
               }
             : null,
           phase,
+          ...(expectedContext
+            ? {
+                context: {
+                  selector: bounded(expectedContext.selector),
+                  contextSelector: bounded(expectedContext.contextSelector),
+                  appId: bounded(expectedContext.appId),
+                  canonical: Object.fromEntries(
+                    ['pathname', 'publicHref', 'language', 'greeting'].map(
+                      name => [name, bounded(expectedContext.canonical[name])],
+                    ),
+                  ),
+                  retainedMatch: Object.fromEntries(
+                    ['id', 'routeId', 'params', 'search', 'current'].map(
+                      name => [
+                        name,
+                        bounded(expectedContext.retainedMatch[name]),
+                      ],
+                    ),
+                  ),
+                },
+              }
+            : {}),
           resourceEvents,
           requestFailures,
           errors: errors.slice(-16).map(bounded),

@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import { reservePort } from '../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/runtime.mjs';
 import { readInstalledPackageFiles } from '../../../scripts/ultramodern-renderers/installed-cohort.mjs';
 import {
@@ -32,11 +33,32 @@ for (const inspectionFails of [false, true]) {
     const cleanup = [];
     const logs = [];
     t.mock.method(console, 'error', (...args) => logs.push(args));
-    const browserObservation = {
-      observed: { style: { borderTopColor: 'rgb(0, 0, 0)' } },
-      stylesheets: [
-        { href: 'http://127.0.0.1/remote.css', sheetPresent: false },
-      ],
+    const remote = {
+      tagName: 'SECTION',
+      className: '',
+      dataset: {
+        appId: 'host',
+        owner: 'host',
+        language: 'cs',
+        matchParams: 'p'.repeat(1024),
+        unrelated: 'Do not capture arbitrary dataset values',
+      },
+      querySelector: () => ({ textContent: 'remote greeting' }),
+    };
+    const host = {
+      dataset: { appId: 'host', language: 'en', matchParams: '{}' },
+      querySelector: () => ({ textContent: 'host greeting' }),
+    };
+    const browserGlobals = {
+      location: { href: 'http://127.0.0.1:9999/en' },
+      document: {
+        readyState: 'complete',
+        querySelector: selector =>
+          selector === '[data-host-context]' ? host : remote,
+        querySelectorAll: () => [],
+      },
+      performance: { getEntriesByType: () => [] },
+      getComputedStyle: () => ({ borderTopColor: 'rgb(0, 0, 0)' }),
     };
     const page = {
       setDefaultTimeout(value) {
@@ -77,9 +99,12 @@ for (const inspectionFails of [false, true]) {
       async waitForFunction() {
         throw original;
       },
-      async evaluate() {
+      async evaluate(callback, argument) {
         if (inspectionFails) throw new Error('Browser inspection unavailable');
-        return browserObservation;
+        return runInNewContext(`(${callback.toString()})(argument)`, {
+          ...browserGlobals,
+          argument,
+        });
       },
       async unrouteAll(options) {
         cleanup.push(['unroute', options]);
@@ -123,7 +148,147 @@ for (const inspectionFails of [false, true]) {
         detail.browser.inspectionError,
         /Browser inspection unavailable/,
       );
-    else assert.deepEqual(detail.browser, browserObservation);
+    else {
+      assert.equal(
+        detail.browser.observed.style.borderTopColor,
+        'rgb(0, 0, 0)',
+      );
+      assert.equal(detail.browser.context.remote.language, 'cs');
+      assert.equal(detail.browser.context.host.language, 'en');
+      assert.equal(detail.browser.context.remote.greeting, 'remote greeting');
+      assert.equal(detail.browser.context.host.greeting, 'host greeting');
+      assert.equal(detail.browser.context.remote.matchParams.length, 512);
+      assert.equal(detail.browser.context.remote.unrelated, undefined);
+    }
+  });
+}
+
+for (const failurePhase of ['context', 'final errors']) {
+  test(`Worker diagnostics report bounded context only during its actual wait (${failurePhase})`, async t => {
+    const original = new Error('Original client context mismatch');
+    const logs = [];
+    const cleanup = [];
+    const listeners = new Map();
+    t.mock.method(console, 'error', (...args) => logs.push(args));
+    const expected = {
+      remote: 'remote-a',
+      expose: './Widget',
+      selector: '[data-worker-remote="a"]',
+      contextSelector: '[data-host-context]',
+    };
+    const canonical = {
+      pathname: '/en',
+      publicHref: '/en',
+      language: 'en',
+      greeting: 'g'.repeat(1024),
+    };
+    const match = {
+      id: 'i'.repeat(1024),
+      routeId: '/',
+      params: 'p'.repeat(1024),
+      search: 's'.repeat(1024),
+      current: 'true',
+      unrelated: 'Do not log arbitrary match fields',
+    };
+    const appId = 'a'.repeat(1024);
+    const observation = {
+      id: 'a',
+      appId,
+      owner: 'host',
+      ...canonical,
+      match,
+      border: 'rgb(13, 117, 83)',
+      host: { appId, ...canonical, match },
+    };
+    let waits = 0;
+    const page = {
+      setDefaultTimeout(value) {
+        assert.equal(value, 15_000);
+      },
+      on(name, listener) {
+        listeners.set(name, listener);
+      },
+      async route() {},
+      async goto() {
+        if (failurePhase === 'final errors')
+          listeners.get('pageerror')(new Error('Late browser error'));
+        return { status: () => 200 };
+      },
+      locator() {
+        return {
+          async waitFor() {},
+          async count() {
+            return 1;
+          },
+          async evaluate() {
+            return observation;
+          },
+          async textContent() {
+            return 'SSR text';
+          },
+          locator() {
+            return {
+              first() {
+                return { async fill() {} };
+              },
+            };
+          },
+        };
+      },
+      async waitForFunction(_predicate, argument) {
+        waits++;
+        if (waits === 2) assert.deepEqual(argument, ['a']);
+        if (waits === 3) {
+          // The predicate still receives the full original values.
+          assert.equal(argument.canonical.greeting.length, 1024);
+          assert.equal(argument.retainedMatch.params.length, 1024);
+          if (failurePhase === 'context') throw original;
+        }
+      },
+      async evaluate(_predicate, argument) {
+        return argument ? { inspected: true } : true;
+      },
+      async unrouteAll() {
+        cleanup.push('unroute');
+      },
+      async close() {
+        cleanup.push('close');
+      },
+    };
+    await assert.rejects(
+      verifyWorkerCompositionRoutes(
+        {
+          async newPage() {
+            return page;
+          },
+        },
+        'http://127.0.0.1:9999',
+        [{ path: '/en', context: canonical, expected: [expected] }],
+        appId,
+      ),
+      error =>
+        failurePhase === 'context'
+          ? error === original
+          : error.code === 'ERR_ASSERTION' &&
+            error.actual[0] === 'Late browser error',
+    );
+    assert.equal(waits, 3);
+    assert.deepEqual(cleanup, ['unroute', 'close']);
+    assert.equal(logs.length, 1);
+    const detail = JSON.parse(logs[0][1]);
+    if (failurePhase === 'context') {
+      assert.equal(detail.phase, 'browser context adoption');
+      assert.deepEqual(detail.expected, expected);
+      assert.equal(detail.context.appId.length, 512);
+      assert.equal(detail.context.canonical.greeting.length, 512);
+      assert.equal(detail.context.retainedMatch.unrelated, undefined);
+      for (const name of ['id', 'params', 'search'])
+        assert.equal(detail.context.retainedMatch[name].length, 512);
+    } else {
+      assert.equal(detail.phase, 'browser error assertions');
+      assert.equal(detail.expected, null);
+      assert.equal(detail.context, undefined);
+    }
   });
 }
 
