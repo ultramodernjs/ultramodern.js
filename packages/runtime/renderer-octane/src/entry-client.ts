@@ -45,6 +45,7 @@ export function startNativeClient(options: OctaneClientEntryOptions): void {
       readOctaneDocumentBootstrap(document, identity, nativeHydrationBuildId),
     createRouter: (application, routerOptions) =>
       createNativeRouter(application, routerOptions, octaneRouterFactory),
+    disposeRouter: router => router.history.destroy(),
     async prepareRouter(router, hydrating, signal) {
       // Hydration adopts the server's matches; a fresh mount loads its own.
       if (hydrating) await prepareOctaneRouterHydration(router, { signal });

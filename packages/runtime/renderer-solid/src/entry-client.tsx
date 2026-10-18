@@ -27,6 +27,7 @@ export function startNativeClient(options: SolidClientEntryOptions): void {
     readBootstrap: readSolidDocumentBootstrap,
     createRouter: (application, routerOptions) =>
       createNativeRouter(application, routerOptions, solidRouterFactory),
+    disposeRouter: router => router.history.destroy(),
     async prepareRouter(router, hydrating) {
       // Hydration adopts the server's matches; a fresh mount loads its own.
       if (!hydrating) await router.load();

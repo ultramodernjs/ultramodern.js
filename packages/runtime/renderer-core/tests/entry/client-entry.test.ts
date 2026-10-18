@@ -55,6 +55,7 @@ function recordingAdapter(expectedBootstrap = true) {
   const prepared: { hydrating: boolean; signal: AbortSignal }[] = [];
   const views: NativeClientView<object, Instance, never>[] = [];
   const disposed = rstest.fn();
+  const disposeRouter = rstest.fn<(router: object) => void>();
   let started!: () => void;
   const ready = new Promise<void>(resolve => {
     started = resolve;
@@ -69,6 +70,7 @@ function recordingAdapter(expectedBootstrap = true) {
       routers.push({ application, options });
       return { subscribe: () => () => {} };
     },
+    disposeRouter,
     async prepareRouter(_router, hydrating, signal) {
       prepared.push({ hydrating, signal });
     },
@@ -82,7 +84,7 @@ function recordingAdapter(expectedBootstrap = true) {
       return disposed;
     },
   };
-  return { adapter, routers, prepared, views, disposed, ready };
+  return { adapter, routers, prepared, views, disposed, disposeRouter, ready };
 }
 
 const pageLoader = async () => ({ page: true });
@@ -278,7 +280,7 @@ describe('generated native client entry', () => {
 
   it('releases a replaced entry whose initial router load ignores the signal', async () => {
     installDocument(false);
-    const { adapter, disposed } = recordingAdapter();
+    const { adapter, disposed, disposeRouter } = recordingAdapter();
     let dispose!: () => void;
     let loading!: () => void;
     const loadStarted = new Promise<void>(resolve => {
@@ -311,6 +313,36 @@ describe('generated native client entry', () => {
     dispose();
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(outcome).toMatchObject({ name: 'AbortError' });
+    expect(disposeRouter).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases its router when startup fails before mounting the root', async () => {
+    installDocument(false);
+    const { adapter, disposed, disposeRouter } = recordingAdapter(false);
+    const router = {};
+    const failure = new Error('The initial route could not load');
+    const reported = Promise.withResolvers<() => void>();
+    const queue = rstest
+      .spyOn(globalThis, 'queueMicrotask')
+      .mockImplementation(callback => reported.resolve(callback));
+    try {
+      startNativeClientEntry(
+        { identity, load: async () => routed },
+        {
+          ...adapter,
+          createRouter: () => router,
+          async prepareRouter() {
+            throw failure;
+          },
+        },
+      );
+      const report = await reported.promise;
+      expect(disposeRouter).toHaveBeenCalledExactlyOnceWith(router);
+      expect(disposed).not.toHaveBeenCalled();
+      expect(report).toThrow(failure);
+    } finally {
+      queue.mockRestore();
+    }
   });
 
   it('persists language changes for a component application until the entry is replaced', async () => {

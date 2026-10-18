@@ -78,6 +78,8 @@ export interface NativeClientAdapter<
     application: NativeRoutedApplication,
     options: NativeRouterOptions,
   ): Router;
+  /** Release the router and browser history created for this entry. */
+  disposeRouter(router: Router): void;
   /** Load a fresh router, or adopt the server's matches when hydrating. */
   prepareRouter(
     router: Router,
@@ -197,6 +199,9 @@ export function startNativeClientEntry<
         ? { rewrite: i18n.rewrite(() => current.language) }
         : {}),
     });
+    const releaseRouter = () => adapter.disposeRouter(router);
+    if (signal.aborted) releaseRouter();
+    else signal.addEventListener('abort', releaseRouter, { once: true });
     // HMR disposal aborts the signal; a failed start stops the sync too.
     const stopSync =
       i18n && current ? i18n.syncWithRouter(router, current) : undefined;
