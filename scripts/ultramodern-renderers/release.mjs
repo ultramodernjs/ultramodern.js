@@ -828,18 +828,26 @@ async function main() {
       ],
       renderers.includes('react'),
     );
+    const nativeInputs = opts['native-inputs']
+      ? readJson(path.resolve(opts['native-inputs']))
+      : undefined;
+    const nativeArchiveContext = renderer =>
+      renderer === 'octane' && nativeInputs ? { nativeInputs } : {};
     const nativeFederationProofs = [
       {
         label: 'mf',
         folder: 'mf',
         run: runPackedNativeFederationProof,
-        context: () => ({}),
+        context: renderer => ({
+          contextExtras: nativeArchiveContext(renderer),
+        }),
       },
       {
         label: 'generated mf',
         folder: 'generated-mf',
         run: runPackedNativeFederationGeneratedProof,
-        context: () => ({
+        context: renderer => ({
+          ...nativeArchiveContext(renderer),
           generatorConsumerRoot: createRoot,
           browserDependencyRoot: playwrightRoot(),
           browserExecutable: browserExecutable(),
@@ -855,7 +863,7 @@ async function main() {
               fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
             );
             activeNativeFederation = nativeProof.run({
-              ...nativeProof.context(),
+              ...nativeProof.context(renderer),
               renderer,
               consumerRoot: apps[renderer].appRoot,
               manifestPath: release.manifestPath,
@@ -879,9 +887,6 @@ async function main() {
     if (opts['required-features']) {
       const rows = {};
       const binding = rendererFeatureBinding(cohort);
-      const nativeInputs = opts['native-inputs']
-        ? readJson(path.resolve(opts['native-inputs']))
-        : undefined;
       for (const [row, renderer, module, exported] of [
         [
           'localized-navigation',

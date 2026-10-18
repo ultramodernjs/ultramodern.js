@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import { registerHooks } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 import {
@@ -8,11 +9,85 @@ import {
   authenticateGeneratedNativeFederationApp,
   planGeneratedNativeFederation,
 } from './native-federation-generated.mjs';
+import * as packed from './native-federation-packed.mjs';
 
 assert(
   process.env.OWNED_TEMP_DIR,
   'Run these filesystem tests through owned-temp-dir',
 );
+
+test('generated MF forwards supplied native archives through its actual packed child boundary', async () => {
+  const calls = [];
+  const stopped = Promise.resolve('captured generated MF child');
+  const key = Symbol.for('generated-mf-native-input-control');
+  globalThis[key] = {
+    ...packed,
+    runPackedNativeFederationProof: options => {
+      calls.push(options);
+      return stopped;
+    },
+  };
+  const moduleURL = new URL(
+    './native-federation-generated.mjs?native-input-control',
+    import.meta.url,
+  );
+  const dependencyURL = `data:text/javascript,${encodeURIComponent(
+    `const dependency = globalThis[Symbol.for('generated-mf-native-input-control')];\n${Object.keys(
+      packed,
+    )
+      .map(
+        name => `export const ${name} = dependency[${JSON.stringify(name)}];`,
+      )
+      .join('\n')}`,
+  )}`;
+  const hooks = registerHooks({
+    resolve(specifier, context, nextResolve) {
+      if (
+        context.parentURL === moduleURL.href &&
+        specifier === './native-federation-packed.mjs'
+      )
+        return { url: dependencyURL, shortCircuit: true };
+      return nextResolve(specifier, context);
+    },
+  });
+  try {
+    const { runPackedNativeFederationGeneratedProof } = await import(moduleURL);
+    const nativeInputs = {
+      '@tanstack/router-core': { request: 'control:authenticated-core' },
+    };
+    const context = {
+      renderer: 'octane',
+      consumerRoot: '/owned/app',
+      generatorConsumerRoot: '/owned/create',
+      browserDependencyRoot: '/owned/browser',
+      browserExecutable: '/owned/chromium',
+    };
+    assert.equal(
+      runPackedNativeFederationGeneratedProof({ ...context, nativeInputs }),
+      stopped,
+    );
+    assert.equal(calls[0].contextExtras.nativeInputs, nativeInputs);
+    assert.equal(Object.hasOwn(calls[0], 'nativeInputs'), false);
+    assert.equal(
+      calls[0].contextExtras.generatorConsumerRoot,
+      context.generatorConsumerRoot,
+    );
+    assert.equal(
+      calls[0].contextExtras.browserDependencyRoot,
+      context.browserDependencyRoot,
+    );
+    assert.equal(
+      calls[0].contextExtras.browserExecutable,
+      context.browserExecutable,
+    );
+    assert.equal(calls[0].consumerRoot, context.consumerRoot);
+    assert.equal(runPackedNativeFederationGeneratedProof(context), stopped);
+    assert.equal(Object.hasOwn(calls[1].contextExtras, 'nativeInputs'), false);
+  } finally {
+    hooks.deregister();
+    delete globalThis[key];
+  }
+});
 
 const ssrPlan = {
   remote: { id: 'packed-mf' },

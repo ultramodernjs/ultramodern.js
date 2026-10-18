@@ -631,6 +631,7 @@ export function runPackedNativeFederationGeneratedProof({
   generatorConsumerRoot,
   browserDependencyRoot,
   browserExecutable,
+  nativeInputs,
   ...options
 }) {
   return runPackedNativeFederationProof({
@@ -640,6 +641,7 @@ export function runPackedNativeFederationGeneratedProof({
       generatorConsumerRoot,
       browserDependencyRoot,
       browserExecutable,
+      ...(nativeInputs ? { nativeInputs } : {}),
     },
     processWitnessPaths: [
       'workspace/packed-mf-install-process.json',
