@@ -429,10 +429,12 @@ async function startApplication(
       throw new Error(
         'Worker federation requires the trusted document identity before application loading',
       );
-    // Capture the selected host before asynchronous application imports.
-    const federation = input.federation
-      ? createFederationScope(input.federation, false)
-      : undefined;
+    // Capture the host before imports and retain Worker SSR's provider ranges
+    // even when no regular Module Federation binding is configured.
+    const federation =
+      input.federation || workerFederation
+        ? createFederationScope(input.federation, false)
+        : undefined;
     if (hydration) {
       const { document, documentId } = hydration;
       bridge = bootstrapStreamedSignalHydration({

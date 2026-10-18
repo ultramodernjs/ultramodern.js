@@ -174,9 +174,12 @@ export async function renderOctaneApplication<Bindings extends object>(
     session.startRendering();
 
     let head = '';
-    const federation = input.federation
-      ? createFederationScope(input.federation, true, document.nonce)
-      : undefined;
+    // Worker SSR and browser activation must own the same provider ranges,
+    // even when only the browser needs a Module Federation loader.
+    const federation =
+      input.federation || input.workerFederation
+        ? createFederationScope(input.federation, true, document.nonce)
+        : undefined;
     const App = federation
       ? () =>
           createElement(FederationRoot, {

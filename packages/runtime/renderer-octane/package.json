@@ -254,7 +254,9 @@
     "i18next": "26.4.6",
     "octane": "https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-d5988dd93614/octane-0.13.8.tgz",
     "typescript": "7.0.2",
-    "@tsrx/oxc": "0.20.0"
+    "@tsrx/oxc": "0.20.0",
+    "jsdom": "30.0.1",
+    "@types/jsdom": "27.0.0"
   },
   "sideEffects": false,
   "publishConfig": {
