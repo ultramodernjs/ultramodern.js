@@ -763,10 +763,38 @@ export async function checkGeneratedSolidBrowser({
     });
     assert.equal(recovery.status, 200);
     await recovery.arrayBuffer();
+    let mainPageState;
+    if (errors.length) {
+      let diagnosticTimer;
+      try {
+        mainPageState = await Promise.race([
+          page.evaluate(() => ({
+            url: location.href.slice(0, 2048),
+            handledError: document
+              .querySelector('[data-testid="native-error"]')
+              ?.textContent?.slice(0, 1024),
+            deferredLate: document
+              .querySelector('[data-testid="native-deferred-late"]')
+              ?.textContent?.slice(0, 1024),
+          })),
+          new Promise((_, reject) => {
+            diagnosticTimer = setTimeout(
+              () =>
+                reject(new Error('Main-page diagnostics exceeded one second')),
+              1000,
+            );
+          }),
+        ]);
+      } catch (error) {
+        mainPageState = { diagnosticError: String(error).slice(0, 512) };
+      } finally {
+        clearTimeout(diagnosticTimer);
+      }
+    }
     assert.deepEqual(
       errors,
       [],
-      `The native browser raised errors or failed resources\nBrowser request lifecycle: ${JSON.stringify(traffic.snapshot())}`,
+      `The native browser raised errors or failed resources\nBrowser request lifecycle: ${JSON.stringify(traffic.snapshot())}\nMain page state: ${JSON.stringify(mainPageState)}`,
     );
     return {
       retainedSsrNodes: true,

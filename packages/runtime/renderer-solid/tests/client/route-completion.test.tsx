@@ -55,6 +55,7 @@ afterEach(() => {
 function byteResponse(
   critical: Record<string, unknown>,
   deferredKeys: string[] = [],
+  routeId = 'item',
 ) {
   let controller!: ReadableStreamDefaultController<Uint8Array>;
   let cancellations = 0;
@@ -70,7 +71,7 @@ function byteResponse(
         envelope: {
           version: 1,
           identity,
-          routeId: 'item',
+          routeId,
           operation: 'loader',
           outcome: { kind: 'success', value: critical, status: 200 },
           deferredKeys,
@@ -110,6 +111,7 @@ function fixture(
     staleTime?: number;
     awaitDeferred?: boolean;
     pendingComponent?: boolean;
+    indexRoute?: boolean;
   } = {},
 ) {
   const requests: Request[] = [];
@@ -117,7 +119,26 @@ function fixture(
   const streams: ByteResponse[] = [];
   const errors: unknown[] = [];
   let resetBoundary: (() => void) | undefined;
-  const client = createDataClient('item', identity, {
+  const routeId = options.indexRoute ? 'index_page' : 'item';
+  const doneId = options.indexRoute ? 'about' : 'done';
+  const routeIR: FileSystemRouteIR[] = options.indexRoute
+    ? [
+        {
+          id: 'layout',
+          isRoot: true,
+          children: [
+            {
+              id: routeId,
+              index: true,
+              modules: { data: '/page.data.ts' },
+              children: [],
+            },
+            { id: doneId, path: 'about', children: [] },
+          ],
+        },
+      ]
+    : routes;
+  const client = createDataClient(routeId, identity, {
     fetch: async (input, init) => {
       const request = input as Request;
       const signal = init?.signal ?? request.signal;
@@ -133,10 +154,10 @@ function fixture(
   });
   const router = createApplicationRouter({
     routeTree: createFileSystemRouteTree(
-      routes,
+      routeIR,
       {
         layout: { component: Outlet },
-        item: {
+        [routeId]: {
           component: () => {
             const data = useLoaderData({ strict: false });
             const later = () => {
@@ -148,7 +169,7 @@ function fixture(
                 value.later instanceof Promise
               )
                 return value.later;
-              throw new Error('The route has no deferred data');
+              return undefined;
             };
             return (
               <>
@@ -157,9 +178,9 @@ function fixture(
                     (data() as Record<string, unknown>).critical ?? 'empty',
                   )}
                 </p>
-                {options.awaitDeferred ? (
+                {options.awaitDeferred && later() ? (
                   <Await
-                    promise={later()}
+                    promise={later()!}
                     fallback={<p data-testid="pending">pending</p>}
                   >
                     {value => <p data-testid="late">{String(value)}</p>}
@@ -178,7 +199,7 @@ function fixture(
             );
           },
         },
-        done: { component: () => <p data-testid="done">complete</p> },
+        [doneId]: { component: () => <p data-testid="done">complete</p> },
       },
       {
         // A real request supplies the same absolute native URL in this DOM
@@ -242,6 +263,69 @@ async function waitFor(
 }
 
 describe('native Solid progressive route completion', () => {
+  test('returning to an index route keeps its deferred query generation alive through EOF', async () => {
+    const initial = byteResponse(
+      { critical: 'initial-index' },
+      [],
+      'index_page',
+    );
+    initial.complete();
+    const stream = byteResponse(
+      { critical: 'deferred-index' },
+      ['later'],
+      'index_page',
+    );
+    const app = fixture(
+      generation => (generation === 1 ? initial.response : stream.response),
+      {
+        initialEntry: '/',
+        indexRoute: true,
+        staleTime: 0,
+        awaitDeferred: true,
+      },
+    );
+    await app.router.load();
+    app.mount();
+    await waitFor(() => app.element.textContent === 'initial-index');
+    await app.router.navigate({ href: '/about' });
+    await waitFor(() => app.element.textContent === 'complete');
+    const navigation = app.router.navigate({ href: '/?case=deferred' });
+    await waitFor(
+      () => app.element.querySelector('[data-testid="pending"]') !== null,
+    );
+    expect(app.requests).toHaveLength(2);
+    expect(new URL(app.requests[1]!.url).searchParams.get('case')).toBe(
+      'deferred',
+    );
+    expect(new URL(app.requests[1]!.url).searchParams.get('__loader')).toBe(
+      'index_page',
+    );
+    expect(app.signals[1]?.aborted).toBe(false);
+    stream.resolve('later', 'index-late-value');
+    await waitFor(
+      () =>
+        app.element.querySelector('[data-testid="late"]')?.textContent ===
+        'index-late-value',
+    );
+    await navigation;
+    stream.terminal();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    flush();
+    expect(app.signals[1]?.aborted).toBe(false);
+    expect(stream.cancellations()).toBe(0);
+    expect(app.requests).toHaveLength(2);
+    expect(app.errors).toEqual([]);
+    stream.close();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    flush();
+    expect(app.signals[1]?.aborted).toBe(false);
+    expect(stream.cancellations()).toBe(0);
+    expect(app.element.querySelector('[data-testid="late"]')?.textContent).toBe(
+      'index-late-value',
+    );
+    expect(app.errors).toEqual([]);
+  });
+
   test('native pending presentation keeps the displayed Await stream alive through terminal EOF', async () => {
     const stream = byteResponse({ critical: 'native-pending-navigation' }, [
       'later',
