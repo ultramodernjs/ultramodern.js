@@ -1,10 +1,152 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { createRequire, registerHooks } from 'node:module';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createOctaneWorkerFederationFixtures } from '../../tests/ultramodern-renderers/octane-federation-workers/fixtures.mjs';
 import {
+  generatePackedWorkerWorkspace,
   verifyPackedWorkerProofEnvelope,
   verifyPackedWorkerProofResult,
   verifyPrebuiltWorkerServices,
 } from './native-federation-worker.mjs';
+
+test('real SDK Octane identities drive authored Worker configs without advertising generated Worker support', async t => {
+  assert(
+    process.env.OWNED_TEMP_DIR,
+    'Run filesystem tests through owned-temp-dir',
+  );
+  const root = fileURLToPath(new URL('../../', import.meta.url));
+  const workspaceRoot = fs.mkdtempSync(
+    path.join(process.env.OWNED_TEMP_DIR, 'worker-sdk-'),
+  );
+  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+  // The built SDK source checkout intentionally supports workspace mode only.
+  // Installed execution separately exercises its exact packed install mode.
+  const sdkRequire = createRequire(
+    path.join(root, 'packages/toolkit/ultramodern-create/package.json'),
+  );
+  const sdk = sdkRequire('@modern-js/ultramodern-create/ultramodern-workspace');
+  const plan = await generatePackedWorkerWorkspace({
+    sdk,
+    workspaceRoot: path.join(workspaceRoot, 'workspace'),
+    options: {
+      modernVersion: '3.9.3-ultramodern.9',
+      enableTailwind: false,
+      packageSource: { strategy: 'workspace' },
+    },
+  });
+  const originals = [plan.topology.shell, ...plan.topology.verticals];
+  for (const app of originals) {
+    assert.equal(app.renderer, 'octane');
+    assert.equal(app.rendererCapabilities.workers, false);
+    assert.equal(Object.hasOwn(app, 'cloudflare'), false);
+  }
+  const fixtureOptions = {
+    ...plan,
+    deploymentSource: 'authored',
+    remoteOrigins: ['http://127.0.0.1:41001', 'http://127.0.0.1:41002'],
+    dependencies: Object.fromEntries(
+      [
+        '@modern-js/ultramodern-app-tools',
+        '@modern-js/renderer-octane',
+        '@modern-js/renderer-core',
+        '@modern-js/i18n-runtime-extensions',
+        'octane',
+        'i18next',
+      ].map(name => [name, '1.0.0']),
+    ),
+  };
+  const fixture = createOctaneWorkerFederationFixtures(fixtureOptions);
+  // Load the emitted config using the actual public preset, without installing
+  // anything into the generated apps or mocking the public API.
+  const publicApiOwner = pathToFileURL(
+    path.join(root, 'packages/solutions/ultramodern-app-tools/package.json'),
+  ).href;
+  const hooks = registerHooks({
+    resolve(specifier, context, nextResolve) {
+      return nextResolve(
+        specifier,
+        specifier === '@modern-js/ultramodern-app-tools'
+          ? { ...context, parentURL: publicApiOwner }
+          : context,
+      );
+    },
+  });
+  try {
+    for (const [index, { app, files }] of fixture.applications.entries()) {
+      assert.deepEqual(app.deliveryUnit, originals[index].deliveryUnit);
+      assert.deepEqual(
+        JSON.parse(files['package.json']).modernjs,
+        app.manifest.modernjs,
+      );
+      const filename = path.join(
+        workspaceRoot,
+        'workspace',
+        app.directory,
+        'worker-proof.config.ts',
+      );
+      fs.writeFileSync(filename, files['modern.config.ts']);
+      const { default: config } = await import(pathToFileURL(filename).href);
+      assert.equal(config.renderer, 'octane');
+      assert.equal(config.deploy.target, 'cloudflare');
+      assert.equal(config.deploy.worker.name, app.deployment.workerName);
+      assert.equal(config.deploy.worker.ssr, true);
+      assert.equal(config.output.distPath.root, 'dist-cloudflare');
+      assert.deepEqual(config.server.publicDir, ['./locales', './assets']);
+      assert.equal(config.html.outputStructure, 'flat');
+      assert.equal(config.output.polyfill, 'off');
+      assert.equal(config.output.splitRouteChunks, true);
+      assert.equal(
+        config.source.globalVars.ULTRAMODERN_SOURCE_REVISION,
+        'workspace',
+      );
+      assert.equal(
+        config.source.globalVars.ULTRAMODERN_BUILD_MARKER,
+        app.deliveryUnit.buildMarker,
+      );
+      const output = {};
+      const chainOutput = {
+        uniqueName(value) {
+          output.uniqueName = value;
+          return this;
+        },
+        chunkLoadingGlobal(value) {
+          output.chunkLoadingGlobal = value;
+          return this;
+        },
+      };
+      const bundlerHooks = Array.isArray(config.tools.bundlerChain)
+        ? config.tools.bundlerChain
+        : [config.tools.bundlerChain];
+      for (const hook of bundlerHooks) hook({ output: chainOutput }, {});
+      assert.equal(output.uniqueName, app.moduleFederationName);
+      assert.match(
+        output.chunkLoadingGlobal,
+        /^__ULTRAMODERN_.*_LOADED_CHUNKS__$/u,
+      );
+      assert.equal(
+        config.output.assetPrefix,
+        index ? `http://127.0.0.1:${41000 + index}/` : '/',
+      );
+      assert.deepEqual(
+        config.deploy.worker.services,
+        index === 0 ? plan.services : (plan.remoteServices[app.id] ?? []),
+      );
+      assert.equal(Object.hasOwn(originals[index], 'cloudflare'), false);
+    }
+  } finally {
+    hooks.deregister();
+  }
+  const invalid = structuredClone(plan);
+  delete invalid.host.deliveryUnit;
+  assert.throws(
+    () =>
+      createOctaneWorkerFederationFixtures({ ...fixtureOptions, ...invalid }),
+    /Authored Worker requires its original deliveryUnit package identity/u,
+  );
+});
 
 const browserProof = () => ({
   ssrBeforeHydration: true,

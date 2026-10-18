@@ -299,6 +299,79 @@ function writeFiles(directory, files) {
   }
 }
 
+/** Generate identities through the SDK; author deployment coordinates separately. */
+export async function generatePackedWorkerWorkspace({
+  sdk,
+  workspaceRoot,
+  options,
+}) {
+  await sdk.generateUltramodernWorkspace({
+    ...options,
+    targetDir: workspaceRoot,
+    packageName: 'packed-worker-federation',
+    renderer: 'octane',
+    generateAgentFiles: false,
+  });
+  for (const name of ['worker-a', 'worker-b'])
+    await sdk.addUltramodernVertical({
+      ...options,
+      workspaceRoot,
+      name,
+      preset: 'ui-only',
+      renderer: 'octane',
+    });
+  const topology = readJson(
+    path.join(workspaceRoot, 'topology/reference-topology.json'),
+  );
+  assert.equal(topology.verticals.length, 2);
+  const descriptor = app => {
+    const manifest = readJson(
+      path.join(workspaceRoot, app.path, 'package.json'),
+    );
+    assert.equal(app.renderer, 'octane');
+    assert.equal(manifest.modernjs?.appId, app.id);
+    assert.equal(manifest.name, app.package);
+    assert.equal(app.rendererIdentity?.appId, app.id);
+    assert.equal(app.deliveryUnit?.packageName, manifest.name);
+    return {
+      id: app.id,
+      directory: app.path,
+      renderer: app.renderer,
+      deliveryUnit: app.deliveryUnit,
+      deployment: { workerName: app.id },
+      moduleFederationName: app.moduleFederation.name,
+      packageName: manifest.name,
+      exposes: { './Widget': './src/components/Widget.tsx' },
+      manifest: {
+        name: manifest.name,
+        version: manifest.version,
+        modernjs: manifest.modernjs,
+      },
+    };
+  };
+  const host = descriptor(topology.shell);
+  const remotes = topology.verticals.map(descriptor);
+  const service = app => ({
+    binding: `REMOTE_${app.id.replace(/\W/gu, '_').toUpperCase()}`,
+    service: app.deployment.workerName,
+    fragments: [
+      {
+        remote: app.id,
+        expose: './Widget',
+        boundaryId: app.moduleFederationName,
+        path: '/{locale}/_mf/fragment/widget',
+      },
+    ],
+  });
+  return {
+    topology,
+    host,
+    remotes,
+    services: remotes.map(service),
+    remoteServices: { [remotes[0].id]: [service(remotes[1])] },
+  };
+}
+
 async function provePackedWorkers(context, input, signal) {
   const actualBinding = {
     sourceRevision: context.cohort.sourceRevision,
@@ -329,44 +402,8 @@ async function provePackedWorkers(context, input, signal) {
       aliasPackageNamePrefix: 'modern-js-',
     },
   };
-  await sdk.generateUltramodernWorkspace({
-    ...options,
-    targetDir: workspaceRoot,
-    packageName: 'packed-worker-federation',
-    renderer: 'octane',
-    generateAgentFiles: false,
-  });
-  for (const name of ['worker-a', 'worker-b'])
-    await sdk.addUltramodernVertical({
-      ...options,
-      workspaceRoot,
-      name,
-      preset: 'ui-only',
-    });
-  const topology = readJson(
-    path.join(workspaceRoot, 'topology/reference-topology.json'),
-  );
-  assert.equal(topology.verticals.length, 2);
-  const descriptor = app => {
-    const manifest = readJson(
-      path.join(workspaceRoot, app.path, 'package.json'),
-    );
-    return {
-      id: app.id,
-      directory: app.path,
-      renderer: app.renderer,
-      moduleFederationName: app.moduleFederation.name,
-      packageName: manifest.name,
-      exposes: { './Widget': './src/components/Widget.tsx' },
-      manifest: {
-        name: manifest.name,
-        version: manifest.version,
-        modernjs: manifest.modernjs,
-      },
-    };
-  };
-  const host = descriptor(topology.shell);
-  const remotes = topology.verticals.map(descriptor);
+  const { host, remotes, services, remoteServices } =
+    await generatePackedWorkerWorkspace({ sdk, workspaceRoot, options });
   const origins = await Promise.all(
     [host, ...remotes].map(
       async () => `http://127.0.0.1:${await reservePort()}`,
@@ -399,32 +436,16 @@ async function provePackedWorkers(context, input, signal) {
       dependencies[name] = request;
     }
   }
-  const service = app => ({
-    binding: `REMOTE_${app.id.replace(/\W/gu, '_').toUpperCase()}`,
-    service: topology.verticals.find(value => value.id === app.id).cloudflare
-      .workerName,
-    fragments: [
-      {
-        remote: app.id,
-        expose: './Widget',
-        boundaryId: app.moduleFederationName,
-        path: '/{locale}/_mf/fragment/widget',
-      },
-    ],
-  });
   const fixture = createOctaneWorkerFederationFixtures({
     host,
     remotes,
     remoteOrigins: origins.slice(1),
     dependencies,
-    services: remotes.map(service),
-    remoteServices: { [remotes[0].id]: [service(remotes[1])] },
-    hostServiceSource: 'topology',
+    services,
+    remoteServices,
+    deploymentSource: 'authored',
   });
   writeFiles(path.join(workspaceRoot, 'shared'), fixture.shared);
-  const environment = {};
-  for (const [index, app] of [topology.shell, ...topology.verticals].entries())
-    environment[app.cloudflare.publicUrlEnv] = origins[index];
   const applications = [];
   for (const [index, { app, files }] of fixture.applications.entries()) {
     const appRoot = path.join(workspaceRoot, app.directory);
@@ -450,21 +471,11 @@ async function provePackedWorkers(context, input, signal) {
       origin: origins[index],
     });
   }
-  const originalEnvironment = { ...process.env };
-  let compiled;
-  try {
-    Object.assign(process.env, environment);
-    compiled = await buildCompiledWorkerApplications({
-      applications,
-      context,
-      signal,
-    });
-  } finally {
-    for (const key of Object.keys(environment))
-      if (Object.hasOwn(originalEnvironment, key))
-        process.env[key] = originalEnvironment[key];
-      else delete process.env[key];
-  }
+  const compiled = await buildCompiledWorkerApplications({
+    applications,
+    context,
+    signal,
+  });
   const planPath = path.join(context.workRoot, 'compiled-worker-plan.json');
   fs.writeFileSync(
     planPath,
@@ -486,7 +497,7 @@ async function provePackedWorkers(context, input, signal) {
   const plan = readWorkerFixturePlan(planPath);
   const workerServices = verifyPrebuiltWorkerServices(
     plan.applications,
-    topology.verticals.map(remote => remote.cloudflare.workerName),
+    remotes.map(remote => remote.deployment.workerName),
   );
   const result = await runWorkerFixtureProof(plan, { signal });
   result.workerServices = workerServices;

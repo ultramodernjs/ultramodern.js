@@ -297,12 +297,16 @@ export function createOctaneWorkerFederationFixtures({
   services,
   remoteServices,
   hostServiceSource = 'authored',
+  deploymentSource = 'topology',
   sharedCounterPackage,
   dependencies,
   host,
   remotes,
 }) {
   assert(['authored', 'topology'].includes(hostServiceSource));
+  assert(['authored', 'topology'].includes(deploymentSource));
+  if (deploymentSource === 'authored')
+    assert.equal(hostServiceSource, 'authored');
   if (sharedCounterPackage !== undefined) {
     assert.match(sharedCounterPackage, /^@[a-z0-9-]+\/[a-z0-9-]+$/u);
     assert.equal(dependencies[sharedCounterPackage], 'workspace:*');
@@ -350,6 +354,76 @@ export function createOctaneWorkerFederationFixtures({
       path.posix.join(app.directory, 'src/components'),
       'shared/Counter',
     );
+  const config = (app, origin, bindings, isHost) => {
+    const authored = deploymentSource === 'authored';
+    const preset = authored
+      ? 'presetUltramodern'
+      : 'presetUltramodernWorkspace';
+    if (authored) {
+      assert.match(
+        app.deployment?.workerName ?? '',
+        /^[a-z0-9][a-z0-9-]{0,62}$/u,
+      );
+      assert.equal(
+        app.deliveryUnit?.packageName,
+        app.packageName,
+        'Authored Worker requires its original deliveryUnit package identity.',
+      );
+      for (const field of [
+        'unitId',
+        'buildMarker',
+        'version',
+        'sourceRevision',
+      ])
+        assert.equal(typeof app.deliveryUnit[field], 'string');
+    }
+    const settings = {
+      renderer: 'octane',
+      server: {
+        ssr: true,
+        ...(authored ? { publicDir: ['./locales', './assets'] } : {}),
+      },
+      ...(authored ? { html: { outputStructure: 'flat' } } : {}),
+      source: { mainEntryName: 'main' },
+      output: {
+        assetPrefix: origin ? `${origin}/` : '/',
+        ...(authored
+          ? {
+              distPath: { html: './', root: 'dist-cloudflare' },
+              polyfill: 'off',
+              splitRouteChunks: true,
+            }
+          : {}),
+      },
+      deploy: {
+        ...(authored ? { target: 'cloudflare' } : {}),
+        worker: {
+          ssr: true,
+          ...(authored ? { name: app.deployment.workerName } : {}),
+          ...(isHost && hostServiceSource === 'topology'
+            ? {}
+            : { services: bindings }),
+        },
+      },
+    };
+    const options = authored
+      ? {
+          appId: app.id,
+          deliveryUnit: Object.fromEntries(
+            ['unitId', 'buildMarker', 'version', 'sourceRevision'].map(
+              field => [field, app.deliveryUnit[field]],
+            ),
+          ),
+        }
+      : undefined;
+    const optionsSource = authored
+      ? `{ ...${JSON.stringify(options)}, deliveryUnit: { ...${JSON.stringify(options.deliveryUnit)}, workspaceRoot: fileURLToPath(new URL(${JSON.stringify(`${path.posix.relative(app.directory, '.')}/`)}, import.meta.url)) } }`
+      : `{ appId: ${JSON.stringify(app.id)}, from: import.meta.url, deployTarget: 'cloudflare' }`;
+    const toolsSource = authored
+      ? `, tools: { bundlerChain(chain) { chain.output.uniqueName(${JSON.stringify(app.moduleFederationName)}).chunkLoadingGlobal(${JSON.stringify(`__ULTRAMODERN_${app.moduleFederationName.replace(/[^a-zA-Z0-9]/gu, '_').toUpperCase()}_LOADED_CHUNKS__`)}); } }`
+      : '';
+    return `${authored ? "import { fileURLToPath } from 'node:url';\n" : ''}import { defineConfig, i18nPlugin, ${preset} } from '@modern-js/ultramodern-app-tools';\nexport default defineConfig(${preset}({ ...${JSON.stringify(settings)}, plugins: [i18nPlugin({ localeDetection: { languages: ['en', 'cs'], fallbackLanguage: 'en' } })]${toolsSource} }, ${optionsSource}));\n`;
+  };
   const application = (app, origin, bindings, isHost) => ({
     'package.json': json({
       ...app.manifest,
@@ -376,7 +450,7 @@ export function createOctaneWorkerFederationFixtures({
         'node_modules/.modern-js',
       ],
     }),
-    'modern.config.ts': `import { defineConfig, i18nPlugin, presetUltramodernWorkspace } from '@modern-js/ultramodern-app-tools';\nexport default defineConfig(presetUltramodernWorkspace({ ...${JSON.stringify({ renderer: 'octane', server: { ssr: true }, source: { mainEntryName: 'main' }, output: { assetPrefix: origin ? `${origin}/` : '/' }, deploy: { worker: { ssr: true, ...(isHost && hostServiceSource === 'topology' ? {} : { services: bindings }) } } })}, plugins: [i18nPlugin({ localeDetection: { languages: ['en', 'cs'], fallbackLanguage: 'en' } })] }, { appId: ${JSON.stringify(app.id)}, from: import.meta.url, deployTarget: 'cloudflare' }));\n`,
+    'modern.config.ts': config(app, origin, bindings, isHost),
     'src/routes/layout.tsx': layout(isHost),
     'locales/en/translation.json': json({
       greeting: isHost ? 'Hello from host' : `Hello from ${app.id}`,
