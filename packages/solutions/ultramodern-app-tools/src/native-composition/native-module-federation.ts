@@ -17,6 +17,7 @@ import {
 import { resolveNativeFederationDevPublicPath } from './native-federation-dev-public-path';
 import { findNativeFederationConfig } from './native-federation-files';
 import { isNativeWorkerBuild } from './native-worker';
+import { resolveInstalledRendererPackage as installedPackageOwner } from './renderer-installed-profile';
 import { resolveNativeRendererAdapter } from './renderer-registration';
 
 export {
@@ -137,37 +138,6 @@ export async function loadNativeFederationConfig(
 export function sharedPackageName(key: string): string {
   const parts = key.split('/');
   return parts.slice(0, key.startsWith('@') ? 2 : 1).join('/');
-}
-
-/** Read the installed version by Node's node_modules lookup, ignoring exports. */
-function installedPackageOwner(
-  name: string,
-  from: readonly string[],
-): NativeSharedOwner | undefined {
-  for (const base of from)
-    for (let directory = base; ; directory = path.dirname(directory)) {
-      const manifest = path.join(
-        directory,
-        'node_modules',
-        name,
-        'package.json',
-      );
-      if (fs.existsSync(manifest)) {
-        const installed = JSON.parse(fs.readFileSync(manifest, 'utf8'));
-        if (
-          typeof installed.version === 'string' &&
-          typeof installed.name === 'string'
-        )
-          return {
-            directory: path.dirname(fs.realpathSync(manifest)),
-            name: installed.name,
-            version: installed.version,
-            exports: installed.exports,
-          };
-      }
-      if (path.dirname(directory) === directory) break;
-    }
-  return undefined;
 }
 
 function nativeSharedRequests(

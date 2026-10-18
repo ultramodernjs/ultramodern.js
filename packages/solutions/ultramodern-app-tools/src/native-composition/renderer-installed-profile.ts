@@ -37,6 +37,73 @@ export function readRendererFrameworkPackage(
   return readInstalledFrameworkOwner(module).binding;
 }
 
+/** Select a physical dependency through its owner's node_modules ancestry. */
+export function resolveInstalledRendererPackage(
+  specifier: string,
+  from: readonly string[],
+):
+  | (RendererFrameworkPackageBinding & { readonly exports: unknown })
+  | undefined {
+  for (const base of from)
+    for (let directory = base; ; directory = path.dirname(directory)) {
+      const filename = path.join(
+        directory,
+        'node_modules',
+        specifier,
+        'package.json',
+      );
+      if (fs.existsSync(filename)) {
+        const owner = readRendererFrameworkPackage({ specifier, filename });
+        const manifest = JSON.parse(fs.readFileSync(filename, 'utf8'));
+        return { ...owner, exports: manifest.exports };
+      }
+      if (path.dirname(directory) === directory) break;
+    }
+  return undefined;
+}
+
+/** Federation describes the exact installed native owners, not scaffold pins. */
+export function projectInstalledFederationProfile<TRenderer extends Renderer>(
+  profile: RendererBuildProfile<TRenderer>,
+  bootstrap: RendererFrameworkPackageBinding,
+): RendererBuildProfile<TRenderer> {
+  const installed = (
+    specifier: string,
+    from: readonly string[] = [bootstrap.directory],
+  ) => {
+    if (specifier === bootstrap.specifier) return bootstrap;
+    const owner = resolveInstalledRendererPackage(specifier, from);
+    if (!owner)
+      throw new Error(
+        `Installed native federation owner ${specifier} is absent`,
+      );
+    return assertCanonicalPublication(
+      readInstalledFrameworkOwner({
+        specifier,
+        filename: path.join(owner.directory, 'package.json'),
+      }),
+    );
+  };
+  const compiler = installed(profile.compiler.name);
+  const hydration = installed(profile.hydration.name);
+  const router = installed(profile.router.name);
+  // MF selects the core owned by this router and aliases its providers to it.
+  const core = installed(profile.router.coreName, [
+    router.directory,
+    bootstrap.directory,
+  ]);
+  return {
+    ...profile,
+    compiler: { ...profile.compiler, version: compiler.version },
+    hydration: { ...profile.hydration, version: hydration.version },
+    router: {
+      ...profile.router,
+      version: router.version,
+      coreVersion: core.version,
+    },
+  };
+}
+
 function readInstalledFrameworkOwner(
   module: FrameworkModule,
 ): InstalledFrameworkOwner {

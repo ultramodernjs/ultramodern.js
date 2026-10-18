@@ -14,7 +14,10 @@ import {
 import type { Renderer } from '@modern-js/renderer-core';
 import type { Rspack } from '@rsbuild/core';
 import { resolveReactFederationCompatibility } from '../renderers/react/module-federation';
-import { readRendererFrameworkPackage } from './renderer-installed-profile';
+import {
+  projectInstalledFederationProfile,
+  readRendererFrameworkPackage,
+} from './renderer-installed-profile';
 import { resolveRendererProfileMetadata } from './renderer-profile';
 import { resolveRendererAdapter } from './renderer-registration';
 
@@ -80,7 +83,8 @@ export function resolveRendererFederationCompatibility(
       owners.package,
     ),
   });
-  const { protocolVersion, compiler, hydration, router } = metadata.profile;
+  const { protocolVersion, compiler, hydration, router } =
+    projectInstalledFederationProfile(metadata.profile, bootstrap);
   return readRendererFederationCompatibility({
     profile: { renderer, protocolVersion, compiler, hydration, router },
     runtime: { name: runtime.name, version: runtime.version },
