@@ -311,6 +311,43 @@ for (const [name, corrupt] of [
     },
   ],
   [
+    'remote removal before its passive cleanup',
+    data => {
+      data.hmr.removedLifecycle = structuredClone(
+        data.incompatibleRemovalUpdate.after.lifecycle,
+      );
+    },
+  ],
+  [
+    'remote removal with a hidden live closure',
+    data => {
+      data.hmr.removedLifecycle = structuredClone(
+        data.incompatibleRemovalUpdate.after.lifecycle,
+      );
+      data.hmr.removedLifecycle.currentOwner = null;
+    },
+  ],
+  [
+    'an extra activation during remote removal',
+    data => {
+      const lifecycle = data.hmr.removedLifecycle;
+      lifecycle.effects.push({
+        id: ++lifecycle.activations,
+        ownerId: lifecycle.owners,
+        cleanups: 1,
+      });
+      lifecycle.cleanups++;
+    },
+  ],
+  [
+    'duplicate cleanup during remote removal',
+    data => {
+      const lifecycle = data.hmr.removedLifecycle;
+      lifecycle.effects.at(-1).cleanups++;
+      lifecycle.cleanups++;
+    },
+  ],
+  [
     'duplicate native cleanup',
     data => {
       data.hmr.nativeCleanup.effects[0].cleanups = 2;

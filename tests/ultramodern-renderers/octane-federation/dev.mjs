@@ -1219,7 +1219,12 @@ export default function Away() { const router = useRouter(); return <section dat
       (await browser('get', 'count', '[data-testid="remote-widget"]')) === '0',
     'normal Octane remote removal',
   );
-  const removed = await evaluate('globalThis.__octaneMFRemoteLifecycle');
+  // Reconciler deletions remove DOM before the native post-paint useEffect
+  // cleanup. Observe that passive phase without forcing a runtime flush.
+  const removed = await waitFor(async () => {
+    const lifecycle = await evaluate('globalThis.__octaneMFRemoteLifecycle');
+    return lifecycle.currentOwner === null ? lifecycle : false;
+  }, 'native passive cleanup after remote removal');
   assertLifecycle(removed, {
     previous: removalAfter.lifecycle,
     transition: 'unmounted',
