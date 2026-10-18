@@ -17,6 +17,7 @@ import {
   verifyPackedNativeFederationDependencies,
 } from '../../../scripts/ultramodern-renderers/native-federation-packed.mjs';
 import { checkSolidBundleModules } from './generated-bundle.mjs';
+import { installCancellationDiagnostics } from './generated-cancellation-diagnostics.mjs';
 import { createSolidConsumerObserver } from './generated-observer.mjs';
 import { createRequestDiagnostics } from './generated-request-diagnostics.mjs';
 import { createAdmissionProcessScope } from './processes.mjs';
@@ -405,6 +406,7 @@ export async function checkGeneratedSolidBrowser({
       if (request.isNavigationRequest() && request.frame() === page.mainFrame())
         documentRequests.push(request.url());
     });
+    await page.addInitScript(installCancellationDiagnostics);
     await page.addInitScript(() => {
       const captured = {
         layout: undefined,
@@ -779,6 +781,8 @@ export async function checkGeneratedSolidBrowser({
         mainPageState = await Promise.race([
           page.evaluate(() => ({
             url: location.href.slice(0, 2048),
+            cancellations:
+              globalThis.__solidCancellationDiagnostics?.snapshot(),
             handledError: document
               .querySelector('[data-testid="native-error"]')
               ?.textContent?.slice(0, 1024),
