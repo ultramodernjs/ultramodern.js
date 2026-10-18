@@ -74,6 +74,7 @@ export function sourceDevManifest(manifest, input) {
     '@types/node',
     '@module-federation/runtime',
     '@modern-js/federation-runtime',
+    '@tanstack/router-core',
   ])
     if (input.packageRequests[name]) dependencies[name] = select(name);
   return { ...manifest, dependencies };
