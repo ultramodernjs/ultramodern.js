@@ -170,7 +170,10 @@ test('raw diagnostic consumes an actual chunked HTTP body through EOF and closes
     },
   };
   try {
-    const result = await probeRawDeferredLoader(browser, origin);
+    const result = await probeRawDeferredLoader(browser, origin, {
+      decodeFrame: JSON.parse,
+      terminalTimeoutMs: 1,
+    });
     assert.equal(result.transport.trueEof, true);
     assert.equal(result.transport.status, 200);
     assert.equal(result.transport.completeFrames, 1);
@@ -208,7 +211,10 @@ test('preserves transport EOF facts when response framing is malformed', async (
       },
     }),
   };
-  const result = await probeRawDeferredLoader(browser, 'http://fixture.test');
+  const result = await probeRawDeferredLoader(browser, 'http://fixture.test', {
+    decodeFrame: JSON.parse,
+    terminalTimeoutMs: 1,
+  });
   assert.equal(result.transport.trueEof, true);
   assert.equal(result.transport.status, 200);
   assert.equal(result.transport.chunks, 1);
@@ -236,4 +242,88 @@ test('closes a hung evaluation context once within the Node-side deadline', asyn
   });
   assert.match(result.transport.error, /evaluation timed out/);
   assert.equal(closeCount, 1);
+});
+
+test('waits for the exact terminal CDP event before capturing pre-close evidence', async () => {
+  const { page, session } = fakePage();
+  let finished = false;
+  page.goto = async () => {};
+  page.evaluate = async () => {
+    session.emit('Network.requestWillBeSent', {
+      requestId: 'probe',
+      request: { url: target },
+      timestamp: 1,
+    });
+    setTimeout(() => {
+      finished = true;
+      session.emit('Network.loadingFinished', {
+        requestId: 'probe',
+        timestamp: 2,
+        encodedDataLength: 99,
+      });
+    }, 15);
+    return {
+      trueEof: true,
+      chunks: 2,
+      bytes: 70,
+      wireLines: ['{"type":"complete"}'],
+    };
+  };
+  const browser = {
+    newContext: async () => ({
+      newPage: async () => page,
+      close: async () => {
+        assert.equal(finished, true);
+        page.emit('requestfailed', {
+          url: () => target,
+          failure: () => ({ errorText: 'cleanup-only failure' }),
+        });
+      },
+    }),
+  };
+  const result = await probeRawDeferredLoader(browser, 'http://fixture.test', {
+    decodeFrame: JSON.parse,
+  });
+  assert.equal(result.terminal.terminal, true);
+  assert.equal(result.network.requests[0].finished.encodedDataLength, 99);
+  assert.deepEqual(result.failures, []);
+  assert.deepEqual(result.cleanupFailures, [
+    { url: target, error: 'cleanup-only failure' },
+  ]);
+  assert.equal(result.transport.completeFrames, 1);
+});
+
+test('terminal wait reports a real failure and a bounded missing terminal', async () => {
+  const { page, session } = fakePage();
+  const diagnostic = await observeDeferredLoaderNetwork(page);
+  session.emit('Network.requestWillBeSent', {
+    requestId: 'probe',
+    request: { url: target },
+    timestamp: 1,
+  });
+  const terminal = diagnostic.waitForTerminal(50);
+  session.emit('Network.loadingFailed', {
+    requestId: 'other',
+    errorText: 'unrelated',
+  });
+  session.emit('Network.loadingFailed', {
+    requestId: 'probe',
+    timestamp: 2,
+    errorText: 'net::ERR_ABORTED',
+    canceled: true,
+  });
+  assert.deepEqual(await terminal, { requestId: 'probe', terminal: true });
+  assert.equal(
+    diagnostic.snapshot().requests[0].failure.errorText,
+    'net::ERR_ABORTED',
+  );
+  session.emit('Network.requestWillBeSent', {
+    requestId: 'next',
+    request: { url: target },
+    timestamp: 3,
+  });
+  assert.deepEqual(await diagnostic.waitForTerminal(5), {
+    requestId: 'next',
+    timedOut: true,
+  });
 });

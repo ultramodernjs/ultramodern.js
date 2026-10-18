@@ -2,6 +2,7 @@
 export async function observeDeferredLoaderNetwork(page) {
   const session = await page.context().newCDPSession(page);
   const requests = new Map();
+  const terminalListeners = new Set();
   let dropped = 0;
   session.on('Network.requestWillBeSent', event => {
     const url = new URL(event.request.url);
@@ -68,18 +69,46 @@ export async function observeDeferredLoaderNetwork(page) {
       corsErrorStatus: event.corsErrorStatus,
       type: event.type,
     };
+    for (const notify of terminalListeners) notify(event.requestId);
   });
   session.on('Network.loadingFinished', event => {
     const request = requests.get(event.requestId);
-    if (request)
+    if (request) {
       request.finished = {
         at: event.timestamp,
         encodedDataLength: event.encodedDataLength,
       };
+      for (const notify of terminalListeners) notify(event.requestId);
+    }
   });
   await session.send('Network.enable');
   // The session belongs to this page and closes with its owning browser.
   return {
+    waitForTerminal(timeoutMs = 1500) {
+      const request = [...requests.values()].at(-1);
+      if (!request) return Promise.resolve({ missing: true });
+      if (request.failure || request.finished)
+        return Promise.resolve({
+          requestId: request.requestId,
+          terminal: true,
+        });
+      return new Promise(resolve => {
+        const finish = result => {
+          clearTimeout(timer);
+          terminalListeners.delete(notify);
+          resolve(result);
+        };
+        const notify = requestId => {
+          if (requestId === request.requestId)
+            finish({ requestId, terminal: true });
+        };
+        const timer = setTimeout(
+          () => finish({ requestId: request.requestId, timedOut: true }),
+          timeoutMs,
+        );
+        terminalListeners.add(notify);
+      });
+    },
     snapshot: () => ({
       dropped,
       requests: structuredClone([...requests.values()]),
@@ -91,15 +120,16 @@ export async function observeDeferredLoaderNetwork(page) {
 export async function probeRawDeferredLoader(
   browser,
   origin,
-  { evaluationTimeoutMs = 12000 } = {},
+  { evaluationTimeoutMs = 12000, terminalTimeoutMs = 1500, decodeFrame } = {},
 ) {
   const context = await browser.newContext({ javaScriptEnabled: false });
   let closing;
   const close = () => (closing ??= context.close());
+  const failures = [];
+  let result;
   try {
     const page = await context.newPage();
     const network = await observeDeferredLoaderNetwork(page);
-    const failures = [];
     page.on('requestfailed', request =>
       failures.push({
         url: request.url(),
@@ -142,20 +172,7 @@ export async function probeRawDeferredLoader(
             chunks,
             bytes,
           };
-          try {
-            const frames = body
-              .trim()
-              .split('\n')
-              .map(line => JSON.parse(line));
-            return {
-              ...facts,
-              frameTypes: frames.map(frame => frame.type),
-              completeFrames: frames.filter(frame => frame.type === 'complete')
-                .length,
-            };
-          } catch (error) {
-            return { ...facts, frameError: String(error).slice(0, 2048) };
-          }
+          return { ...facts, wireLines: body.trim().split('\n') };
         }),
         new Promise((_, reject) => {
           timer = setTimeout(() => {
@@ -173,8 +190,35 @@ export async function probeRawDeferredLoader(
     } finally {
       clearTimeout(timer);
     }
-    return { transport, failures, network: network.snapshot() };
+    if (transport.wireLines) {
+      const { wireLines } = transport;
+      delete transport.wireLines;
+      try {
+        transport.wireFrameKeys = wireLines.map(line =>
+          Object.keys(JSON.parse(line)),
+        );
+        if (decodeFrame) {
+          const frames = wireLines.map(decodeFrame);
+          transport.frameTypes = frames.map(frame => frame.type);
+          transport.completeFrames = frames.filter(
+            frame => frame.type === 'complete',
+          ).length;
+        }
+      } catch (error) {
+        transport.frameError = String(error).slice(0, 2048);
+      }
+    }
+    const terminal = await network.waitForTerminal(terminalTimeoutMs);
+    result = {
+      transport,
+      terminal,
+      failures: structuredClone(failures),
+      network: network.snapshot(),
+    };
   } finally {
     await close();
   }
+  // Keep cleanup-caused failures distinct from the same pre-close boundary as
+  // the CDP snapshot; never let a live array mutate the transport evidence.
+  return { ...result, cleanupFailures: failures.slice(result.failures.length) };
 }

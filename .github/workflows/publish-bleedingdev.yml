@@ -1397,10 +1397,16 @@ jobs:
           mise exec -- node scripts/lib/browser-provisioning.js --install --runtime tests
           --version ${{ steps.renderer-browser-runtime.outputs.version }}
 
+      - name: Install fixed installed-renderer Chrome
+        id: renderer-fixed-browser
+        run: mise exec -- node scripts/ultramodern-renderers/provision-browser.mjs
+
       - name: Run registry-byte installed renderer features
         env:
+          RENDERER_BROWSER_EXECUTABLE: ${{ steps.renderer-fixed-browser.outputs.executable_path }}
           PRODUCER_RUN_IDENTITY: ${{ needs.accept-release.outputs.producer_run_identity }}
         run: |
+          test -x "$RENDERER_BROWSER_EXECUTABLE"
           feature_work="$(mktemp -d "$RUNNER_TEMP/renderer-features-XXXXXX")"
           feature_work="$(realpath "$feature_work")"
           export OWNED_TEMP_DIR="$feature_work"
@@ -1410,6 +1416,7 @@ jobs:
           mise exec -- node scripts/ultramodern-renderers/release.mjs \
             --cohort-dir "$BLEEDINGDEV_RELEASE_DIR" --renderers solid,octane --with '' \
             --work-dir "$feature_work" --required-features \
+            --browser-executable "$RENDERER_BROWSER_EXECUTABLE" \
             --native-inputs "$feature_work/native-inputs/native-inputs.json" \
             --acceptance-mode published --registry-url https://registry.npmjs.org/ \
             --source-feature-receipt "$BLEEDINGDEV_RELEASE_DIR/acceptance-receipt.renderer-features.json" \

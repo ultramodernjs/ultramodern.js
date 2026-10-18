@@ -365,6 +365,7 @@ export async function checkGeneratedSolidTypes({ appRoot, execute }) {
 
 /** This browser diagnostic is qualified only by runGeneratedSolidConsumer. */
 export async function checkGeneratedSolidBrowser({
+  appRoot,
   origin,
   browserRoot,
   browserExecutable,
@@ -783,7 +784,12 @@ export async function checkGeneratedSolidBrowser({
     let rawLoaderDiagnostic;
     if (errors.length) {
       try {
-        rawLoaderDiagnostic = await probeRawDeferredLoader(browser, origin);
+        const { parsePublicData } = createRequire(
+          path.join(appRoot, 'package.json'),
+        )('@modern-js/renderer-core/data');
+        rawLoaderDiagnostic = await probeRawDeferredLoader(browser, origin, {
+          decodeFrame: parsePublicData,
+        });
       } catch (error) {
         rawLoaderDiagnostic = { diagnosticError: String(error).slice(0, 2048) };
       }
@@ -911,6 +917,7 @@ export async function runGeneratedSolidConsumer({
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     const browser = await checkGeneratedSolidBrowser({
+      appRoot,
       origin,
       browserRoot,
       browserExecutable,
