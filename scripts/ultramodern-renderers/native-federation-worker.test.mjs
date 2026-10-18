@@ -19,6 +19,56 @@ import {
   verifyPrebuiltWorkerServices,
 } from './native-federation-worker.mjs';
 
+test('Worker manifests preserve complete direct Start archives and reject partial selection', () => {
+  const packageRequests = Object.fromEntries(
+    [
+      '@modern-js/ultramodern-app-tools',
+      '@modern-js/renderer-core',
+      '@modern-js/renderer-octane',
+      '@modern-js/i18n-runtime-extensions',
+      '@module-federation/enhanced',
+      '@module-federation/node',
+      'octane',
+      '@octanejs/tanstack-router',
+      '@octanejs/rspack-plugin',
+      '@tsrx/oxc',
+      'i18next',
+    ].map(name => [name, '1.0.0']),
+  );
+  const core =
+    'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-bbbbbbbbbbbb/tanstack-router-core-1.0.0.tgz';
+  packageRequests['@tanstack/router-core'] = core;
+  assert.equal(
+    packedWorkerDependencies({ cohort: { artifacts: [] }, packageRequests })[
+      '@tanstack/router-core'
+    ],
+    core,
+  );
+  const start = Object.fromEntries(
+    Object.entries({
+      '@tanstack/start-storage-context': 'storage',
+      '@tanstack/start-client-core': 'client',
+      '@tanstack/start-server-core': 'server',
+    }).map(([name, profile]) => [
+      name,
+      `https://github.com/BleedingDev/router/releases/download/ultramodern-start-${profile}-cccccccccccc/tanstack-${name.slice('@tanstack/'.length)}-1.0.0.tgz`,
+    ]),
+  );
+  Object.assign(packageRequests, start);
+  const dependencies = packedWorkerDependencies({
+    cohort: { artifacts: [] },
+    packageRequests,
+  });
+  for (const [name, request] of Object.entries(start))
+    assert.equal(dependencies[name], request);
+  delete packageRequests['@tanstack/start-client-core'];
+  assert.throws(
+    () =>
+      packedWorkerDependencies({ cohort: { artifacts: [] }, packageRequests }),
+    /Incomplete native Start closure/u,
+  );
+});
+
 test('packed Worker builds derive their identity from the actual clean fixture commit', async t => {
   assert(
     process.env.OWNED_TEMP_DIR,

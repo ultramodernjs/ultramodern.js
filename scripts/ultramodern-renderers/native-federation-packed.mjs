@@ -21,13 +21,19 @@ import {
   verifyInstalledPackage,
 } from './installed-cohort.mjs';
 import {
+  assertNativeStartPeers,
+  nativeFederationPackageRequests,
+  nativeStartArchiveRequests,
+  nativeStartSharedPeers,
+} from './native-federation-inputs.mjs';
+import {
   assertReleaseAgeExclusionsUnchanged,
   captureReleaseAgeExclusions,
 } from './release-age-policy.mjs';
 
 const readJson = filename => JSON.parse(fs.readFileSync(filename, 'utf8'));
 const nativeDependency = name =>
-  /^(?:@module-federation\/|@octanejs\/|@solidjs\/|@tanstack\/router-core$|@tsrx\/oxc$|octane$|solid-js$|i18next$|typescript$|@types\/node$)/u.test(
+  /^(?:@module-federation\/|@octanejs\/|@solidjs\/|@tanstack\/(?:router-core|start-storage-context|start-client-core|start-server-core)$|@tsrx\/oxc$|octane$|solid-js$|i18next$|typescript$|@types\/node$)/u.test(
     name,
   );
 const inside = (parent, child) => {
@@ -209,8 +215,8 @@ export function verifyPackedNativeFederationDependencies({
   );
   const manifest = readJson(path.join(appRoot, 'package.json'));
   const roots = {};
-  for (const name of dependencyNames ??
-    Object.keys({ ...manifest.dependencies, ...manifest.devDependencies })) {
+  const requests = nativeFederationPackageRequests(manifest);
+  for (const name of dependencyNames ?? Object.keys(requests)) {
     const directory = fs.realpathSync(path.join(appRoot, 'node_modules', name));
     assert(
       inside(storeRoot, directory),
@@ -231,8 +237,7 @@ export function verifyPackedNativeFederationDependencies({
       );
       verifyInstalledPackage(directory, artifact);
     } else {
-      const request =
-        manifest.dependencies?.[name] ?? manifest.devDependencies?.[name];
+      const request = requests[name];
       const alias = /^npm:((?:@[^/]+\/)?[^@]+)@(.+)$/u.exec(request ?? '');
       const expected = packageIdentities[name] ?? {
         name: alias?.[1] ?? name,
@@ -267,18 +272,42 @@ export function verifyPackedNativeFederationDependencies({
 
 /** Verify supplied native packs before any dev server can execute their files. */
 export function verifyPackedNativeFederationInputs(appRoot, inputs) {
-  if (!inputs) return;
   const manifest = readJson(path.join(appRoot, 'package.json'));
+  const requests = nativeFederationPackageRequests(manifest);
+  const startRequests = nativeStartArchiveRequests(requests);
+  if (!inputs) {
+    assert.equal(
+      Object.keys(startRequests).length,
+      0,
+      'Declared Start requests require authenticated native inputs',
+    );
+    return;
+  }
+  const startInputs = nativeStartArchiveRequests(
+    Object.fromEntries(
+      Object.entries(inputs).map(([name, input]) => [name, input.request]),
+    ),
+  );
+  if (Object.keys(startRequests).length)
+    assert.deepEqual(
+      startRequests,
+      startInputs,
+      'Declared Start requests must retain their authenticated inputs',
+    );
+  const packedPackages = new Map();
   for (const name of [
     'octane',
     '@octanejs/tanstack-router',
     '@octanejs/rspack-plugin',
     '@tanstack/router-core',
+    ...Object.keys(startRequests).filter(
+      name => name !== '@tanstack/router-core',
+    ),
   ]) {
     const input = inputs[name];
     assert(input, `Missing exact native input: ${name}`);
     assert.equal(
-      manifest.dependencies?.[name] ?? manifest.devDependencies?.[name],
+      requests[name],
       input.request,
       `${name} must retain its supplied native archive request`,
     );
@@ -292,6 +321,14 @@ export function verifyPackedNativeFederationInputs(appRoot, inputs) {
     );
     const packed = inspectNpmTarball(bytes);
     assert.equal(packed.packageJson.name, name);
+    if (startRequests[name])
+      assert(
+        input.request.endsWith(
+          `/tanstack-${name.slice('@tanstack/'.length)}-${packed.packageJson.version}.tgz`,
+        ),
+        `${name} differs from its declared archive version`,
+      );
+    packedPackages.set(name, packed.packageJson);
     verifyInstalledPackage(
       fs.realpathSync(path.join(appRoot, 'node_modules', name)),
       {
@@ -306,6 +343,44 @@ export function verifyPackedNativeFederationInputs(appRoot, inputs) {
     );
   }
   const appRequire = createRequire(path.join(appRoot, 'package.json'));
+  const versions = Object.fromEntries(
+    [...packedPackages].map(([name, value]) => [name, value.version]),
+  );
+  for (const [name, peers] of Object.entries(nativeStartSharedPeers)) {
+    if (!startRequests[name]) continue;
+    assertNativeStartPeers(packedPackages.get(name), versions);
+    const owner = createRequire(
+      fs.realpathSync(appRequire.resolve(`${name}/package.json`)),
+    );
+    for (const peer of peers)
+      assert.equal(
+        fs.realpathSync(owner.resolve(`${peer}/package.json`)),
+        fs.realpathSync(appRequire.resolve(`${peer}/package.json`)),
+        `${name} must resolve the application's physical ${peer}`,
+      );
+  }
+  for (const name of [
+    '@octanejs/tanstack-start',
+    '@octanejs/tanstack-router-ssr-query',
+  ]) {
+    if (!Object.hasOwn(requests, name)) continue;
+    const owner = createRequire(
+      fs.realpathSync(path.join(appRoot, 'node_modules', name, 'package.json')),
+    );
+    for (const peer of [
+      '@tanstack/router-core',
+      ...(name === '@octanejs/tanstack-start'
+        ? Object.keys(startRequests).filter(
+            name => name !== '@tanstack/router-core',
+          )
+        : []),
+    ])
+      assert.equal(
+        fs.realpathSync(owner.resolve(`${peer}/package.json`)),
+        fs.realpathSync(appRequire.resolve(`${peer}/package.json`)),
+        `${name} must resolve the application's physical ${peer}`,
+      );
+  }
   const adapterRequire = createRequire(
     fs.realpathSync(
       path.join(appRoot, 'node_modules/@octanejs/tanstack-router/package.json'),
@@ -353,10 +428,7 @@ export async function readPackedNativeFederationContext(filename, renderer) {
   const release = readReleaseManifest({ manifestPath: input.manifestPath });
   const cohort = readCohort(release.manifestPath);
   const manifest = readJson(path.join(consumerRoot, 'package.json'));
-  const packageRequests = {
-    ...manifest.dependencies,
-    ...manifest.devDependencies,
-  };
+  const packageRequests = nativeFederationPackageRequests(manifest);
   const cohortNames = new Set(
     cohort.artifacts.flatMap(artifact => [
       artifact.sourceName,
@@ -413,6 +485,7 @@ export async function readPackedNativeFederationContext(filename, renderer) {
 
 /** Translate fixture declarations to the same aliases and native pins users install. */
 export function packedNativeFederationManifest(manifest, context) {
+  const startRequests = nativeStartArchiveRequests(context.packageRequests);
   const artifacts = new Map(
     context.cohort.artifacts.map(artifact => [artifact.sourceName, artifact]),
   );
@@ -452,6 +525,7 @@ export function packedNativeFederationManifest(manifest, context) {
     '@modern-js/federation-runtime',
     '@module-federation/runtime',
     '@tanstack/router-core',
+    ...Object.keys(startRequests),
   ])
     if (context.packageRequests[name]) dependencies[name] = request(name);
   const devDependencies = Object.fromEntries(
@@ -843,6 +917,7 @@ export async function runPackedNativeFederationProof({
     !fs.existsSync(workDir),
     `Packed MF work directory already exists: ${workDir}`,
   );
+  verifyPackedNativeFederationInputs(consumerRoot, contextExtras.nativeInputs);
   const owner = `renderer-mf-packed-${renderer}-${process.pid}`;
   const registration = registerOwnedRoot({
     workDir,

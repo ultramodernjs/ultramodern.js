@@ -15,11 +15,16 @@ import {
 } from '../../tests/ultramodern-renderers/octane-federation-workers/proof.mjs';
 import { reservePort } from '../ultramodern-production-readiness/renderer-mf-lifecycle-proof/runtime.mjs';
 import {
+  nativeFederationPackageRequests,
+  nativeStartArchiveRequests,
+} from './native-federation-inputs.mjs';
+import {
   installPackedNativeFederationDependencies,
   readPackedNativeFederationContext,
   runPackedNativeFederationCommand,
   runPackedNativeFederationProof,
   verifyPackedNativeFederationDependencies,
+  verifyPackedNativeFederationInputs,
 } from './native-federation-packed.mjs';
 import {
   buildCompiledWorkerApplications,
@@ -176,6 +181,14 @@ export function assertGeneratedWorkerResult(result) {
 }
 
 export async function runPackedNativeFederationGeneratedWorkerProof(context) {
+  const requests = nativeFederationPackageRequests(
+    readJson(path.join(context.consumerRoot, 'package.json')),
+  );
+  nativeStartArchiveRequests(requests);
+  verifyPackedNativeFederationInputs(
+    context.consumerRoot,
+    context.nativeInputs,
+  );
   assert(context.receiptPath && context.binding);
   assert(path.isAbsolute(context.receiptPath));
   assert(!fs.existsSync(context.receiptPath));
@@ -248,6 +261,40 @@ export async function runPackedNativeFederationGeneratedWorkerProof(context) {
   return receipt;
 }
 
+export function verifyGeneratedWorkerNativeRequests(manifest, packageRequests) {
+  assert.deepEqual(
+    nativeStartArchiveRequests(nativeFederationPackageRequests(manifest)),
+    nativeStartArchiveRequests(packageRequests),
+    'Public generator must emit the selected complete Native Start closure',
+  );
+}
+
+export function generatedWorkerDependencies(context) {
+  nativeStartArchiveRequests(context.packageRequests);
+  const dependencies = {};
+  for (const name of [
+    '@modern-js/ultramodern-app-tools',
+    '@modern-js/renderer-octane',
+    '@modern-js/renderer-core',
+    '@modern-js/i18n-runtime-extensions',
+    'octane',
+    'i18next',
+  ]) {
+    const artifact = context.cohort.artifacts.find(
+      item => item.sourceName === name,
+    );
+    dependencies[name] = artifact
+      ? `npm:${artifact.targetName}@${artifact.version}`
+      : context.packageRequests[name];
+    assert(
+      dependencies[name],
+      `The installed source cohort must declare ${name}.`,
+    );
+    assert(!/^(?:workspace:|link:|file:)/u.test(dependencies[name]));
+  }
+  return dependencies;
+}
+
 /** A public generator invocation and ordinary install, followed by real workerd. */
 export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
   assert(
@@ -273,27 +320,7 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
     cohort: context.cohort,
     consumerRoot: generatorConsumerRoot,
   });
-  const dependencies = {};
-  for (const name of [
-    '@modern-js/ultramodern-app-tools',
-    '@modern-js/renderer-octane',
-    '@modern-js/renderer-core',
-    '@modern-js/i18n-runtime-extensions',
-    'octane',
-    'i18next',
-  ]) {
-    const artifact = context.cohort.artifacts.find(
-      item => item.sourceName === name,
-    );
-    dependencies[name] = artifact
-      ? `npm:${artifact.targetName}@${artifact.version}`
-      : context.packageRequests[name];
-    assert(
-      dependencies[name],
-      `The installed source cohort must declare ${name}.`,
-    );
-    assert(!/^(?:workspace:|link:|file:)/u.test(dependencies[name]));
-  }
+  const dependencies = generatedWorkerDependencies(context);
   const ports = [];
   while (ports.length < 3) {
     const port = await reservePort();
@@ -363,6 +390,11 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
   );
   const generation = readJson(resultPath);
   verifyGeneratedWorkerGeneration(generation);
+  for (const app of generation.applications)
+    verifyGeneratedWorkerNativeRequests(
+      readJson(path.join(workspaceRoot, app.directory, 'package.json')),
+      context.packageRequests,
+    );
   const topology = readJson(
     path.join(workspaceRoot, 'topology/reference-topology.json'),
   );
@@ -397,13 +429,11 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
   const applications = generation.applications.map((app, index) => {
     const appRoot = path.join(workspaceRoot, app.directory);
     const manifest = readJson(path.join(appRoot, 'package.json'));
-    const dependencyNames = Object.keys({
-      ...manifest.dependencies,
-      ...manifest.devDependencies,
-    }).filter(
+    const requests = nativeFederationPackageRequests(manifest);
+    const dependencyNames = Object.keys(requests).filter(
       name =>
         cohortNames.has(name) ||
-        /^(?:@module-federation\/|@octanejs\/|octane$|i18next$|typescript$|@types\/node$)/u.test(
+        /^(?:@module-federation\/|@octanejs\/|@tanstack\/(?:router-core|start-storage-context|start-client-core|start-server-core)$|octane$|i18next$|typescript$|@types\/node$)/u.test(
           name,
         ),
     );
@@ -412,6 +442,8 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
       cohort: context.cohort,
       dependencyNames,
     });
+    if (Object.keys(nativeStartArchiveRequests(requests)).length)
+      verifyPackedNativeFederationInputs(appRoot, context.nativeInputs);
     return {
       role: index ? 'remote' : 'host',
       ...(index ? { remote: app.id } : {}),

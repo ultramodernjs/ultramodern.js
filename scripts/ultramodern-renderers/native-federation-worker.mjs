@@ -12,6 +12,7 @@ import {
 } from '../../tests/ultramodern-renderers/octane-federation-workers/proof.mjs';
 import { confinedPath } from '../lib/file-evidence.mjs';
 import { reservePort } from '../ultramodern-production-readiness/renderer-mf-lifecycle-proof/runtime.mjs';
+import { nativeStartArchiveRequests } from './native-federation-inputs.mjs';
 import {
   installedBin,
   preparePackedNativeFederationWorkspace,
@@ -503,6 +504,7 @@ export async function generatePackedWorkerWorkspace({
 
 /** Preserve the seed's exact native compiler peers in every authored app. */
 export function packedWorkerDependencies({ cohort, packageRequests }) {
+  const startRequests = nativeStartArchiveRequests(packageRequests);
   const dependencies = {};
   for (const name of [
     '@modern-js/ultramodern-app-tools',
@@ -529,6 +531,8 @@ export function packedWorkerDependencies({ cohort, packageRequests }) {
       dependencies[name] = request;
     }
   }
+  for (const name of ['@tanstack/router-core', ...Object.keys(startRequests)])
+    if (packageRequests[name]) dependencies[name] = packageRequests[name];
   return dependencies;
 }
 

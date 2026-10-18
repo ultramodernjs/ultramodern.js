@@ -7,6 +7,9 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   nativeFederationArtifacts,
+  nativeFederationPackageRequests,
+  nativeStartArchiveRequests,
+  nativeStartSharedPeers,
   stageNativeFederationInputs,
 } from './native-federation-inputs.mjs';
 
@@ -21,7 +24,44 @@ const names = {
   '@octanejs/rspack-plugin': 'octanejs-rspack-plugin',
   '@tanstack/router-core': 'tanstack-router-core',
 };
-function fixture(t) {
+
+test('shared native requests reject conflicting blocks and optional Start authority', () => {
+  const name = '@tanstack/start-client-core';
+  const request = 'https://example.test/client.tgz';
+  assert.deepEqual(
+    nativeFederationPackageRequests({
+      dependencies: { [name]: request },
+      devDependencies: { [name]: request },
+    }),
+    { [name]: request },
+  );
+  for (const shared of [
+    '@tanstack/router-core',
+    name,
+    '@octanejs/tanstack-start',
+  ])
+    assert.throws(
+      () =>
+        nativeFederationPackageRequests({
+          dependencies: { [shared]: request },
+          devDependencies: { [shared]: '1.0.0' },
+        }),
+      /Conflicting native request/u,
+    );
+  for (const shared of [
+    ...Object.keys(nativeStartSharedPeers),
+    '@octanejs/tanstack-start',
+  ])
+    assert.throws(
+      () =>
+        nativeFederationPackageRequests({
+          optionalDependencies: { [shared]: request },
+        }),
+      /cannot be optional/u,
+    );
+});
+
+function fixture(t, start = false, mutate = () => {}) {
   const root = fs.mkdtempSync(
     path.join(process.env.OWNED_TEMP_DIR, 'native-input-control-'),
   );
@@ -36,18 +76,36 @@ function fixture(t) {
     devDependencies: {},
     peerDependencies: {},
   };
-  for (const [name, basename] of Object.entries(names)) {
+  for (const [name, basename] of Object.entries({
+    ...names,
+    ...(start
+      ? Object.fromEntries(
+          Object.keys(nativeStartSharedPeers).map(name => [
+            name,
+            `tanstack-${name.slice('@tanstack/'.length)}`,
+          ]),
+        )
+      : {}),
+  })) {
     const packageRoot = path.join(root, basename, 'package');
     fs.mkdirSync(packageRoot, { recursive: true });
+    const packed = {
+      name,
+      version: '1.0.0',
+      ...(name === '@octanejs/tanstack-router' || nativeStartSharedPeers[name]
+        ? {
+            peerDependencies: Object.fromEntries(
+              (nativeStartSharedPeers[name] ?? ['@tanstack/router-core']).map(
+                name => [name, '1.0.0'],
+              ),
+            ),
+          }
+        : {}),
+    };
+    mutate(packed);
     fs.writeFileSync(
       path.join(packageRoot, 'package.json'),
-      JSON.stringify({
-        name,
-        version: '1.0.0',
-        ...(name === '@octanejs/tanstack-router'
-          ? { peerDependencies: { '@tanstack/router-core': '1.0.0' } }
-          : {}),
-      }),
+      JSON.stringify(packed),
     );
     fs.writeFileSync(
       path.join(packageRoot, 'index.mjs'),
@@ -60,9 +118,15 @@ function fixture(t) {
       { env: { ...process.env, COPYFILE_DISABLE: '1' } },
     );
     const bytes = fs.readFileSync(archivePath);
-    const repository = name === '@tanstack/router-core' ? 'router' : 'octane';
-    const tag =
-      repository === 'router'
+    const profile = {
+      '@tanstack/start-storage-context': 'storage',
+      '@tanstack/start-client-core': 'client',
+      '@tanstack/start-server-core': 'server',
+    }[name];
+    const repository = name.startsWith('@tanstack/') ? 'router' : 'octane';
+    const tag = profile
+      ? `ultramodern-start-${profile}-cccccccccccc`
+      : repository === 'router'
         ? 'ultramodern-router-core-bbbbbbbbbbbb'
         : 'ultramodern-octane-aaaaaaaaaaaa';
     const request = `https://github.com/BleedingDev/${repository}/releases/download/${tag}/${basename}-1.0.0.tgz`;
@@ -142,6 +206,67 @@ test('stages all four exact hosted archive bytes from the packed renderer descri
   }
 });
 
+test('stages the complete declared Start peer authority and rejects partial or foreign requests', async t => {
+  const f = fixture(t, true);
+  const manifest = f.rendererPackage.packageJson;
+  const requests = nativeStartArchiveRequests(manifest.devDependencies);
+  assert.equal(Object.keys(requests).length, 4);
+  const transport = await server(t, f);
+  const filename = await stageNativeFederationInputs({
+    rendererPackage: f.rendererPackage,
+    directory: path.join(f.root, 'staged'),
+    fetchArtifact: transport.fetchArtifact,
+  });
+  const inputs = JSON.parse(fs.readFileSync(filename, 'utf8'));
+  assert.equal(Object.keys(inputs).length, 7);
+  for (const [name, request] of Object.entries(requests))
+    assert.equal(inputs[name].request, request);
+  const partial = structuredClone(f.rendererPackage);
+  delete partial.packageJson.ultramodern.nativeArtifacts[
+    '@tanstack/start-server-core'
+  ];
+  assert.throws(() => nativeFederationArtifacts(partial), /complete/u);
+  const missing = { ...manifest.devDependencies };
+  delete missing['@tanstack/start-client-core'];
+  assert.throws(
+    () => nativeStartArchiveRequests(missing),
+    /Incomplete native Start closure/u,
+  );
+  assert.throws(
+    () =>
+      nativeStartArchiveRequests({
+        ...manifest.devDependencies,
+        '@tanstack/start-client-core': '1.0.0',
+      }),
+    /owning hosted/u,
+  );
+});
+
+for (const conflict of ['version', 'dependency', 'optional'])
+  test(`rejects authenticated Start archives with a conflicting shared ${conflict}`, async t => {
+    const f = fixture(t, true, packed => {
+      if (packed.name !== '@tanstack/start-client-core') return;
+      if (conflict === 'version')
+        packed.peerDependencies['@tanstack/router-core'] = '2.0.0';
+      if (conflict === 'dependency')
+        packed.dependencies = { '@tanstack/router-core': '1.0.0' };
+      if (conflict === 'optional')
+        packed.peerDependenciesMeta = {
+          '@tanstack/router-core': { optional: true },
+        };
+    });
+    const transport = await server(t, f);
+    const directory = path.join(f.root, 'staged');
+    await assert.rejects(
+      stageNativeFederationInputs({
+        rendererPackage: f.rendererPackage,
+        directory,
+        fetchArtifact: transport.fetchArtifact,
+      }),
+    );
+    assert.equal(fs.existsSync(directory), false);
+  });
+
 test('rejects a conflicting production or optional request even when the dev request matches', t => {
   const f = fixture(t);
   for (const block of ['dependencies', 'optionalDependencies']) {
@@ -150,7 +275,9 @@ test('rejects a conflicting production or optional request even when the dev req
     assert.throws(
       () => nativeFederationArtifacts(candidate),
       new RegExp(
-        `octane differs from its packed renderer ${block} request`,
+        block === 'dependencies'
+          ? 'Conflicting native request: octane'
+          : `octane differs from its packed renderer ${block} request`,
         'u',
       ),
     );
@@ -178,6 +305,9 @@ test('rejects absent, extra, mixed-cohort and unhosted descriptor requests befor
     alter(candidate.packageJson);
     assert.throws(() => nativeFederationArtifacts(candidate));
   };
+  rejects(manifest => {
+    manifest.devDependencies['@octanejs/tanstack-start'] = '1.0.0';
+  });
   rejects(manifest => {
     delete manifest.ultramodern.nativeArtifacts;
   });

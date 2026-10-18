@@ -5,6 +5,7 @@ import { once } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { nativeStartSharedPeers } from './native-federation-inputs.mjs';
 import {
   packedNativeFederationManifest,
   retirePackedNativeFederationInstaller,
@@ -564,6 +565,29 @@ test('retains an explicitly supplied core archive in real host and remote fixtur
         ],
         core,
       );
+      const start = Object.fromEntries(
+        Object.entries({
+          '@tanstack/start-storage-context': 'storage',
+          '@tanstack/start-client-core': 'client',
+          '@tanstack/start-server-core': 'server',
+        }).map(([name, profile]) => [
+          name,
+          `https://github.com/BleedingDev/router/releases/download/ultramodern-start-${profile}-cccccccccccc/tanstack-${name.slice('@tanstack/'.length)}-1.0.0.tgz`,
+        ]),
+      );
+      Object.assign(context.packageRequests, start);
+      context.packageRequests['@tanstack/router-core'] =
+        'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-bbbbbbbbbbbb/tanstack-router-core-1.0.0.tgz';
+      const complete = packedNativeFederationManifest(manifest, context);
+      for (const [name, request] of Object.entries(start))
+        assert.equal(complete.dependencies[name], request);
+      delete context.packageRequests['@tanstack/start-client-core'];
+      assert.throws(
+        () => packedNativeFederationManifest(manifest, context),
+        /Incomplete native Start closure/u,
+      );
+      for (const name of Object.keys(start))
+        delete context.packageRequests[name];
       delete context.packageRequests['@tanstack/router-core'];
       assert.equal(
         Object.hasOwn(
@@ -578,7 +602,197 @@ test('retains an explicitly supplied core archive in real host and remote fixtur
   }
 });
 
-test('checks every supplied native byte and rejects a second physical core before dev starts', () => {
+test('rejects a declared Native Start binding before creating proof resources', async () => {
+  const supplied = fixture();
+  try {
+    verifyPackedNativeFederationInputs(supplied.appRoot);
+    externalPackage(supplied, '@octanejs/tanstack-start', '1.0.0');
+    for (const inputs of [undefined, {}])
+      assert.throws(
+        () => verifyPackedNativeFederationInputs(supplied.appRoot, inputs),
+        /Incomplete native Start closure/u,
+      );
+    const before = fs.readdirSync(supplied.root);
+    const workDir = path.join(supplied.root, 'proof');
+    await assert.rejects(
+      runPackedNativeFederationProof({
+        renderer: 'octane',
+        consumerRoot: supplied.appRoot,
+        workDir,
+        contextExtras: { nativeInputs: {} },
+      }),
+      /Incomplete native Start closure/u,
+    );
+    assert.deepEqual(fs.readdirSync(supplied.root), before);
+  } finally {
+    fs.rmSync(supplied.root, { recursive: true });
+  }
+});
+
+test('authenticates Start archive bytes and rejects private shared instances and mixed peer versions', () => {
+  const supplied = fixture();
+  try {
+    const inputs = {};
+    const directories = {};
+    for (const name of [
+      'octane',
+      '@octanejs/tanstack-router',
+      '@octanejs/rspack-plugin',
+      '@tanstack/router-core',
+      ...Object.keys(nativeStartSharedPeers),
+    ]) {
+      const profile = {
+        '@tanstack/start-storage-context': 'storage',
+        '@tanstack/start-client-core': 'client',
+        '@tanstack/start-server-core': 'server',
+      }[name];
+      const request = name.startsWith('@tanstack/')
+        ? `https://github.com/BleedingDev/router/releases/download/${profile ? `ultramodern-start-${profile}-cccccccccccc` : 'ultramodern-router-core-bbbbbbbbbbbb'}/tanstack-${name.slice('@tanstack/'.length)}-1.0.0.tgz`
+        : `https://example.test/${encodeURIComponent(name)}.tgz`;
+      const directory = externalPackage(supplied, name, '1.0.0', request);
+      directories[name] = directory;
+      if (nativeStartSharedPeers[name])
+        fs.writeFileSync(
+          path.join(directory, 'package.json'),
+          JSON.stringify({
+            name,
+            version: '1.0.0',
+            peerDependencies: Object.fromEntries(
+              nativeStartSharedPeers[name].map(name => [name, '1.0.0']),
+            ),
+          }),
+        );
+      const archiveRoot = path.join(supplied.root, encodeURIComponent(name));
+      fs.mkdirSync(archiveRoot);
+      fs.cpSync(directory, path.join(archiveRoot, 'package'), {
+        recursive: true,
+      });
+      const archivePath = path.join(archiveRoot, 'candidate.tgz');
+      execFileSync('tar', ['-czf', archivePath, '-C', archiveRoot, 'package'], {
+        env: { ...process.env, COPYFILE_DISABLE: '1' },
+      });
+      inputs[name] = {
+        request,
+        archivePath,
+        integrity: `sha512-${createHash('sha512').update(fs.readFileSync(archivePath)).digest('base64')}`,
+      };
+    }
+    const nativeStart = externalPackage(
+      supplied,
+      '@octanejs/tanstack-start',
+      '1.0.0',
+    );
+    const ssrQuery = externalPackage(
+      supplied,
+      '@octanejs/tanstack-router-ssr-query',
+      '1.0.0',
+    );
+    // The real SSR-query package exposes only its public root, not its manifest.
+    fs.writeFileSync(
+      path.join(ssrQuery, 'package.json'),
+      JSON.stringify({
+        name: '@octanejs/tanstack-router-ssr-query',
+        version: '1.0.0',
+        exports: { '.': './index.mjs' },
+      }),
+    );
+    verifyPackedNativeFederationInputs(supplied.appRoot, inputs);
+    const manifestPath = path.join(supplied.appRoot, 'package.json');
+    const declared = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const noStart = structuredClone(declared);
+    for (const name of [
+      '@octanejs/tanstack-start',
+      ...Object.keys(nativeStartSharedPeers),
+    ])
+      delete noStart.dependencies[name];
+    fs.writeFileSync(manifestPath, JSON.stringify(noStart));
+    // One renderer input cohort can serve apps that do not consume Start.
+    verifyPackedNativeFederationInputs(supplied.appRoot, inputs);
+    const partialUnused = { ...inputs };
+    delete partialUnused['@tanstack/start-client-core'];
+    assert.throws(
+      () => verifyPackedNativeFederationInputs(supplied.appRoot, partialUnused),
+      /Incomplete native Start closure/u,
+    );
+    fs.writeFileSync(manifestPath, JSON.stringify(declared));
+    assert.throws(
+      () => verifyPackedNativeFederationInputs(supplied.appRoot),
+      /require authenticated native inputs/u,
+    );
+    const partial = { ...inputs };
+    delete partial['@tanstack/start-client-core'];
+    assert.throws(
+      () => verifyPackedNativeFederationInputs(supplied.appRoot, partial),
+      /Incomplete native Start closure/u,
+    );
+    for (const [owner, peer] of [
+      ...[
+        '@tanstack/router-core',
+        '@tanstack/start-storage-context',
+        '@tanstack/start-client-core',
+      ].map(peer => [directories['@tanstack/start-server-core'], peer]),
+      [nativeStart, '@tanstack/start-client-core'],
+      [ssrQuery, '@tanstack/router-core'],
+    ]) {
+      const privatePeer = path.join(owner, 'node_modules', peer);
+      fs.mkdirSync(path.dirname(privatePeer), { recursive: true });
+      const duplicate = fs.mkdtempSync(
+        path.join(supplied.root, 'duplicate-peer-'),
+      );
+      fs.cpSync(directories[peer], duplicate, { recursive: true });
+      fs.symlinkSync(duplicate, privatePeer, 'dir');
+      assert.throws(
+        () =>
+          execFileSync(
+            process.execPath,
+            [
+              '--input-type=module',
+              '-e',
+              `import { verifyPackedNativeFederationInputs } from ${JSON.stringify(new URL('./native-federation-packed.mjs', import.meta.url).href)}; verifyPackedNativeFederationInputs(process.argv[1], JSON.parse(process.argv[2]));`,
+              supplied.appRoot,
+              JSON.stringify(inputs),
+            ],
+            { encoding: 'utf8', stdio: 'pipe' },
+          ),
+        /must resolve the application's physical/u,
+      );
+      fs.unlinkSync(privatePeer);
+    }
+    const client = '@tanstack/start-client-core';
+    const archived = path.join(
+      path.dirname(inputs[client].archivePath),
+      'package/package.json',
+    );
+    const wrong = JSON.parse(fs.readFileSync(archived, 'utf8'));
+    wrong.peerDependencies['@tanstack/router-core'] = '2.0.0';
+    fs.writeFileSync(archived, JSON.stringify(wrong));
+    fs.writeFileSync(
+      path.join(directories[client], 'package.json'),
+      JSON.stringify(wrong),
+    );
+    execFileSync(
+      'tar',
+      [
+        '-czf',
+        inputs[client].archivePath,
+        '-C',
+        path.dirname(inputs[client].archivePath),
+        'package',
+      ],
+      { env: { ...process.env, COPYFILE_DISABLE: '1' } },
+    );
+    inputs[client].integrity =
+      `sha512-${createHash('sha512').update(fs.readFileSync(inputs[client].archivePath)).digest('base64')}`;
+    assert.throws(
+      () => verifyPackedNativeFederationInputs(supplied.appRoot, inputs),
+      /selected exact shared/u,
+    );
+  } finally {
+    fs.rmSync(supplied.root, { recursive: true });
+  }
+});
+
+test('checks every supplied native byte and rejects a second physical core before dev starts', async () => {
   const supplied = fixture();
   try {
     const inputs = {};
@@ -625,6 +839,17 @@ test('checks every supplied native byte and rejects a second physical core befor
       () => verifyPackedNativeFederationInputs(supplied.appRoot, inputs),
       /differs from its tarball/u,
     );
+    const before = fs.readdirSync(supplied.root);
+    await assert.rejects(
+      runPackedNativeFederationProof({
+        renderer: 'octane',
+        consumerRoot: supplied.appRoot,
+        workDir: path.join(supplied.root, 'proof'),
+        contextExtras: { nativeInputs: inputs },
+      }),
+      /differs from its tarball/u,
+    );
+    assert.deepEqual(fs.readdirSync(supplied.root), before);
     fs.writeFileSync(nativeFile, 'export const native = true;\n');
     assert.throws(
       () =>
