@@ -81,7 +81,7 @@ export const rendererAdapter: NativeRendererAdapter<'octane'> =
     artifacts: compilerArtifacts,
     assertSupportedSource: assertOctaneEntrySource,
     create: {
-      templates: { federation: true, workers: false },
+      templates: { federation: true, workers: true },
       dependencies: (profile, { typescriptVersion }) => ({
         frameworkDependencies: [
           '@modern-js/renderer-core',

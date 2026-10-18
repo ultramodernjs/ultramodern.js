@@ -31,13 +31,15 @@ export function createAppModernConfig(
   const renderer = resolveWorkspaceRenderer(app);
   if (hasNativeAppGeneration(renderer)) {
     const generation = resolveAppGenerationProfile(app)!;
-    const exposes = Object.keys(app.exposes ?? {}).length > 0;
-    return `import { defineConfig } from '@modern-js/ultramodern-app-tools';
-${exposes ? "import { createRemoteManifestUrl } from '@modern-js/app-tools-extensions/config';\n" : ''}
+    const authoredAssetPrefix =
+      !generation.capabilities.workers &&
+      Object.keys(app.exposes ?? {}).length > 0;
+    return `import { defineConfig${generation.capabilities.workers ? ', presetUltramodernWorkspace' : ''} } from '@modern-js/ultramodern-app-tools';
+${authoredAssetPrefix ? "import { createRemoteManifestUrl } from '@modern-js/app-tools-extensions/config';\n" : ''}
 ${appHasApi(app) ? "import { bffPlugin } from '@modern-js/plugin-bff-build-extensions';\n" : ''}
 ${enableTailwind ? "import { pluginTailwindcss } from '@rsbuild/plugin-tailwindcss';\n" : ''}
 ${
-  exposes
+  authoredAssetPrefix
     ? `// Set ${createCloudflarePublicUrlEnv(app)} to this remote's public origin when deploying.
 const remoteAddress = createRemoteManifestUrl({
   manifestEnv: ${JSON.stringify(createRemoteManifestEnv(app))},
@@ -50,10 +52,10 @@ const assetPrefix = new URL('.', remoteAddress.replace(/^[^@]+@(?=https?:\\/\\/)
 `
     : ''
 }
-export default defineConfig({
+export default defineConfig(${generation.capabilities.workers ? 'presetUltramodernWorkspace(' : ''}{
 ${enableTailwind ? '  builderPlugins: [pluginTailwindcss()],\n' : ''}  renderer: ${JSON.stringify(renderer)},
 ${appHasApi(app) ? '  plugins: [bffPlugin()],\n' : ''}
-${exposes ? '  output: { assetPrefix },\n' : ''}
+${authoredAssetPrefix ? '  output: { assetPrefix },\n' : ''}
   server: { port: ${app.port}, ssr: ${generation.capabilities.ssr}${
     appHasApi(app)
       ? `,
@@ -68,7 +70,7 @@ ${resolveApiProtocol(app) === 'rest' ? "        openapi: { path: '/openapi.json'
       : ''
   } },
   source: { mainEntryName: 'main' },
-});
+}${generation.capabilities.workers ? `, { appId: ${JSON.stringify(app.id)}, from: import.meta.url })` : ''});
 `;
   }
   // Workspace policy (deploy, dev server, output, delivery identity, Zephyr)

@@ -3340,6 +3340,9 @@ importers:
       '@modern-js/server-runtime-extensions':
         specifier: workspace:*
         version: link:../../server/runtime-extensions
+      '@modern-js/surface-resolution':
+        specifier: workspace:*
+        version: link:../../toolkit/surface-resolution
       '@modern-js/types':
         specifier: workspace:*
         version: link:../../toolkit/types

@@ -146,7 +146,8 @@ function appDevDependencies(
               name !== '@types/react' &&
               name !== '@types/react-dom' &&
               name !== 'zephyr-rspack-plugin' &&
-              name !== 'wrangler',
+              (name !== 'wrangler' ||
+                generationProfile?.capabilities.workers === true),
           ),
         );
 
@@ -184,6 +185,12 @@ export function createRootPackageJson(
   const renderer = resolveWorkspaceRenderer(primaryShell);
   if (hasNativeAppGeneration(renderer)) {
     const apps = [primaryShell, ...additionalShells, ...remotes];
+    const workerApps = apps.filter(
+      app => resolveAppGenerationProfile(app)?.capabilities.workers,
+    );
+    const workerFilters = workerApps
+      .map(app => `--filter ${packageName(scope, app.packageSuffix)}`)
+      .join(' ');
     if (bridge)
       throw new Error(
         `Renderer ${renderer} does not support React bridge configuration.`,
@@ -191,7 +198,7 @@ export function createRootPackageJson(
     const rootDevDependencies = Object.fromEntries(
       Object.entries(ULTRAMODERN_PACKAGE_PINS.rootDevDependencies).filter(
         ([name]) =>
-          name !== 'wrangler' &&
+          (name !== 'wrangler' || workerApps.length > 0) &&
           name !== 'zephyr-agent' &&
           name !== 'miniflare',
       ),
@@ -210,6 +217,13 @@ export function createRootPackageJson(
         dev: `pnpm --parallel ${apps.map(app => `--filter ${packageName(scope, app.packageSuffix)}`).join(' ')} dev`,
         'dev:shell': `pnpm --filter ${packageName(scope, primaryShell.packageSuffix)} dev`,
         build: 'pnpm -r --filter "./apps/*" --filter "./verticals/*" run build',
+        ...(workerApps.length > 0
+          ? {
+              'cloudflare:build': `pnpm -r ${workerFilters} run cloudflare:build`,
+              'cloudflare:deploy': `pnpm -r ${workerFilters} run cloudflare:deploy`,
+              'cloudflare:preview': `pnpm --parallel ${workerFilters} run cloudflare:preview`,
+            }
+          : {}),
         typecheck:
           'pnpm -r --filter "./packages/*" run typecheck && pnpm -r --filter "./apps/*" --filter "./verticals/*" run typecheck',
         'contract:check': 'ultramodern-create ultramodern validate',

@@ -193,6 +193,96 @@ describe('native workspace build policy', () => {
     }
   });
 
+  it('preserves exposed Octane discovery URLs and rejects missing production origins', () => {
+    const workspace = fixture();
+    try {
+      Object.assign(workspace.topology.verticals[0], {
+        renderer: 'octane',
+        domain: 'catalog',
+      });
+      workspace.save();
+      for (const target of ['node', 'cloudflare'] as const) {
+        const options = {
+          ...workspace.options('catalog'),
+          deployTarget: target,
+        };
+        const cdn = createPresetUltramodernWorkspaceConfig({
+          ...options,
+          environment: {
+            NODE_ENV: 'production',
+            VERTICAL_CATALOG_MF_MANIFEST:
+              'verticalCatalog@https://cdn.example/releases/mf-manifest.json',
+          },
+        });
+        expect(cdn.output?.assetPrefix).toBe('https://cdn.example/releases/');
+        expect(() =>
+          createPresetUltramodernWorkspaceConfig({
+            ...options,
+            environment: { NODE_ENV: 'production' },
+          }),
+        ).toThrow(/localhost fallback is disabled/u);
+      }
+      const local = createPresetUltramodernWorkspaceConfig({
+        ...workspace.options('catalog'),
+        environment: { NODE_ENV: 'development' },
+      });
+      expect(local.output?.assetPrefix).toBe('http://localhost:3030/');
+      const worker = createPresetUltramodernWorkspaceConfig({
+        ...workspace.options('catalog'),
+        deployTarget: 'cloudflare',
+        environment: {
+          NODE_ENV: 'production',
+          ULTRAMODERN_CLOUDFLARE_WORKERS_DEV_SUBDOMAIN: 'preview',
+        },
+      });
+      expect(worker.output?.assetPrefix).toBe(
+        'https://acme-catalog.preview.workers.dev/',
+      );
+      // The pre-existing React policy still permits automatic Worker public paths.
+      Object.assign(workspace.topology.verticals[0], { renderer: 'react' });
+      workspace.save();
+      const react = createPresetUltramodernWorkspaceConfig({
+        ...workspace.options('catalog'),
+        deployTarget: 'cloudflare',
+        environment: { NODE_ENV: 'production' },
+      });
+      expect(react.output?.assetPrefix).toBe('auto');
+    } finally {
+      workspace.cleanup();
+    }
+  });
+
+  it('resolves explicit Octane asset prefixes before requiring a discovery origin', () => {
+    const workspace = fixture();
+    try {
+      Object.assign(workspace.topology.verticals[0], { renderer: 'octane' });
+      workspace.save();
+      const options = {
+        ...workspace.options('catalog'),
+        environment: { NODE_ENV: 'production' },
+      };
+      for (const name of ['MODERN_ASSET_PREFIX', 'ULTRAMODERN_ASSET_PREFIX']) {
+        const config = createPresetUltramodernWorkspaceConfig({
+          ...options,
+          environment: {
+            ...options.environment,
+            [name]: 'https://explicit.example/assets/',
+          },
+        });
+        expect(config.output?.assetPrefix).toBe(
+          'https://explicit.example/assets/',
+        );
+      }
+      const authored = presetUltramodernWorkspace(
+        { renderer: 'octane', output: { assetPrefix: '/authored/' } },
+        options,
+      );
+      expect(authored.output?.assetPrefix).toBe('/authored/');
+    } finally {
+      workspace.cleanup();
+    }
+  });
+
   it('reads topology updates for each app without rewriting its config or broadening shell references', () => {
     const workspace = fixture();
     try {

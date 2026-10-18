@@ -373,7 +373,7 @@ export function validateWorkspace(
       `${app.path}/shared/ultramodern-build.json`,
       `${app.id} build stamp`,
     );
-    if (!nativeRenderer) {
+    if (!nativeRenderer || generation.capabilities.workers) {
       const cloudflare = record(app.cloudflare, `${app.id} cloudflare`);
       for (const field of ['workerName', 'publicUrlEnv'])
         assert(

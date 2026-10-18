@@ -638,7 +638,8 @@ export function assertNativeRendererSourceSurface(
   for (const script of Object.values(manifest.scripts ?? {})) {
     assert(
       typeof script === 'string' &&
-        !/wrangler|i18n/iu.test(script) &&
+        !/i18n/iu.test(script) &&
+        (generation.capabilities.workers || !/wrangler/iu.test(script)) &&
         (generation.capabilities.federation ||
           !/module-federation/iu.test(script)),
       `${app.id} native renderer scripts claim an unsupported capability`,

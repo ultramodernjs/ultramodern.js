@@ -21,6 +21,7 @@ import {
   type TopologyApp,
 } from '@modern-js/app-tools-extensions/workspace-topology';
 import { createLoadedConfig, mergeConfig } from '@modern-js/plugin/cli';
+import { resolveBrowserManifestAddress } from '@modern-js/surface-resolution';
 import { type PresetUltramodernOptions, presetUltramodern } from './preset';
 import type { AppUserConfig } from './types';
 
@@ -418,16 +419,45 @@ const resolveWorkspaceConfig = (
     configuredCloudflareUrl ||
     inferredCloudflareUrl ||
     (cloudflare ? '' : `http://localhost:${port}`);
-  const defaultAssetPrefix =
+  let defaultAssetPrefix =
     app.kind === 'shell'
       ? '/'
       : remoteAssetOrigin
         ? `${remoteAssetOrigin.replace(/\/+$/u, '')}/`
         : 'auto';
-  const assetPrefix =
+  const assetPrefixOverride =
     envValue(environment, 'MODERN_ASSET_PREFIX') ||
-    envValue(environment, 'ULTRAMODERN_ASSET_PREFIX') ||
-    defaultAssetPrefix;
+    envValue(environment, 'ULTRAMODERN_ASSET_PREFIX');
+  if (
+    !assetPrefixOverride &&
+    config.output?.assetPrefix === undefined &&
+    declaredRenderer === 'octane' &&
+    app.kind === 'vertical' &&
+    Array.isArray(app.moduleFederation?.exposes) &&
+    app.moduleFederation.exposes.length > 0
+  ) {
+    const name = requiredString(
+      app.moduleFederation.name,
+      `${options.appId}.moduleFederation.name`,
+    );
+    const address = resolveBrowserManifestAddress(
+      { ...environment, MODERNJS_DEPLOY: target },
+      {
+        manifestEnv: `VERTICAL_${envSegment(typeof app.domain === 'string' ? app.domain : options.appId)}_MF_MANIFEST`,
+        publicUrlEnv,
+        mfName: name,
+        workerName,
+        port,
+      },
+      environment.NODE_ENV ?? 'production',
+    );
+    if (!address.ok)
+      throw new Error(
+        `[ultramodern-workspace] Remote ${name}: ${address.reason}`,
+      );
+    defaultAssetPrefix = new URL('.', address.manifestUrl).href;
+  }
+  const assetPrefix = assetPrefixOverride || defaultAssetPrefix;
   const buildTarget = cloudflare ? 'cloudflare' : 'web';
   const refs =
     app.verticalRefs ??

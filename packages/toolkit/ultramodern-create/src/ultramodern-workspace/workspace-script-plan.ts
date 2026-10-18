@@ -202,6 +202,15 @@ export function createWorkspaceAppPackageScripts(
       dev: 'ultramodern dev',
       build: 'ultramodern build',
       serve: 'ultramodern serve',
+      ...(resolveAppGenerationProfile(app)?.capabilities.workers
+        ? {
+            'cloudflare:build':
+              'ultramodern build --deploy-target cloudflare && ultramodern deploy --skip-build --deploy-target cloudflare',
+            'cloudflare:deploy':
+              'pnpm run cloudflare:build && wrangler deploy --config .output/wrangler.json',
+            'cloudflare:preview': `pnpm run cloudflare:build && wrangler dev --port ${app.port} --config .output/wrangler.json`,
+          }
+        : {}),
       typecheck:
         resolveAppGenerationProfile(app)?.typecheckCommand ??
         createStrictTsgoTypecheckCommand(app.directory),

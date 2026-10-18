@@ -5,8 +5,13 @@ import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import { parse } from '@babel/parser';
+import { loadUltramodernConfigFile } from '@modern-js/ultramodern-app-tools';
 import { transformSync } from 'esbuild';
 import { WORKSPACE_PACKAGE_VERSION } from '../src/ultramodern-package-source';
+import {
+  addUltramodernVertical,
+  generateUltramodernWorkspace,
+} from '../src/ultramodern-workspace';
 import { rewriteShellAppFiles } from '../src/ultramodern-workspace/add-vertical/shell-files';
 import {
   createVerticalDescriptor,
@@ -22,13 +27,92 @@ import {
   ULTRAMODERN_PACKAGE_PINS,
 } from '../src/ultramodern-workspace/versions';
 import { writeApp } from '../src/ultramodern-workspace/write-app';
-import { snapshotWorkspace } from './helpers/workspace-kit';
+import {
+  linkInstalledCompilerPolicy,
+  snapshotWorkspace,
+} from './helpers/workspace-kit';
 
 const packageSource = {
   strategy: 'workspace',
   modernPackageVersion: '3.8.3',
 } as const;
 const scope = 'native-mf-workspace';
+
+// Preset-capable app configs execute through the actual loader and generated
+// topology. Backend-only config units retain their isolated dependency fixture.
+async function createOctaneConfigWorkspace(
+  root: string,
+  apiProtocol?: 'rest' | 'rpc',
+) {
+  await generateUltramodernWorkspace({
+    targetDir: root,
+    packageName: scope,
+    modernVersion: packageSource.modernPackageVersion,
+    renderer: 'octane',
+    enableTailwind: false,
+    generateAgentFiles: false,
+    packageSource: { strategy: 'workspace' },
+  });
+  linkInstalledCompilerPolicy(root);
+  const result = await addUltramodernVertical({
+    workspaceRoot: root,
+    name: 'catalog',
+    modernVersion: packageSource.modernPackageVersion,
+    renderer: 'octane',
+    preset: apiProtocol ? 'full-stack' : 'ui-only',
+    apiProtocol,
+    enableTailwind: false,
+  });
+  for (const name of [
+    '@modern-js/ultramodern-app-tools',
+    '@modern-js/app-tools-extensions',
+    '@modern-js/plugin-bff-build-extensions',
+  ]) {
+    const destination = path.join(root, 'node_modules', name);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.symlinkSync(
+      fs.realpathSync(path.resolve(__dirname, '../node_modules', name)),
+      destination,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+  }
+  return result.createdApps[0]!;
+}
+
+async function loadAppConfig(
+  appDirectory: string,
+  env: Record<string, string>,
+) {
+  const names = new Set([
+    ...Object.keys(env),
+    'NODE_ENV',
+    'MODERNJS_DEPLOY',
+    'ULTRAMODERN_PUBLIC_URL_CATALOG',
+    'VERTICAL_CATALOG_MF_MANIFEST',
+    'ULTRAMODERN_CLOUDFLARE_WORKERS_DEV_SUBDOMAIN',
+    'MODERN_ASSET_PREFIX',
+    'ULTRAMODERN_ASSET_PREFIX',
+  ]);
+  const previous = new Map([...names].map(name => [name, process.env[name]]));
+  try {
+    for (const name of names) {
+      if (env[name] === undefined) delete process.env[name];
+      else process.env[name] = env[name];
+    }
+    return (
+      await loadUltramodernConfigFile({
+        appDirectory,
+        env: 'production',
+        command: 'build',
+      })
+    ).config;
+  } finally {
+    for (const [name, value] of previous) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+}
 
 /** Execute config with real address policy and declared consumer package versions. */
 function evaluateConfig(
@@ -185,7 +269,7 @@ for (const renderer of ['solid', 'octane'] as const) {
   });
 
   for (const apiProtocol of ['rest', 'rpc'] as const) {
-    test(`${renderer} full-stack ${apiProtocol} vertical emits its advertised API and backend contracts`, () => {
+    test(`${renderer} full-stack ${apiProtocol} vertical emits its advertised API and backend contracts`, async () => {
       const temporary = fs.mkdtempSync(
         path.join(
           process.env.OWNED_TEMP_DIR ?? os.tmpdir(),
@@ -202,9 +286,14 @@ for (const renderer of ['solid', 'octane'] as const) {
           renderer,
           verticalRefs: [remote.id],
         });
-        writeApp(temporary, scope, remote, packageSource, false);
-        writeApp(temporary, scope, shell, packageSource, false, [remote]);
-        const files = snapshotWorkspace(temporary);
+        const workspaceRoot = path.join(temporary, 'workspace');
+        if (renderer === 'octane') {
+          await createOctaneConfigWorkspace(workspaceRoot, apiProtocol);
+        } else {
+          writeApp(workspaceRoot, scope, remote, packageSource, false);
+          writeApp(workspaceRoot, scope, shell, packageSource, false, [remote]);
+        }
+        const files = snapshotWorkspace(workspaceRoot);
         const manifest = JSON.parse(files[`${remote.directory}/package.json`]!);
         const shellManifest = JSON.parse(
           files[`${shell.directory}/package.json`]!,
@@ -234,10 +323,15 @@ for (const renderer of ['solid', 'octane'] as const) {
           'api/effect-api.ts',
         ])
           assert.ok(files[`${remote.directory}/${relative}`]);
-        const modern = evaluateConfig(
-          files[`${remote.directory}/modern.config.ts`]!,
-          { NODE_ENV: 'development' },
-        );
+        const modern =
+          renderer === 'octane'
+            ? await loadAppConfig(path.join(workspaceRoot, remote.directory), {
+                NODE_ENV: 'development',
+                MODERNJS_DEPLOY: 'node',
+              })
+            : evaluateConfig(files[`${remote.directory}/modern.config.ts`]!, {
+                NODE_ENV: 'development',
+              });
         assert.equal(modern.server.bff.effect.entry, './api/index');
         assert.equal(modern.server.bff.effect.strictEffectApproach, true);
         assert.equal(modern.server.bff.runtimeFramework, 'effect');
@@ -262,7 +356,7 @@ for (const renderer of ['solid', 'octane'] as const) {
     });
   }
 
-  test(`${renderer} remote assets use the same authenticated discovery address`, () => {
+  test(`${renderer} remote assets use ${renderer === 'octane' ? 'the generated deployment preset' : 'the authenticated discovery address'}`, async () => {
     const temporary = fs.mkdtempSync(
       path.join(
         process.env.OWNED_TEMP_DIR ?? os.tmpdir(),
@@ -270,6 +364,61 @@ for (const renderer of ['solid', 'octane'] as const) {
       ),
     );
     try {
+      if (renderer === 'octane') {
+        const workspaceRoot = path.join(temporary, 'workspace');
+        const catalog = await createOctaneConfigWorkspace(workspaceRoot);
+        const appDirectory = path.join(workspaceRoot, catalog.directory);
+        const node = await loadAppConfig(appDirectory, {
+          NODE_ENV: 'development',
+          MODERNJS_DEPLOY: 'node',
+        });
+        assert.equal(
+          node.output?.assetPrefix,
+          `http://localhost:${catalog.port}/`,
+        );
+        assert.equal(node.deploy?.worker, undefined);
+        const cloudflare = await loadAppConfig(appDirectory, {
+          NODE_ENV: 'production',
+          MODERNJS_DEPLOY: 'cloudflare',
+          ULTRAMODERN_PUBLIC_URL_CATALOG: 'https://remote.example/assets',
+        });
+        assert.equal(
+          cloudflare.output?.assetPrefix,
+          'https://remote.example/assets/',
+        );
+        assert.equal(cloudflare.output?.distPath?.root, 'dist-cloudflare');
+        assert.equal(cloudflare.deploy?.worker?.ssr, true);
+        const workersDev = await loadAppConfig(appDirectory, {
+          NODE_ENV: 'production',
+          MODERNJS_DEPLOY: 'cloudflare',
+          ULTRAMODERN_CLOUDFLARE_WORKERS_DEV_SUBDOMAIN: 'native-account',
+        });
+        assert.equal(
+          workersDev.output?.assetPrefix,
+          `https://${cloudflare.deploy?.worker?.name}.native-account.workers.dev/`,
+        );
+        for (const target of ['node', 'cloudflare']) {
+          const manifestOnly = await loadAppConfig(appDirectory, {
+            NODE_ENV: 'production',
+            MODERNJS_DEPLOY: target,
+            VERTICAL_CATALOG_MF_MANIFEST:
+              'verticalCatalog@https://cdn.example/releases/mf-manifest.json',
+          });
+          assert.equal(
+            manifestOnly.output?.assetPrefix,
+            'https://cdn.example/releases/',
+          );
+          await assert.rejects(
+            () =>
+              loadAppConfig(appDirectory, {
+                NODE_ENV: 'production',
+                MODERNJS_DEPLOY: target,
+              }),
+            /localhost fallback is disabled/u,
+          );
+        }
+        return;
+      }
       const catalog = createRemote('catalog', 4101);
       writeApp(temporary, scope, catalog, packageSource, false);
       const source = fs.readFileSync(

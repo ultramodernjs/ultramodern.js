@@ -3,12 +3,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { validateRendererRouterBindings } from '@modern-js/backend-federation-contracts';
+import { shellApp } from '../src/ultramodern-workspace/descriptors';
 import {
   assertOverlayPreservedBaseline,
   captureOverlayBaselineSnapshot,
   OverlayBaselineRelaxationError,
 } from '../src/ultramodern-workspace/overlay-baseline-guard';
-import { ULTRAMODERN_WORKSPACE_POLICY } from '../src/ultramodern-workspace/policy';
+import {
+  createCloudflareDeployContract,
+  ULTRAMODERN_WORKSPACE_POLICY,
+} from '../src/ultramodern-workspace/policy';
 import { getRendererGenerationProfile } from '../src/ultramodern-workspace/renderer-profile';
 import {
   assertAuthoredRendererDependencyPins,
@@ -522,8 +526,6 @@ test('native federation admission stays closed across every dependency group and
           `npm:@module-federation/runtime@${ULTRAMODERN_PACKAGE_PINS.appDependencies['@module-federation/runtime']}`,
           /declared federation ABI/u,
         ],
-        ['wrangler', '4.151.0', /unsupported .* capability/u],
-        ['worker-tools', 'npm:wrangler@4.151.0', /unsupported .* capability/u],
       ] as const) {
         const manifest = {
           name: `@fixture/${renderer}`,
@@ -537,6 +539,40 @@ test('native federation admission stays closed across every dependency group and
           () => assertRendererDependencies(manifest, renderer),
           message,
         );
+      }
+      for (const [name, request] of [
+        ['wrangler', '4.151.0'],
+        ['worker-tools', 'npm:wrangler@4.151.0'],
+      ]) {
+        const manifest = {
+          name: `@fixture/${renderer}`,
+          [group]: { [name]: request },
+        };
+        const check = () =>
+          assertAuthoredRendererDependencyPins(manifest, generation);
+        const projectionCheck = () =>
+          assertRendererDependencies(manifest, renderer);
+        if (renderer === 'octane') {
+          assert.doesNotThrow(check);
+          assert.doesNotThrow(projectionCheck);
+          const workerDisabled = {
+            ...generation,
+            capabilities: { ...generation.capabilities, workers: false },
+          };
+          assert.throws(
+            () =>
+              assertAuthoredRendererDependencyPins(manifest, workerDisabled),
+            /unsupported octane capability/u,
+          );
+          assert.throws(
+            () =>
+              assertRendererDependencies(manifest, renderer, workerDisabled),
+            /unsupported octane capability/u,
+          );
+        } else {
+          assert.throws(check, /unsupported solid capability/u);
+          assert.throws(projectionCheck, /unsupported solid capability/u);
+        }
       }
       const gated = {
         ...generation,
@@ -630,7 +666,7 @@ test('native federation runtime requests authenticate the actual framework produ
   }
 });
 
-test('native federation source artifacts are admitted by capability while worker and React artifacts stay rejected', () => {
+test('native source validation admits Worker commands by capability and rejects authored Worker and React artifacts', () => {
   for (const renderer of ['solid', 'octane'] as const) {
     const { root, app, manifest, write } = overlayFixture(renderer);
     const generation = getRendererGenerationProfile(renderer);
@@ -693,12 +729,24 @@ test('native federation source artifacts are admitted by capability while worker
         );
         fs.rmSync(path.join(root, app.path, artifact));
       }
+      const workerScripts = {
+        ...manifest,
+        scripts: { build: 'wrangler deploy' },
+      };
+      if (generation.capabilities.workers) {
+        assertNativeRendererSourceSurface(root, app, generation, workerScripts);
+      }
       assert.throws(
         () =>
-          assertNativeRendererSourceSurface(root, app, generation, {
-            ...manifest,
-            scripts: { build: 'wrangler deploy' },
-          }),
+          assertNativeRendererSourceSurface(
+            root,
+            app,
+            {
+              ...generation,
+              capabilities: { ...generation.capabilities, workers: false },
+            },
+            workerScripts,
+          ),
         /scripts claim an unsupported capability/u,
       );
     } finally {
@@ -734,6 +782,16 @@ test('authored native workspace federation validates discovery, exposes and rend
           name: index === 0 ? 'shell' : 'verticalCatalog',
         },
         verticalRefs: index === 0 ? [remote.id] : [],
+        ...(generation.capabilities.workers
+          ? {
+              cloudflare: createCloudflareDeployContract(scope, {
+                ...shellApp,
+                id: projection.id,
+                kind,
+                directory: projection.path,
+              }),
+            }
+          : {}),
       };
     });
     const overlay = {
@@ -837,6 +895,48 @@ test('authored native workspace federation validates discovery, exposes and rend
       );
       linkInstalledCompiler(root);
       validateWorkspace(root, contract);
+      if (renderer === 'octane') {
+        for (const [index, candidate] of apps.entries()) {
+          for (const [field, message] of [
+            ['cloudflare', /cloudflare must be an object/u],
+            ['workerName', /cloudflare.workerName is required/u],
+            ['publicUrlEnv', /cloudflare.publicUrlEnv is required/u],
+            ['routes', /cloudflare.routes must be an object/u],
+            ['security', /cloudflare.security must be an object/u],
+            ['qualityGates', /cloudflare.qualityGates must be an object/u],
+            ...(index === 0
+              ? [['ssr', /cloudflare SSR route is required/u] as const]
+              : []),
+          ] as const) {
+            const malformed = JSON.parse(JSON.stringify(apps));
+            if (field === 'cloudflare') delete malformed[index].cloudflare;
+            else if (field === 'ssr')
+              delete malformed[index].cloudflare.routes.ssr;
+            else delete malformed[index].cloudflare[field];
+            write('topology/reference-topology.json', {
+              schemaVersion: 1,
+              shell: malformed[0],
+              verticals: [malformed[1]],
+              sharedPackages: [],
+            });
+            assert.throws(
+              () => validateWorkspace(root, contract),
+              message,
+              `${candidate.id} must reject missing ${field}`,
+            );
+          }
+        }
+        write('topology/reference-topology.json', {
+          schemaVersion: 1,
+          shell: apps[0],
+          verticals: [apps[1]],
+          sharedPackages: [],
+        });
+      } else {
+        assert.ok(
+          apps.every(candidate => !Object.hasOwn(candidate, 'cloudflare')),
+        );
+      }
 
       const configs = new Map(
         apps.map(candidate => [

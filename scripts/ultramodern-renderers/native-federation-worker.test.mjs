@@ -15,7 +15,7 @@ import {
   verifyPrebuiltWorkerServices,
 } from './native-federation-worker.mjs';
 
-test('real SDK Octane identities drive authored Worker configs without advertising generated Worker support', async t => {
+test('real SDK Octane Worker contracts preserve authored and topology service bindings', async t => {
   assert(
     process.env.OWNED_TEMP_DIR,
     'Run filesystem tests through owned-temp-dir',
@@ -43,8 +43,10 @@ test('real SDK Octane identities drive authored Worker configs without advertisi
   const originals = [plan.topology.shell, ...plan.topology.verticals];
   for (const app of originals) {
     assert.equal(app.renderer, 'octane');
-    assert.equal(app.rendererCapabilities.workers, false);
-    assert.equal(Object.hasOwn(app, 'cloudflare'), false);
+    assert.equal(app.rendererCapabilities.workers, true);
+    assert.equal(app.cloudflare.target, 'cloudflare');
+    assert.equal(app.cloudflare.assetsBinding, 'ASSETS');
+    assert.match(app.cloudflare.workerName, /^[a-z0-9][a-z0-9-]{0,62}$/u);
   }
   const fixtureOptions = {
     ...plan,
@@ -202,7 +204,43 @@ test('real SDK Octane identities drive authored Worker configs without advertisi
         config.deploy.worker.services,
         index === 0 ? plan.services : (plan.remoteServices[app.id] ?? []),
       );
-      assert.equal(Object.hasOwn(originals[index], 'cloudflare'), false);
+      assert.deepEqual(app.deployment, { workerName: app.id });
+      assert.equal(originals[index].cloudflare.target, 'cloudflare');
+    }
+    const topologyFixture = createOctaneWorkerFederationFixtures({
+      ...fixtureOptions,
+      deploymentSource: 'topology',
+      hostServiceSource: 'authored',
+    });
+    const topologyServices = plan.services.map((service, index) => ({
+      ...service,
+      binding:
+        index === 0 ? 'VERTICAL_WORKER_A_WORKER' : 'VERTICAL_WORKER_B_WORKER',
+      service: originals[index + 1].cloudflare.workerName,
+    }));
+    for (const [
+      index,
+      { app, files },
+    ] of topologyFixture.applications.entries()) {
+      const filename = path.join(
+        workspaceRoot,
+        'workspace',
+        app.directory,
+        'topology-worker-proof.config.ts',
+      );
+      fs.writeFileSync(filename, files['modern.config.ts']);
+      const { default: config } = await import(pathToFileURL(filename).href);
+      assert.equal(config.deploy.target, 'cloudflare');
+      assert.equal(
+        config.deploy.worker.name,
+        originals[index].cloudflare.workerName,
+      );
+      assert.deepEqual(
+        config.deploy.worker.services,
+        index === 0
+          ? [...topologyServices, ...plan.services]
+          : (plan.remoteServices[app.id] ?? []),
+      );
     }
   } finally {
     hooks.deregister();

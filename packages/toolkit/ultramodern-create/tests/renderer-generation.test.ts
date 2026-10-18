@@ -7,7 +7,11 @@ import {
   validateRendererRouterBindings,
   validateUltramodernBuildArtifact,
 } from '@modern-js/backend-federation-contracts';
-import { generateUltramodernWorkspace } from '../src/ultramodern-workspace';
+import { loadUltramodernConfigFile } from '@modern-js/ultramodern-app-tools';
+import {
+  addUltramodernVertical,
+  generateUltramodernWorkspace,
+} from '../src/ultramodern-workspace';
 import { createBuildMarker } from '../src/ultramodern-workspace/delivery-unit';
 import {
   createVerticalDescriptor,
@@ -169,7 +173,7 @@ declare const ULTRAMODERN_SITE_URL: string;
       assert.deepEqual(profile.capabilities, {
         ssr: true,
         streaming: true,
-        workers: false,
+        workers: renderer === 'octane',
         federation: true,
         rsc: false,
       });
@@ -185,7 +189,31 @@ declare const ULTRAMODERN_SITE_URL: string;
       assert.equal(topology.shell.moduleFederation.ssr, true);
       assert.ok(files[`${appDirectory}/module-federation.config.ts`]);
       assert.ok(files[`${appDirectory}/src/routes/remotes/page.tsx`]);
-      assert.equal(Object.hasOwn(topology.shell, 'cloudflare'), false);
+      if (renderer === 'octane') {
+        assert.equal(topology.shell.cloudflare.target, 'cloudflare');
+        assert.equal(typeof topology.shell.cloudflare.workerName, 'string');
+        assert.ok(topology.shell.cloudflare.workerName.length > 0);
+        assert.equal(topology.shell.cloudflare.assetsBinding, 'ASSETS');
+        assert.ok(
+          topology.shell.cloudflare.compatibilityFlags.includes(
+            'enable_request_signal',
+          ),
+        );
+        assert.equal(topology.shell.rendererCapabilities.workers, true);
+      } else {
+        assert.equal(Object.hasOwn(topology.shell, 'cloudflare'), false);
+        for (const generatedManifest of [manifest, rootManifest]) {
+          assert.equal(generatedManifest.devDependencies.wrangler, undefined);
+          for (const command of [
+            'cloudflare:build',
+            'cloudflare:deploy',
+            'cloudflare:preview',
+          ]) {
+            assert.equal(generatedManifest.scripts[command], undefined);
+          }
+        }
+        assert.doesNotMatch(config, /presetUltramodernWorkspace/u);
+      }
       assert.equal(Object.hasOwn(manifest, 'zephyr:dependencies'), false);
       assert.equal(
         manifest.dependencies[`@modern-js/renderer-${renderer}`],
@@ -232,13 +260,15 @@ declare const ULTRAMODERN_SITE_URL: string;
           relativePath === 'package.json'
         ) {
           const packageManifest = JSON.parse(source);
+          if (renderer === 'solid')
+            assert.equal(packageManifest.devDependencies?.wrangler, undefined);
           for (const name of [
             ...Object.keys(packageManifest.dependencies ?? {}),
             ...Object.keys(packageManifest.devDependencies ?? {}),
           ]) {
             assert.doesNotMatch(
               name,
-              /^(?:react(?:-dom)?|@types\/react(?:-dom)?|@tanstack\/react-router|@module-federation\/(?!(?:enhanced|node|runtime)$)|@modern-js\/(?:runtime$|runtime-renderer-extensions$|plugin-(?:i18n|tanstack)$)|wrangler$|miniflare$|zephyr)/u,
+              /^(?:react(?:-dom)?|@types\/react(?:-dom)?|@tanstack\/react-router|@module-federation\/(?!(?:enhanced|node|runtime)$)|@modern-js\/(?:runtime$|runtime-renderer-extensions$|plugin-(?:i18n|tanstack)$)|miniflare$|zephyr)/u,
               `${relativePath}: ${name}`,
             );
             assert.doesNotMatch(
@@ -251,7 +281,9 @@ declare const ULTRAMODERN_SITE_URL: string;
           }
           assert.doesNotMatch(
             JSON.stringify(packageManifest.scripts ?? {}),
-            unsupportedNativeArtifact,
+            renderer === 'octane'
+              ? /(?:mf-types|i18n|locales)/iu
+              : unsupportedNativeArtifact,
             `${relativePath}: scripts`,
           );
         }
@@ -306,6 +338,223 @@ declare const ULTRAMODERN_SITE_URL: string;
     }
   });
 }
+
+test('ordinary Octane generation admits Worker contracts for the shell and added remote', async () => {
+  const tempRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'um-octane-worker-generation-'),
+  );
+  const targetDir = path.join(tempRoot, 'worker-workspace');
+  try {
+    const shell = await generateUltramodernWorkspace({
+      targetDir,
+      packageName: 'worker-workspace',
+      modernVersion: '3.8.3',
+      renderer: 'octane',
+      enableTailwind: false,
+      generateAgentFiles: false,
+      packageSource: { strategy: 'workspace' },
+    });
+    linkInstalledCompilerPolicy(targetDir);
+    const remote = await addUltramodernVertical({
+      workspaceRoot: targetDir,
+      name: 'catalog',
+      renderer: 'octane',
+      horizontalRemote: true,
+      enableTailwind: false,
+      modernVersion: '3.8.3',
+    });
+    const rootManifest = JSON.parse(
+      fs.readFileSync(path.join(targetDir, 'package.json'), 'utf8'),
+    );
+    assert.ok(rootManifest.devDependencies.wrangler);
+    assert.ok(rootManifest.scripts['cloudflare:build']);
+    assert.ok(rootManifest.scripts['cloudflare:deploy']);
+    assert.ok(rootManifest.scripts['cloudflare:preview']);
+    for (const command of [
+      'cloudflare:build',
+      'cloudflare:deploy',
+      'cloudflare:preview',
+    ]) {
+      assert.match(
+        rootManifest.scripts[command],
+        /--filter @worker-workspace\/shell-super-app/u,
+      );
+      assert.match(
+        rootManifest.scripts[command],
+        /--filter @worker-workspace\/catalog/u,
+      );
+    }
+    assert.equal(
+      rootManifest.scripts.build,
+      'pnpm -r --filter "./apps/*" --filter "./verticals/*" run build',
+    );
+    for (const name of [
+      '@modern-js/ultramodern-app-tools',
+      '@modern-js/app-tools-extensions',
+    ]) {
+      const destination = path.join(targetDir, 'node_modules', name);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.symlinkSync(
+        fs.realpathSync(path.resolve(__dirname, '../node_modules', name)),
+        destination,
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+    }
+    assert.deepEqual(shell.warnings, []);
+    assert.deepEqual(remote.warnings, []);
+    const topology = JSON.parse(
+      fs.readFileSync(
+        path.join(targetDir, 'topology/reference-topology.json'),
+        'utf8',
+      ),
+    );
+    assert.equal(topology.verticals.length, 1);
+    const previewPorts = new Set<number>();
+    for (const app of [topology.shell, topology.verticals[0]]) {
+      const generatedApp = [...shell.createdApps, ...remote.createdApps].find(
+        candidate => candidate.id === app.id,
+      )!;
+      previewPorts.add(generatedApp.port);
+      assert.equal(app.renderer, 'octane');
+      assert.equal(app.rendererCapabilities.workers, true);
+      assert.equal(app.cloudflare.target, 'cloudflare');
+      assert.equal(app.cloudflare.assetsBinding, 'ASSETS');
+      assert.ok(
+        app.cloudflare.compatibilityFlags.includes('enable_request_signal'),
+      );
+      assert.equal(app.rendererIdentity.renderer, 'octane');
+      const directory = path.join(targetDir, app.path);
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(directory, 'package.json'), 'utf8'),
+      );
+      assert.ok(manifest.devDependencies.wrangler);
+      assert.equal(manifest.scripts.build, 'ultramodern build');
+      assert.equal(
+        manifest.scripts['cloudflare:build'],
+        'ultramodern build --deploy-target cloudflare && ultramodern deploy --skip-build --deploy-target cloudflare',
+      );
+      assert.equal(
+        manifest.scripts['cloudflare:deploy'],
+        'pnpm run cloudflare:build && wrangler deploy --config .output/wrangler.json',
+      );
+      assert.equal(
+        manifest.scripts['cloudflare:preview'],
+        `pnpm run cloudflare:build && wrangler dev --port ${generatedApp.port} --config .output/wrangler.json`,
+      );
+      const environmentNames = [
+        'MODERNJS_DEPLOY',
+        'NODE_ENV',
+        'ULTRAMODERN_CLOUDFLARE_WORKERS_DEV_SUBDOMAIN',
+        'MODERN_ASSET_PREFIX',
+        'ULTRAMODERN_ASSET_PREFIX',
+        ...[topology.shell, ...topology.verticals].map(
+          candidate => candidate.cloudflare.publicUrlEnv,
+        ),
+      ];
+      const priorEnvironment = new Map(
+        environmentNames.map(name => [name, process.env[name]]),
+      );
+      try {
+        for (const name of environmentNames) delete process.env[name];
+        process.env[app.cloudflare.publicUrlEnv] =
+          `https://${app.cloudflare.workerName}.example.com`;
+        for (const target of ['node', 'cloudflare']) {
+          process.env.MODERNJS_DEPLOY = target;
+          process.env.NODE_ENV =
+            target === 'node' ? 'development' : 'production';
+          const loaded = await loadUltramodernConfigFile({
+            appDirectory: directory,
+            env: 'production',
+            command: 'build',
+          });
+          assert.equal(loaded.config.renderer, 'octane');
+          assert.equal(loaded.config.server?.port, generatedApp.port);
+          assert.equal(
+            loaded.config.output?.distPath?.root,
+            target === 'cloudflare' ? 'dist-cloudflare' : 'dist',
+          );
+          if (target === 'cloudflare') {
+            assert.equal(loaded.config.deploy?.target, 'cloudflare');
+            assert.equal(
+              loaded.config.deploy?.worker?.name,
+              app.cloudflare.workerName,
+            );
+            assert.equal(loaded.config.deploy?.worker?.ssr, true);
+            assert.deepEqual(
+              loaded.config.deploy?.worker?.security,
+              app.cloudflare.security,
+            );
+            const services = loaded.config.deploy?.worker?.services ?? [];
+            assert.equal(services.length, app.kind === 'shell' ? 1 : 0);
+            if (app.kind === 'shell')
+              assert.equal(
+                services[0].service,
+                topology.verticals[0].cloudflare.workerName,
+              );
+          } else assert.equal(loaded.config.deploy?.worker, undefined);
+        }
+        delete process.env[app.cloudflare.publicUrlEnv];
+        process.env.ULTRAMODERN_CLOUDFLARE_WORKERS_DEV_SUBDOMAIN =
+          'worker-account';
+        for (const target of ['cloudflare', 'node']) {
+          process.env.MODERNJS_DEPLOY = target;
+          process.env.NODE_ENV =
+            target === 'node' ? 'development' : 'production';
+          const loaded = await loadUltramodernConfigFile({
+            appDirectory: directory,
+            env: 'production',
+            command: 'build',
+          });
+          assert.equal(
+            loaded.config.output?.assetPrefix,
+            app.kind === 'shell'
+              ? '/'
+              : target === 'cloudflare'
+                ? `https://${app.cloudflare.workerName}.worker-account.workers.dev/`
+                : `http://localhost:${generatedApp.port}/`,
+          );
+        }
+        process.env.MODERNJS_DEPLOY = 'cloudflare';
+        process.env.NODE_ENV = 'production';
+        process.env.ULTRAMODERN_ASSET_PREFIX =
+          'https://ultramodern-assets.example.com/';
+        process.env.MODERN_ASSET_PREFIX = 'https://modern-assets.example.com/';
+        const modernOverride = await loadUltramodernConfigFile({
+          appDirectory: directory,
+          env: 'production',
+          command: 'build',
+        });
+        assert.equal(
+          modernOverride.config.output?.assetPrefix,
+          process.env.MODERN_ASSET_PREFIX,
+        );
+        delete process.env.MODERN_ASSET_PREFIX;
+        const ultramodernOverride = await loadUltramodernConfigFile({
+          appDirectory: directory,
+          env: 'production',
+          command: 'build',
+        });
+        assert.equal(
+          ultramodernOverride.config.output?.assetPrefix,
+          process.env.ULTRAMODERN_ASSET_PREFIX,
+        );
+      } finally {
+        for (const [name, value] of priorEnvironment) {
+          if (value === undefined) delete process.env[name];
+          else process.env[name] = value;
+        }
+      }
+    }
+    assert.equal(previewPorts.size, 2);
+    assert.notEqual(
+      topology.shell.cloudflare.workerName,
+      topology.verticals[0].cloudflare.workerName,
+    );
+    assert.deepEqual(topology.shell.verticalRefs, ['catalog']);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
 
 for (const renderer of ['solid', 'octane'] as const) {
   test(`CodeSmith cannot create ${renderer} UI identity before config capture`, async () => {
