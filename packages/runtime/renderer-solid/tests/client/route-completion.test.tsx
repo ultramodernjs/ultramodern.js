@@ -13,6 +13,7 @@ import { flush } from 'solid-js';
 import { mountApplication } from '../../src/client';
 import {
   ApplicationRouter,
+  Await,
   createApplicationRouter,
   createFileSystemRouteTree,
   createMemoryHistory,
@@ -86,6 +87,8 @@ function byteResponse(
     }),
     resolve: (key: string, value: unknown) =>
       send({ type: 'resolve', key, value }),
+    terminal: () => send({ type: 'complete' }),
+    close: () => controller.close(),
     complete() {
       send({ type: 'complete' });
       controller.close();
@@ -98,7 +101,16 @@ function byteResponse(
 type ByteResponse = ReturnType<typeof byteResponse>;
 
 function fixture(
-  response?: (generation: number, signal: AbortSignal) => Response,
+  response?: (
+    generation: number,
+    signal: AbortSignal,
+  ) => Response | Promise<Response>,
+  options: {
+    initialEntry?: string;
+    staleTime?: number;
+    awaitDeferred?: boolean;
+    pendingComponent?: boolean;
+  } = {},
 ) {
   const requests: Request[] = [];
   const signals: AbortSignal[] = [];
@@ -127,12 +139,33 @@ function fixture(
         item: {
           component: () => {
             const data = useLoaderData({ strict: false });
+            const later = () => {
+              const value: unknown = data();
+              if (
+                value !== null &&
+                typeof value === 'object' &&
+                'later' in value &&
+                value.later instanceof Promise
+              )
+                return value.later;
+              throw new Error('The route has no deferred data');
+            };
             return (
-              <p data-testid="critical">
-                {String(
-                  (data() as Record<string, unknown>).critical ?? 'empty',
-                )}
-              </p>
+              <>
+                <p data-testid="critical">
+                  {String(
+                    (data() as Record<string, unknown>).critical ?? 'empty',
+                  )}
+                </p>
+                {options.awaitDeferred ? (
+                  <Await
+                    promise={later()}
+                    fallback={<p data-testid="pending">pending</p>}
+                  >
+                    {value => <p data-testid="late">{String(value)}</p>}
+                  </Await>
+                ) : null}
+              </>
             );
           },
           errorComponent: ({ error, reset }) => {
@@ -154,12 +187,19 @@ function fixture(
         loadRoute: (_route, input) => client.loader(input),
       },
     ),
-    history: createMemoryHistory({ initialEntries: ['/items/42'] }),
+    history: createMemoryHistory({
+      initialEntries: [options.initialEntry ?? '/items/42'],
+    }),
     origin: 'http://localhost',
     context: { ultramodern: { rendererIdentity: identity } },
-    defaultStaleTime: Number.POSITIVE_INFINITY,
-    defaultPendingMs: 0,
-    defaultPendingMinMs: 0,
+    defaultStaleTime: options.staleTime ?? Number.POSITIVE_INFINITY,
+    ...(options.pendingComponent
+      ? {
+          defaultPendingComponent: () => (
+            <p data-testid="route-pending">loading route</p>
+          ),
+        }
+      : { defaultPendingMs: 0, defaultPendingMinMs: 0 }),
     isServer: false,
   });
   const element = document.createElement('div');
@@ -184,8 +224,12 @@ function fixture(
   };
 }
 
-async function waitFor(predicate: () => boolean, details?: () => unknown) {
-  for (let i = 0; i < 200; i++) {
+async function waitFor(
+  predicate: () => boolean,
+  details?: () => unknown,
+  attempts = 200,
+) {
+  for (let i = 0; i < attempts; i++) {
     flush();
     if (predicate()) return;
     await new Promise(resolve => setTimeout(resolve, 5));
@@ -198,6 +242,114 @@ async function waitFor(predicate: () => boolean, details?: () => unknown) {
 }
 
 describe('native Solid progressive route completion', () => {
+  test('native pending presentation keeps the displayed Await stream alive through terminal EOF', async () => {
+    const stream = byteResponse({ critical: 'native-pending-navigation' }, [
+      'later',
+    ]);
+    let releaseResponse!: (response: Response) => void;
+    const response = new Promise<Response>(resolve => {
+      releaseResponse = resolve;
+    });
+    const app = fixture(() => response, {
+      initialEntry: '/done',
+      staleTime: 0,
+      awaitDeferred: true,
+      pendingComponent: true,
+    });
+    expect(app.router.options.defaultPendingMs).toBe(1000);
+    expect(app.router.options.defaultPendingMinMs).toBe(500);
+    await app.router.load();
+    app.mount();
+    await waitFor(() => app.element.textContent === 'complete');
+    const navigation = app.router.navigate({ href: '/items/42' });
+    await waitFor(
+      () => app.element.querySelector('[data-testid="route-pending"]') !== null,
+      undefined,
+      600,
+    );
+    expect(app.requests).toHaveLength(1);
+    expect(app.signals[0]?.aborted).toBe(false);
+    releaseResponse(stream.response);
+    await waitFor(
+      () => app.element.querySelector('[data-testid="pending"]') !== null,
+      undefined,
+      600,
+    );
+    stream.resolve('later', 'pending-late-value');
+    await waitFor(
+      () =>
+        app.element.querySelector('[data-testid="late"]')?.textContent ===
+        'pending-late-value',
+    );
+    await navigation;
+    stream.terminal();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    flush();
+    expect(app.signals[0]?.aborted).toBe(false);
+    expect(stream.cancellations()).toBe(0);
+    expect(app.requests).toHaveLength(1);
+    expect(
+      app.element.querySelector('[data-testid="route-pending"]'),
+    ).toBeNull();
+    expect(app.errors).toEqual([]);
+    stream.close();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    flush();
+    expect(app.signals[0]?.aborted).toBe(false);
+    expect(stream.cancellations()).toBe(0);
+    expect(app.element.querySelector('[data-testid="late"]')?.textContent).toBe(
+      'pending-late-value',
+    );
+    expect(app.errors).toEqual([]);
+  });
+
+  test('settling the active Await keeps its response alive until terminal framing', async () => {
+    const stream = byteResponse({ critical: 'active-navigation' }, ['later']);
+    const app = fixture(() => stream.response, {
+      initialEntry: '/done',
+      staleTime: 0,
+      awaitDeferred: true,
+    });
+    await app.router.load();
+    app.mount();
+    await waitFor(() => app.element.textContent === 'complete');
+    const navigation = app.router.navigate({ href: '/items/42' });
+    await waitFor(
+      () => app.element.querySelector('[data-testid="pending"]') !== null,
+    );
+    expect(app.requests).toHaveLength(1);
+    expect(app.signals[0]?.aborted).toBe(false);
+    stream.resolve('later', 'active-late-value');
+    await waitFor(
+      () =>
+        app.element.querySelector('[data-testid="late"]')?.textContent ===
+        'active-late-value',
+    );
+    await navigation;
+    expect(app.signals[0]?.aborted).toBe(false);
+    expect(stream.cancellations()).toBe(0);
+    expect(app.requests).toHaveLength(1);
+    stream.terminal();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    flush();
+    expect(app.signals[0]?.aborted).toBe(false);
+    expect(stream.cancellations()).toBe(0);
+    expect(app.requests).toHaveLength(1);
+    expect(app.element.querySelector('[data-testid="late"]')?.textContent).toBe(
+      'active-late-value',
+    );
+    expect(app.errors).toEqual([]);
+    stream.close();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    flush();
+    expect(app.signals[0]?.aborted).toBe(false);
+    expect(stream.cancellations()).toBe(0);
+    expect(app.element.querySelector('[data-testid="late"]')?.textContent).toBe(
+      'active-late-value',
+    );
+    expect(app.errors).toEqual([]);
+  });
+
   test('critical data paints before the real producer resolves deferred data', async () => {
     let resolveLater!: (value: string) => void;
     const later = new Promise<string>(resolve => {

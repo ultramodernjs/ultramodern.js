@@ -20,6 +20,11 @@ export function createRequestDiagnostics({
       owner = { id: ++sequence, startedAtMs: timeMs, startedPhase: phase };
       requests.set(request, owner);
     }
+    if (kind === 'response') {
+      owner.responseAtMs = timeMs;
+      owner.responseStatus = details.status;
+      owner.responseHeaders = details.headers;
+    }
     const event = {
       ...owner,
       page,
@@ -49,11 +54,20 @@ export function createRequestDiagnostics({
     },
     attach(page, label) {
       page.on('request', request => record(label, 'request', request));
-      page.on('response', response =>
+      page.on('response', response => {
+        const headers = response.headers();
         record(label, 'response', response.request(), {
           status: response.status(),
-        }),
-      );
+          headers: Object.fromEntries(
+            ['content-type', 'content-length', 'transfer-encoding'].flatMap(
+              name =>
+                headers[name] === undefined
+                  ? []
+                  : [[name, headers[name].slice(0, 256)]],
+            ),
+          ),
+        });
+      });
       page.on('requestfinished', request => record(label, 'finished', request));
       page.on('requestfailed', request =>
         record(label, 'failed', request, {
@@ -64,9 +78,9 @@ export function createRequestDiagnostics({
     snapshot() {
       return {
         dropped,
-        events: events.map(event => ({ ...event })),
+        events: events.map(event => structuredClone(event)),
         droppedAbnormal,
-        abnormal: abnormal.map(event => ({ ...event })),
+        abnormal: abnormal.map(event => structuredClone(event)),
       };
     },
   };

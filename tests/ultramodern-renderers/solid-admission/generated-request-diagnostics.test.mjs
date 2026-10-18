@@ -26,7 +26,11 @@ test('correlates overlapping page requests, phases and terminal outcomes', () =>
   diagnostic.phase('deferred navigation');
   main.emit('request', first);
   isolated.emit('request', second);
-  main.emit('response', { request: () => first, status: () => 200 });
+  main.emit('response', {
+    request: () => first,
+    status: () => 200,
+    headers: () => ({}),
+  });
   diagnostic.phase('overlapping pages');
   isolated.emit('requestfailed', second);
   main.emit('requestfinished', first);
@@ -88,7 +92,11 @@ test('bounds retained events and strings without losing request identity', () =>
   diagnostic.attach(page, 'main');
   const first = request('x'.repeat(3000), { errorText: 'e'.repeat(1000) });
   page.emit('request', first);
-  page.emit('response', { request: () => first, status: () => 200 });
+  page.emit('response', {
+    request: () => first,
+    status: () => 200,
+    headers: () => ({}),
+  });
   page.emit('requestfailed', first);
   const snapshot = diagnostic.snapshot();
   assert.equal(snapshot.dropped, 1);
@@ -121,12 +129,20 @@ test('retains early failures and HTTP errors after normal traffic rolls over', (
   page.emit('requestfailed', failed);
   const broken = request('http://localhost/broken.js');
   page.emit('request', broken);
-  page.emit('response', { request: () => broken, status: () => 500 });
+  page.emit('response', {
+    request: () => broken,
+    status: () => 500,
+    headers: () => ({}),
+  });
   diagnostic.phase('isolated pages');
   for (let i = 0; i < 10; i++) {
     const healthy = request(`http://localhost/healthy-${i}.js`);
     page.emit('request', healthy);
-    page.emit('response', { request: () => healthy, status: () => 200 });
+    page.emit('response', {
+      request: () => healthy,
+      status: () => 200,
+      headers: () => ({}),
+    });
     page.emit('requestfinished', healthy);
   }
   const snapshot = diagnostic.snapshot();
@@ -150,4 +166,40 @@ test('retains early failures and HTTP errors after normal traffic rolls over', (
   assert.deepEqual(diagnostic.snapshot().abnormal, snapshot.abnormal);
   snapshot.abnormal[0].failure = 'modified snapshot';
   assert.equal(diagnostic.snapshot().abnormal[0].failure, 'net::ERR_ABORTED');
+});
+
+test('retains bounded response metadata with failures after response events roll over', () => {
+  let time = 0;
+  const diagnostic = createRequestDiagnostics({ limit: 1, now: () => time++ });
+  const page = new EventEmitter();
+  diagnostic.attach(page, 'main');
+  const deferred = request('http://localhost/?__loader=index_page', {
+    errorText: 'net::ERR_ABORTED',
+  });
+  page.emit('request', deferred);
+  page.emit('response', {
+    request: () => deferred,
+    status: () => 200,
+    headers: () => ({
+      'content-type': 'application/x-ultramodern-data-stream',
+      'transfer-encoding': 'chunked',
+      'content-length': 'x'.repeat(300),
+      'set-cookie': 'private-cookie',
+    }),
+  });
+  page.emit('request', request('http://localhost/other.js'));
+  page.emit('requestfailed', deferred);
+  const failure = diagnostic.snapshot().abnormal[0];
+  assert.equal(failure.responseAtMs, 2);
+  assert.equal(failure.responseStatus, 200);
+  assert.deepEqual(failure.responseHeaders, {
+    'content-type': 'application/x-ultramodern-data-stream',
+    'transfer-encoding': 'chunked',
+    'content-length': 'x'.repeat(256),
+  });
+  failure.responseHeaders['content-type'] = 'mutated snapshot';
+  assert.equal(
+    diagnostic.snapshot().abnormal[0].responseHeaders['content-type'],
+    'application/x-ultramodern-data-stream',
+  );
 });
