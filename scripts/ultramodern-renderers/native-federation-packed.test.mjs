@@ -447,6 +447,7 @@ test('uses candidate aliases and preserves maintained Octane downloads and tooli
         octane:
           'https://github.com/bleedingdev/octane/releases/download/test/octane.tgz',
         '@module-federation/enhanced': '2.9.2',
+        '@tsrx/oxc': '0.20.0',
         typescript: '7.0.0-test',
         '@types/node': '26.0.0',
       },
@@ -461,6 +462,7 @@ test('uses candidate aliases and preserves maintained Octane downloads and tooli
           [supplied.sourceName]: 'workspace',
           octane: '0.7.1',
           '@module-federation/enhanced': '2.9.1',
+          '@tsrx/oxc': '0.19.0',
         },
       },
       context,
@@ -471,6 +473,15 @@ test('uses candidate aliases and preserves maintained Octane downloads and tooli
     );
     assert.equal(manifest.dependencies.octane, context.packageRequests.octane);
     assert.equal(manifest.dependencies['@module-federation/enhanced'], '2.9.2');
+    assert.equal(manifest.dependencies['@tsrx/oxc'], '0.20.0');
+    assert.throws(
+      () =>
+        packedNativeFederationManifest(
+          { dependencies: { '@tsrx/oxc': '0.20.0' } },
+          { ...context, packageRequests: {} },
+        ),
+      /missing the @tsrx\/oxc dependency pin/u,
+    );
     assert.equal(manifest.devDependencies.typescript, '7.0.0-test');
     assert.throws(
       () =>

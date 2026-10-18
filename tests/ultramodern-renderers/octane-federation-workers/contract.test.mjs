@@ -365,6 +365,7 @@ test('ordinary fixtures retain public generator identity and share one native si
       '@modern-js/renderer-octane',
       '@modern-js/renderer-core',
       '@modern-js/i18n-runtime-extensions',
+      '@tsrx/oxc',
       'octane',
       'i18next',
     ].map(name => [name, '1.0.0']),

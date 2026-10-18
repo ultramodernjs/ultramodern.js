@@ -344,6 +344,7 @@ export function createOctaneWorkerFederationFixtures({
     '@modern-js/renderer-octane',
     '@modern-js/renderer-core',
     '@modern-js/i18n-runtime-extensions',
+    '@tsrx/oxc',
     'octane',
     'i18next',
   ])

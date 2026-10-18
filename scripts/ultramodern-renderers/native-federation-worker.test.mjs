@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createOctaneWorkerFederationFixtures } from '../../tests/ultramodern-renderers/octane-federation-workers/fixtures.mjs';
 import {
   generatePackedWorkerWorkspace,
+  packedWorkerDependencies,
   verifyPackedWorkerProofEnvelope,
   verifyPackedWorkerProofResult,
   verifyPrebuiltWorkerServices,
@@ -47,17 +48,51 @@ test('real SDK Octane identities drive authored Worker configs without advertisi
     ...plan,
     deploymentSource: 'authored',
     remoteOrigins: ['http://127.0.0.1:41001', 'http://127.0.0.1:41002'],
-    dependencies: Object.fromEntries(
-      [
-        '@modern-js/ultramodern-app-tools',
-        '@modern-js/renderer-octane',
-        '@modern-js/renderer-core',
-        '@modern-js/i18n-runtime-extensions',
-        'octane',
-        'i18next',
-      ].map(name => [name, '1.0.0']),
-    ),
+    dependencies: packedWorkerDependencies({
+      cohort: { artifacts: [] },
+      packageRequests: Object.fromEntries(
+        [
+          '@modern-js/ultramodern-app-tools',
+          '@modern-js/renderer-octane',
+          '@modern-js/renderer-core',
+          '@modern-js/i18n-runtime-extensions',
+          '@module-federation/enhanced',
+          '@module-federation/node',
+          '@octanejs/tanstack-router',
+          '@octanejs/rspack-plugin',
+          '@tsrx/oxc',
+          'octane',
+          'i18next',
+        ].map(name => [name, name === '@tsrx/oxc' ? '0.20.0' : '1.0.0']),
+      ),
+    }),
   };
+  assert.throws(
+    () =>
+      packedWorkerDependencies({
+        cohort: { artifacts: [] },
+        packageRequests: {},
+      }),
+    /consumer's declared/u,
+  );
+  const missingParser = { ...fixtureOptions.dependencies };
+  delete missingParser['@tsrx/oxc'];
+  assert.throws(
+    () =>
+      packedWorkerDependencies({
+        cohort: { artifacts: [] },
+        packageRequests: missingParser,
+      }),
+    /consumer's declared @tsrx\/oxc pin/u,
+  );
+  assert.throws(
+    () =>
+      createOctaneWorkerFederationFixtures({
+        ...fixtureOptions,
+        dependencies: missingParser,
+      }),
+    /Missing native fixture dependency @tsrx\/oxc/u,
+  );
   const fixture = createOctaneWorkerFederationFixtures(fixtureOptions);
   // Load the emitted config using the actual public preset, without installing
   // anything into the generated apps or mocking the public API.
@@ -77,9 +112,20 @@ test('real SDK Octane identities drive authored Worker configs without advertisi
   try {
     for (const [index, { app, files }] of fixture.applications.entries()) {
       assert.deepEqual(app.deliveryUnit, originals[index].deliveryUnit);
+      const generatedManifest = JSON.parse(
+        fs.readFileSync(
+          path.join(workspaceRoot, 'workspace', app.directory, 'package.json'),
+          'utf8',
+        ),
+      );
+      assert.equal(generatedManifest.dependencies['@tsrx/oxc'], '0.20.0');
       assert.deepEqual(
         JSON.parse(files['package.json']).modernjs,
         app.manifest.modernjs,
+      );
+      assert.equal(
+        JSON.parse(files['package.json']).dependencies['@tsrx/oxc'],
+        '0.20.0',
       );
       const filename = path.join(
         workspaceRoot,

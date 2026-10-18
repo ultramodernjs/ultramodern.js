@@ -372,6 +372,37 @@ export async function generatePackedWorkerWorkspace({
   };
 }
 
+/** Preserve the seed's exact native compiler peers in every authored app. */
+export function packedWorkerDependencies({ cohort, packageRequests }) {
+  const dependencies = {};
+  for (const name of [
+    '@modern-js/ultramodern-app-tools',
+    '@modern-js/renderer-core',
+    '@modern-js/renderer-octane',
+    '@modern-js/i18n-runtime-extensions',
+    '@module-federation/enhanced',
+    '@module-federation/node',
+    'octane',
+    '@octanejs/tanstack-router',
+    '@octanejs/rspack-plugin',
+    '@tsrx/oxc',
+    'i18next',
+  ]) {
+    const artifact = cohort.artifacts.find(value => value.sourceName === name);
+    if (artifact)
+      dependencies[name] = `npm:${artifact.targetName}@${artifact.version}`;
+    else {
+      const request = packageRequests[name];
+      assert(
+        typeof request === 'string',
+        `Installed Worker acceptance requires the consumer's declared ${name} pin.`,
+      );
+      dependencies[name] = request;
+    }
+  }
+  return dependencies;
+}
+
 async function provePackedWorkers(context, input, signal) {
   const actualBinding = {
     sourceRevision: context.cohort.sourceRevision,
@@ -409,33 +440,7 @@ async function provePackedWorkers(context, input, signal) {
       async () => `http://127.0.0.1:${await reservePort()}`,
     ),
   );
-  const dependencies = {};
-  for (const name of [
-    '@modern-js/ultramodern-app-tools',
-    '@modern-js/renderer-core',
-    '@modern-js/renderer-octane',
-    '@modern-js/i18n-runtime-extensions',
-    '@module-federation/enhanced',
-    '@module-federation/node',
-    'octane',
-    '@octanejs/tanstack-router',
-    '@octanejs/rspack-plugin',
-    'i18next',
-  ]) {
-    const artifact = context.cohort.artifacts.find(
-      value => value.sourceName === name,
-    );
-    if (artifact)
-      dependencies[name] = `npm:${artifact.targetName}@${artifact.version}`;
-    else {
-      const request = context.packageRequests[name];
-      assert(
-        typeof request === 'string',
-        `Installed Worker acceptance requires the consumer's declared ${name} pin.`,
-      );
-      dependencies[name] = request;
-    }
-  }
+  const dependencies = packedWorkerDependencies(context);
   const fixture = createOctaneWorkerFederationFixtures({
     host,
     remotes,
@@ -464,6 +469,21 @@ async function provePackedWorkers(context, input, signal) {
       ),
       signal,
     });
+    // Load the renderer's real native compiler, including its optional parser peer,
+    // from this freshly installed app before starting any Worker compilation.
+    const rendererRequire = createRequire(
+      fs.realpathSync(
+        path.join(
+          appRoot,
+          'node_modules/@modern-js/renderer-octane/package.json',
+        ),
+      ),
+    );
+    assert.equal(
+      typeof rendererRequire('@octanejs/rspack-plugin')
+        .getOctaneRspackBuildInfo,
+      'function',
+    );
     applications.push({
       role: index === 0 ? 'host' : 'remote',
       ...(index ? { remote: app.id } : {}),

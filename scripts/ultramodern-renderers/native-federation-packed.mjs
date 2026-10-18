@@ -27,7 +27,7 @@ import {
 
 const readJson = filename => JSON.parse(fs.readFileSync(filename, 'utf8'));
 const nativeDependency = name =>
-  /^(?:@module-federation\/|@octanejs\/|@solidjs\/|@tanstack\/router-core$|octane$|solid-js$|i18next$|typescript$|@types\/node$)/u.test(
+  /^(?:@module-federation\/|@octanejs\/|@solidjs\/|@tanstack\/router-core$|@tsrx\/oxc$|octane$|solid-js$|i18next$|typescript$|@types\/node$)/u.test(
     name,
   );
 const inside = (parent, child) => {
