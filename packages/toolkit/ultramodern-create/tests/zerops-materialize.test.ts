@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,6 +19,7 @@ type PackageJson = {
   scripts?: Record<string, string>;
   dependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
+  overrides?: Record<string, string>;
   exports?: unknown;
 };
 
@@ -71,6 +72,7 @@ test('Zerops runtime materializer executes deploy, assembles runtime output, and
     });
     const workspaceRealPath = fs.realpathSync(workspaceRoot);
     writeText(path.join(workspaceRoot, 'README.md'), 'original source\n');
+    writeText(path.join(workspaceRoot, 'pnpm-lock.yaml'), 'packages: {}\n');
     const rootManifest = readJson<Record<string, unknown>>(
       path.join(workspaceRoot, 'package.json'),
     );
@@ -294,6 +296,349 @@ fs.writeFileSync(
     );
     assert.equal(sharedModule.sharedValue, 'from-shared');
     assert.deepEqual(sharedModule.tuple, ['shared']);
+  } finally {
+    fs.rmSync(tempRoot, { force: true, recursive: true });
+  }
+});
+
+test('Zerops finalization preserves a prepared worker and uses the installed cohort and locked dependencies', async () => {
+  const tempRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'um-zerops-finalize-'),
+  );
+  try {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    const runtimeRoot = path.join(
+      workspaceRoot,
+      '.zerops/runtime/catalog-worker',
+    );
+    const fakeBinDir = path.join(tempRoot, 'bin');
+    const recordPath = path.join(tempRoot, 'install-package.json');
+    const version = '3.9.3-ultramodern.9';
+    writeJson(path.join(workspaceRoot, 'package.json'), {
+      name: 'zerops-finalize-fixture',
+      devDependencies: {
+        '@modern-js/ultramodern-create': `npm:@bleedingdev/modern-js-ultramodern-create@${version}`,
+      },
+    });
+    writeJson(path.join(workspaceRoot, 'verticals/catalog/package.json'), {
+      name: '@acme/catalog',
+    });
+    writeText(
+      path.join(workspaceRoot, 'pnpm-lock.yaml'),
+      [
+        'packageManager: pnpm@12.11.2',
+        '---',
+        'lockfileVersion: 9.0',
+        'packages:',
+        '  pinned-transitive@2.3.4: {}',
+        '  left-pad@1.0.0: {}',
+        '  ambiguous@1.0.0: {}',
+        '  ambiguous@2.0.0: {}',
+        '  "@acme/scoped@4.5.6": {}',
+        '',
+      ].join('\n'),
+    );
+    const aliases = {
+      '@modern-js/plugin-bff': '@bleedingdev/modern-js-plugin-bff',
+      '@modern-js/runtime': '@bleedingdev/modern-js-runtime',
+    };
+    writeJson(
+      path.join(
+        workspaceRoot,
+        'node_modules/@modern-js/ultramodern-create/release-cohort.json',
+      ),
+      {
+        schema: 'bleedingdev.ultramodern.release-cohort',
+        schemaVersion: 2,
+        source: {
+          commit: 'abc123',
+          repository: 'ultramodernjs/ultramodern.js',
+        },
+        release: { tag: `v${version}`, version },
+        aliases,
+        packages: Object.entries(aliases).map(([sourceName, targetName]) => ({
+          sourceName,
+          targetName,
+          version,
+        })),
+        sidecars: [],
+      },
+    );
+    writeJson(path.join(runtimeRoot, 'package.json'), {
+      name: 'prepared-worker',
+      scripts: { serve: 'node worker.mjs' },
+      dependencies: {
+        '@modern-js/runtime': 'catalog:ultramodern',
+        '@acme/shared': 'workspace:*',
+        'left-pad': '1.0.0',
+        'excluded-os': '1.0.0',
+        'excluded-cpu': '1.0.0',
+      },
+      optionalDependencies: {
+        '@bleedingdev/modern-js-plugin-bff': 'catalog:ultramodern',
+        'allowed-platform': '1.0.0',
+      },
+    });
+    writeText(
+      path.join(runtimeRoot, 'worker.mjs'),
+      "console.log('prepared worker');\n",
+    );
+    writeText(
+      path.join(runtimeRoot, 'worker-artifact.json'),
+      '{"owned":"outbox"}\n',
+    );
+    writeText(
+      path.join(workspaceRoot, 'node_modules/.modules.yaml'),
+      'virtualStoreDir: .pnpm\n',
+    );
+    for (const [name, constraints] of Object.entries({
+      'excluded-os': { os: [`!${process.platform}`] },
+      'excluded-cpu': { cpu: [`!${process.arch}`] },
+      'allowed-platform': { os: ['any'], cpu: [process.arch] },
+    })) {
+      writeJson(
+        path.join(
+          workspaceRoot,
+          'node_modules/.pnpm',
+          `${name}@1.0.0/node_modules`,
+          name,
+          'package.json',
+        ),
+        {
+          name,
+          version: '1.0.0',
+          ...constraints,
+        },
+      );
+    }
+    writeJson(path.join(workspaceRoot, 'packages/shared/package.json'), {
+      name: '@acme/shared',
+      type: 'module',
+      exports: './index.ts',
+    });
+    writeText(
+      path.join(workspaceRoot, 'packages/shared/index.ts'),
+      [
+        "import { makeValue } from './value.ts';",
+        "import './side-effect.ts';",
+        "export { makeValue as exportedValue } from './value.ts';",
+        "export * from './extra.ts';",
+        'export const value: { nested: string } = makeValue();',
+        "export const loadValue = () => import('./value.ts');",
+        "export const literal = './untouched.ts';",
+        `export const help = "import './example.ts'";`,
+        `export const exportHelp = "export * from './example.ts'";`,
+        `export const dynamicHelp = "import('./example.ts')";`,
+      ].join('\n'),
+    );
+    writeText(
+      path.join(workspaceRoot, 'packages/shared/value.ts'),
+      "export function makeValue(): { nested: string } { return { nested: 'worker' }; }\n",
+    );
+    writeText(
+      path.join(workspaceRoot, 'packages/shared/extra.ts'),
+      "export const extraValue: string = 're-exported';\n",
+    );
+    writeText(
+      path.join(workspaceRoot, 'packages/shared/side-effect.ts'),
+      'export {};\n',
+    );
+    writeExecutable(
+      path.join(fakeBinDir, 'pnpm'),
+      "throw new Error('finalize-only must not deploy');",
+    );
+    writeExecutable(
+      path.join(fakeBinDir, 'npm'),
+      `
+const fs = require('node:fs');
+const path = require('node:path');
+fs.copyFileSync(path.join(process.cwd(), 'package.json'), process.env.UM_ZEROPS_INSTALL_RECORD);
+fs.mkdirSync(path.join(process.cwd(), 'node_modules'), { recursive: true });
+`,
+    );
+    execFileSync(
+      process.execPath,
+      [
+        materializeScriptPath,
+        '--app',
+        'catalog-worker',
+        '--package',
+        '@acme/catalog',
+        '--package-dir',
+        'verticals/catalog',
+        '--finalize-only',
+        '--runtime-dir',
+        '.zerops/runtime/catalog-worker',
+      ],
+      {
+        cwd: workspaceRoot,
+        env: {
+          ...process.env,
+          PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ''}`,
+          ULTRAMODERN_WORKSPACE_ROOT: workspaceRoot,
+          UM_ZEROPS_INSTALL_RECORD: recordPath,
+        },
+        stdio: 'pipe',
+        timeout: 20_000,
+      },
+    );
+    assert.equal(
+      fs.readFileSync(path.join(runtimeRoot, 'worker-artifact.json'), 'utf8'),
+      '{"owned":"outbox"}\n',
+    );
+    assert.equal(
+      fs.readFileSync(path.join(runtimeRoot, 'worker.mjs'), 'utf8'),
+      "console.log('prepared worker');\n",
+    );
+    const manifest = readJson<PackageJson>(
+      path.join(runtimeRoot, 'package.json'),
+    );
+    assert.equal(manifest.scripts?.serve, 'node worker.mjs');
+    assert.equal(
+      manifest.dependencies?.['@modern-js/runtime'],
+      `npm:@bleedingdev/modern-js-runtime@${version}`,
+    );
+    assert.equal(
+      manifest.optionalDependencies?.['@modern-js/plugin-bff'],
+      `npm:@bleedingdev/modern-js-plugin-bff@${version}`,
+    );
+    assert.equal(
+      manifest.optionalDependencies?.['@bleedingdev/modern-js-plugin-bff'],
+      version,
+    );
+    assert.equal(manifest.dependencies?.['excluded-os'], undefined);
+    assert.equal(manifest.dependencies?.['excluded-cpu'], undefined);
+    assert.equal(manifest.optionalDependencies?.['allowed-platform'], '1.0.0');
+    const installed = readJson<PackageJson>(recordPath);
+    assert.equal(installed.dependencies?.['@acme/shared'], undefined);
+    assert.deepEqual(installed.overrides, {
+      'pinned-transitive': '2.3.4',
+      '@acme/scoped': '4.5.6',
+    });
+    const shared = await import(
+      pathToFileURL(
+        path.join(runtimeRoot, 'node_modules/@acme/shared/index.js'),
+      ).href
+    );
+    assert.deepEqual(shared.value, { nested: 'worker' });
+    assert.deepEqual(shared.exportedValue(), { nested: 'worker' });
+    assert.equal(shared.extraValue, 're-exported');
+    assert.deepEqual((await shared.loadValue()).makeValue(), {
+      nested: 'worker',
+    });
+    assert.equal(shared.literal, './untouched.ts');
+    assert.equal(shared.help, "import './example.ts'");
+    assert.equal(shared.exportHelp, "export * from './example.ts'");
+    assert.equal(shared.dynamicHelp, "import('./example.ts')");
+    for (const dependencies of [
+      { 'unresolved-package': 'catalog:ultramodern' },
+      { '@modern-js/runtime': 'catalog:unresolved' },
+    ]) {
+      writeJson(path.join(runtimeRoot, 'package.json'), {
+        scripts: { serve: 'node worker.mjs' },
+        dependencies,
+      });
+      writeText(recordPath, 'do not install unresolved catalogs\n');
+      const result = spawnSync(
+        process.execPath,
+        [
+          materializeScriptPath,
+          '--app',
+          'catalog-worker',
+          '--package',
+          '@acme/catalog',
+          '--package-dir',
+          'verticals/catalog',
+          '--finalize-only',
+          '--runtime-dir',
+          '.zerops/runtime/catalog-worker',
+        ],
+        {
+          cwd: workspaceRoot,
+          env: {
+            ...process.env,
+            PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ''}`,
+            ULTRAMODERN_WORKSPACE_ROOT: workspaceRoot,
+            UM_ZEROPS_INSTALL_RECORD: recordPath,
+          },
+          encoding: 'utf8',
+          timeout: 20_000,
+        },
+      );
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(result.stderr, /no installed release identity/u);
+      assert.equal(
+        fs.readFileSync(recordPath, 'utf8'),
+        'do not install unresolved catalogs\n',
+      );
+    }
+  } finally {
+    fs.rmSync(tempRoot, { force: true, recursive: true });
+  }
+});
+
+test('Zerops finalization rejects unknown flags and unsafe runtime paths before touching staged files', () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'um-zerops-paths-'));
+  try {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    writeJson(path.join(workspaceRoot, 'verticals/catalog/package.json'), {
+      name: '@acme/catalog',
+    });
+    const marker = path.join(workspaceRoot, 'protected/marker.txt');
+    writeText(marker, 'preserve\n');
+    fs.mkdirSync(path.join(workspaceRoot, '.zerops/runtime'), {
+      recursive: true,
+    });
+    fs.symlinkSync(
+      path.join(workspaceRoot, 'protected'),
+      path.join(workspaceRoot, '.zerops/runtime/link'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    const baseArgs = [
+      materializeScriptPath,
+      '--app',
+      'catalog',
+      '--package',
+      '@acme/catalog',
+      '--package-dir',
+      'verticals/catalog',
+    ];
+    const rejected: [string[], RegExp][] = [
+      [['--worker'], /Unknown option/u],
+      [['--finalize-only'], /must be used together/u],
+      [['--runtime-dir', '.zerops/runtime/catalog'], /must be used together/u],
+      [
+        ['--finalize-only', '--runtime-dir', '../outside'],
+        /workspace-relative path/u,
+      ],
+      [
+        ['--finalize-only', '--runtime-dir', path.join(tempRoot, 'outside')],
+        /workspace-relative path/u,
+      ],
+      [
+        ['--finalize-only', '--runtime-dir', 'protected'],
+        /inside .zerops\/runtime/u,
+      ],
+      [
+        ['--finalize-only', '--runtime-dir', '.zerops/runtime/link'],
+        /must not contain symlinks/u,
+      ],
+    ];
+    for (const [flags, expectedError] of rejected) {
+      const result = spawnSync(process.execPath, [...baseArgs, ...flags], {
+        cwd: workspaceRoot,
+        env: { ...process.env, ULTRAMODERN_WORKSPACE_ROOT: workspaceRoot },
+        encoding: 'utf8',
+        timeout: 20_000,
+      });
+      assert.equal(
+        result.status,
+        1,
+        JSON.stringify({ flags, stderr: result.stderr }),
+      );
+      assert.match(result.stderr, expectedError);
+      assert.equal(fs.readFileSync(marker, 'utf8'), 'preserve\n');
+    }
   } finally {
     fs.rmSync(tempRoot, { force: true, recursive: true });
   }

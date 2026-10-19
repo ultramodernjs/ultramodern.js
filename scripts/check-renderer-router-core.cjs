@@ -8,7 +8,7 @@ const nativeConsumers = new Set([
 function assertRendererRouterCore(dependency) {
   for (const { version, packages } of dependency.versions) {
     for (const { pathRelative } of packages) {
-      const expected = nativeConsumers.has(pathRelative)
+      const expected = nativeConsumers.has(pathRelative.replaceAll('\\', '/'))
         ? nativeCore
         : '1.171.37';
       if (version !== expected) {

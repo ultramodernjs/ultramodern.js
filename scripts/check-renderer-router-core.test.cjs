@@ -11,6 +11,11 @@ const usage = (pathRelative, version) => ({
 });
 
 test('keeps the accepted native Core separate from the registry bindings', () => {
+  assert.doesNotThrow(() =>
+    assertRendererRouterCore(
+      usage('packages\\runtime\\renderer-octane', nativeCore),
+    ),
+  );
   for (const path of [
     'packages/runtime/renderer-octane',
     'tests/integration/renderer-octane',

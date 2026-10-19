@@ -1343,34 +1343,23 @@ jobs:
           restore-keys: |
             pnpm-store-accept-${{ runner.os }}-
 
-      - name: Install published acceptance tools and await the registry cohort
+      - name: Install published acceptance tools
+        timeout-minutes: 20
+        run: |
+          mise exec -- pnpm install --frozen-lockfile --ignore-scripts \
+            --filter @scripts/ultramodern-production-readiness --filter modern-js-monorepo --filter tests
+
+      - name: Await the registry cohort
         timeout-minutes: 20
         env:
           PUBLISH_CONCURRENCY: ${{ env.BLEEDINGDEV_PUBLISH_CONCURRENCY }}
           PUBLISH_TAG: ${{ env.BLEEDINGDEV_PUBLISH_TAG }}
           PUBLISH_VERSION: ${{ inputs.version }}
         run: |
-          registry_pid=''
-          cleanup_registry_wait() {
-            if [[ -n "$registry_pid" ]]; then
-              kill "$registry_pid" 2>/dev/null || true
-              wait "$registry_pid" 2>/dev/null || true
-            fi
-          }
-          trap cleanup_registry_wait EXIT
-          trap 'exit 130' INT TERM
           timeout --signal=TERM --kill-after=15s 15m \
             bash scripts/ultramodern-publish/wait-for-registry-cohort.sh \
             "$BLEEDINGDEV_RELEASE_DIR" "$PUBLISH_CONCURRENCY" \
-            "$PUBLISH_VERSION" "$PUBLISH_TAG" > "$RUNNER_TEMP/registry-cohort-wait.log" 2>&1 &
-          registry_pid=$!
-          mise exec -- pnpm install --frozen-lockfile --ignore-scripts \
-            --filter @scripts/ultramodern-production-readiness --filter modern-js-monorepo --filter tests
-          status=0
-          wait "$registry_pid" || status=$?
-          registry_pid=''
-          cat "$RUNNER_TEMP/registry-cohort-wait.log"
-          exit "$status"
+            "$PUBLISH_VERSION" "$PUBLISH_TAG"
 
       - name: Run published ERP-10 acceptance
         env:
