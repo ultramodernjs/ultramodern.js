@@ -37,8 +37,8 @@ function packageOwner(file, name) {
   }
 }
 
-// This runs after the normal build in plain Node. Unlike the source unit
-// runner, it cannot redirect app-root package lookup to workspace dependencies.
+// This runs after the normal build in plain Node. Block app-root app-tools
+// lookup explicitly so ancestor node_modules and NODE_PATH cannot satisfy it.
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'native-builder-alias-'));
 try {
   fs.writeFileSync(
@@ -54,6 +54,18 @@ try {
     `export default { name: 'remote', exposes: { './Widget': './Widget.tsrx' }, manifest: { filePath: 'browser/meta', fileName: 'graph.json' } };`,
   );
   fs.mkdirSync(path.join(root, 'node_modules/@modern-js'), { recursive: true });
+  const unavailableAppTools = path.join(
+    root,
+    'node_modules/@modern-js/app-tools/unavailable.cjs',
+  );
+  fs.mkdirSync(path.dirname(unavailableAppTools));
+  fs.writeFileSync(
+    path.join(path.dirname(unavailableAppTools), 'package.json'),
+    JSON.stringify({
+      name: '@modern-js/app-tools',
+      exports: './unavailable.cjs',
+    }),
+  );
   fs.mkdirSync(path.join(root, 'node_modules/@module-federation'), {
     recursive: true,
   });
@@ -74,9 +86,14 @@ try {
   );
 
   const applicationRequire = createRequire(path.join(root, 'package.json'));
-  assert.throws(() => applicationRequire.resolve('@modern-js/app-tools'), {
-    code: 'MODULE_NOT_FOUND',
-  });
+  assert.throws(
+    () => applicationRequire.resolve('@modern-js/app-tools'),
+    error => {
+      assert.equal(error.code, 'MODULE_NOT_FOUND');
+      assert.ok(error.message.includes(unavailableAppTools));
+      return true;
+    },
+  );
   const selected = applicationRequire.resolve('selected-tools');
   assert.ok(selected.startsWith(fs.realpathSync(compositionRoot) + path.sep));
   const { nativeModuleFederationPlugin } = applicationRequire(
