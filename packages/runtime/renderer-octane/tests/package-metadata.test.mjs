@@ -8,8 +8,18 @@ const packageRoot = new URL('../', import.meta.url);
 const manifest = JSON.parse(
   fs.readFileSync(new URL('package.json', packageRoot), 'utf8'),
 );
-const nativeArtifactPeers = ['octane', '@octanejs/tanstack-router'];
-const compilerPeers = ['@octanejs/rspack-plugin', '@rsbuild/core'];
+const acceptedNativeArtifacts = {
+  octane:
+    'https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz',
+  '@octanejs/tanstack-router':
+    'https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-tanstack-router-0.2.10.tgz',
+  '@octanejs/rspack-plugin':
+    'https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-rspack-plugin-0.2.4.tgz',
+  '@tanstack/router-core':
+    'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz',
+};
+const nativeArtifactPeers = Object.keys(acceptedNativeArtifacts);
+const compilerPeers = ['@rsbuild/core', '@tsrx/oxc'];
 const frameworkPeer = '@modern-js/i18n-runtime-extensions';
 const supportedPeers = [
   ...nativeArtifactPeers,
@@ -18,7 +28,7 @@ const supportedPeers = [
   frameworkPeer,
 ];
 
-test('the published SDK preserves optional application peers and framework aliases without exotic runtime subdependencies', () => {
+test('the published SDK preserves application peers, accepted artifacts and framework aliases without exotic runtime subdependencies', () => {
   const published = structuredClone(manifest);
   rewritePackageJson(
     published,
@@ -64,9 +74,14 @@ test('the published SDK preserves optional application peers and framework alias
     );
     assert.equal(published.dependencies?.[name], undefined);
     assert.equal(published.optionalDependencies?.[name], undefined);
-    assert.equal(manifest.peerDependenciesMeta?.[name]?.optional, true);
-    assert.equal(published.peerDependenciesMeta?.[name]?.optional, true);
+    const optional = name === '@tanstack/router-core' ? undefined : true;
+    assert.equal(manifest.peerDependenciesMeta?.[name]?.optional, optional);
+    assert.equal(published.peerDependenciesMeta?.[name]?.optional, optional);
   }
+  assert.deepEqual(
+    published.ultramodern.nativeArtifacts,
+    manifest.ultramodern.nativeArtifacts,
+  );
   for (const dependencies of [
     published.dependencies,
     published.optionalDependencies,
@@ -80,6 +95,11 @@ test('the published SDK preserves optional application peers and framework alias
 test('SDK development retains the immutable native artifacts matching its installed peer versions', () => {
   for (const name of nativeArtifactPeers) {
     const version = manifest.peerDependencies[name];
+    const artifact = manifest.ultramodern.nativeArtifacts[name];
+    assert.equal(manifest.devDependencies[name], acceptedNativeArtifacts[name]);
+    assert.equal(artifact.request, acceptedNativeArtifacts[name]);
+    assert.equal(artifact.version, version);
+    assert.match(artifact.integrity, /^sha512-[A-Za-z0-9+/]{86}==$/u);
     const nativeManifest = JSON.parse(
       fs.readFileSync(
         new URL(`node_modules/${name}/package.json`, packageRoot),
@@ -88,19 +108,14 @@ test('SDK development retains the immutable native artifacts matching its instal
     );
     assert.equal(nativeManifest.name, name);
     assert.equal(nativeManifest.version, version);
-    const transport = new URL(manifest.devDependencies[name]);
-    assert.equal(transport.protocol, 'https:');
-    assert.equal(transport.hostname, 'github.com');
-    const file = `${name.replace('@', '').replace('/', '-')}-${version}.tgz`;
-    assert.equal(
-      decodeURIComponent(transport.pathname),
-      `/bleedingdev/octane/releases/download/${name}@${version}/${file}`,
-    );
   }
 });
 
 test('SDK development resolves framework, i18n and compiler peers from their declared sources', () => {
-  assert.equal(manifest.peerDependencies[frameworkPeer], 'workspace:*');
+  assert.equal(
+    manifest.peerDependencies[frameworkPeer],
+    `workspace:^${manifest.version}`,
+  );
   assert.equal(manifest.devDependencies[frameworkPeer], 'workspace:*');
   const frameworkManifest = JSON.parse(
     fs.readFileSync(
