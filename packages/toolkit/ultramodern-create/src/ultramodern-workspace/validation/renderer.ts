@@ -441,12 +441,15 @@ export function assertAuthoredRendererDependencyPins(
     [profile.router.name]: profile.router.version,
     [profile.router.coreName]: profile.router.coreVersion,
   };
+  // Install requests may identify accepted archives while the profile keeps
+  // their contained package ABI versions.
   for (const [name, version] of Object.entries({
     ...generation.dependencies,
     ...generation.devDependencies,
   })) {
     if (
       name === profile.compiler.name ||
+      name === profile.router.coreName ||
       isForeignRendererPackage(name, 'none')
     )
       pins[name] = version;

@@ -1146,6 +1146,10 @@ test('maintained Octane distribution pins match the generated requests exactly',
     generation.profile.compiler,
     generation.profile.hydration,
     generation.profile.router,
+    {
+      name: generation.profile.router.coreName,
+      version: generation.profile.router.coreVersion,
+    },
   ]) {
     const request = generation.dependencies[profile.name];
     assert.equal(typeof request, 'string');
@@ -1184,6 +1188,11 @@ test('maintained Octane distribution pins match the generated requests exactly',
       );
     }
   }
+  assert.equal(generation.profile.router.coreVersion, '1.171.38');
+  assert.equal(
+    generation.dependencies[generation.profile.router.coreName],
+    'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz',
+  );
 });
 
 test('framework router workspace requests require actual producer version evidence', () => {

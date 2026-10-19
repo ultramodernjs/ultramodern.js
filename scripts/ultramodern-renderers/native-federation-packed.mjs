@@ -902,6 +902,13 @@ export async function runPackedNativeFederationProof({
   processWitnessPaths = ['remote', 'host', 'host-csr'].map(directory =>
     path.join(directory, 'packed-mf-install-process.json'),
   ),
+  registerRoot = registerOwnedRoot,
+  releaseRoot = (directory, owner) =>
+    execFileSync(
+      'disk-guardian-artifacts',
+      ['release', directory, '--owner', owner],
+      { stdio: 'pipe' },
+    ),
 }) {
   assert(['solid', 'octane'].includes(renderer));
   assert(
@@ -919,7 +926,7 @@ export async function runPackedNativeFederationProof({
   );
   verifyPackedNativeFederationInputs(consumerRoot, contextExtras.nativeInputs);
   const owner = `renderer-mf-packed-${renderer}-${process.pid}`;
-  const registration = registerOwnedRoot({
+  const registration = registerRoot({
     workDir,
     owner,
     ownerPid: process.pid,
@@ -1006,12 +1013,7 @@ export async function runPackedNativeFederationProof({
       // The caller's lease owns only the new proof tree. Installed starter
       // packages and the shared pnpm store remain outside this cleanup.
       try {
-        if (registration.status === 'registered')
-          execFileSync(
-            'disk-guardian-artifacts',
-            ['release', workDir, '--owner', owner],
-            { stdio: 'pipe' },
-          );
+        if (registration.status === 'registered') releaseRoot(workDir, owner);
         fs.rmSync(workDir, { recursive: true });
       } catch (error) {
         failure = failure

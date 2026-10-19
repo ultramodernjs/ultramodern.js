@@ -5,6 +5,7 @@ import { once } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { registerOwnedRoot } from '../ultramodern-production-readiness/react-rsc-worker-proof/lifecycle.mjs';
 import { nativeStartSharedPeers } from './native-federation-inputs.mjs';
 import {
   packedNativeFederationManifest,
@@ -314,6 +315,7 @@ test('witness directories record the actual command child PID', async () => {
 test('parent cleanup retires a workspace installer recorded at numeric witness 0.json', async () => {
   const supplied = fixture();
   const copiedWitness = path.join(supplied.root, 'child-process.json');
+  const lifecycleEvents = [];
   try {
     const proofScript = path.join(supplied.root, 'exit-before-cleanup.mjs');
     fs.writeFileSync(
@@ -342,7 +344,30 @@ process.exit(0);
       env: process.env,
       proofScript,
       contextExtras: { copiedWitness },
+      registerRoot: options =>
+        registerOwnedRoot(options, {
+          env: {},
+          registerImpl: (command, args) => {
+            assert.equal(command, 'disk-guardian-artifacts');
+            assert.equal(args[0], 'register');
+            assert.equal(args.at(-1), workDir);
+            assert.equal(
+              args[args.indexOf('--owner-pid') + 1],
+              String(process.pid),
+            );
+            lifecycleEvents.push(['register', options.workDir, options.owner]);
+          },
+        }),
+      releaseRoot: (directory, owner) => {
+        assert.equal(fs.existsSync(directory), true);
+        lifecycleEvents.push(['release', directory, owner]);
+      },
     });
+    const owner = `renderer-mf-packed-octane-${process.pid}`;
+    assert.deepEqual(lifecycleEvents, [
+      ['register', workDir, owner],
+      ['release', workDir, owner],
+    ]);
     assert.equal(fs.existsSync(workDir), false);
     const retirement = await retirePackedNativeFederationInstaller(
       JSON.parse(fs.readFileSync(copiedWitness, 'utf8')),
