@@ -28,11 +28,11 @@ export const octaneProfile: RendererBuildProfile<'octane'> = {
   dependencies: {
     '@tsrx/oxc': '0.20.0',
     octane:
-      'https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz',
+      'https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz',
     '@octanejs/tanstack-router':
-      'https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-tanstack-router-0.2.10.tgz',
+      'https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz',
     '@octanejs/rspack-plugin':
-      'https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-rspack-plugin-0.2.4.tgz',
+      'https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz',
     '@tanstack/router-core':
       'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz',
     '@modern-js/renderer-octane': '3.8.3',
