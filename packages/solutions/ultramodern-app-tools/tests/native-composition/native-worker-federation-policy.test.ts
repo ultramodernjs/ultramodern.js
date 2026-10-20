@@ -258,8 +258,12 @@ describe('native Worker remote URL policy through public configuration', () => {
       cs: '/remote-hook/remote-config/cs/_mf/fragment/komponenta',
       en: '/remote-hook/remote-config/en/_mf/fragment/widget',
     });
-    expect(JSON.parse(fs.readFileSync(remote.routeTrace, 'utf8'))).toEqual({
-      appDirectory: fixture.remote,
+    const routeTrace = JSON.parse(fs.readFileSync(remote.routeTrace, 'utf8'));
+    expect({
+      ...routeTrace,
+      appDirectory: fs.realpathSync.native(routeTrace.appDirectory),
+    }).toEqual({
+      appDirectory: fs.realpathSync.native(fixture.remote),
       command: 'metadata',
       input: ['/remote-config'],
     });

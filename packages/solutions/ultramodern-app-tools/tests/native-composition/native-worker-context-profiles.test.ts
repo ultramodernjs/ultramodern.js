@@ -8,7 +8,7 @@ import { resolveNativeWorkerContextProfiles } from '../../src/native-composition
 const directories: string[] = [];
 
 function fixture() {
-  const root = fs.realpathSync(
+  const root = fs.realpathSync.native(
     fs.mkdtempSync(
       path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'worker-profiles-'),
     ),

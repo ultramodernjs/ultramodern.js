@@ -133,10 +133,13 @@ describe('native Worker federation build plan', () => {
         '/app',
       ),
     ).toEqual([
-      { expose: './Counter', import: '/app/src/Counter.tsx' },
-      { expose: './Nested/Totals', import: '/app/src/Totals.ts' },
-      { expose: './Route', import: '/app/src/Route.tsx' },
-      { expose: './Widget', import: '/app/src/Widget.tsrx' },
+      { expose: './Counter', import: path.resolve('/app', 'src/Counter.tsx') },
+      {
+        expose: './Nested/Totals',
+        import: path.resolve('/app', 'src/Totals.ts'),
+      },
+      { expose: './Route', import: path.resolve('/app', 'src/Route.tsx') },
+      { expose: './Widget', import: path.resolve('/app', 'src/Widget.tsrx') },
     ]);
     expect(normalizeNativeWorkerFederationExposes(undefined, '/app')).toEqual(
       [],
