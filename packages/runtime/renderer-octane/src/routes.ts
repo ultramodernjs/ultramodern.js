@@ -29,6 +29,13 @@ import {
 } from '@octanejs/tanstack-router';
 import { createElement, Fragment } from 'octane';
 
+const fileRouteHeads = new WeakMap<AnyRoute, AnyRoute['options']['head']>();
+
+/** Head callbacks execute on the host; only the factory's original binding is admitted. */
+export function hasUnchangedOctaneFileRouteHead(route: AnyRoute): boolean {
+  return fileRouteHeads.get(route) === route.options.head;
+}
+
 export type {
   FileSystemDataModule,
   FileSystemRouteOptions,
@@ -241,6 +248,7 @@ export function createFileSystemRouteTree<Context = unknown>(
     ...rootBindings,
     component: OctaneDocumentRoot,
   });
+  fileRouteHeads.set(root, root.options.head);
 
   function bind(
     route: FileSystemRouteIR,
@@ -254,6 +262,7 @@ export function createFileSystemRouteTree<Context = unknown>(
       ...nativeRoutePath(route),
       ...bindings(route, errorComponent),
     });
+    fileRouteHeads.set(native, native.options.head);
     return native.addChildren(
       route.children.map(child => bind(child, native, errorComponent)),
     );
