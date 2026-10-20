@@ -41,7 +41,8 @@ env:
 jobs:
   accept-release:
     name: Clean-room acceptance of the immutable release bundle
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || fromJSON(vars.BLEEDINGDEV_ACCEPT_RUNNER_LABELS || '"ubuntu-latest"') }}
+    # Required feature proofs validate a GitHub-hosted RUNNER_TEMP lease.
+    runs-on: ${{ inputs.required_renderer_features && 'ubuntu-24.04' || github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || fromJSON(vars.BLEEDINGDEV_ACCEPT_RUNNER_LABELS || '"ubuntu-latest"') }}
     timeout-minutes: 180
     outputs:
       producer_artifact_identity: ${{ inputs.producer_artifact_identity }}

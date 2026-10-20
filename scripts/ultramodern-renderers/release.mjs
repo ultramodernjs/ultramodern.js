@@ -595,10 +595,23 @@ async function main() {
         async () => overlayFixture(appRoot, renderer, release),
         ready,
       );
+      // The authored fixture can add dependencies after the starter install.
+      // Resolve those requests under the same release-age and trust policy,
+      // then prove the actual installation consumes that lock unchanged.
+      ready = await step(
+        `${renderer} resolve fixture`,
+        () =>
+          sh('pnpm', ['install', '--lockfile-only', '--no-frozen-lockfile'], {
+            cwd: workspace,
+            env,
+            log: `${renderer}-resolve-fixture`,
+          }),
+        ready,
+      );
       ready = await step(
         `${renderer} install`,
         () =>
-          sh('pnpm', ['install'], {
+          sh('pnpm', ['install', '--frozen-lockfile'], {
             cwd: workspace,
             env,
             log: `${renderer}-install`,

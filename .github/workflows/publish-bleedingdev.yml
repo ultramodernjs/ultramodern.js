@@ -1263,8 +1263,8 @@ jobs:
   # renderer feature proofs run again using registry-resolved installed bytes.
   accept-published:
     name: Accept the exact published registry cohort
-    # Use the same Depot selection and fallback as accept-release.
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || fromJSON(vars.BLEEDINGDEV_ACCEPT_RUNNER_LABELS || '"ubuntu-latest"') }}
+    # Installed feature proofs validate a GitHub-hosted RUNNER_TEMP lease.
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     if: >-
       always() &&

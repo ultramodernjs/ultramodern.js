@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import yaml from '../../packages/toolkit/utils/compiled/js-yaml/index.js';
 
 const readWorkflow = name =>
@@ -147,4 +148,58 @@ test('required native PR checks run focused renderer acceptance controls', () =>
     /scripts\/native-compatibility\/packed-workflows\.test\.mjs/u,
   );
   assert.match(controls.run, /trap 'rm -rf -- "\$controls_work"' EXIT/u);
+});
+
+test('required feature proofs select real GitHub-hosted Linux without changing ordinary acceptance runners', () => {
+  const source = readWorkflow('ultramodern-release-acceptance').jobs[
+    'accept-release'
+  ];
+  const published = readWorkflow('publish-bleedingdev').jobs[
+    'accept-published'
+  ];
+  const expression = source['runs-on'].slice(3, -3);
+  const select = (required, vars = {}, foreign = false) =>
+    runInNewContext(expression, {
+      inputs: { required_renderer_features: required },
+      github: {
+        event_name: 'pull_request',
+        repository: 'owner/repo',
+        event: {
+          pull_request: {
+            head: {
+              repo: { full_name: foreign ? 'contributor/repo' : 'owner/repo' },
+            },
+          },
+        },
+      },
+      vars,
+      fromJSON: JSON.parse,
+    });
+  for (const foreign of [false, true]) {
+    assert.equal(
+      select(true, { DEPOT_LINUX_RUNNER: 'depot-linux' }, foreign),
+      'ubuntu-24.04',
+    );
+    assert.equal(
+      select(
+        true,
+        { BLEEDINGDEV_ACCEPT_RUNNER_LABELS: '["self-hosted","linux"]' },
+        foreign,
+      ),
+      'ubuntu-24.04',
+    );
+  }
+  assert.equal(
+    select(false, { DEPOT_LINUX_RUNNER: 'depot-linux' }),
+    'depot-linux',
+  );
+  assert.equal(select(false, {}, true), 'ubuntu-latest');
+  assert.equal(select(false), 'ubuntu-latest');
+  assert.equal(published['runs-on'], 'ubuntu-24.04');
+  for (const job of [source, published]) {
+    for (const env of [job.env, ...job.steps.map(step => step.env)]) {
+      assert.equal(env?.RUNNER_ENVIRONMENT, undefined);
+      assert.equal(env?.GITHUB_ACTIONS, undefined);
+    }
+  }
 });
