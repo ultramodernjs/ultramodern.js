@@ -20,6 +20,7 @@ import {
 } from './native-federation-inputs.mjs';
 import {
   installPackedNativeFederationDependencies,
+  packedI18nextRequest,
   readPackedNativeFederationContext,
   runPackedNativeFederationCommand,
   runPackedNativeFederationProof,
@@ -278,7 +279,6 @@ export function generatedWorkerDependencies(context) {
     '@modern-js/renderer-core',
     '@modern-js/i18n-runtime-extensions',
     'octane',
-    'i18next',
   ]) {
     const artifact = context.cohort.artifacts.find(
       item => item.sourceName === name,
@@ -292,6 +292,7 @@ export function generatedWorkerDependencies(context) {
     );
     assert(!/^(?:workspace:|link:|file:)/u.test(dependencies[name]));
   }
+  dependencies.i18next = packedI18nextRequest(context);
   return dependencies;
 }
 

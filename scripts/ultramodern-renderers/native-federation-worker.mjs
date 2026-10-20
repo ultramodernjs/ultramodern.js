@@ -15,6 +15,7 @@ import { reservePort } from '../ultramodern-production-readiness/renderer-mf-lif
 import { nativeStartArchiveRequests } from './native-federation-inputs.mjs';
 import {
   installedBin,
+  packedI18nextRequest,
   preparePackedNativeFederationWorkspace,
   readPackedNativeFederationContext,
   runPackedNativeFederationCommand,
@@ -503,7 +504,8 @@ export async function generatePackedWorkerWorkspace({
 }
 
 /** Preserve the seed's exact native compiler peers in every authored app. */
-export function packedWorkerDependencies({ cohort, packageRequests }) {
+export function packedWorkerDependencies(context) {
+  const { cohort, packageRequests } = context;
   const startRequests = nativeStartArchiveRequests(packageRequests);
   const dependencies = {};
   for (const name of [
@@ -517,7 +519,6 @@ export function packedWorkerDependencies({ cohort, packageRequests }) {
     '@octanejs/tanstack-router',
     '@octanejs/rspack-plugin',
     '@tsrx/oxc',
-    'i18next',
   ]) {
     const artifact = cohort.artifacts.find(value => value.sourceName === name);
     if (artifact)
@@ -531,6 +532,7 @@ export function packedWorkerDependencies({ cohort, packageRequests }) {
       dependencies[name] = request;
     }
   }
+  dependencies.i18next = packedI18nextRequest(context);
   for (const name of ['@tanstack/router-core', ...Object.keys(startRequests)])
     if (packageRequests[name]) dependencies[name] = packageRequests[name];
   return dependencies;

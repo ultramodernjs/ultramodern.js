@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  configureHostedRendererSandbox,
   provisionRendererBrowser,
   rendererBrowserTools,
   rendererBrowserVersion,
@@ -86,7 +87,11 @@ for (const platform of ['linux', 'mac', 'mac_arm', 'win64'])
       },
     ]);
     assert.deepEqual(supplied.calls.launches, [
-      { headless: true, executablePath: output.executable_path },
+      {
+        headless: true,
+        executablePath: output.executable_path,
+        chromiumSandbox: true,
+      },
     ]);
     assert.equal(output.browser_version, '157.0.8103.6');
     assert.equal(output.browser_platform, platform);
@@ -118,6 +123,36 @@ test('rejects an unsupported platform before any browser installation', async t 
     /Unsupported CfT platform/u,
   );
   assert.equal(supplied.calls.installs.length, 0);
+});
+
+test('requires successful sandbox provisioning before the real launch', async t => {
+  const root = directory(t);
+  const supplied = tools(root);
+  const failure = new Error('sandbox provisioning failed');
+  let configured;
+  await assert.rejects(
+    provisionRendererBrowser(
+      { environment: { RUNNER_TEMP: root } },
+      {
+        resolveTools: () => supplied.value,
+        configureSandbox(executable) {
+          configured = executable;
+          throw failure;
+        },
+      },
+    ),
+    error => error === failure,
+  );
+  assert.equal(
+    configured,
+    path.join(
+      root,
+      `renderer-chrome-${rendererBrowserVersion}-linux`,
+      'chrome-control',
+    ),
+  );
+  assert.equal(supplied.calls.installs.length, 1);
+  assert.equal(supplied.calls.launches.length, 0);
 });
 
 test('rejects an unexpected installed path before launching it', async t => {
@@ -225,4 +260,104 @@ test('writes the exact executable output and rejects multiline paths', t => {
       ),
     /one line/u,
   );
+});
+
+function hostedSandbox(t) {
+  const root = directory(t);
+  const binary = path.join(root, 'chrome');
+  fs.writeFileSync(binary, 'fabricated executable');
+  const environment = {
+    RUNNER_TEMP: root,
+    GITHUB_ACTIONS: 'true',
+    RUNNER_ENVIRONMENT: 'github-hosted',
+  };
+  return { root, binary, environment };
+}
+
+test('allows user namespaces only for the exact hosted Chrome and removes its policy source', t => {
+  const { binary, environment } = hostedSandbox(t);
+  const calls = [];
+  configureHostedRendererSandbox(binary, {
+    environment,
+    platform: 'linux',
+    command(name, args, options) {
+      calls.push({ name, args, options });
+      assert.equal(name, 'sudo');
+      assert.deepEqual(args.slice(0, 3), [
+        '-n',
+        'apparmor_parser',
+        '--replace',
+      ]);
+      assert.equal(
+        fs.readFileSync(args[3], 'utf8'),
+        `abi <abi/4.0>,\ninclude <tunables/global>\nprofile ultramodern-renderer-chrome-${process.pid} "${binary}" flags=(unconfined) {\n  userns,\n}\n`,
+      );
+    },
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(fs.existsSync(calls[0].args[3]), false);
+});
+
+test('sandbox provisioning fails closed and retires its own policy source', t => {
+  const { binary, environment } = hostedSandbox(t);
+  const failure = new Error('AppArmor rejected profile');
+  assert.throws(
+    () =>
+      configureHostedRendererSandbox(binary, {
+        environment,
+        platform: 'linux',
+        command() {
+          throw failure;
+        },
+      }),
+    error => error === failure,
+  );
+  assert.equal(
+    fs.existsSync(path.join(path.dirname(binary), 'renderer-chrome.apparmor')),
+    false,
+  );
+});
+
+test('does not change sandbox policy outside a GitHub-hosted Linux job', t => {
+  const { binary, environment } = hostedSandbox(t);
+  for (const options of [
+    { platform: 'darwin', environment },
+    { platform: 'win32', environment },
+    {
+      platform: 'linux',
+      environment: { ...environment, RUNNER_ENVIRONMENT: 'self-hosted' },
+    },
+    {
+      platform: 'linux',
+      environment: { ...environment, GITHUB_ACTIONS: 'false' },
+    },
+  ])
+    configureHostedRendererSandbox(binary, {
+      ...options,
+      command() {
+        assert.fail('must not configure this host');
+      },
+    });
+});
+
+test('rejects a foreign binary and AppArmor glob syntax before privilege elevation', t => {
+  const { root, binary, environment } = hostedSandbox(t);
+  const foreignRoot = directory(t);
+  const foreignBinary = path.join(foreignRoot, 'chrome');
+  fs.writeFileSync(foreignBinary, 'foreign executable');
+  const globBinary = path.join(root, 'chrome*');
+  fs.writeFileSync(globBinary, 'glob executable');
+  for (const executable of [foreignBinary, globBinary])
+    assert.throws(
+      () =>
+        configureHostedRendererSandbox(executable, {
+          environment,
+          platform: 'linux',
+          command() {
+            assert.fail('must reject before sudo');
+          },
+        }),
+      /job temporary directory|Unsafe AppArmor/u,
+    );
+  assert.equal(fs.existsSync(binary), true);
 });

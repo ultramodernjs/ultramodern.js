@@ -8,6 +8,7 @@ import test from 'node:test';
 import { registerOwnedRoot } from '../ultramodern-production-readiness/react-rsc-worker-proof/lifecycle.mjs';
 import { nativeStartSharedPeers } from './native-federation-inputs.mjs';
 import {
+  packedI18nextRequest,
   packedNativeFederationManifest,
   retirePackedNativeFederationInstaller,
   runPackedNativeFederationCommand,
@@ -22,6 +23,30 @@ assert(
   process.env.OWNED_TEMP_DIR,
   'Run these filesystem tests through owned-temp-dir',
 );
+
+test('authored i18n consumers use the authenticated cohort pin when the seed has no i18n', () => {
+  const context = {
+    packageRequests: {},
+    release: {
+      packages: [
+        {
+          sourceName: '@modern-js/i18n-runtime-extensions',
+          packageJson: { devDependencies: { i18next: '26.1.3' } },
+        },
+      ],
+    },
+  };
+  assert.equal(packedI18nextRequest(context), '26.1.3');
+  context.packageRequests.i18next = '26.1.4';
+  assert.equal(packedI18nextRequest(context), '26.1.4');
+  context.packageRequests.i18next = '^26.1.4';
+  assert.throws(() => packedI18nextRequest(context), /pin i18next exactly/u);
+  delete context.packageRequests.i18next;
+  context.release.packages[0].packageJson.devDependencies.i18next = '^26.1.3';
+  assert.throws(() => packedI18nextRequest(context), /pin i18next exactly/u);
+  context.release.packages = [];
+  assert.throws(() => packedI18nextRequest(context), /pin i18next exactly/u);
+});
 
 function fixture() {
   const root = fs.mkdtempSync(

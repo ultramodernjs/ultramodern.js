@@ -1386,16 +1386,23 @@ jobs:
           mise exec -- node scripts/lib/browser-provisioning.js --install --runtime tests
           --version ${{ steps.renderer-browser-runtime.outputs.version }}
 
+      - name: Install pinned installed-renderer browser CLI
+        id: renderer-browser-cli
+        run: mise exec -- node scripts/ultramodern-renderers/provision-agent-browser.mjs
+
       - name: Install fixed installed-renderer Chrome
         id: renderer-fixed-browser
         run: mise exec -- node scripts/ultramodern-renderers/provision-browser.mjs
 
       - name: Run registry-byte installed renderer features
         env:
+          RENDERER_AGENT_BROWSER_EXECUTABLE: ${{ steps.renderer-browser-cli.outputs.executable_path }}
           RENDERER_BROWSER_EXECUTABLE: ${{ steps.renderer-fixed-browser.outputs.executable_path }}
           PRODUCER_RUN_IDENTITY: ${{ needs.accept-release.outputs.producer_run_identity }}
         run: |
           test -x "$RENDERER_BROWSER_EXECUTABLE"
+          test -x "$RENDERER_AGENT_BROWSER_EXECUTABLE"
+          test "$(command -v agent-browser)" = "$RENDERER_AGENT_BROWSER_EXECUTABLE"
           feature_work="$(mktemp -d "$RUNNER_TEMP/renderer-features-XXXXXX")"
           feature_work="$(realpath "$feature_work")"
           export OWNED_TEMP_DIR="$feature_work"

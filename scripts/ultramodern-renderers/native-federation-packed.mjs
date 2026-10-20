@@ -46,6 +46,20 @@ const inside = (parent, child) => {
   );
 };
 
+/** Authored i18n proofs use the consumer's pin or the authenticated cohort's pin. */
+export function packedI18nextRequest({ packageRequests, release }) {
+  const request =
+    packageRequests.i18next ??
+    release?.packages.find(
+      item => item.sourceName === '@modern-js/i18n-runtime-extensions',
+    )?.packageJson.devDependencies?.i18next;
+  assert(
+    typeof request === 'string' && /^\d+\.\d+\.\d+$/u.test(request),
+    'The consumer or authenticated i18n cohort must pin i18next exactly',
+  );
+  return request;
+}
+
 function installedStore(appRoot) {
   for (let directory = appRoot; ; directory = path.dirname(directory)) {
     const store = path.join(directory, 'node_modules/.pnpm');

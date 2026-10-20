@@ -44,6 +44,23 @@ test('Worker manifests preserve complete direct Start archives and reject partia
     ],
     core,
   );
+  delete packageRequests.i18next;
+  assert.equal(
+    packedWorkerDependencies({
+      cohort: { artifacts: [] },
+      packageRequests,
+      release: {
+        packages: [
+          {
+            sourceName: '@modern-js/i18n-runtime-extensions',
+            packageJson: { devDependencies: { i18next: '26.1.3' } },
+          },
+        ],
+      },
+    }).i18next,
+    '26.1.3',
+  );
+  packageRequests.i18next = '1.0.0';
   const start = Object.fromEntries(
     Object.entries({
       '@tanstack/start-storage-context': 'storage',

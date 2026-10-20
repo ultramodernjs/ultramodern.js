@@ -25,6 +25,22 @@ test('public generation requires actual profile Start requests instead of inject
   const context = { cohort: { artifacts: [] }, packageRequests };
   const original = { ...packageRequests };
   assert.deepEqual(generatedWorkerDependencies(context), original);
+  delete packageRequests.i18next;
+  assert.equal(
+    generatedWorkerDependencies({
+      ...context,
+      release: {
+        packages: [
+          {
+            sourceName: '@modern-js/i18n-runtime-extensions',
+            packageJson: { devDependencies: { i18next: '26.1.3' } },
+          },
+        ],
+      },
+    }).i18next,
+    '26.1.3',
+  );
+  packageRequests.i18next = original.i18next;
   verifyGeneratedWorkerNativeRequests(
     { dependencies: original },
     packageRequests,

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -40,10 +41,56 @@ export function rendererBrowserTools(ownerRoot) {
   };
 }
 
+/** Allow only this downloaded Chrome to create its normal Linux sandbox. */
+export function configureHostedRendererSandbox(
+  executable,
+  {
+    environment = process.env,
+    platform = process.platform,
+    command = execFileSync,
+  } = {},
+) {
+  if (
+    platform !== 'linux' ||
+    environment.GITHUB_ACTIONS !== 'true' ||
+    environment.RUNNER_ENVIRONMENT !== 'github-hosted'
+  )
+    return;
+  const temporaryRoot = fs.realpathSync(environment.RUNNER_TEMP);
+  const binary = fs.realpathSync(executable);
+  const relative = path.relative(temporaryRoot, binary);
+  assert(
+    relative &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative),
+    'Hosted renderer sandbox executable must belong to the job temporary directory',
+  );
+  // AppArmor treats these as policy syntax even inside a quoted attachment.
+  assert(!/[\\"\r\n*?[\]{}@]/u.test(binary), 'Unsafe AppArmor executable path');
+  const profile = path.join(path.dirname(binary), 'renderer-chrome.apparmor');
+  fs.writeFileSync(
+    profile,
+    `abi <abi/4.0>,\ninclude <tunables/global>\nprofile ultramodern-renderer-chrome-${process.pid} "${binary}" flags=(unconfined) {\n  userns,\n}\n`,
+    { flag: 'wx', mode: 0o600 },
+  );
+  try {
+    // Ubuntu 24.04 restricts user namespaces for downloaded CfT executables.
+    // Keep the browser sandbox and grant only this exact binary its namespace.
+    command('sudo', ['-n', 'apparmor_parser', '--replace', profile], {
+      stdio: 'inherit',
+    });
+  } finally {
+    fs.rmSync(profile);
+  }
+}
+
 /** The job owns its cache; browser downloads never run as install side effects. */
 export async function provisionRendererBrowser(
   { ownerRoot = path.join(root, 'tests'), environment = process.env } = {},
-  { resolveTools = rendererBrowserTools } = {},
+  {
+    resolveTools = rendererBrowserTools,
+    configureSandbox = configureHostedRendererSandbox,
+  } = {},
 ) {
   assert(
     typeof environment.RUNNER_TEMP === 'string' &&
@@ -83,11 +130,13 @@ export async function provisionRendererBrowser(
     fs.statSync(expected).isFile(),
     `Browser was not installed: ${expected}`,
   );
+  configureSandbox(expected, { environment });
   let browser;
   try {
     browser = await chromium.launch({
       headless: true,
       executablePath: expected,
+      chromiumSandbox: true,
     });
     assert.equal(
       browser.version(),
