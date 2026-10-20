@@ -109,7 +109,7 @@ export async function action({ request }: DataHandlerInput) {
 ### Octane
 
 Octane applications use the exact runtime, router and compiler archives from
-[Octane source `0bf2313bbdfb`](https://github.com/BleedingDev/octane/releases/tag/ultramodern-octane-0bf2313bbdfb),
+[Octane source `2383d2ab1e70`](https://github.com/BleedingDev/octane/releases/tag/ultramodern-octane-2383d2ab1e70),
 together with the Core archive from
 [Router source `585d3233f7f5`](https://github.com/BleedingDev/router/releases/tag/ultramodern-router-core-585d3233f7f5).
 This archive tuple is the supported contract. The generator writes its exact

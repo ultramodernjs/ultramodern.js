@@ -2404,11 +2404,11 @@ importers:
         specifier: workspace:*
         version: link:../../tsconfig
       '@octanejs/rspack-plugin':
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-rspack-plugin-0.2.4.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.2.9(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.23))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz
+        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.2.9(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.23))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@octanejs/tanstack-router':
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-tanstack-router-0.2.10.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-tanstack-router-0.2.10.tgz(@tanstack/router-core@https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz)(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz
+        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz(@tanstack/router-core@https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz)(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@rsbuild/core':
         specifier: 2.2.13
         version: 2.2.13(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)
@@ -2440,8 +2440,8 @@ importers:
         specifier: 30.0.1
         version: 30.0.1(@noble/hashes@2.4.0)
       octane:
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz
+        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/runtime/renderer-solid:
     dependencies:
@@ -3395,8 +3395,8 @@ importers:
         specifier: workspace:*
         version: link:../../tsconfig
       '@octanejs/rspack-plugin':
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-rspack-plugin-0.2.4.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.2.9(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.23))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz
+        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.2.9(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.23))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@rsbuild/plugin-svgr':
         specifier: 2.0.5
         version: 2.0.5(@rsbuild/core@2.2.13(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0))(@rspack/core@2.2.9(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.23))(supports-color@10.2.2)(typescript@7.0.2)
@@ -3419,8 +3419,8 @@ importers:
         specifier: ^0.28.2
         version: 0.28.2
       octane:
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz
+        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -3823,8 +3823,8 @@ importers:
         specifier: workspace:*
         version: link:../../../scripts/rslib
       '@octanejs/rspack-plugin':
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-rspack-plugin-0.2.4.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.2.9(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.23))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz
+        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.2.9(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.23))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@rslib/core':
         specifier: 1.0.3
         version: 1.0.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(typescript@7.0.2)
@@ -3844,8 +3844,8 @@ importers:
         specifier: 5.5.0
         version: 5.5.0
       octane:
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz
+        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/toolkit/ultramodern-sandpack-profile:
     devDependencies:
@@ -5959,8 +5959,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/runtime/renderer-octane
       '@octanejs/tanstack-router':
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-tanstack-router-0.2.10.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-tanstack-router-0.2.10.tgz(@tanstack/router-core@https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz)(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz
+        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz(@tanstack/router-core@https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz)(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@tanstack/router-core':
         specifier: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
         version: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
@@ -5968,8 +5968,8 @@ importers:
         specifier: 0.20.0
         version: 0.20.0
       octane:
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz
+        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       seroval:
         specifier: 1.6.9
         version: 1.6.9
@@ -5981,8 +5981,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/solutions/ultramodern-app-tools
       '@octanejs/rspack-plugin':
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-rspack-plugin-0.2.4.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.2.9(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.23))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz
+        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.2.9(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.23))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
@@ -10339,16 +10339,16 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@octanejs/rspack-plugin@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-rspack-plugin-0.2.4.tgz':
-    resolution: {integrity: sha512-I8m/d/oj3Qh8nG5nqkWD90m8qgNwlPK9oNh5tlVvGNdSYCTLddRG7Og8wpYKFAGxe2D+0zOIhYGarC0ZKZgSzw==, tarball: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-rspack-plugin-0.2.4.tgz}
+  '@octanejs/rspack-plugin@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz':
+    resolution: {integrity: sha512-I8m/d/oj3Qh8nG5nqkWD90m8qgNwlPK9oNh5tlVvGNdSYCTLddRG7Og8wpYKFAGxe2D+0zOIhYGarC0ZKZgSzw==, tarball: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz}
     version: 0.2.4
     engines: {node: '>=22.22.2'}
     peerDependencies:
       '@rspack/core': ^2.0.0
       octane: ^0.13.8
 
-  '@octanejs/tanstack-router@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-tanstack-router-0.2.10.tgz':
-    resolution: {integrity: sha512-wdnPhVZSQqZg2DDllUyz4RZufn7I0GEnPKrb/CB21Z8JYKnunAtZn41Dma/+xhg5xvN/USnIg9Eyyf2nbJgxMQ==, tarball: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-tanstack-router-0.2.10.tgz}
+  '@octanejs/tanstack-router@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz':
+    resolution: {integrity: sha512-wdnPhVZSQqZg2DDllUyz4RZufn7I0GEnPKrb/CB21Z8JYKnunAtZn41Dma/+xhg5xvN/USnIg9Eyyf2nbJgxMQ==, tarball: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz}
     version: 0.2.10
     engines: {node: '>=22.22.2'}
     peerDependencies:
@@ -17696,8 +17696,8 @@ packages:
     resolution: {integrity: sha512-5vvB5+W7ePv+p3uqxi+RcW1XAzLW0/hxt3/4X4Lc4qHudzOhmBiBwOY6DRob4WnanAEGvNcLjF+KNOufrUoEQw==}
     engines: {node: '>=12.20.0'}
 
-  octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz:
-    resolution: {integrity: sha512-5ReT/LEGpeLyAD1NAObxbcvlaC3yjcF2TNA0ZRT63tnO841r8u66WlSbEdcrQmUnIxl/ECsYrmN5LEampD8Jpg==, tarball: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz}
+  octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz:
+    resolution: {integrity: sha512-ryNxtzX4pwMVHNhWyEYG8VnpRUByWUDhtVDpYlQkeqipTSF7s8cP86CzBl/miNCruE48D27mnR7E8UW6V1fEnA==, tarball: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz}
     version: 0.13.8
     engines: {node: '>=22.22.2'}
     peerDependencies:
@@ -23620,19 +23620,19 @@ snapshots:
   '@nx/nx-win32-x64-msvc@23.3.0':
     optional: true
 
-  '@octanejs/rspack-plugin@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.2.9(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.23))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@octanejs/rspack-plugin@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.2.9(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.23))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
       '@jridgewell/remapping': 2.3.5
       '@rspack/core': 2.2.9(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.23)
-      octane: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      octane: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
-  '@octanejs/tanstack-router@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octanejs-tanstack-router-0.2.10.tgz(@tanstack/router-core@https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz)(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@octanejs/tanstack-router@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz(@tanstack/router-core@https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz)(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
       '@tanstack/history': 1.162.5
       '@tanstack/router-core': https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
       '@tanstack/store': 0.9.3
       isbot: 5.2.2
-      octane: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      octane: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@open-draft/deferred-promise@2.2.0': {}
 
@@ -31424,7 +31424,7 @@ snapshots:
 
   obug@3.0.0: {}
 
-  octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-0bf2313bbdfb/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)):
+  octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)):
     dependencies:
       '@tsrx/core': 0.5.5
       '@types/react': 19.3.0
