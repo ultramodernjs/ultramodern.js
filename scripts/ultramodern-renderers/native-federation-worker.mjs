@@ -283,6 +283,11 @@ export async function assertPackedWorkerSource({
     '',
     `Authored Worker sources changed after ${label}:\n${status}`,
   );
+  fs.writeFileSync(
+    path.join(context.workRoot, `${label}-result.json`),
+    `${JSON.stringify({ sourceRevision: revision, status }, null, 2)}\n`,
+    { flag: 'wx' },
+  );
   return revision;
 }
 
@@ -699,8 +704,7 @@ async function provePackedWorkers(context, input, signal) {
   result.workerServices = workerServices;
   const files = [
     planPath,
-    path.join(context.workRoot, 'source-git-commit-revision.log'),
-    path.join(context.workRoot, 'source-git-commit-status.log'),
+    path.join(context.workRoot, 'source-git-commit-result.json'),
     ...[0, 1, 2].flatMap(index =>
       ['build', 'deploy'].map(label =>
         path.join(context.workRoot, `worker-${index}-${label}-process.json`),
@@ -824,10 +828,7 @@ export async function runPackedNativeFederationWorkerProof({
     checks,
     evidence: [
       ...envelope.evidence,
-      ...[proofEvidencePath, options.log].map(filename => ({
-        path: filename,
-        sha256: digest(filename),
-      })),
+      { path: proofEvidencePath, sha256: digest(proofEvidencePath) },
     ],
   };
   fs.writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, {

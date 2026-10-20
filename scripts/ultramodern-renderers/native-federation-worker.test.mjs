@@ -147,6 +147,16 @@ test('packed Worker builds derive their identity from the actual clean fixture c
     },
   ).trim();
   assert.match(sourceRevision, /^[a-f0-9]{40}$/u);
+  const sourceResult = path.join(workRoot, 'source-git-commit-result.json');
+  assert.deepEqual(JSON.parse(fs.readFileSync(sourceResult, 'utf8')), {
+    sourceRevision,
+    status: '',
+  });
+  assert.equal(
+    fs.statSync(path.join(workRoot, 'source-git-commit-status.log')).size,
+    0,
+    'A clean source checkout legitimately produces no status output.',
+  );
   assert.equal(
     resolveUltramodernSourceRevision(directory, 'workspace', {}),
     sourceRevision,
