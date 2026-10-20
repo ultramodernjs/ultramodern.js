@@ -31,6 +31,7 @@ import {
 } from './native-federation-packed.mjs';
 import {
   buildCompiledWorkerApplications,
+  preparePackedWorkerSource,
   verifyPackedWorkerProofEnvelope,
   verifyPackedWorkerProofResult,
 } from './native-federation-worker.mjs';
@@ -434,6 +435,12 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
       signal,
     },
   );
+  // Qualify the build against the generated sources and installed lockfile.
+  const sourceRevision = await preparePackedWorkerSource({
+    directory: workspaceRoot,
+    context,
+    signal,
+  });
   const cohortNames = new Set(
     context.cohort.artifacts.flatMap(item => [
       item.sourceName,
@@ -507,6 +514,8 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
   const compiled = await buildCompiledWorkerApplications({
     applications,
     context,
+    sourceDirectory: workspaceRoot,
+    sourceRevision,
     signal,
   });
   const publications = compiled
