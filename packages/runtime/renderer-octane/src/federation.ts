@@ -126,7 +126,12 @@ export function federatedComponent<P extends object = Record<string, never>>(
       if (!scopes) workerOwners.set(context, (scopes = new WeakMap()));
       let variants = scopes.get(worker);
       if (!variants) scopes.set(worker, (variants = new Map()));
-      const key = JSON.stringify([language, contextKeys]);
+      // Server snapshots are locale-specific. The hydrated browser publisher
+      // keeps its native owner and receives language changes through context.
+      const key = JSON.stringify([
+        context.server ? language : undefined,
+        contextKeys,
+      ]);
       let variant = variants.get(key);
       if (!variant) variants.set(key, (variant = {}));
       owner = variant;
