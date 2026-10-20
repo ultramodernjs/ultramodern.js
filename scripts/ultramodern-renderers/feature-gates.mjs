@@ -35,9 +35,19 @@ export const requiredRendererFeatureRows = Object.freeze({
     'retainedHostState',
     'currentSameHostSsr',
   ],
-  // The installed Octane Worker rows (prebuilt-worker, generated-worker) are
-  // deferred to .10: nested remote snapshots are not adopted during hydration
-  // yet (modernjs-dnpv3.58.11.5.9). Restore them here and in release.mjs.
+  'prebuilt-worker': [
+    'requestIsolation',
+    'ssrBeforeHydration',
+    'cancellation',
+    'boundedRecovery',
+  ],
+  'generated-worker': [
+    'generatedPublicWorkspace',
+    'requestIsolation',
+    'ssrBeforeHydration',
+    'cancellation',
+    'boundedRecovery',
+  ],
 });
 export const digestFile = file =>
   createHash('sha256').update(fs.readFileSync(file)).digest('hex');

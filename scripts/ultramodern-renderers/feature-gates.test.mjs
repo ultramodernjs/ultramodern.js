@@ -119,6 +119,31 @@ test('generated Solid cannot be skipped or omit its strict compilation result', 
   );
 });
 
+for (const row of ['prebuilt-worker', 'generated-worker']) {
+  test(`${row} is required for release acceptance`, t => {
+    const { options } = fixture(t);
+    delete options.rows[row];
+    assert.throws(
+      () => writeRendererFeatureReceipt(options),
+      /Every renderer feature row/u,
+    );
+  });
+
+  test(`${row} must execute cancellation and bounded recovery`, t => {
+    const { rows, binding } = fixture(t);
+    for (const check of ['cancellation', 'boundedRecovery']) {
+      const rowWithoutCheck = {
+        ...rows[row],
+        checks: { ...rows[row].checks, [check]: false },
+      };
+      assert.throws(
+        () => assertRendererFeatureRow(row, rowWithoutCheck, binding),
+        /failed or skipped/u,
+      );
+    }
+  });
+}
+
 test('a passed row cannot omit, skip or fail a required runtime assertion', t => {
   const { rows, binding } = fixture(t);
   delete rows['dev-refresh'].checks.noDocumentReload;
