@@ -35,7 +35,10 @@ import {
   resolveNativeFederationDevManifest,
   retainNativeFederationDevAssets,
 } from './native-federation-dev-assets';
-import { nativeFederationDevHotUpdateTarget } from './native-federation-dev-public-path';
+import {
+  isNativeFederationDevGraphAsset,
+  nativeFederationDevHotUpdateTarget,
+} from './native-federation-dev-public-path';
 import type { NativeDevelopmentSnapshot } from './native-server-plugin';
 import type { RendererBuildProfile } from './renderer-profile';
 import { resolveNativeRendererAdapter } from './renderer-registration';
@@ -248,6 +251,28 @@ export class NativeDevelopment {
               const protocol =
                 request.socket instanceof TLSSocket ? 'https:' : 'http:';
               const origin = `${protocol}//${request.headers.host}`;
+              const afterPublication = (resume: () => void) => {
+                const pending = new AbortController();
+                const aborted = () =>
+                  pending.abort(new Error('Native graph request closed'));
+                request.once('aborted', aborted);
+                response.once('close', aborted);
+                if (request.aborted || response.destroyed) aborted();
+                const cleanup = () => {
+                  request.removeListener('aborted', aborted);
+                  response.removeListener('close', aborted);
+                };
+                void owner.waitForPublication(pending.signal).then(
+                  () => {
+                    cleanup();
+                    if (!pending.signal.aborted) resume();
+                  },
+                  error => {
+                    cleanup();
+                    if (!pending.signal.aborted) next(error);
+                  },
+                );
+              };
               if (
                 !owner.federationGraph &&
                 [...owner.federationCompilers].some(compiler => {
@@ -259,31 +284,13 @@ export class NativeDevelopment {
                 // native publication has validated and retained the graph.
                 // Discovery must wait for that publication, not fall through
                 // to a manifest without its completed-graph coordinates.
-                const pending = new AbortController();
-                const aborted = () =>
-                  pending.abort(new Error('Native manifest request closed'));
-                request.once('aborted', aborted);
-                response.once('close', aborted);
-                if (request.aborted || response.destroyed) aborted();
-                const cleanup = () => {
-                  request.removeListener('aborted', aborted);
-                  response.removeListener('close', aborted);
-                };
-                void owner.waitForPublication(pending.signal).then(
-                  () => {
-                    cleanup();
-                    if (pending.signal.aborted) return;
-                    if (!owner.federationGraph)
-                      return next(
-                        new Error('Native browser manifest was not published'),
-                      );
-                    serve(request, response, next);
-                  },
-                  error => {
-                    cleanup();
-                    if (!pending.signal.aborted) next(error);
-                  },
-                );
+                afterPublication(() => {
+                  if (!owner.federationGraph)
+                    return next(
+                      new Error('Native browser manifest was not published'),
+                    );
+                  serve(request, response, next);
+                });
                 return;
               }
               const hotUpdate =
@@ -314,7 +321,25 @@ export class NativeDevelopment {
               const revision = owner.federationRevision;
               const asset =
                 federationAsset || (pathname && owner.retained.get(pathname));
-              if (!asset) return next();
+              if (!asset) {
+                if (
+                  owner.federationGraph &&
+                  !owner.ready &&
+                  !owner.failure &&
+                  isNativeFederationDevGraphAsset(
+                    owner.federationGraph.publicPath,
+                    request.url ?? '/',
+                    origin,
+                  )
+                ) {
+                  // A live HMR apply can already address the graph that the
+                  // in-flight compile is about to publish. Serve its immutable
+                  // asset once published instead of answering 404 meanwhile.
+                  afterPublication(() => serve(request, response, next));
+                  return;
+                }
+                return next();
+              }
               applyDevServerHeaders(
                 request,
                 response,

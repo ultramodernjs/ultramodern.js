@@ -131,3 +131,30 @@ export function nativeFederationDevHotUpdateTarget(
   }
   return `${new URL(match[1], publicPath.endsWith('/') ? publicPath : `${publicPath}/`).pathname}${url.search}`;
 }
+
+/**
+ * A runtime that applied a live HMR delta already addresses the next graph's
+ * immutable directory, which can be requested before that graph publishes.
+ */
+export function isNativeFederationDevGraphAsset(
+  publicPath: string,
+  target: string,
+  origin: string,
+): boolean {
+  if (
+    !target.startsWith('/') ||
+    target.startsWith('//') ||
+    target.includes('#')
+  )
+    return false;
+  const pathname = target.split('?')[0];
+  const url = URL.parse(target, origin);
+  const prefix = new URL(nativeFederationDevGraphPublicPath(publicPath));
+  return (
+    !!url &&
+    url.pathname === pathname &&
+    url.origin === prefix.origin &&
+    url.pathname.startsWith(prefix.pathname) &&
+    /^[a-f0-9]+\/[^/]/iu.test(url.pathname.slice(prefix.pathname.length))
+  );
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@rstest/core';
 import {
+  isNativeFederationDevGraphAsset,
   nativeFederationDevGraphPublicPath,
   nativeFederationDevHotUpdateTarget,
   resolveNativeFederationDevPublicPath,
@@ -180,5 +181,36 @@ describe('native federation immutable graph publicPath', () => {
         'http://foreign.example:43123',
       ),
     ).toBeUndefined();
+  });
+  it.each([
+    '/assets/__ultramodern_mf__/ab1234/main.js',
+    '/assets/__ultramodern_mf__/ab1234/static/js/async/src_page.js?v=1',
+  ])('recognizes pending immutable graph asset %s', target => {
+    expect(
+      isNativeFederationDevGraphAsset(prefix, target, 'http://localhost:43123'),
+    ).toBe(true);
+  });
+  it.each([
+    '/assets/__ultramodern_mf__/ab1234/',
+    '/assets/__ultramodern_mf__/main.js',
+    '/assets/__ultramodern_mf__/zz1234/main.js',
+    '/assets/main.js',
+    '/other/__ultramodern_mf__/ab1234/main.js',
+    '/assets/__ultramodern_mf__/ab1234/main.js#x',
+    '//foreign/assets/__ultramodern_mf__/ab1234/main.js',
+    'assets/__ultramodern_mf__/ab1234/main.js',
+  ])('rejects non-graph request %s', target => {
+    expect(
+      isNativeFederationDevGraphAsset(prefix, target, 'http://localhost:43123'),
+    ).toBe(false);
+  });
+  it('rejects a graph asset requested from an alternate origin', () => {
+    expect(
+      isNativeFederationDevGraphAsset(
+        prefix,
+        '/assets/__ultramodern_mf__/ab1234/main.js',
+        'http://foreign.example:43123',
+      ),
+    ).toBe(false);
   });
 });
