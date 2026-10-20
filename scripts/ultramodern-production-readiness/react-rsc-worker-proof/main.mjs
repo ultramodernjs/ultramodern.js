@@ -131,7 +131,25 @@ export async function runCommand(
     let processGroupCleanup;
     try {
       code = await completed;
-      assert.equal(code, 0, `Command failed; see ${log}`);
+      if (code !== 0) {
+        const output = fs.openSync(log, 'r');
+        let tail;
+        try {
+          const size = fs.fstatSync(output).size;
+          const bytes = Buffer.alloc(Math.min(size, 16 * 1024));
+          const read = fs.readSync(
+            output,
+            bytes,
+            0,
+            bytes.length,
+            size - bytes.length,
+          );
+          tail = bytes.subarray(0, read).toString('utf8');
+        } finally {
+          fs.closeSync(output);
+        }
+        assert.equal(code, 0, `Command failed; see ${log}\n${tail}`);
+      }
     } finally {
       clearTimeout(deadline);
       clearTimeout(escalation);

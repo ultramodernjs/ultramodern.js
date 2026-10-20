@@ -556,9 +556,9 @@ async function proveGeneratedTopology(context, renderer, signal) {
   try {
     await command(
       context.pnpmExecutable,
-      ['--filter', './packages/*', 'build'],
+      ['--filter', './packages/*', 'run', 'typecheck'],
       workspaceRoot,
-      'shared-build.log',
+      'shared-typecheck.log',
     );
     await command(
       process.execPath,

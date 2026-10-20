@@ -14,6 +14,10 @@ import {
   startWorkerFederationRuntime,
   verifyWorkerFederationModule,
 } from '../../../scripts/ultramodern-renderers/native-federation-workers.mjs';
+import {
+  createBrowserTemporary,
+  usesHostedBrowserTemporary,
+} from '../octane-federation/browser-temporary.mjs';
 import { workerFederationFaultSource } from './fixtures.mjs';
 
 const readJson = filename => JSON.parse(fs.readFileSync(filename, 'utf8'));
@@ -1077,6 +1081,49 @@ export async function verifyWorkerFixtureBrowser(
   }
 }
 
+/** Keep only the browser's temporary files in a short witnessed hosted-job root. */
+export async function openWorkerFixtureBrowser(
+  chromium,
+  plan,
+  {
+    env = process.env,
+    platform = process.platform,
+    createTemporary = createBrowserTemporary,
+  } = {},
+) {
+  const temporary = usesHostedBrowserTemporary(env, platform)
+    ? createTemporary({ workRoot: plan.root, env, platform })
+    : undefined;
+  let browser;
+  try {
+    browser = await chromium.launch({
+      headless: true,
+      ...(plan.browserExecutable
+        ? { executablePath: plan.browserExecutable }
+        : {}),
+      ...(temporary ? { env: { ...env, ...temporary.env } } : {}),
+    });
+  } catch (error) {
+    try {
+      temporary?.cleanup();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'Worker browser startup and temporary cleanup failed.',
+      );
+    }
+    throw error;
+  }
+  return {
+    browser,
+    async close() {
+      // A failed browser close leaves its temporary files for the job owner.
+      await browser.close();
+      temporary?.cleanup();
+    },
+  };
+}
+
 /** Execute prebuilt ordinary source/packed apps; generated public acceptance is separate. */
 export async function runWorkerFixtureProof(plan, { signal } = {}) {
   signal?.throwIfAborted();
@@ -1409,6 +1456,7 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
   fs.writeFileSync(faultPath, workerFederationFaultSource, { flag: 'wx' });
   let runtime;
   let browser;
+  let browserLifetime;
   let failure;
   let result;
   const cleanupErrors = [];
@@ -1457,12 +1505,11 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
     const browserRequire = createRequire(
       path.join(plan.browserDependencyRoot, 'package.json'),
     );
-    browser = await browserRequire('playwright').chromium.launch({
-      headless: true,
-      ...(plan.browserExecutable
-        ? { executablePath: plan.browserExecutable }
-        : {}),
-    });
+    browserLifetime = await openWorkerFixtureBrowser(
+      browserRequire('playwright').chromium,
+      plan,
+    );
+    browser = browserLifetime.browser;
     const control = async (fault, mode) => {
       const response = await fetch(
         `${runtime.bridges.get(fault.name).url}/__proof/control`,
@@ -1695,7 +1742,10 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
   } catch (error) {
     failure = error;
   } finally {
-    for (const dispose of [() => browser?.close(), () => runtime?.dispose()]) {
+    for (const dispose of [
+      () => browserLifetime?.close(),
+      () => runtime?.dispose(),
+    ]) {
       try {
         await dispose();
       } catch (error) {

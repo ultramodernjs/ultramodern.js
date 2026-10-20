@@ -21,6 +21,7 @@ import {
 } from './fixtures.mjs';
 import {
   isSharedCounterCompilation,
+  openWorkerFixtureBrowser,
   readWorkerFixturePlan,
   verifyWorkerCompositionRoutes,
 } from './proof.mjs';
@@ -1432,6 +1433,150 @@ test('provider resolution rejects a changed Miniflare dependency pin before impo
     error => {
       assert.equal(error.actual, '5.0.1');
       assert.equal(error.expected, '5.0.0');
+      return true;
+    },
+  );
+});
+
+function workerBrowserControl({
+  launchFailure,
+  closeFailure,
+  cleanupFailure,
+  platform = 'linux',
+} = {}) {
+  const events = [];
+  const env = {
+    GITHUB_ACTIONS: 'true',
+    RUNNER_ENVIRONMENT: 'github-hosted',
+    RUNNER_OS: 'Linux',
+    TMPDIR: '/long/feature/prebuilt-worker',
+    KEEP: 'unchanged',
+  };
+  const browser = {
+    async close() {
+      events.push('close');
+      if (closeFailure) throw closeFailure;
+    },
+  };
+  const chromium = {
+    async launch(options) {
+      events.push(['launch', options]);
+      if (launchFailure) throw launchFailure;
+      return browser;
+    },
+  };
+  const options = {
+    env,
+    platform,
+    createTemporary(input) {
+      events.push(['temporary', input]);
+      return {
+        env: {
+          TMPDIR: '/job/b-ABCDEF',
+          TMP: '/job/b-ABCDEF',
+          TEMP: '/job/b-ABCDEF',
+        },
+        cleanup() {
+          events.push('cleanup');
+          if (cleanupFailure) throw cleanupFailure;
+        },
+      };
+    },
+  };
+  return {
+    events,
+    env,
+    browser,
+    chromium,
+    options,
+    plan: {
+      root: '/long/feature/prebuilt-worker',
+      browserExecutable: '/fixed/chrome',
+    },
+  };
+}
+
+test('Worker browser uses the short witnessed hosted child environment and cleans it after close', async () => {
+  const control = workerBrowserControl();
+  const lifetime = await openWorkerFixtureBrowser(
+    control.chromium,
+    control.plan,
+    control.options,
+  );
+  assert.equal(lifetime.browser, control.browser);
+  assert.deepEqual(control.events[0], [
+    'temporary',
+    { workRoot: control.plan.root, env: control.env, platform: 'linux' },
+  ]);
+  assert.deepEqual(control.events[1], [
+    'launch',
+    {
+      headless: true,
+      executablePath: '/fixed/chrome',
+      env: {
+        ...control.env,
+        TMPDIR: '/job/b-ABCDEF',
+        TMP: '/job/b-ABCDEF',
+        TEMP: '/job/b-ABCDEF',
+      },
+    },
+  ]);
+  assert.equal(control.env.TMPDIR, '/long/feature/prebuilt-worker');
+  await lifetime.close();
+  assert.deepEqual(control.events.slice(-2), ['close', 'cleanup']);
+});
+
+test('Worker browser preserves non-Linux launch behavior without a hosted lease', async () => {
+  for (const platform of ['darwin', 'win32']) {
+    const control = workerBrowserControl({ platform });
+    const lifetime = await openWorkerFixtureBrowser(
+      control.chromium,
+      control.plan,
+      control.options,
+    );
+    assert.deepEqual(control.events, [
+      ['launch', { headless: true, executablePath: '/fixed/chrome' }],
+    ]);
+    await lifetime.close();
+    assert.deepEqual(control.events.at(-1), 'close');
+  }
+});
+
+test('Worker browser preserves startup failure and retires only its temporary child', async () => {
+  const failure = new Error('launch failed');
+  const control = workerBrowserControl({ launchFailure: failure });
+  await assert.rejects(
+    openWorkerFixtureBrowser(control.chromium, control.plan, control.options),
+    error => error === failure,
+  );
+  assert.equal(control.events.at(-1), 'cleanup');
+});
+
+test('Worker browser retains temporary files when browser retirement fails', async () => {
+  const failure = new Error('close failed');
+  const control = workerBrowserControl({ closeFailure: failure });
+  const lifetime = await openWorkerFixtureBrowser(
+    control.chromium,
+    control.plan,
+    control.options,
+  );
+  await assert.rejects(lifetime.close(), error => error === failure);
+  assert.equal(control.events.at(-1), 'close');
+  assert.equal(control.events.includes('cleanup'), false);
+});
+
+test('Worker browser startup and cleanup failures retain the original error first', async () => {
+  const failure = new Error('launch failed');
+  const cleanupFailure = new Error('identity changed');
+  const control = workerBrowserControl({
+    launchFailure: failure,
+    cleanupFailure,
+  });
+  await assert.rejects(
+    openWorkerFixtureBrowser(control.chromium, control.plan, control.options),
+    error => {
+      assert(error instanceof AggregateError);
+      assert.deepEqual(error.errors, [failure, cleanupFailure]);
       return true;
     },
   );

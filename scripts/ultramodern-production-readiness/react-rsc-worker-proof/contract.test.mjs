@@ -44,6 +44,29 @@ function write(root, relative, contents = 'export default {};\n') {
   return file;
 }
 
+test('a failed command preserves its bounded diagnostic tail before its workspace retires', async t => {
+  const root = ownedDirectory(t);
+  const log = path.join(root, 'failure.log');
+  await assert.rejects(
+    runCommand(
+      process.execPath,
+      [
+        '-e',
+        'process.stdout.write("omitted-start\\n" + "x".repeat(32768) + "\\nactual nested failure\\n"); process.exitCode = 7;',
+      ],
+      { cwd: root, env: process.env, log, signal: t.signal },
+    ),
+    error => {
+      assert.equal(error.actual, 7);
+      assert.equal(error.expected, 0);
+      assert.match(error.message, /actual nested failure/u);
+      assert.doesNotMatch(error.message, /omitted-start/u);
+      assert(error.message.length < 17 * 1024);
+      return true;
+    },
+  );
+});
+
 for (const exitCode of [7, 0]) {
   test(`owned command preserves exit ${exitCode} semantics when group cleanup is denied`, {
     timeout: 10_000,

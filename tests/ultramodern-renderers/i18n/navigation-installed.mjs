@@ -16,6 +16,7 @@ import {
   localizedNavigationBrowserRequest,
   localizedNavigationInputs,
   localizedNavigationRegistry,
+  localizedNavigationSharedCheckCommand,
   verifyLocalizedNavigationCore,
 } from '../../../scripts/ultramodern-renderers/native-localized-navigation.mjs';
 import { assertLocalizedNavigation } from './navigation-browser.mjs';
@@ -402,9 +403,9 @@ try {
       );
       await command(
         pnpm,
-        ['--filter', './packages/*', 'build'],
+        [...localizedNavigationSharedCheckCommand],
         workspaceRoot,
-        `${renderer}-shared-build`,
+        `${renderer}-shared-typecheck`,
       );
       await command(
         process.execPath,

@@ -651,6 +651,7 @@ export function defineRendererSpecs(options: RendererSpecOptions) {
       const output = path.join(nodeDeployDir, '.output');
       let isolated: string | undefined;
       let ownsOutput = false;
+      let deployedServerLog = '';
       useApp(
         async (port, ownServer) => {
           if (fs.existsSync(output))
@@ -708,14 +709,13 @@ export function defineRendererSpecs(options: RendererSpecOptions) {
           server.once('error', error => {
             spawnError = error;
           });
-          let log = '';
-          server.stdout.on('data', chunk => (log += chunk));
-          server.stderr.on('data', chunk => (log += chunk));
+          server.stdout.on('data', chunk => (deployedServerLog += chunk));
+          server.stderr.on('data', chunk => (deployedServerLog += chunk));
           const deadline = Date.now() + 60_000;
           for (;;) {
             if (spawnError) throw spawnError;
             if (server.exitCode !== null)
-              throw new Error(`deployed server exited\n${log}`);
+              throw new Error(`deployed server exited\n${deployedServerLog}`);
             try {
               await fetch(`http://localhost:${port}/`, {
                 signal: AbortSignal.timeout(2_000),
@@ -724,7 +724,9 @@ export function defineRendererSpecs(options: RendererSpecOptions) {
             } catch {
               if (spawnError) throw spawnError;
               if (Date.now() > deadline)
-                throw new Error(`deployed server did not start\n${log}`);
+                throw new Error(
+                  `deployed server did not start\n${deployedServerLog}`,
+                );
               await new Promise(resolve => setTimeout(resolve, 250));
             }
           }
@@ -736,6 +738,22 @@ export function defineRendererSpecs(options: RendererSpecOptions) {
       );
 
       spec('node-deploy', async () => {
+        const failedClientRequests: string[] = [];
+        page.on('requestfailed', request => {
+          if (request.resourceType() === 'script')
+            failedClientRequests.push(
+              `${request.url()}: ${request.failure()?.errorText}`,
+            );
+        });
+        page.on('response', response => {
+          if (
+            response.status() >= 400 &&
+            response.request().resourceType() === 'script'
+          )
+            failedClientRequests.push(
+              `${response.url()}: HTTP ${response.status()}`,
+            );
+        });
         const { response, html } = await fetchHtml('/');
         expect(response.status).toBe(200);
         expect(html).toContain('data-testid="native-layout"');
@@ -743,7 +761,20 @@ export function defineRendererSpecs(options: RendererSpecOptions) {
         expect(html).toMatch(
           /data-testid="native-loader-value"[^>]*>[^<]*Native loader value/,
         );
-        await openHydrated('/');
+        try {
+          await openHydrated('/');
+        } catch (error) {
+          console.error(
+            'Node deploy hydration diagnostics',
+            JSON.stringify({
+              url: page.url(),
+              pageErrors,
+              failedClientRequests,
+              serverLog: deployedServerLog.slice(-16_384),
+            }),
+          );
+          throw error;
+        }
         expect(await adopted('native-layout')).toBe(true);
         await waitForStyle('native-layout', 'color', 'rgb(20, 40, 60)');
         await page.type('input[name="name"]', 'Ada');

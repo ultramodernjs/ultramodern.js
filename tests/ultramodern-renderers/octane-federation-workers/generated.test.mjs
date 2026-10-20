@@ -232,7 +232,11 @@ test('public source overlays retain generated strict inputs and never author ren
     name: generatedApp.packageName,
     private: true,
     modernjs: { appId: generatedApp.id },
-    dependencies: { preserved: '1.0.0', '@tsrx/oxc': '0.20.0' },
+    dependencies: {
+      preserved: '1.0.0',
+      '@tsrx/oxc': '0.20.0',
+      '@modern-js/renderer-core': 'catalog:ultramodern',
+    },
     devDependencies: { typescript: '7.0.2' },
   };
   fs.writeFileSync(
@@ -247,6 +251,11 @@ test('public source overlays retain generated strict inputs and never author ren
     },
   });
   fs.writeFileSync(path.join(appRoot, 'tsconfig.json'), strict);
+  const workspacePolicy = path.join(root, 'pnpm-workspace.yaml');
+  fs.writeFileSync(
+    workspacePolicy,
+    'catalogs:\n  ultramodern:\n    "@modern-js/renderer-core": "1.0.0"\n',
+  );
   const dependencies = Object.fromEntries(
     [
       '@modern-js/ultramodern-app-tools',
@@ -282,6 +291,10 @@ test('public source overlays retain generated strict inputs and never author ren
   );
   assert.equal(authoredManifest.dependencies.preserved, '1.0.0');
   assert.equal(authoredManifest.dependencies['@tsrx/oxc'], '0.20.0');
+  assert.equal(
+    authoredManifest.dependencies['@modern-js/renderer-core'],
+    'catalog:ultramodern',
+  );
   assert.equal(authoredManifest.dependencies.i18next, dependencies.i18next);
   assert.deepEqual(authoredManifest.modernjs, manifest.modernjs);
   assert.deepEqual(authoredManifest.devDependencies, manifest.devDependencies);
@@ -310,6 +323,16 @@ test('public source overlays retain generated strict inputs and never author ren
     fs.readFileSync(path.join(appRoot, 'src/components/Shell.tsx'), 'utf8'),
     /federatedComponent<RemoteProps>/u,
   );
+  for (const catalog of [
+    'catalogs:\n  ultramodern:\n    "@modern-js/renderer-core": "2.0.0"\n',
+    'catalogs:\n  ultramodern: {}\n',
+  ]) {
+    fs.writeFileSync(workspacePolicy, catalog);
+    assert.throws(
+      () => authorGeneratedWorkerApplication(overlayInput),
+      /renderer-core must resolve to the authenticated candidate request/u,
+    );
+  }
 });
 
 test('vertical authoring preserves an already formatted shared Counter', t => {

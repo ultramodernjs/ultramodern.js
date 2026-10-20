@@ -47,6 +47,15 @@ export const localizedNavigationChecks = Object.freeze([
   'noRuntimeErrors',
 ]);
 
+// Native shared packages export authored source and declare typecheck, not a
+// build script. Use their generated public script rather than pnpm exec.
+export const localizedNavigationSharedCheckCommand = Object.freeze([
+  '--filter',
+  './packages/*',
+  'run',
+  'typecheck',
+]);
+
 /** Derive expected identities from authenticated packs, never a historical recipe. */
 export function localizedNavigationInputs(release, nativeInputs) {
   const renderer = name => {

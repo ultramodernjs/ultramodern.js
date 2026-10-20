@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parse as parseYaml } from 'yaml';
 import { createOctaneWorkerFederationFixtures } from './fixtures.mjs';
 
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -128,9 +129,27 @@ export function authorGeneratedWorkerApplication(config) {
     'i18next',
   ]) {
     assert(dependencies[name], `The installed candidate is missing ${name}.`);
-    if (addedDependencies[name])
-      assert.equal(addedDependencies[name], dependencies[name]);
-    else addedDependencies[name] = dependencies[name];
+    if (addedDependencies[name]) {
+      const declared = addedDependencies[name];
+      let resolved = declared;
+      if (declared.startsWith('catalog:')) {
+        const workspace = parseYaml(
+          fs.readFileSync(
+            path.join(outputWorkspaceRoot, 'pnpm-workspace.yaml'),
+            'utf8',
+          ),
+        );
+        const catalog = declared.slice('catalog:'.length);
+        resolved = catalog
+          ? workspace.catalogs?.[catalog]?.[name]
+          : workspace.catalog?.[name];
+      }
+      assert.equal(
+        resolved,
+        dependencies[name],
+        `Generated ${name} must resolve to the authenticated candidate request.`,
+      );
+    } else addedDependencies[name] = dependencies[name];
   }
   fs.writeFileSync(
     path.join(outputWorkspaceRoot, generatedApp.directory, 'package.json'),

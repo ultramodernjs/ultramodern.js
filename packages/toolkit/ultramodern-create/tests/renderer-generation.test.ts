@@ -8,6 +8,7 @@ import {
   validateUltramodernBuildArtifact,
 } from '@modern-js/backend-federation-contracts';
 import { loadUltramodernConfigFile } from '@modern-js/ultramodern-app-tools';
+import { localizedNavigationSharedCheckCommand } from '../../../../scripts/ultramodern-renderers/native-localized-navigation.mjs';
 import {
   addUltramodernVertical,
   generateUltramodernWorkspace,
@@ -54,6 +55,27 @@ for (const renderer of renderers) {
       const files = snapshotWorkspace(targetDir);
       const manifest = JSON.parse(files[`${appDirectory}/package.json`]!);
       const rootManifest = JSON.parse(files['package.json']!);
+      if (renderer !== 'react') {
+        const [filter, packages, operation, script] =
+          localizedNavigationSharedCheckCommand;
+        assert.equal(filter, '--filter');
+        assert.equal(packages, './packages/*');
+        assert.equal(operation, 'run');
+        assert.match(
+          rootManifest.scripts.typecheck,
+          /^pnpm -r --filter "\.\/packages\/\*" run typecheck && /u,
+        );
+        for (const name of ['shared-contracts', 'shared-design-tokens']) {
+          const shared = JSON.parse(files[`packages/${name}/package.json`]!);
+          assert.equal(shared.exports['.'], './src/index.ts');
+          assert.equal(shared.scripts.build, undefined);
+          assert.equal(typeof shared.scripts[script], 'string');
+          assert.match(
+            shared.scripts[script],
+            / typecheck --project tsconfig\.json$/u,
+          );
+        }
+      }
       const baseTsconfig = JSON.parse(files['tsconfig.base.json']!);
       assert.deepEqual(baseTsconfig, {
         extends: '@modern-js/ultramodern-create/tsconfig',
