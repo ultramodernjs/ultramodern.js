@@ -87,7 +87,6 @@
     "@solidjs/signals": "2.0.0-rc.15",
     "@solidjs/web": "2.0.0-rc.15",
     "@tanstack/history": "1.162.5",
-    "@tanstack/router-core": "https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz",
     "isbot": "5.2.2",
     "solid-js": "2.0.0-rc.15"
   },
@@ -95,7 +94,8 @@
     "@modern-js/i18n-runtime-extensions": "workspace:^3.8.3",
     "@rsbuild/core": "2.2.13",
     "@solidjs/compiler": "2.0.0-rc.15",
-    "i18next": ">=25.7.4"
+    "i18next": ">=25.7.4",
+    "@tanstack/router-core": "1.171.38"
   },
   "peerDependenciesMeta": {
     "@modern-js/i18n-runtime-extensions": {
@@ -118,11 +118,21 @@
     "@rslib/core": "1.0.3",
     "@scripts/rstest-config": "workspace:*",
     "@solidjs/compiler": "2.0.0-rc.15",
-    "@types/node": "^26.6.5"
+    "@types/node": "^26.6.5",
+    "@tanstack/router-core": "https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz"
   },
   "sideEffects": false,
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
     "access": "public"
+  },
+  "ultramodern": {
+    "nativeArtifacts": {
+      "@tanstack/router-core": {
+        "request": "https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz",
+        "version": "1.171.38",
+        "integrity": "sha512-d/aGvcyEVwDh2Cn9MuZM1n1dqTIqkFYi7AHY2Na/6x/a0jVSDVTNVVVY7QEsuKFXktaJF9zjVwetaRm/0MALZg=="
+      }
+    }
   }
 }

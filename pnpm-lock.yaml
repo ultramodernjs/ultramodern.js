@@ -2463,9 +2463,6 @@ importers:
       '@tanstack/history':
         specifier: 1.162.5
         version: 1.162.5
-      '@tanstack/router-core':
-        specifier: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
-        version: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
       isbot:
         specifier: 5.2.2
         version: 5.2.2
@@ -2491,6 +2488,9 @@ importers:
       '@solidjs/compiler':
         specifier: 2.0.0-rc.15
         version: 2.0.0-rc.15
+      '@tanstack/router-core':
+        specifier: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
+        version: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5

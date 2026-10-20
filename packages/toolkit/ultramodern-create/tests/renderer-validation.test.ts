@@ -364,7 +364,7 @@ test('authored renderer ABI pins resolve explicit catalogs and reject mismatches
     dependencies: {
       'solid-js': 'catalog:ui',
       '@solidjs/web': 'catalog:',
-      '@tanstack/router-core': generation.profile.router.coreVersion,
+      '@tanstack/router-core': generation.dependencies['@tanstack/router-core'],
     },
     devDependencies: {
       '@solidjs/compiler': `npm:@solidjs/compiler@${generation.profile.compiler.version}`,
