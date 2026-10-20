@@ -25,6 +25,7 @@ import {
 } from '../../renderer-core/tests/worker-federation.fixture';
 import type { OctaneApplicationHandle } from '../src/client';
 import { federatedComponent } from '../src/federation';
+import { I18nContext } from '../src/i18n/context';
 import { renderOctaneApplication } from '../src/server';
 import {
   createNativeWorkerFederationRuntime,
@@ -666,7 +667,15 @@ export default function Widget(props: { label: string }) {
             },
           }
         : {}),
-      App: () => createElement(ServerRemote, { label: 'Native' }),
+      App: () =>
+        createElement(I18nContext, {
+          value: {
+            language: 'en',
+            languages: ['en', 'fr'],
+            instance: { language: 'en', t: (key: string) => key },
+          },
+          children: createElement(ServerRemote, { label: 'Native' }),
+        }),
     });
     const html = await response.text();
     expect((await session.completion).fallback).toBe(false);
@@ -816,6 +825,17 @@ export default function Widget(props: { label: string }) {
       const BrowserRemote = browserFederation.federatedComponent<{
         label: string;
       }>('adoption/Widget');
+      const BrowserApp = (props: { label: string; language: string }) =>
+        browserNative.createElement(i18nContext.I18nContext, {
+          value: {
+            language: props.language,
+            languages: ['en', 'fr'],
+            instance: { language: props.language, t: (key: string) => key },
+          },
+          children: browserNative.createElement(BrowserRemote, {
+            label: props.label,
+          }),
+        });
       handle = await hydrateOctaneApplication({
         container,
         identity: hostIdentity,
@@ -861,8 +881,8 @@ export default function Widget(props: { label: string }) {
           return { transport: browserTransport, locale: 'en', signal };
         },
         load: async () => ({
-          default: () =>
-            browserNative.createElement(BrowserRemote, { label: 'Native' }),
+          default: BrowserApp,
+          props: { label: 'Native', language: 'en' },
         }),
       });
       expect(Reflect.get(window, '__octanePublishSignalControl')).toBeTypeOf(
@@ -928,6 +948,21 @@ export default function Widget(props: { label: string }) {
       expect(container.querySelector('button')).toBe(counter);
       expect(counter?.textContent).toBe('Native: 4');
       expect(moduleLoadCount).toBe(1);
+      for (const language of ['en', 'fr']) {
+        await Promise.race([
+          browserNative.act(() =>
+            handle?.update({
+              default: BrowserApp,
+              props: { label: 'Updated', language },
+            }),
+          ),
+          rendererFailure.promise,
+        ]);
+        assertRetained(`after ${language} host prop/context update`);
+        expect(counter?.textContent).toBe('Updated: 4');
+        expect(clientCommitCount).toBe(1);
+        expect(moduleLoadCount).toBe(1);
+      }
       expect(errors).toEqual([]);
     } finally {
       admission.resolve();
