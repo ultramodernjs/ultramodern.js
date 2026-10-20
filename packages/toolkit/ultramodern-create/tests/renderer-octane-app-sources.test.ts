@@ -42,8 +42,8 @@ test('the emitted routes use native Octane hook state and router bindings', () =
       'src/routes/page.head.ts',
       'src/routes/about/page.tsx',
       'src/routes/about/page.head.ts',
-      'src/components/Counter.tsx',
-      'src/components/Stable.tsx',
+      'src/components/counter.tsx',
+      'src/components/stable.tsx',
       'src/routes/page.data.ts',
       'src/routes/error.tsx',
       'src/routes/not-found.tsx',
@@ -60,8 +60,8 @@ test('the emitted routes use native Octane hook state and router bindings', () =
       '@modern-js/renderer-octane/router',
       'octane',
       '@modern-js/renderer-core/data',
-      '../components/Counter',
-      '../components/Stable',
+      '../components/counter',
+      '../components/stable',
       './index.css',
     ]),
   );
@@ -77,7 +77,7 @@ test('the emitted routes use native Octane hook state and router bindings', () =
   );
   for (const name of ['Counter', 'Stable']) {
     const component = routes.find(
-      route => route.path === `src/components/${name}.tsx`,
+      route => route.path === `src/components/${name.toLowerCase()}.tsx`,
     );
     assert.equal(
       component.program.body[0].specifiers[0].imported.name,

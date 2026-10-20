@@ -60,7 +60,7 @@ export function generateOctaneAppSources(
       {
         path: 'src/routes/layout.tsx',
         content: `import { Link, Outlet } from '@modern-js/renderer-octane/router';
-import Stable from '../components/Stable';
+import Stable from '../components/stable';
 import './index.css';
 
 const appTitle = ${title};
@@ -91,7 +91,7 @@ ${options.capabilities.federation ? '          <Link to="/remotes">Federated app
   useOctaneRouteAction,
 } from '@modern-js/renderer-octane/router';
 import { useActionState } from 'octane';
-import Counter from '../components/Counter';
+import Counter from '../components/counter';
 
 const appId = ${appId};
 const appTitle = ${title};
@@ -162,7 +162,7 @@ export const head: NonNullable<FileSystemRouteModule['head']> = () => ({
 `,
       },
       {
-        path: 'src/components/Counter.tsx',
+        path: 'src/components/counter.tsx',
         content: `import { useState } from 'octane';
 
 export default function Counter() {
@@ -180,7 +180,7 @@ export default function Counter() {
 `,
       },
       {
-        path: 'src/components/Stable.tsx',
+        path: 'src/components/stable.tsx',
         content: `import { useState } from 'octane';
 
 export default function Stable() {
@@ -207,7 +207,7 @@ export function loader({ request }: DataHandlerInput) {
   if (url.searchParams.get('case') === 'error')
     throw new Error('Native loader failure');
   if (url.searchParams.get('case') === 'redirect')
-    return new Response(null, { status: 302, headers: { location: '/about' } });
+    return new Response(null, { headers: { location: '/about' }, status: 302 });
   return {
     message: 'Native loader value',
     privateValue: request.headers.get('x-conformance-private'),
@@ -224,11 +224,11 @@ export async function action({ request }: DataHandlerInput) {
     );
   if (form.get('intent') === 'redirect')
     return new Response(null, {
-      status: 303,
       headers: {
         location: '/about',
         'set-cookie': 'conformance-saved=1; Path=/; SameSite=Lax',
       },
+      status: 303,
     });
   if (form.get('intent') === 'throw') throw new Error('Native action failure');
   return {

@@ -252,6 +252,14 @@ test('generated Worker compilation receives its generated sources and installed 
         generationInput = JSON.parse(fs.readFileSync(args[1], 'utf8'));
         const { workspaceRoot, origins, resultPath } = generationInput;
         fs.mkdirSync(path.join(workspaceRoot, 'topology'), { recursive: true });
+        execFileSync('git', ['init', '--quiet'], {
+          cwd: workspaceRoot,
+          env: Object.fromEntries(
+            Object.entries(process.env).filter(
+              ([name]) => !name.toUpperCase().startsWith('GIT_'),
+            ),
+          ),
+        });
         fs.writeFileSync(
           path.join(workspaceRoot, 'pnpm-workspace.yaml'),
           'minimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\n',

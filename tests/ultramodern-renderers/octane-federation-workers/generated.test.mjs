@@ -407,7 +407,7 @@ test('public source overlays retain generated strict inputs and never author ren
     fs.readFileSync(path.join(sharedRoot, 'package.json'), 'utf8'),
   );
   assert.equal(sharedManifest.name, generatedWorkerSharedCounter.name);
-  assert.deepEqual(sharedManifest.exports, { '.': './src/Counter.tsx' });
+  assert.deepEqual(sharedManifest.exports, { '.': './src/counter.tsx' });
   assert.deepEqual(sharedManifest.dependencies, {
     octane: dependencies.octane,
   });
@@ -431,7 +431,7 @@ test('public source overlays retain generated strict inputs and never author ren
     /signal\$\(3\)/u,
   );
   assert.match(
-    fs.readFileSync(path.join(appRoot, 'src/components/Shell.tsx'), 'utf8'),
+    fs.readFileSync(path.join(appRoot, 'src/components/shell.tsx'), 'utf8'),
     /from '@authored-worker\/shared-counter'/u,
   );
 
@@ -477,7 +477,7 @@ test('public source overlays retain generated strict inputs and never author ren
     overlayInput.services.remoteA,
   );
   assert.match(
-    fs.readFileSync(path.join(appRoot, 'src/components/Shell.tsx'), 'utf8'),
+    fs.readFileSync(path.join(appRoot, 'src/components/shell.tsx'), 'utf8'),
     /federatedComponent<RemoteProps>/u,
   );
   for (const catalog of [
