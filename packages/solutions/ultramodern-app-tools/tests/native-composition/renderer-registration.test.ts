@@ -127,7 +127,7 @@ describe('static renderer owner admission', () => {
     expect(adapter.profile.compiler.name).toBe('fourth-compiler');
     // Generated entries import the adapter's own runtime entry modules.
     const generator = createNativeEntryGenerator(renderer);
-    expect(Object.keys(generator)).toEqual(['client', 'server']);
+    expect(Object.keys(generator)).toEqual(['client', 'server', 'worker']);
   });
 
   it('compiles through the selected adapter and claims its compiler once', async () => {

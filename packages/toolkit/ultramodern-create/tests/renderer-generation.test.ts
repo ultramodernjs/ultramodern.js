@@ -231,7 +231,7 @@ declare const ULTRAMODERN_SITE_URL: string;
       );
       assert.equal(
         manifest.dependencies['@tanstack/router-core'],
-        profile.profile.router.coreVersion,
+        profile.dependencies['@tanstack/router-core'],
       );
 
       for (const [relativePath, source] of Object.entries(files)) {

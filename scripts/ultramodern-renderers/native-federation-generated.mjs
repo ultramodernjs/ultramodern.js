@@ -24,7 +24,7 @@ import {
 
 const readJson = filename => JSON.parse(fs.readFileSync(filename, 'utf8'));
 const requireHtml = createRequire(
-  new URL('../../packages/toolkit/utils/package.json', import.meta.url),
+  new URL('../ultramodern-production-readiness/package.json', import.meta.url),
 );
 const { Window } = await import(requireHtml.resolve('happy-dom'));
 const htmlWindow = new Window({

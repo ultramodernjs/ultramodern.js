@@ -253,8 +253,8 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
         eager: false,
       });
     }
-    expect(installed['@tanstack/router-core']).toBe('1.171.34');
-    expect(installed['@tanstack/history']).toBe('1.162.4');
+    expect(installed['@tanstack/router-core']).toBe('1.171.38');
+    expect(installed['@tanstack/history']).toBe('1.162.5');
     // Localization is optional; its context belongs to the shared SDK prefix.
     expect(shared.i18next).toBeUndefined();
     expect(shared['@modern-js/i18n-runtime-extensions']).toBeUndefined();
@@ -319,8 +319,8 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
     );
     const installed = resolveNativeSharedVersions('octane', root);
     expect(installed.octane).toBe('0.13.8');
-    expect(installed['@tanstack/router-core']).toBe('1.171.34');
-    expect(installed['@tanstack/history']).toBe('1.162.4');
+    expect(installed['@tanstack/router-core']).toBe('1.171.38');
+    expect(installed['@tanstack/history']).toBe('1.162.5');
     expect(installed.seroval).toBe('1.6.9');
     const bindings = resolveNativeSharedBindings('octane', root, 'server');
     const selected = fs.realpathSync(

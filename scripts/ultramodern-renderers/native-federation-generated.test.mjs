@@ -16,6 +16,37 @@ assert(
   'Run these filesystem tests through owned-temp-dir',
 );
 
+test('generated SSR resolves its parser from the declared acceptance runner dependency owner', async () => {
+  const owner = new URL(
+    '../ultramodern-production-readiness/package.json',
+    import.meta.url,
+  );
+  const manifest = JSON.parse(fs.readFileSync(owner, 'utf8'));
+  assert.equal(manifest.name, '@scripts/ultramodern-production-readiness');
+  assert.equal(typeof manifest.dependencies['happy-dom'], 'string');
+  const resolutions = [];
+  const hooks = registerHooks({
+    resolve(specifier, context, nextResolve) {
+      if (specifier === 'happy-dom') {
+        assert.equal(context.parentURL, owner.href);
+        resolutions.push(context.parentURL);
+      }
+      return nextResolve(specifier, context);
+    },
+  });
+  try {
+    await import(
+      new URL(
+        './native-federation-generated.mjs?acceptance-parser-owner',
+        import.meta.url,
+      )
+    );
+    assert.deepEqual(resolutions, [owner.href]);
+  } finally {
+    hooks.deregister();
+  }
+});
+
 test('generated MF forwards supplied native archives through its actual packed child boundary', async () => {
   const calls = [];
   const stopped = Promise.resolve('captured generated MF child');
