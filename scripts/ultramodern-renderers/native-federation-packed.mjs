@@ -507,6 +507,15 @@ export function packedNativeFederationManifest(manifest, context) {
     const artifact = artifacts.get(name);
     if (artifact) return `npm:${artifact.targetName}@${artifact.version}`;
     assert(!name.startsWith('@modern-js/'), `Packed cohort is missing ${name}`);
+    if (name === 'i18next') {
+      const selected = packedI18nextRequest(context);
+      assert.equal(
+        supplied,
+        selected,
+        'Authored i18next must match the consumer or authenticated i18n cohort pin',
+      );
+      return selected;
+    }
     if (nativeDependency(name))
       assert(
         context.packageRequests[name],

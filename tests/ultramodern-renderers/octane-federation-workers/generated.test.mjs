@@ -232,7 +232,7 @@ test('public source overlays retain generated strict inputs and never author ren
     name: generatedApp.packageName,
     private: true,
     modernjs: { appId: generatedApp.id },
-    dependencies: { preserved: '1.0.0' },
+    dependencies: { preserved: '1.0.0', '@tsrx/oxc': '0.20.0' },
     devDependencies: { typescript: '7.0.2' },
   };
   fs.writeFileSync(
@@ -281,6 +281,8 @@ test('public source overlays retain generated strict inputs and never author ren
     fs.readFileSync(path.join(appRoot, 'package.json'), 'utf8'),
   );
   assert.equal(authoredManifest.dependencies.preserved, '1.0.0');
+  assert.equal(authoredManifest.dependencies['@tsrx/oxc'], '0.20.0');
+  assert.equal(authoredManifest.dependencies.i18next, dependencies.i18next);
   assert.deepEqual(authoredManifest.modernjs, manifest.modernjs);
   assert.deepEqual(authoredManifest.devDependencies, manifest.devDependencies);
   assert.equal(
@@ -332,7 +334,7 @@ test('vertical authoring preserves an already formatted shared Counter', t => {
     JSON.stringify({
       name: generatedApp.packageName,
       modernjs: { appId: generatedApp.id },
-      dependencies: { baseline: '1.0.0' },
+      dependencies: { baseline: '1.0.0', '@tsrx/oxc': '0.20.0' },
     }),
   );
   const config = {

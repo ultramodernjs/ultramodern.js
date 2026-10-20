@@ -509,3 +509,71 @@ export default defineConfig({ renderer: 'solid', server: { ssr: true } });
     fs.rmSync(tempRoot, { force: true, recursive: true });
   }
 });
+
+for (const renderer of ['solid', 'octane'] as const)
+  for (const [source, request] of [
+    ['canonical', 'workspace:*'],
+    [
+      'cohort alias',
+      'npm:@bleedingdev/modern-js-i18n-runtime-extensions@3.9.3-ultramodern.123',
+    ],
+  ])
+    test(`sync-delivery-unit accepts ${renderer} native i18n with a ${source} dependency`, async () => {
+      const tempRoot = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'um-du-sync-native-i18n-'),
+      );
+      try {
+        const workspaceDir = path.join(tempRoot, 'workspace');
+        await generateUltramodernWorkspace({
+          targetDir: workspaceDir,
+          packageName: `native-i18n-${renderer}`,
+          modernVersion: '3.8.3',
+          renderer,
+          enableTailwind: false,
+          generateAgentFiles: false,
+          packageSource: { strategy: 'workspace' },
+        });
+        const manifestPath = 'apps/shell-super-app/package.json';
+        const manifest = JSON.parse(read(workspaceDir, manifestPath));
+        manifest.dependencies['@modern-js/i18n-runtime-extensions'] = request;
+        manifest.dependencies.i18next = '26.4.6';
+        writeJson(workspaceDir, manifestPath, manifest);
+        const authoredManifest = read(workspaceDir, manifestPath);
+        assert.equal(
+          await runSyncDeliveryUnit([], {
+            workspaceRoot: workspaceDir,
+            invocationCwd: workspaceDir,
+          }),
+          0,
+        );
+        assert.equal(read(workspaceDir, manifestPath), authoredManifest);
+
+        // Installing the shared native helpers does not admit React's plugin
+        // or a package subpath as an application dependency.
+        for (const forbidden of [
+          '@modern-js/plugin-i18n',
+          '@modern-js/i18n-integration',
+          '@modern-js/i18n-runtime-extensions/native',
+        ]) {
+          writeJson(workspaceDir, manifestPath, {
+            ...manifest,
+            dependencies: {
+              ...manifest.dependencies,
+              [forbidden]: 'workspace:*',
+            },
+          });
+          const before = snapshotAllFiles(workspaceDir);
+          await assert.rejects(
+            () =>
+              runSyncDeliveryUnit([], {
+                workspaceRoot: workspaceDir,
+                invocationCwd: workspaceDir,
+              }),
+            /conflicts with the selected .* renderer/u,
+          );
+          assert.deepEqual(snapshotAllFiles(workspaceDir), before);
+        }
+      } finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });

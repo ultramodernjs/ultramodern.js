@@ -15,6 +15,10 @@ import {
   ownedBrowserInvocation,
 } from './browser-errors.mjs';
 import {
+  createBrowserTemporary,
+  usesHostedBrowserTemporary,
+} from './browser-temporary.mjs';
+import {
   createOctaneFederationFixtures,
   decodeOctaneSSRDocument,
   linkOctaneFederationDependencies,
@@ -60,15 +64,8 @@ if (packedContext)
 const owner = `octane-mf-dev-${process.pid}`;
 const browserSession = `mfdev-${process.pid}-${randomUUID().slice(0, 8)}`;
 const browserConfig = path.join(temporary, `${browserSession}.json`);
-const browserInvocation = ownedBrowserInvocation({
-  env: process.env,
-  configPath: browserConfig,
-  executable:
-    sourceContext?.browserExecutable ??
-    packedContext?.browserExecutable ??
-    process.env.AGENT_BROWSER_EXECUTABLE_PATH,
-  session: browserSession,
-});
+let browserInvocation;
+let browserTemporary;
 const cancellation = new AbortController();
 const children = [];
 const results = {};
@@ -584,6 +581,17 @@ const browserObservation = () =>
 
 let failure;
 try {
+  if (usesHostedBrowserTemporary())
+    browserTemporary = createBrowserTemporary({ workRoot: temporary });
+  browserInvocation = ownedBrowserInvocation({
+    env: { ...process.env, ...browserTemporary?.env },
+    configPath: browserConfig,
+    executable:
+      sourceContext?.browserExecutable ??
+      packedContext?.browserExecutable ??
+      process.env.AGENT_BROWSER_EXECUTABLE_PATH,
+    session: browserSession,
+  });
   await fs.writeFile(browserConfig, '{}\n', { flag: 'wx' });
   if (sourceContext) {
     results.mode = 'source-installed';
@@ -1448,11 +1456,23 @@ export default function Away() { const router = useRouter(); return <section dat
 } finally {
   const cleanupErrors = [];
   await disposeBrowserDiagnostics?.().catch(error => cleanupErrors.push(error));
+  let browserRetired = !browserOpened;
   if (browserOpened)
     await execute('agent-browser', [...browserInvocation.args, 'close'], {
       env: browserInvocation.env,
       timeout: 15_000,
-    }).catch(error => cleanupErrors.push(error));
+    }).then(
+      () => {
+        browserRetired = true;
+      },
+      error => cleanupErrors.push(error),
+    );
+  if (browserTemporary && browserRetired)
+    try {
+      browserTemporary.cleanup();
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
   let processesRetired = true;
   for (const child of children)
     await stopChild(child).catch(error => {
@@ -1487,6 +1507,11 @@ export default function Away() { const router = useRouter(); return <section dat
     }
   }
   results.resourceCleanup = {
+    browserTemporary: browserTemporary && {
+      directory: browserTemporary.directory,
+      lease: browserTemporary.lease,
+      browserRetired,
+    },
     processGroups,
     releasedArtifactCount,
     registeredArtifactCount: artifacts.size,

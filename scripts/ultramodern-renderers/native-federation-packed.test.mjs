@@ -504,6 +504,14 @@ test('uses candidate aliases and preserves maintained Octane downloads and tooli
         typescript: '7.0.0-test',
         '@types/node': '26.0.0',
       },
+      release: {
+        packages: [
+          {
+            sourceName: '@modern-js/i18n-runtime-extensions',
+            packageJson: { devDependencies: { i18next: '26.1.3' } },
+          },
+        ],
+      },
       packageRoots: {
         typescript,
         '@types/node': nodeTypes,
@@ -516,6 +524,7 @@ test('uses candidate aliases and preserves maintained Octane downloads and tooli
           octane: '0.7.1',
           '@module-federation/enhanced': '2.9.1',
           '@tsrx/oxc': '0.19.0',
+          i18next: '26.1.3',
         },
       },
       context,
@@ -527,6 +536,26 @@ test('uses candidate aliases and preserves maintained Octane downloads and tooli
     assert.equal(manifest.dependencies.octane, context.packageRequests.octane);
     assert.equal(manifest.dependencies['@module-federation/enhanced'], '2.9.2');
     assert.equal(manifest.dependencies['@tsrx/oxc'], '0.20.0');
+    assert.equal(manifest.dependencies.i18next, '26.1.3');
+    assert.throws(
+      () =>
+        packedNativeFederationManifest(
+          { dependencies: { i18next: '26.1.2' } },
+          context,
+        ),
+      /Authored i18next must match/u,
+    );
+    assert.throws(
+      () =>
+        packedNativeFederationManifest(
+          { dependencies: { i18next: '26.1.3' } },
+          {
+            ...context,
+            packageRequests: { ...context.packageRequests, i18next: '26.1.4' },
+          },
+        ),
+      /Authored i18next must match/u,
+    );
     assert.throws(
       () =>
         packedNativeFederationManifest(

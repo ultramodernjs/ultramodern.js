@@ -190,7 +190,6 @@ export function isForeignRendererPackage(
     name.startsWith('@modern-js/plugin-i18n/') ||
     name === '@modern-js/i18n-integration' ||
     name.startsWith('@modern-js/i18n-integration/') ||
-    name === '@modern-js/i18n-runtime-extensions' ||
     name.startsWith('@modern-js/i18n-runtime-extensions/') ||
     name === '@modern-js/plugin-runtime' ||
     name.startsWith('@modern-js/plugin-runtime/');

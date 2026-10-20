@@ -88,7 +88,7 @@ export function authorGeneratedWorkerApplication(config) {
     remoteOrigins: origins.slice(1),
     services: services.host,
     remoteServices: { 'remote-a': services.remoteA },
-    dependencies,
+    dependencies: { ...manifest.dependencies, ...dependencies },
   });
   const application = fixtures.applications.find(
     item => item.app.id === generatedApp.id,
