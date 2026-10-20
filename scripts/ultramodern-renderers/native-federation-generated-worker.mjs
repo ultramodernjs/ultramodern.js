@@ -9,6 +9,7 @@ import {
   authorGeneratedWorkerRoutes,
   generatedWorkerCoordinates,
   generatedWorkerDeploymentInput,
+  generatedWorkerSharedCounter,
 } from '../../tests/ultramodern-renderers/octane-federation-workers/generated.mjs';
 import {
   readWorkerFixturePlan,
@@ -422,6 +423,17 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
     signal,
   });
   assertReleaseAgeExclusionsUnchanged(releaseAgePolicy);
+  await runPackedNativeFederationCommand(
+    context.pnpmExecutable,
+    ['--filter', './packages/*', 'run', 'typecheck'],
+    {
+      witnessDirectory: path.join(context.workRoot, 'process-witnesses'),
+      cwd: workspaceRoot,
+      env: { ...process.env, NODE_PATH: '', NODE_ENV: 'production' },
+      log: path.join(context.workRoot, 'generated-shared-typecheck.log'),
+      signal,
+    },
+  );
   const cohortNames = new Set(
     context.cohort.artifacts.flatMap(item => [
       item.sourceName,
@@ -544,7 +556,11 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
       applications: compiled,
       routes: fixtures.routes,
       hops: fixtures.hops,
-      sharedCounterPath: path.join(workspaceRoot, 'shared/Counter.tsx'),
+      sharedCounterPath: path.join(
+        workspaceRoot,
+        generatedWorkerSharedCounter.directory,
+        generatedWorkerSharedCounter.source,
+      ),
       generatorPackageRoot: generator.directory,
       generatorConsumerRoot,
       browserDependencyRoot: context.browserDependencyRoot,

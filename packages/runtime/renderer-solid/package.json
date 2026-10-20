@@ -87,7 +87,7 @@
     "@solidjs/signals": "2.0.0-rc.15",
     "@solidjs/web": "2.0.0-rc.15",
     "@tanstack/history": "1.162.5",
-    "@tanstack/router-core": "1.171.37",
+    "@tanstack/router-core": "https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz",
     "isbot": "5.2.2",
     "solid-js": "2.0.0-rc.15"
   },

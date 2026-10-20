@@ -18,11 +18,13 @@ export const solidProfile: RendererBuildProfile<'solid'> = {
     name: '@modern-js/renderer-solid',
     version: '3.8.3',
     coreName: '@tanstack/router-core',
-    coreVersion: '1.171.37',
+    coreVersion: '1.171.38',
   },
   sourceExtensions: ['.tsx', '.ts', '.jsx', '.js'],
   jsxImportSource: '@solidjs/web',
   dependencies: {
+    '@tanstack/router-core':
+      'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz',
     'solid-js': '2.0.0-rc.15',
     '@solidjs/web': '2.0.0-rc.15',
     '@solidjs/signals': '2.0.0-rc.15',

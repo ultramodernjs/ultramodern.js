@@ -5,7 +5,7 @@ export const SOLID_RENDERER_PROFILE = {
   web: '2.0.0-rc.15',
   router: '@modern-js/renderer-solid/router@3.8.3',
   routerSource: '4fbd65c5c3b40be87a6248867c22021c1c19bba8',
-  routerCore: '1.171.37',
+  routerCore: '1.171.38',
   history: '1.162.5',
   publicRouteData: {
     containers: ['plain-record', 'null-record', 'array'],

@@ -2464,8 +2464,8 @@ importers:
         specifier: 1.162.5
         version: 1.162.5
       '@tanstack/router-core':
-        specifier: 1.171.37
-        version: 1.171.37(patch_hash=6ffa70914ed338f3cb56d3cd1f526e35286e09f287ecf48ee6dbc1aa18305458)
+        specifier: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
+        version: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
       isbot:
         specifier: 5.2.2
         version: 5.2.2

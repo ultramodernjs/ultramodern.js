@@ -2,6 +2,7 @@ const nativeCore =
   'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz';
 const nativeConsumers = new Set([
   'packages/runtime/renderer-octane',
+  'packages/runtime/renderer-solid',
   'tests/integration/renderer-octane',
 ]);
 

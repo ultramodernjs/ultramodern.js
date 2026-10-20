@@ -18,6 +18,7 @@ test('keeps the accepted native Core separate from the registry bindings', () =>
   );
   for (const path of [
     'packages/runtime/renderer-octane',
+    'packages/runtime/renderer-solid',
     'tests/integration/renderer-octane',
   ]) {
     assert.doesNotThrow(() =>
@@ -27,7 +28,6 @@ test('keeps the accepted native Core separate from the registry bindings', () =>
     assert.throws(() => assertRendererRouterCore(usage(path, '1.171.37')));
   }
   for (const path of [
-    'packages/runtime/renderer-solid',
     'packages/runtime/plugin-tanstack',
     'packages/new-consumer',
   ]) {

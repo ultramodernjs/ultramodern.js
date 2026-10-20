@@ -70,7 +70,7 @@ export function loader({ params, request }: DataHandlerInput) {
 `,
     'src/routes/blocked/page.tsx': `import { useBlocker } from '${adapter}/router';
 export default function Blocked() {
-  const blocker = useBlocker({ shouldBlockFn: async () => true, withResolver: true, enableBeforeUnload: false });
+  const blocker = useBlocker({ shouldBlockFn: () => Promise.resolve(true), withResolver: true, enableBeforeUnload: false });
   return <section>
     <output data-testid="navigation-blocker">{${blocker}.status}</output>
     <button type="button" data-testid="navigation-reject" onClick={() => ${blocker}.reset?.()}>Stay</button>

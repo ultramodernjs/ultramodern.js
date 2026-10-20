@@ -9,6 +9,7 @@ import {
   authorGeneratedWorkerRoutes,
   generatedWorkerCoordinates,
   generatedWorkerDeploymentInput,
+  generatedWorkerSharedCounter,
 } from './generated.mjs';
 
 const coordinates = [
@@ -246,19 +247,48 @@ test('explicit route authoring extends native topology bindings without changing
     assert.equal(binding.fragments[0], defaults[index].fragments[0]);
   }
   assert.equal(authorGeneratedWorkerRoutes(config, []), config);
-  for (const invalid of [
-    [],
-    [defaults[0]],
-    [defaults[0], defaults[0], defaults[1]],
-  ])
-    assert.throws(
-      () =>
-        authorGeneratedWorkerRoutes(
-          { deploy: { worker: { services: invalid } } },
-          generatedWorkerCoordinates.remotes,
-        ),
-      /Expected one topology-owned Worker binding/u,
-    );
+  assert.throws(
+    () =>
+      authorGeneratedWorkerRoutes(
+        {
+          deploy: {
+            worker: { services: [defaults[0], defaults[0], defaults[1]] },
+          },
+        },
+        generatedWorkerCoordinates.remotes,
+      ),
+    /Expected at most one topology-owned Worker binding/u,
+  );
+});
+
+test('route authoring follows public generation before remotes and Worker name overrides exist', () => {
+  const remotes = generatedWorkerCoordinates.remotes;
+  for (let count = 0; count <= remotes.length; count++) {
+    const defaults = remotes.slice(0, count).map(remote => ({
+      ...service(remote, false),
+      service: remote.id,
+    }));
+    const config = { deploy: { worker: { services: defaults } } };
+    const authored = authorGeneratedWorkerRoutes(config, remotes);
+    assert.equal(authored.deploy.worker.services.length, count);
+    assert.deepEqual(config.deploy.worker.services, defaults);
+    for (const [index, binding] of authored.deploy.worker.services.entries()) {
+      assert.equal(binding.service, remotes[index].id);
+      assert.equal(binding.binding, defaults[index].binding);
+      assert.deepEqual(
+        binding.fragments.map(fragment => fragment.expose),
+        ['./Widget', './Route'],
+      );
+      assert.equal(binding.fragments[0], defaults[index].fragments[0]);
+      assert.deepEqual(
+        binding.fragments[1],
+        service(remotes[index], true).fragments[0],
+      );
+    }
+  }
+  const incomplete = result();
+  incomplete.generation.workerServices[0].services.pop();
+  assert.throws(() => assertGeneratedWorkerResult(incomplete));
 });
 
 test('public source overlays retain generated strict inputs and never author renderer identities', t => {
@@ -296,6 +326,36 @@ test('public source overlays retain generated strict inputs and never author ren
     },
   });
   fs.writeFileSync(path.join(appRoot, 'tsconfig.json'), strict);
+  const modelRoot = path.join(root, 'packages/shared-contracts');
+  fs.mkdirSync(modelRoot, { recursive: true });
+  const modelManifest = {
+    scripts: {
+      typecheck:
+        'ultramodern-create ultramodern typecheck --project tsconfig.json',
+    },
+    devDependencies: { '@effect/tsgo': '0.53.1' },
+  };
+  fs.writeFileSync(
+    path.join(modelRoot, 'package.json'),
+    JSON.stringify(modelManifest),
+  );
+  fs.writeFileSync(
+    path.join(modelRoot, 'tsconfig.json'),
+    JSON.stringify({
+      extends: '../../tsconfig.base.json',
+      compilerOptions: {
+        composite: true,
+        declaration: true,
+        emitDeclarationOnly: true,
+      },
+      include: ['src'],
+    }),
+  );
+  fs.mkdirSync(path.join(appRoot, 'src'), { recursive: true });
+  const generatedEnv =
+    '/// <reference types="@modern-js/ultramodern-app-tools/react-types" />\ndeclare const ULTRAMODERN_SITE_URL: string;\n';
+  fs.writeFileSync(path.join(appRoot, 'src/modern-app-env.d.ts'), generatedEnv);
+
   const workspacePolicy = path.join(root, 'pnpm-workspace.yaml');
   fs.writeFileSync(
     workspacePolicy,
@@ -327,14 +387,62 @@ test('public source overlays retain generated strict inputs and never author ren
     dependencies,
   };
   authorGeneratedWorkerApplication(overlayInput);
-  assert.equal(
-    fs.readFileSync(path.join(appRoot, 'tsconfig.json'), 'utf8'),
-    strict,
+  assert.deepEqual(
+    JSON.parse(fs.readFileSync(path.join(appRoot, 'tsconfig.json'), 'utf8')),
+    {
+      ...JSON.parse(strict),
+      references: [{ path: '../../packages/shared-counter' }],
+    },
   );
+  assert.equal(
+    fs.readFileSync(path.join(appRoot, 'src/modern-app-env.d.ts'), 'utf8'),
+    generatedEnv,
+  );
+  assert.match(
+    fs.readFileSync(path.join(appRoot, 'src/worker-proof-env.d.ts'), 'utf8'),
+    /__octaneWorkerProof/u,
+  );
+  const sharedRoot = path.join(root, generatedWorkerSharedCounter.directory);
+  const sharedManifest = JSON.parse(
+    fs.readFileSync(path.join(sharedRoot, 'package.json'), 'utf8'),
+  );
+  assert.equal(sharedManifest.name, generatedWorkerSharedCounter.name);
+  assert.deepEqual(sharedManifest.exports, { '.': './src/Counter.tsx' });
+  assert.deepEqual(sharedManifest.dependencies, {
+    octane: dependencies.octane,
+  });
+  assert.deepEqual(
+    sharedManifest.devDependencies,
+    modelManifest.devDependencies,
+  );
+  const sharedConfig = JSON.parse(
+    fs.readFileSync(path.join(sharedRoot, 'tsconfig.json'), 'utf8'),
+  );
+  assert.equal(sharedConfig.extends, '../../tsconfig.base.json');
+  assert.equal(sharedConfig.compilerOptions.composite, true);
+  assert.equal(sharedConfig.compilerOptions.jsxImportSource, 'octane');
+  assert.deepEqual(sharedConfig.include, ['src']);
+  assert.deepEqual(sharedConfig.compilerOptions.types, []);
+  assert.match(
+    fs.readFileSync(
+      path.join(sharedRoot, generatedWorkerSharedCounter.source),
+      'utf8',
+    ),
+    /signal\$\(3\)/u,
+  );
+  assert.match(
+    fs.readFileSync(path.join(appRoot, 'src/components/Shell.tsx'), 'utf8'),
+    /from '@authored-worker\/shared-counter'/u,
+  );
+
   const authoredManifest = JSON.parse(
     fs.readFileSync(path.join(appRoot, 'package.json'), 'utf8'),
   );
   assert.equal(authoredManifest.dependencies.preserved, '1.0.0');
+  assert.equal(
+    authoredManifest.dependencies[generatedWorkerSharedCounter.name],
+    'workspace:*',
+  );
   assert.equal(authoredManifest.dependencies['@tsrx/oxc'], '0.20.0');
   assert.equal(
     authoredManifest.dependencies['@modern-js/renderer-core'],
@@ -389,8 +497,12 @@ test('vertical authoring preserves an already formatted shared Counter', t => {
     path.join(os.tmpdir(), 'worker-formatted-overlay-'),
   );
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  fs.mkdirSync(path.join(root, 'shared'));
-  const shared = path.join(root, 'shared/Counter.tsx');
+  const shared = path.join(
+    root,
+    generatedWorkerSharedCounter.directory,
+    generatedWorkerSharedCounter.source,
+  );
+  fs.mkdirSync(path.dirname(shared), { recursive: true });
   const formatted =
     '/* Public generator formatted this shared source. */\nexport function Counter() {\n  return <button>0</button>;\n}\n';
   fs.writeFileSync(shared, formatted);
@@ -408,6 +520,10 @@ test('vertical authoring preserves an already formatted shared Counter', t => {
       modernjs: { appId: generatedApp.id },
       dependencies: { baseline: '1.0.0', '@tsrx/oxc': '0.20.0' },
     }),
+  );
+  fs.writeFileSync(
+    path.join(appRoot, 'tsconfig.json'),
+    JSON.stringify({ compilerOptions: { strict: true }, include: ['src'] }),
   );
   const config = {
     operation: 'vertical',

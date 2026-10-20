@@ -13,8 +13,8 @@ const {
 async function main() {
   const { CDVC } = await import('check-dependency-version-consistency');
   const workspace = new CDVC('.', { ignorePackagePattern: ['^@examples/'] });
-  // Octane's accepted snapshot API requires its own Core archive. Check that
-  // exact package-specific contract before checking the remaining dependencies.
+  // Native snapshots and localized masks require the accepted Core archive.
+  // Check that exact contract before checking the remaining dependencies.
   assertRendererRouterCore(workspace.getDependency('@tanstack/router-core'));
 
   // Use the workspace-pinned version to avoid unexpected breaking changes from @latest.

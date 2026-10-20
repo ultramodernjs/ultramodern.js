@@ -27,6 +27,12 @@ export const generatedWorkerCoordinates = Object.freeze({
   })),
 });
 
+export const generatedWorkerSharedCounter = Object.freeze({
+  name: '@authored-worker/shared-counter',
+  directory: 'packages/shared-counter',
+  source: 'src/Counter.tsx',
+});
+
 /** Let the public workspace topology own host bindings; author only the extra remote hop. */
 export function generatedWorkerDeploymentInput(app, services) {
   return {
@@ -45,17 +51,18 @@ export function generatedWorkerDeploymentInput(app, services) {
   };
 }
 
-/** Explicitly opt authored host routes into the topology-owned Worker bindings. */
+/** Opt routes into current topology bindings; generation also reads this before remotes exist. */
 export function authorGeneratedWorkerRoutes(config, remotes) {
   if (remotes.length === 0) return config;
   const services = config.deploy?.worker?.services ?? [];
   for (const remote of remotes) {
     if (
-      services.filter(service => service.service === `proof-${remote.id}`)
-        .length !== 1
+      services.filter(service =>
+        service.fragments?.some(fragment => fragment.remote === remote.id),
+      ).length > 1
     )
       throw new Error(
-        `Expected one topology-owned Worker binding for ${remote.id}.`,
+        `Expected at most one topology-owned Worker binding for ${remote.id}.`,
       );
   }
   return {
@@ -65,8 +72,8 @@ export function authorGeneratedWorkerRoutes(config, remotes) {
       worker: {
         ...config.deploy?.worker,
         services: services.map(service => {
-          const remote = remotes.find(
-            value => service.service === `proof-${value.id}`,
+          const remote = remotes.find(value =>
+            service.fragments?.some(fragment => fragment.remote === value.id),
           );
           if (!remote) return service;
           return {
@@ -131,7 +138,12 @@ export function authorGeneratedWorkerApplication(config) {
     remoteOrigins: origins.slice(1),
     services: services.host,
     remoteServices: { 'remote-a': services.remoteA },
-    dependencies: { ...manifest.dependencies, ...dependencies },
+    dependencies: {
+      ...manifest.dependencies,
+      ...dependencies,
+      [generatedWorkerSharedCounter.name]: 'workspace:*',
+    },
+    sharedCounterPackage: generatedWorkerSharedCounter.name,
   });
   const application = fixtures.applications.find(
     item => item.app.id === generatedApp.id,
@@ -144,7 +156,9 @@ export function authorGeneratedWorkerApplication(config) {
     const destination = path.join(
       outputWorkspaceRoot,
       generatedApp.directory,
-      relative,
+      relative === 'src/modern-app-env.d.ts'
+        ? 'src/worker-proof-env.d.ts'
+        : relative,
     );
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     const authoredConfig =
@@ -153,10 +167,61 @@ export function authorGeneratedWorkerApplication(config) {
         : contents;
     fs.writeFileSync(destination, authoredConfig);
   }
-  const shared = path.join(outputWorkspaceRoot, 'shared/Counter.tsx');
+  const sharedRoot = path.join(
+    outputWorkspaceRoot,
+    generatedWorkerSharedCounter.directory,
+  );
+  const shared = path.join(sharedRoot, generatedWorkerSharedCounter.source);
   if (config.operation === 'workspace') {
+    const modelRoot = path.join(
+      outputWorkspaceRoot,
+      'packages/shared-contracts',
+    );
+    const modelManifest = readJson(path.join(modelRoot, 'package.json'));
+    const modelTsconfig = readJson(path.join(modelRoot, 'tsconfig.json'));
     fs.mkdirSync(path.dirname(shared), { recursive: true });
     fs.writeFileSync(shared, fixtures.shared['Counter.tsx']);
+    fs.writeFileSync(
+      path.join(sharedRoot, 'package.json'),
+      `${JSON.stringify(
+        {
+          name: generatedWorkerSharedCounter.name,
+          version: '0.0.0',
+          private: true,
+          type: 'module',
+          exports: { '.': `./${generatedWorkerSharedCounter.source}` },
+          scripts: { typecheck: modelManifest.scripts.typecheck },
+          dependencies: {
+            octane: manifest.dependencies.octane ?? dependencies.octane,
+          },
+          devDependencies: modelManifest.devDependencies,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    fs.writeFileSync(
+      path.join(sharedRoot, 'tsconfig.json'),
+      `${JSON.stringify(
+        {
+          ...modelTsconfig,
+          compilerOptions: {
+            ...modelTsconfig.compilerOptions,
+            outDir:
+              '../../node_modules/.cache/tsgo/declarations/packages__shared-counter',
+            tsBuildInfoFile:
+              '../../node_modules/.cache/tsgo/packages__shared-counter.tsbuildinfo',
+            jsx: 'preserve',
+            jsxImportSource: 'octane',
+            types: [],
+          },
+          tsrx: { compiler: 'octane/compiler/volar', platform: 'web' },
+          include: ['src'],
+        },
+        null,
+        2,
+      )}\n`,
+    );
   } else {
     assert.equal(config.operation, 'vertical');
     assert(
@@ -164,7 +229,36 @@ export function authorGeneratedWorkerApplication(config) {
       'The workspace must already own its Counter source.',
     );
   }
-  const addedDependencies = { ...manifest.dependencies };
+  const appTsconfigPath = path.join(
+    outputWorkspaceRoot,
+    generatedApp.directory,
+    'tsconfig.json',
+  );
+  const appTsconfig = readJson(appTsconfigPath);
+  const sharedReference = path.posix.relative(
+    generatedApp.directory,
+    generatedWorkerSharedCounter.directory,
+  );
+  fs.writeFileSync(
+    appTsconfigPath,
+    `${JSON.stringify(
+      {
+        ...appTsconfig,
+        references: [
+          ...(appTsconfig.references ?? []).filter(
+            reference => reference.path !== sharedReference,
+          ),
+          { path: sharedReference },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  const addedDependencies = {
+    ...manifest.dependencies,
+    [generatedWorkerSharedCounter.name]: 'workspace:*',
+  };
   for (const name of [
     '@modern-js/renderer-core',
     '@modern-js/i18n-runtime-extensions',

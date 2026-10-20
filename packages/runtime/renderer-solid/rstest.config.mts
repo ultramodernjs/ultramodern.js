@@ -36,6 +36,8 @@ export default defineConfig({
     {
       name: 'client',
       root: __dirname,
+      // Nested projects do not inherit the package-level timeout.
+      testTimeout: 30_000,
       include: ['tests/client/**/*.test.{ts,tsx}'],
       exclude: ['tests/client/router-lifecycle.test.tsx'],
       testEnvironment: 'happy-dom',
