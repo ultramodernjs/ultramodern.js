@@ -919,8 +919,18 @@ async function main() {
           './native-federation-dev.mjs',
           'runPackedNativeFederationDevProof',
         ],
-        // Installed Octane Worker rows are deferred to .10 with
-        // requiredRendererFeatureRows (modernjs-dnpv3.58.11.5.9).
+        [
+          'prebuilt-worker',
+          'octane',
+          './native-federation-worker.mjs',
+          'runPackedNativeFederationWorkerProof',
+        ],
+        [
+          'generated-worker',
+          'octane',
+          './native-federation-generated-worker.mjs',
+          'runPackedNativeFederationGeneratedWorkerProof',
+        ],
       ]) {
         await step(row, async () => {
           if (!apps[renderer])
