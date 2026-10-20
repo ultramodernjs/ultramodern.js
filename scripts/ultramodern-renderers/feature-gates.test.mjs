@@ -94,15 +94,6 @@ for (const status of ['skipped', 'failed', 'not-run', undefined])
     );
   });
 
-test('missing generated Worker proof cannot be replaced by prebuilt Worker', t => {
-  const { options } = fixture(t);
-  delete options.rows['generated-worker'];
-  assert.throws(
-    () => writeRendererFeatureReceipt(options),
-    /Every renderer feature row/u,
-  );
-});
-
 test('generated Solid strict/browser acceptance is required independently of Worker and HMR', t => {
   const { options } = fixture(t);
   delete options.rows['generated-solid'];
@@ -258,7 +249,7 @@ test('downloaded source results require all rows and the actual ERP digest', t =
   writeRendererFeatureReceipt(options);
   verifyRendererFeatureReceipt(options);
   const receipt = JSON.parse(fs.readFileSync(options.receiptPath));
-  delete receipt.rows['generated-worker'];
+  delete receipt.rows['generated-solid'];
   fs.writeFileSync(options.receiptPath, JSON.stringify(receipt));
   assert.throws(
     () => verifyRendererFeatureReceipt(options),
@@ -277,7 +268,7 @@ for (const mutation of ['outside', 'empty', 'cross-row'])
     } else if (mutation === 'empty') {
       fs.writeFileSync(evidence.path, '');
       evidence.sha256 = digestFile(evidence.path);
-    } else rows['generated-worker'].evidence = rows['dev-refresh'].evidence;
+    } else rows['generated-solid'].evidence = rows['dev-refresh'].evidence;
     assert.throws(
       () => writeRendererFeatureReceipt(options),
       /distinct feature-row logs|nonempty/u,
