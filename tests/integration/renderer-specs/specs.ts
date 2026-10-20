@@ -59,6 +59,20 @@ const browserUserAgent =
 
 const id = (testId: string) => `[data-testid="${testId}"]`;
 
+// Watchers must see either complete source revision, never a truncated module.
+function replaceSourceFile(file: string, source: string) {
+  const stagingDirectory = fs.mkdtempSync(
+    path.join(path.dirname(file), '.renderer-hmr-'),
+  );
+  try {
+    const stagedFile = path.join(stagingDirectory, 'source.tmp');
+    fs.writeFileSync(stagedFile, source, { mode: fs.statSync(file).mode });
+    fs.renameSync(stagedFile, file);
+  } finally {
+    fs.rmSync(stagingDirectory, { recursive: true, force: true });
+  }
+}
+
 /**
  * One behavior contract for every renderer. Fixtures share the data-testid
  * names, loader cases and action intents, so each spec runs unchanged.
@@ -587,7 +601,7 @@ export function defineRendererSpecs(options: RendererSpecOptions) {
     const messageFile = path.join(appDir, 'src/components/Message.tsx');
     const original = fs.readFileSync(messageFile, 'utf8');
     useApp(port => launchApp(appDir, port, { modernBin }));
-    afterAll(() => fs.writeFileSync(messageFile, original));
+    afterAll(() => replaceSourceFile(messageFile, original));
 
     spec(
       'dev-hmr',
@@ -598,7 +612,7 @@ export function defineRendererSpecs(options: RendererSpecOptions) {
         });
         const before = documentRequests.length;
         try {
-          fs.writeFileSync(
+          replaceSourceFile(
             messageFile,
             original.replace('Native message', 'Native message edited'),
           );
@@ -620,7 +634,7 @@ export function defineRendererSpecs(options: RendererSpecOptions) {
           expect(sockets.length).toBeGreaterThan(0);
           expect(pageErrors).toEqual([]);
         } finally {
-          fs.writeFileSync(messageFile, original);
+          replaceSourceFile(messageFile, original);
         }
       },
       // Cold dev compilation plus a rebuild can each take tens of seconds.
