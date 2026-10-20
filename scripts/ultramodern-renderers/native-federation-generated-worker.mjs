@@ -551,7 +551,16 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
   const fixtures = createOctaneWorkerFederationFixtures({
     host: generation.applications[0],
     remotes: generation.applications.slice(1),
-    dependencies,
+    dependencies: {
+      ...readJson(
+        path.join(
+          workspaceRoot,
+          generation.applications[0].directory,
+          'package.json',
+        ),
+      ).dependencies,
+      ...dependencies,
+    },
     remoteOrigins: origins.slice(1),
     services: services.host,
     remoteServices: { 'remote-a': services.remoteA },

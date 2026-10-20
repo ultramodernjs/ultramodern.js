@@ -400,7 +400,7 @@ test('public source overlays retain generated strict inputs and never author ren
   );
   assert.match(
     fs.readFileSync(path.join(appRoot, 'src/worker-proof-env.d.ts'), 'utf8'),
-    /__octaneWorkerProof/u,
+    /export interface OctaneWorkerProofObservations \{.*\}\ndeclare global \{ var __octaneWorkerProof: OctaneWorkerProofObservations \| undefined; \}/u,
   );
   const sharedRoot = path.join(root, generatedWorkerSharedCounter.directory);
   const sharedManifest = JSON.parse(

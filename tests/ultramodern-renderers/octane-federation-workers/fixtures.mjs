@@ -471,7 +471,7 @@ export function createOctaneWorkerFederationFixtures({
     'locales/cs/translation.json': json({
       greeting: isHost ? 'Ahoj od hostitele' : `Ahoj od ${app.id}`,
     }),
-    'src/modern-app-env.d.ts': `export {};\ndeclare global { var __octaneWorkerProof: { mounts: Record<string, number>; cleanups: Record<string, number> } | undefined; }\n`,
+    'src/modern-app-env.d.ts': `export interface OctaneWorkerProofObservations { cleanups: Record<string, number>; mounts: Record<string, number> }\ndeclare global { var __octaneWorkerProof: OctaneWorkerProofObservations | undefined; }\n`,
   });
   const remote = (app, origin, index) => ({
     ...application(app, origin, remoteServices[app.id] ?? [], false),

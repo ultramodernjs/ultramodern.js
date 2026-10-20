@@ -8,6 +8,7 @@ import {
   type NativeRoutedApplication,
 } from '@modern-js/renderer-core/router';
 import {
+  type AnyRoute,
   type AnyRouter,
   associateRouterRenderProfile,
   createRouterRenderRouteTree,
@@ -107,6 +108,7 @@ function fixture(
       search: Record<string, unknown>,
     ) => Record<string, unknown>;
     component?: RouteComponent;
+    head?: AnyRoute['options']['head'];
   } = {},
 ) {
   const privateContext = { credential: 'HOST_PRIVATE_CREDENTIAL' };
@@ -128,6 +130,7 @@ function fixture(
     ],
     routeModules: {
       product: {
+        ...(options.head ? { head: { head: options.head } } : {}),
         ...(options.validateSearch
           ? { search: { validateSearch: options.validateSearch } }
           : {}),
@@ -239,6 +242,42 @@ function nativeI18n() {
 }
 
 describe('generated Octane router Worker snapshots', () => {
+  test('captures generated route heads without replaying their callbacks in the Worker', async () => {
+    const head = rs.fn(() => ({ meta: [{ title: 'Host product' }] }));
+    const host = fixture({ head });
+    await host.router.load();
+    expect(head).toHaveBeenCalled();
+    const calls = head.mock.calls.length;
+    const snapshot = captureOctaneRouterSnapshot(host.router);
+    const restored = await restore(JSON.parse(JSON.stringify(snapshot)));
+    expect(matches(restored)).toEqual(matches(host.router));
+    expect(head.mock.calls.length).toBe(calls);
+    expect(
+      Object.values(restored.routesById).every(
+        route => route.options.head === undefined,
+      ),
+    ).toBe(true);
+  });
+
+  test.each(['replace', 'add', 'remove'])(
+    'rejects a file-route head callback changed by %s',
+    async operation => {
+      const head = () => ({ meta: [{ title: 'Host product' }] });
+      const host = fixture(operation === 'add' ? {} : { head });
+      await host.router.load();
+      const route = Object.values(host.router.routesById).find(
+        route => route.options.staticData?.ultramodernRouteId === 'product',
+      );
+      if (!route) throw new Error('Missing product route');
+      route.update({
+        head: operation === 'remove' ? undefined : () => ({ meta: [] }),
+      });
+      expect(() => captureOctaneRouterSnapshot(host.router)).toThrow(
+        'authored route behavior requires an exact local profile',
+      );
+    },
+  );
+
   test('restores host logical identity and public loader data without private handler input or loader replay', async () => {
     const host = fixture();
     await host.router.load();

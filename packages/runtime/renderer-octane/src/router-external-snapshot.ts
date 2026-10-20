@@ -1,7 +1,7 @@
 import type { LocalisedUrlsOption } from '@modern-js/i18n-runtime-extensions/paths';
 import {
+  type AnyRoute,
   type AnyRouter,
-  assertDefaultRouterRenderHost,
   associateRouterRenderProfile,
   captureRouterRenderSnapshot,
   createRouterRenderRouteTree,
@@ -16,6 +16,7 @@ import {
   restoreRouterRenderSnapshot,
   routerContext,
 } from '@octanejs/tanstack-router';
+import { hasUnchangedOctaneFileRouteHead } from './routes';
 import {
   getOctaneWorkerRouterRewrite,
   OCTANE_WORKER_CONTEXT_KEYS,
@@ -163,6 +164,62 @@ function validateDefaultSnapshot(snapshot: RouterRenderSnapshot): void {
   rewriteDescriptor(snapshot.i18n);
 }
 
+/** File-route heads are host presentation work, like the already settled loaders. */
+function assertFileRouteRenderHost(
+  router: AnyRouter,
+  allowRewrite: boolean,
+): void {
+  if (
+    router.options.parseSearch !== defaultParseSearch ||
+    router.options.stringifySearch !== defaultStringifySearch ||
+    (!allowRewrite && router.options.rewrite) ||
+    router.options.routeMasks?.length
+  )
+    throw new TypeError(
+      'Router render snapshot: authored router behavior requires an exact local profile',
+    );
+  const authoredRouting = [
+    'caseSensitive',
+    'validateSearch',
+    'loaderDeps',
+    'beforeLoad',
+    'context',
+    'onEnter',
+    'onStay',
+    'onLeave',
+    'lazyFn',
+    'scripts',
+    'headers',
+    'onError',
+    'parseParams',
+    'stringifyParams',
+  ];
+  const seen = new Set<AnyRoute>();
+  const visit = (route: AnyRoute, depth: number) => {
+    if (seen.has(route) || seen.size >= 4096 || depth > 64)
+      throw new TypeError(
+        'Router render snapshot: route geometry must be bounded and acyclic',
+      );
+    seen.add(route);
+    if (
+      authoredRouting.some(
+        key => Reflect.get(route.options, key) !== undefined,
+      ) ||
+      route.options.params?.parse ||
+      route.options.params?.stringify ||
+      route.options.search?.middlewares?.length ||
+      route.lazyFn ||
+      ('path' in route.options && 'id' in route.options) ||
+      !hasUnchangedOctaneFileRouteHead(route)
+    )
+      throw new TypeError(
+        'Router render snapshot: authored route behavior requires an exact local profile',
+      );
+    for (const child of route.children ?? []) visit(child, depth + 1);
+  };
+  visit(router.options.routeTree, 0);
+}
+
 function ensureDefaultProfile(): void {
   if (profileRegistered) return;
   registerRouterRenderProfile({
@@ -176,7 +233,7 @@ function ensureDefaultProfile(): void {
           JSON.stringify(origin.publicContext)
       )
         throw new TypeError('Generated Worker router origin changed');
-      assertDefaultRouterRenderHost(router, snapshot.i18n !== undefined);
+      assertFileRouteRenderHost(router, snapshot.i18n !== undefined);
       validateDefaultSnapshot(snapshot);
       if (
         JSON.stringify(nativeRewriteDescriptor(router)) !==
