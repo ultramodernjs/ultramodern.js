@@ -25,7 +25,7 @@ export default defineConfig({
 `,
     'locales/en/translation.json': '{"title":"English"}\n',
     'locales/cs/translation.json': '{"title":"Česky"}\n',
-    'src/routes/layout.tsx': `import { Outlet, useLocation } from '${adapter}/router';
+    'src/routes/layout.tsx': `import { type HistoryState, Outlet, useLocation } from '${adapter}/router';
 import { LocalizedLink, useI18n } from '${adapter}/i18n';
 
 export default function Layout() {
@@ -34,8 +34,8 @@ export default function Layout() {
   return <main data-testid="navigation-layout">
     <nav>
       <LocalizedLink data-testid="localized-product" to="/items/$id" params={{ id: 'red' }} language="cs"
-        search={previous => ({ ...previous, sort: 'price' })} hash="details"
-        state={previous => ({ ...previous, cart: 'tractor' })} preload="intent"
+        search={(previous: Record<string, unknown>) => ({ ...previous, sort: 'price' })} hash="details"
+        state={(previous: HistoryState) => ({ ...previous, cart: 'tractor' })} preload="intent"
         activeProps={{ 'data-selected': 'yes' }} inactiveProps={{ 'data-selected': 'no' }}>Red</LocalizedLink>
       <LocalizedLink data-testid="localized-replace" to="/items/$id" params={{ id: 'blue' }} language="cs"
         replace preload={false}>Blue</LocalizedLink>
@@ -65,7 +65,7 @@ export default function Item() {
 `,
     'src/routes/items/[id]/page.data.ts': `import type { DataHandlerInput } from '@modern-js/renderer-core/data';
 export function loader({ params, request }: DataHandlerInput) {
-  return { id: params.id, sort: new URL(request.url).searchParams.get('sort') };
+  return { id: params['id'], sort: new URL(request.url).searchParams.get('sort') };
 }
 `,
     'src/routes/blocked/page.tsx': `import { useBlocker } from '${adapter}/router';
