@@ -251,10 +251,7 @@ export async function runPackedNativeFederationGeneratedWorkerProof(context) {
     checks,
     evidence: [
       ...envelope.evidence,
-      ...[proofResultPath, context.log].map(filename => ({
-        path: filename,
-        sha256: digest(filename),
-      })),
+      { path: proofResultPath, sha256: digest(proofResultPath) },
     ],
   };
   fs.writeFileSync(
