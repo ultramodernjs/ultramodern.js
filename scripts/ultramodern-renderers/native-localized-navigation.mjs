@@ -102,14 +102,44 @@ export function localizedNavigationInputs(release, nativeInputs) {
     ),
   };
   const solid = renderer('solid').packageJson;
-  const coreRequest = solid.dependencies?.['@tanstack/router-core'];
-  const solidUsesNativeCore =
-    coreRequest === artifacts['@tanstack/router-core'].request;
+  // A published renderer cannot install archive subdependencies, so Solid
+  // declares the fork Core as nativeArtifacts metadata plus an exact peer.
+  const solidArtifact =
+    solid.ultramodern?.nativeArtifacts?.['@tanstack/router-core'];
+  const solidUsesNativeCore = solidArtifact !== undefined;
+  if (solidUsesNativeCore) {
+    const accepted = artifacts['@tanstack/router-core'];
+    assert.deepEqual(
+      {
+        request: solidArtifact.request,
+        integrity: solidArtifact.integrity,
+        version: solidArtifact.version,
+      },
+      {
+        request: accepted.request,
+        integrity: accepted.integrity,
+        version: accepted.version,
+      },
+      'Solid must declare the same accepted Router Core archive as Octane',
+    );
+    assert.equal(
+      solid.peerDependencies?.['@tanstack/router-core'],
+      core.version,
+      'Solid must peer on the exact accepted Router Core version',
+    );
+    assert.equal(
+      solid.dependencies?.['@tanstack/router-core'],
+      undefined,
+      'Solid must not install the Router Core archive as a dependency',
+    );
+  }
   const expectedNativeTuples = {
     solid: {
       routerCore: identity(
         '@tanstack/router-core',
-        solidUsesNativeCore ? core.version : coreRequest,
+        solidUsesNativeCore
+          ? core.version
+          : solid.dependencies?.['@tanstack/router-core'],
       ),
       history: identity(
         '@tanstack/history',

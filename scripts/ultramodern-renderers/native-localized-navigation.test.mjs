@@ -270,6 +270,18 @@ test('derives distinct Solid and Octane tuples from verified packed requests and
   );
   solid.packageJson.dependencies['@tanstack/router-core'] =
     nativeInputs['@tanstack/router-core'].request;
+  solid.packageJson.ultramodern = {
+    nativeArtifacts: {
+      '@tanstack/router-core':
+        manifest.ultramodern.nativeArtifacts['@tanstack/router-core'],
+    },
+  };
+  solid.packageJson.peerDependencies = { '@tanstack/router-core': '1.0.0' };
+  assert.throws(
+    () => localizedNavigationInputs(release, nativeInputs),
+    /must not install the Router Core archive/u,
+  );
+  delete solid.packageJson.dependencies['@tanstack/router-core'];
   assert.equal(
     localizedNavigationInputs(release, nativeInputs).solidUsesNativeCore,
     true,
@@ -279,6 +291,12 @@ test('derives distinct Solid and Octane tuples from verified packed requests and
       .routerCore.version,
     '1.0.0',
   );
+  solid.packageJson.peerDependencies['@tanstack/router-core'] = '1.0.1';
+  assert.throws(
+    () => localizedNavigationInputs(release, nativeInputs),
+    /exact accepted Router Core version/u,
+  );
+  solid.packageJson.peerDependencies['@tanstack/router-core'] = '1.0.0';
   assert.throws(
     () => localizedNavigationInputs(release, {}),
     /requires authenticated native input octane/u,
