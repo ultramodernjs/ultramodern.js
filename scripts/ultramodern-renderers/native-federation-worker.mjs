@@ -295,7 +295,28 @@ export async function preparePackedWorkerSource({
   const workspace = fs.realpathSync(directory);
   const owner = fs.realpathSync(context.workRoot);
   assert(workspace.startsWith(`${owner}${path.sep}`));
-  assert(!fs.existsSync(path.join(workspace, '.git')));
+  const gitDirectory = path.join(workspace, '.git');
+  if (fs.existsSync(gitDirectory)) {
+    assert(
+      fs.lstatSync(gitDirectory).isDirectory() &&
+        fs.realpathSync(gitDirectory) === gitDirectory,
+      'The Worker fixture must own its Git directory.',
+    );
+    const repository = await runWorkerSourceGit(
+      ['rev-parse', '--show-toplevel', '--absolute-git-dir'],
+      {
+        directory: workspace,
+        context,
+        signal,
+        label: 'source-git-owner',
+      },
+    );
+    assert.deepEqual(
+      repository.split('\n').map(directory => fs.realpathSync(directory)),
+      [workspace, gitDirectory],
+      'The Worker fixture must own its Git repository.',
+    );
+  }
   for (const [label, args] of [
     ['init', ['init', '--quiet']],
     ['add', ['add', '--all']],

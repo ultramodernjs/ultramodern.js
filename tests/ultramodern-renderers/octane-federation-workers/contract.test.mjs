@@ -24,6 +24,7 @@ import {
   openWorkerFixtureBrowser,
   readWorkerFixturePlan,
   verifyWorkerCompositionRoutes,
+  waitForWorkerSsrCompletion,
 } from './proof.mjs';
 import { sourceWorkerGitignore } from './source.mjs';
 
@@ -575,7 +576,7 @@ test('ordinary fixtures retain public generator identity and share one native si
   for (const { app, files } of packageFixture.applications) {
     const source =
       files[
-        app === host ? 'src/components/Shell.tsx' : 'src/components/widget.tsx'
+        app === host ? 'src/components/shell.tsx' : 'src/components/widget.tsx'
       ];
     assert.match(
       source,
@@ -640,7 +641,7 @@ test('ordinary fixtures retain public generator identity and share one native si
     assert(files['modern.config.ts'].includes(JSON.stringify(app.id)));
     const source =
       app === host
-        ? files['src/components/Shell.tsx']
+        ? files['src/components/shell.tsx']
         : files['src/components/widget.tsx'];
     assert.match(
       source,
@@ -929,6 +930,130 @@ test('header and full-body hangs release their request lease once on cancellatio
     const state = await faultMode(handler, 'pass');
     assert.equal(state.active, 0);
     assert.equal(state.cancellations, 1);
+  }
+});
+
+test('Worker recovery waits for the entire SSR response before checking cancellation', async () => {
+  let complete;
+  let settled = false;
+  const finished = new Promise(resolve => {
+    complete = resolve;
+  });
+  const pending = waitForWorkerSsrCompletion(
+    { finished: () => finished },
+    Date.now(),
+  ).then(() => {
+    settled = true;
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(
+    settled,
+    false,
+    'A visible initial fallback cannot complete SSR recovery',
+  );
+  complete(null);
+  await pending;
+  assert.equal(settled, true);
+  const failure = new Error('SSR stream interrupted');
+  await assert.rejects(
+    waitForWorkerSsrCompletion({ finished: async () => failure }, Date.now()),
+    error => error === failure,
+  );
+  await assert.rejects(
+    waitForWorkerSsrCompletion(
+      { finished: () => new Promise(() => {}) },
+      Date.now() - 5000,
+    ),
+    /native SSR response exceeded its bounded deadline/,
+  );
+});
+
+test('workerd service hangs remain pending until the caller cancels headers or body', async () => {
+  const request = createRequire(
+    new URL(
+      '../../../packages/toolkit/ultramodern-create/package.json',
+      import.meta.url,
+    ),
+  );
+  const { Miniflare, convertV4MiniflareOptions, Log, LogLevel } =
+    request('miniflare');
+  const compatibility = {
+    compatibilityDate: '2026-10-01',
+    compatibilityFlags: ['nodejs_compat', 'enable_request_signal'],
+  };
+  const runtime = new Miniflare(
+    convertV4MiniflareOptions({
+      log: new Log(LogLevel.ERROR),
+      workers: [
+        {
+          ...compatibility,
+          name: 'host',
+          modules: true,
+          serviceBindings: { FAULT: 'fault' },
+          script: `
+export default {
+  async fetch(request, env) {
+    const mode = new URL(request.url).searchParams.get('mode');
+    const before = await (await env.FAULT.fetch('https://fault.test/__proof/control', {
+      method: 'POST', body: JSON.stringify({mode}),
+    })).json();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error('owned cancellation')), 100);
+    let failure;
+    try {
+      const response = await env.FAULT.fetch(new Request('https://fault.test/native', {
+        method: mode.startsWith('manifest-') ? 'GET' : 'POST',
+        signal: controller.signal,
+      }));
+      await response.text();
+    } catch (error) {
+      failure = String(error);
+    } finally {
+      clearTimeout(timer);
+    }
+    const after = await (await env.FAULT.fetch('https://fault.test/__proof/control')).json();
+    return Response.json({
+      failure, active: after.active,
+      cancellations: after.cancellations - before.cancellations,
+    });
+  },
+};`,
+        },
+        {
+          ...compatibility,
+          name: 'fault',
+          modules: true,
+          script: workerFederationFaultSource,
+          serviceBindings: { TARGET: 'target' },
+        },
+        {
+          ...compatibility,
+          name: 'target',
+          modules: true,
+          script:
+            'export default {fetch() {return new Response("body prefix")}}',
+        },
+      ],
+    }),
+  );
+  try {
+    for (const mode of [
+      'headers-hang',
+      'body-hang',
+      'manifest-headers-hang',
+      'manifest-body-hang',
+    ]) {
+      const response = await runtime.dispatchFetch(
+        `https://host.test/?mode=${mode}`,
+      );
+      assert.deepEqual(await response.json(), {
+        failure: 'Error: owned cancellation',
+        active: 0,
+        cancellations: 1,
+      });
+    }
+  } finally {
+    await runtime.dispose();
   }
 });
 

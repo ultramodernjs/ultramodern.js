@@ -12,6 +12,7 @@ import {
   generatePackedWorkerWorkspace,
   packedWorkerDependencies,
   packedWorkerProofContext,
+  preparePackedWorkerSource,
   runPackedNativeFederationWorkerProof,
   runWorkerCompilationCommand,
   verifyPackedWorkerProofEnvelope,
@@ -179,6 +180,36 @@ test('packed Worker builds derive their identity from the actual clean fixture c
     assertPackedWorkerSource({ ...options, label: 'changed-fixture' }),
     /Authored Worker sources changed/u,
   );
+});
+
+test('packed Worker source preparation rejects a linked foreign Git directory', async t => {
+  assert(
+    process.env.OWNED_TEMP_DIR,
+    'Run filesystem tests through owned-temp-dir',
+  );
+  const workRoot = fs.mkdtempSync(
+    path.join(process.env.OWNED_TEMP_DIR, 'worker-foreign-source-'),
+  );
+  t.after(() => fs.rmSync(workRoot, { recursive: true, force: true }));
+  const directory = path.join(workRoot, 'workspace');
+  const foreign = path.join(workRoot, 'foreign');
+  fs.mkdirSync(directory);
+  fs.mkdirSync(foreign);
+  for (const linked of [false, true]) {
+    const gitDirectory = path.join(directory, '.git');
+    if (linked) fs.symlinkSync(foreign, gitDirectory);
+    else fs.writeFileSync(gitDirectory, `gitdir: ${foreign}\n`);
+    await assert.rejects(
+      preparePackedWorkerSource({
+        directory,
+        context: { workRoot },
+        signal: new AbortController().signal,
+      }),
+      /The Worker fixture must own its Git directory/u,
+    );
+    fs.unlinkSync(gitDirectory);
+  }
+  assert.deepEqual(fs.readdirSync(foreign), []);
 });
 
 test('failed Worker commands preserve bounded compiler output after log cleanup', async t => {

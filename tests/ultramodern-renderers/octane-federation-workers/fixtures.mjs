@@ -132,9 +132,17 @@ export function createWorkerFederationFaultHandler() {
       const waitForAbort = reject => {
         let finished = false;
         evidence.active++;
+        // A signal listener alone is not pending I/O to workerd: it terminates
+        // that handler before the caller's deadline can cancel the request.
+        // Keep an event pending beyond the proof's bounded recovery deadline.
+        const watchdog = setTimeout(
+          () => reject(new Error('Fault request was not canceled within 30s')),
+          30_000,
+        );
         const abort = () => {
           if (finished) return;
           finished = true;
+          clearTimeout(watchdog);
           evidence.active--;
           evidence.cancellations++;
           request.signal.removeEventListener('abort', abort);
@@ -252,7 +260,7 @@ export default function Counter(props: { id: string; initial: number }) {
 
 const layout =
   host => `import { Outlet } from '@modern-js/renderer-octane/router';
-${host ? "import Shell from '../components/Shell';" : ''}
+${host ? "import Shell from '../components/shell';" : ''}
 export default function Layout() {
   return <main>${host ? '<Shell />' : ''}<Outlet /></main>;
 }
@@ -272,21 +280,25 @@ type RemoteProps = { id: string; initial: number; hostAppId: string; label: stri
 export default function Widget(props: RemoteProps) {
   const identity = useApplicationIdentity();
   const pathname = useRouterState({ select: state => state.location.pathname });
-  const match = useMatch({ strict: false, select: value => ({ id: value.id, routeId: value.routeId, params: value.params, search: value.search }) });
+  const match = useMatch({ strict: false, select: value => ({ id: value.id, params: value.params, routeId: value.routeId, search: value.search }) });
   const matches = useRouterState({ select: state => state.matches.map(value => value.id) });
   const publicHref = useRouterState({ select: state => state.location.publicHref });
   const i18n = useI18n();
   useEffect(() => {
-    const observations = (globalThis.__octaneWorkerProof ??= { mounts: {}, cleanups: {} });
+    let observations = globalThis.__octaneWorkerProof;
+    if (!observations) {
+      observations = { cleanups: {}, mounts: {} };
+      globalThis.__octaneWorkerProof = observations;
+    }
     observations.mounts[props.id] = (observations.mounts[props.id] ?? 0) + 1;
     return () => { observations.cleanups[props.id] = (observations.cleanups[props.id] ?? 0) + 1; };
-  }, []);
+  }, [props.id]);
   return <section data-worker-remote={props.id} data-app-id={identity.appId} data-owner={identity.appId === props.hostAppId ? 'host' : 'detached'} data-path={pathname} data-public-href={publicHref} data-match-id={match.id} data-match-route-id={match.routeId} data-match-params={JSON.stringify(match.params)} data-match-search={JSON.stringify(match.search)} data-match-current={matches.includes(match.id)} data-language={i18n.language}>
     <p data-remote-label={props.id}>{props.label}</p>
     <p data-remote-greeting={props.id}>{i18n.t('greeting')}</p>
     <input data-remote-input={props.id} defaultValue="server draft" />
     <Counter id={props.id} initial={props.initial} />
-    ${nestedRemote ? '<>{props.nested && <Nested id="b-hop" initial={37} hostAppId={props.hostAppId} label={props.label} />}</>' : ''}
+    ${nestedRemote ? '{props.nested && <Nested id="b-hop" initial={37} hostAppId={props.hostAppId} label={props.label} />}' : ''}
   </section>;
 }
 `;
@@ -527,7 +539,7 @@ export function createOctaneWorkerFederationFixtures({
           ...application(host, undefined, services, true),
           'module-federation.config.ts': `export default ${JSON.stringify({ name: host.moduleFederationName, remotes: Object.fromEntries(remoteOrigins.map((origin, index) => [remotes[index].id, `${remotes[index].moduleFederationName}@${origin}/mf-manifest.json`])) })};\n`,
           'src/routes/page.tsx': `export default function Home() { return <p data-host-home>Native Worker host</p>; }\n`,
-          'src/components/Shell.tsx': `import { useState } from 'octane';
+          'src/components/shell.tsx': `import { useState } from 'octane';
 import { federatedComponent } from '@modern-js/renderer-octane/federation';
 import { Link, useApplicationIdentity, useMatch, useRouterState } from '@modern-js/renderer-octane/router';
 import { useI18n } from '@modern-js/renderer-octane/i18n';
@@ -537,7 +549,7 @@ const A = federatedComponent<RemoteProps>(${JSON.stringify(`${remotes[0].id}/Wid
 const B = federatedComponent<RemoteProps>(${JSON.stringify(`${remotes[1].id}/Widget`)}, { timeout: 1000, fallback: () => <p data-fallback="b">Remote B unavailable</p> });
 export default function Home() {
   const identity = useApplicationIdentity();
-  const match = useMatch({ strict: false, select: value => ({ id: value.id, routeId: value.routeId, params: value.params, search: value.search }) });
+  const match = useMatch({ strict: false, select: value => ({ id: value.id, params: value.params, routeId: value.routeId, search: value.search }) });
   const matches = useRouterState({ select: state => state.matches.map(value => value.id) });
   const publicHref = useRouterState({ select: state => state.location.publicHref });
   const pathname = useRouterState({ select: state => state.location.pathname });
@@ -548,10 +560,10 @@ export default function Home() {
   return <section data-worker-host="true" data-host-app-id={identity.appId} data-app-id={identity.appId} data-match-id={match.id} data-match-route-id={match.routeId} data-match-params={JSON.stringify(match.params)} data-match-search={JSON.stringify(match.search)} data-match-current={matches.includes(match.id)} data-path={pathname} data-public-href={publicHref} data-language={i18n.language}>
     <p data-host-greeting>{i18n.t('greeting')}</p>
     <Counter id="host" initial={5} />
-    <button data-host-relabel onClick={() => setLabel('updated by host')}>Relabel</button>
-    <button data-host-language onClick={() => void i18n.changeLanguage('cs')}>Czech</button>
-    <button data-host-toggle="a" onClick={() => setVisibleA(value => !value)}>Toggle A</button>
-    <button data-host-toggle="b" onClick={() => setVisibleB(value => !value)}>Toggle B</button>
+    <button type="button" data-host-relabel onClick={() => setLabel('updated by host')}>Relabel</button>
+    <button type="button" data-host-language onClick={() => { i18n.changeLanguage('cs'); }}>Czech</button>
+    <button type="button" data-host-toggle="a" onClick={() => setVisibleA(value => !value)}>Toggle A</button>
+    <button type="button" data-host-toggle="b" onClick={() => setVisibleB(value => !value)}>Toggle B</button>
     {visibleA && <A id="a" initial={11} hostAppId={identity.appId} label={label} />}
     {visibleB && <B id="b" initial={19} hostAppId={identity.appId} label={label} />}
     <Link to="/about" data-host-navigation>About</Link>
@@ -566,7 +578,7 @@ import { useI18n } from '@modern-js/renderer-octane/i18n';
 const Nested = federatedComponent<{ id: string; initial: number; hostAppId: string; label: string; nested: boolean }>(${JSON.stringify(`${remotes[0].id}/Widget`)}, { timeout: 1000, fallback: () => <p data-fallback="a-hop">Remote A unavailable</p> });
 export default function NestedPage() {
   const identity = useApplicationIdentity();
-  const match = useMatch({ strict: false, select: value => ({ id: value.id, routeId: value.routeId, params: value.params, search: value.search }) });
+  const match = useMatch({ strict: false, select: value => ({ id: value.id, params: value.params, routeId: value.routeId, search: value.search }) });
   const matches = useRouterState({ select: state => state.matches.map(value => value.id) });
   const publicHref = useRouterState({ select: state => state.location.publicHref });
   const pathname = useRouterState({ select: state => state.location.pathname });

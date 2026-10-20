@@ -8,6 +8,16 @@ import { parse as parseYaml } from 'yaml';
 import { createOctaneWorkerFederationFixtures } from './fixtures.mjs';
 
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+const authoredJson = value =>
+  JSON.stringify(value, (_key, entry) =>
+    entry !== null && typeof entry === 'object' && !Array.isArray(entry)
+      ? Object.fromEntries(
+          Object.keys(entry)
+            .sort()
+            .map(key => [key, entry[key]]),
+        )
+      : entry,
+  );
 
 /** These are ordinary authored import/service coordinates, never renderer identities. */
 export const generatedWorkerCoordinates = Object.freeze({
@@ -30,7 +40,7 @@ export const generatedWorkerCoordinates = Object.freeze({
 export const generatedWorkerSharedCounter = Object.freeze({
   name: '@authored-worker/shared-counter',
   directory: 'packages/shared-counter',
-  source: 'src/Counter.tsx',
+  source: 'src/counter.tsx',
 });
 
 /** Let the public workspace topology own host bindings; author only the extra remote hop. */
@@ -38,7 +48,6 @@ export function generatedWorkerDeploymentInput(app, services) {
   return {
     worker: {
       name: `proof-${app.id}`,
-      ssr: true,
       ...(app.id === generatedWorkerCoordinates.host.id
         ? {}
         : {
@@ -47,6 +56,7 @@ export function generatedWorkerDeploymentInput(app, services) {
                 ? services.remoteA
                 : [],
           }),
+      ssr: true,
     },
   };
 }
@@ -81,10 +91,10 @@ export function authorGeneratedWorkerRoutes(config, remotes) {
             fragments: [
               ...(service.fragments ?? []),
               {
-                remote: remote.id,
                 boundaryId: remote.moduleFederationName,
                 expose: './Route',
                 path: '/{locale}/_mf/fragment/route',
+                remote: remote.id,
               },
             ],
           };
@@ -163,7 +173,7 @@ export function authorGeneratedWorkerApplication(config) {
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     const authoredConfig =
       relative === 'modern.config.ts'
-        ? `import { defineConfig, i18nPlugin, presetUltramodernWorkspace } from '@modern-js/ultramodern-app-tools';\n${authorGeneratedWorkerRoutes.toString().replace('(config, remotes)', '(config: ReturnType<typeof presetUltramodernWorkspace>, remotes: Array<{ id: string; moduleFederationName: string }>)')}\nconst config = presetUltramodernWorkspace({ renderer: 'octane', server: { ssr: true }, source: { mainEntryName: 'main' }, deploy: ${JSON.stringify(generatedWorkerDeploymentInput(selected, services))}, plugins: [i18nPlugin({ localeDetection: { languages: ['en', 'cs'], fallbackLanguage: 'en' } })] }, { appId: ${JSON.stringify(selected.id)}, from: import.meta.url, deployTarget: 'cloudflare' });\nexport default defineConfig(authorGeneratedWorkerRoutes(config, ${JSON.stringify(selected.id === generatedWorkerCoordinates.host.id ? generatedWorkerCoordinates.remotes : [])}));\n`
+        ? `import { defineConfig, i18nPlugin, presetUltramodernWorkspace } from '@modern-js/ultramodern-app-tools';\n${authorGeneratedWorkerRoutes.toString().replace('(config, remotes)', '(config: ReturnType<typeof presetUltramodernWorkspace>, remotes: Array<{ id: string; moduleFederationName: string }>)')}\nconst config = presetUltramodernWorkspace({ deploy: ${authoredJson(generatedWorkerDeploymentInput(selected, services))}, plugins: [i18nPlugin({ localeDetection: { fallbackLanguage: 'en', languages: ['en', 'cs'] } })], renderer: 'octane', server: { ssr: true }, source: { mainEntryName: 'main' } }, { appId: ${JSON.stringify(selected.id)}, deployTarget: 'cloudflare', from: import.meta.url });\nexport default defineConfig(authorGeneratedWorkerRoutes(config, ${authoredJson(selected.id === generatedWorkerCoordinates.host.id ? generatedWorkerCoordinates.remotes : [])}));\n`
         : contents;
     fs.writeFileSync(destination, authoredConfig);
   }

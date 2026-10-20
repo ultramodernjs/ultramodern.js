@@ -756,6 +756,30 @@ export async function verifyWorkerCompositionRoutes(
   return result;
 }
 
+/** An initial Suspense placeholder is not a completed server recovery. */
+export async function waitForWorkerSsrCompletion(response, started) {
+  let timer;
+  try {
+    const error = await Promise.race([
+      response.finished(),
+      new Promise((_resolve, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                'The native SSR response exceeded its bounded deadline.',
+              ),
+            ),
+          Math.max(0, 5000 - (Date.now() - started)),
+        );
+      }),
+    ]);
+    if (error) throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Native loaders run normally after the browser has recorded the visible SSR nodes. */
 export async function verifyWorkerFixtureBrowser(
   context,
@@ -788,6 +812,7 @@ export async function verifyWorkerFixtureBrowser(
           : `[data-worker-remote="${id}"]`;
       await page.locator(selector).waitFor({ state: 'visible' });
     }
+    if (failedRemote) await waitForWorkerSsrCompletion(response, started);
     const ssrElapsedMs = Date.now() - started;
     await page.waitForFunction(
       failed =>
@@ -1659,7 +1684,10 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
         assert.equal(
           after.active,
           0,
-          'The failed service kept an active request.',
+          `The ${mode} service kept an active request: ${JSON.stringify({
+            cancellations: after.cancellations - before.cancellations,
+            requests: after.requests.slice(before.requests.length),
+          })}`,
         );
         const requests = after.requests.slice(before.requests.length);
         if (mode.endsWith('-hang')) {

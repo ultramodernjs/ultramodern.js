@@ -318,8 +318,16 @@ declare const ULTRAMODERN_SITE_URL: string;
       assert.ok(files[`${appDirectory}/src/routes/page.data.ts`]);
       assert.ok(files[`${appDirectory}/src/routes/error.tsx`]);
       assert.ok(files[`${appDirectory}/src/routes/not-found.tsx`]);
-      assert.ok(files[`${appDirectory}/src/components/Counter.tsx`]);
-      assert.ok(files[`${appDirectory}/src/components/Stable.tsx`]);
+      assert.ok(
+        files[
+          `${appDirectory}/src/components/${renderer === 'octane' ? 'counter' : 'Counter'}.tsx`
+        ],
+      );
+      assert.ok(
+        files[
+          `${appDirectory}/src/components/${renderer === 'octane' ? 'stable' : 'Stable'}.tsx`
+        ],
+      );
       assert.match(
         files[`${appDirectory}/src/routes/page.data.ts`]!,
         /export (?:async )?function loader\(/u,

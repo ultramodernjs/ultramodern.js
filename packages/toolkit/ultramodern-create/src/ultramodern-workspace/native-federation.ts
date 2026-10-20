@@ -68,7 +68,12 @@ export function createNativeFederationArtifacts(
     if (exposedSources.has(relativePath)) continue;
     exposedSources.add(relativePath);
     const counterPath = path.posix
-      .relative(path.posix.dirname(relativePath), 'src/components/Counter')
+      .relative(
+        path.posix.dirname(relativePath),
+        generation.renderer === 'octane'
+          ? 'src/components/counter'
+          : 'src/components/Counter',
+      )
       .replace(/^(?!\.)/u, './');
     artifacts.push({
       path: relativePath,
