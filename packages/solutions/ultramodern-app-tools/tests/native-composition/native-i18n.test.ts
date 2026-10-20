@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { AppTools, CLIPluginAPI } from '@modern-js/app-tools';
 import { rspack } from '@rsbuild/core';
 import { describe, expect, it } from '@rstest/core';
+import { localizedNavigationFixture } from '../../../../../tests/ultramodern-renderers/i18n/navigation-fixtures.mjs';
 import {
   emitNativeI18nModule,
   findNativeI18nConfig,
@@ -11,6 +12,7 @@ import {
   resolveNativeI18nEntry,
   validateNativeLocalisedUrls,
 } from '../../src/native-composition/native-i18n';
+import { discoverNativeFileSystemRoutes } from '../../src/native-composition/native-routes';
 
 const localeDetection = { languages: ['en', 'cs'], fallbackLanguage: 'en' };
 
@@ -275,6 +277,69 @@ describe('native i18n entry modules', () => {
 });
 
 describe('native localised URL validation', () => {
+  for (const renderer of ['solid', 'octane']) {
+    it(`validates the exact ${renderer} navigation fixture against its discovered routes`, async () => {
+      const directory = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'navigation-i18n-'),
+      );
+      try {
+        const files = localizedNavigationFixture(renderer);
+        for (const [relative, source] of Object.entries(files)) {
+          const filename = path.join(directory, relative);
+          fs.mkdirSync(path.dirname(filename), { recursive: true });
+          fs.writeFileSync(filename, source);
+        }
+        const config = await evaluate(files['modern.config.ts'], {
+          '@modern-js/ultramodern-app-tools': {
+            defineConfig: (value: unknown) => value,
+            i18nPlugin,
+          },
+        });
+        const native = findNativeI18nConfig(config.default.plugins);
+        if (!native || typeof native.localisedUrls !== 'object')
+          throw new Error(
+            'The navigation fixture must enable strict localized URLs',
+          );
+        const routes = await discoverNativeFileSystemRoutes({
+          routesDirectory: path.join(directory, 'src/routes'),
+          entryName: 'main',
+          extensions: ['.tsx', '.ts'],
+        });
+        expect(() => validateNativeLocalisedUrls(native, routes)).not.toThrow();
+        expect(Object.keys(native.localisedUrls).sort()).toEqual([
+          '/about',
+          '/blocked',
+          '/items',
+          '/items/:id',
+        ]);
+        const entry = resolveNativeI18nEntry(native, directory, '/');
+        expect(Object.keys(entry.resources).sort()).toEqual(['cs', 'en']);
+        for (const canonical of Object.keys(native.localisedUrls)) {
+          const incomplete = { ...native.localisedUrls };
+          delete incomplete[canonical];
+          expect(() =>
+            validateNativeLocalisedUrls(
+              { ...native, localisedUrls: incomplete },
+              routes,
+            ),
+          ).toThrow(`route "${canonical}" does not define localised URLs`);
+        }
+        const incomplete = {
+          ...native.localisedUrls,
+          '/items/:id': { en: '/items/:id' },
+        };
+        expect(() =>
+          validateNativeLocalisedUrls(
+            { ...native, localisedUrls: incomplete },
+            routes,
+          ),
+        ).toThrow('is missing languages: cs');
+      } finally {
+        fs.rmSync(directory, { recursive: true });
+      }
+    });
+  }
+
   const routes = [
     {
       path: '/',

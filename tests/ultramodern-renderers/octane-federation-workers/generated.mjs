@@ -45,6 +45,48 @@ export function generatedWorkerDeploymentInput(app, services) {
   };
 }
 
+/** Explicitly opt authored host routes into the topology-owned Worker bindings. */
+export function authorGeneratedWorkerRoutes(config, remotes) {
+  if (remotes.length === 0) return config;
+  const services = config.deploy?.worker?.services ?? [];
+  for (const remote of remotes) {
+    if (
+      services.filter(service => service.service === `proof-${remote.id}`)
+        .length !== 1
+    )
+      throw new Error(
+        `Expected one topology-owned Worker binding for ${remote.id}.`,
+      );
+  }
+  return {
+    ...config,
+    deploy: {
+      ...config.deploy,
+      worker: {
+        ...config.deploy?.worker,
+        services: services.map(service => {
+          const remote = remotes.find(
+            value => service.service === `proof-${value.id}`,
+          );
+          if (!remote) return service;
+          return {
+            ...service,
+            fragments: [
+              ...(service.fragments ?? []),
+              {
+                remote: remote.id,
+                boundaryId: remote.moduleFederationName,
+                expose: './Route',
+                path: '/{locale}/_mf/fragment/route',
+              },
+            ],
+          };
+        }),
+      },
+    },
+  };
+}
+
 /** CodeSmith calls this while authoring, before the generator captures native identities. */
 export function authorGeneratedWorkerApplication(config) {
   const { outputWorkspaceRoot, generatedApp, origins, services, dependencies } =
@@ -107,7 +149,7 @@ export function authorGeneratedWorkerApplication(config) {
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     const authoredConfig =
       relative === 'modern.config.ts'
-        ? `import { defineConfig, i18nPlugin, presetUltramodernWorkspace } from '@modern-js/ultramodern-app-tools';\nexport default defineConfig(presetUltramodernWorkspace({ renderer: 'octane', server: { ssr: true }, source: { mainEntryName: 'main' }, deploy: ${JSON.stringify(generatedWorkerDeploymentInput(selected, services))}, plugins: [i18nPlugin({ localeDetection: { languages: ['en', 'cs'], fallbackLanguage: 'en' } })] }, { appId: ${JSON.stringify(selected.id)}, from: import.meta.url, deployTarget: 'cloudflare' }));\n`
+        ? `import { defineConfig, i18nPlugin, presetUltramodernWorkspace } from '@modern-js/ultramodern-app-tools';\n${authorGeneratedWorkerRoutes.toString().replace('(config, remotes)', '(config: ReturnType<typeof presetUltramodernWorkspace>, remotes: Array<{ id: string; moduleFederationName: string }>)')}\nconst config = presetUltramodernWorkspace({ renderer: 'octane', server: { ssr: true }, source: { mainEntryName: 'main' }, deploy: ${JSON.stringify(generatedWorkerDeploymentInput(selected, services))}, plugins: [i18nPlugin({ localeDetection: { languages: ['en', 'cs'], fallbackLanguage: 'en' } })] }, { appId: ${JSON.stringify(selected.id)}, from: import.meta.url, deployTarget: 'cloudflare' });\nexport default defineConfig(authorGeneratedWorkerRoutes(config, ${JSON.stringify(selected.id === generatedWorkerCoordinates.host.id ? generatedWorkerCoordinates.remotes : [])}));\n`
         : contents;
     fs.writeFileSync(destination, authoredConfig);
   }

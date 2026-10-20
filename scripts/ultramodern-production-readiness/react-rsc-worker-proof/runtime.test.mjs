@@ -1011,6 +1011,60 @@ test('HTTP bridge uses the compiled origin port and releases it after native for
   );
 });
 
+test('HTTP bridge forwards native redirects for the browser to follow', async t => {
+  const targetRequests = [];
+  const target = http.createServer((incoming, outgoing) => {
+    targetRequests.push(incoming.url);
+    if (incoming.url === '/en/') {
+      outgoing.writeHead(302, { location: '/en' });
+      outgoing.end();
+    } else {
+      outgoing.end(`canonical page: ${incoming.url}`);
+    }
+  });
+  await new Promise((resolve, reject) => {
+    target.once('error', reject);
+    target.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(async () => {
+    target.closeAllConnections();
+    await new Promise((resolve, reject) =>
+      target.close(error => (error ? reject(error) : resolve())),
+    );
+  });
+  const targetOrigin = `http://127.0.0.1:${target.address().port}`;
+  const bridge = await startBridge(
+    {
+      dispatchFetch(input, init) {
+        const url = new URL(input);
+        return fetch(`${targetOrigin}${url.pathname}${url.search}`, init);
+      },
+    },
+    'octane-worker-proof',
+  );
+  t.after(() => bridge.close());
+
+  const redirect = await fetch(`${bridge.url}/en/`, { redirect: 'manual' });
+  assert.equal(redirect.status, 302);
+  assert.equal(redirect.headers.get('location'), '/en');
+  await redirect.arrayBuffer();
+  assert.deepEqual(targetRequests, ['/en/']);
+
+  const page = await fetch(`${bridge.url}/en/`);
+  assert.equal(page.status, 200);
+  assert.equal(page.url, `${bridge.url}/en`);
+  assert.equal(await page.text(), 'canonical page: /en');
+  assert.deepEqual(targetRequests, ['/en/', '/en/', '/en']);
+  assert.deepEqual(
+    bridge.evidence.map(({ path, status }) => ({ path, status })),
+    [
+      { path: '/en/', status: 302 },
+      { path: '/en/', status: 302 },
+      { path: '/en', status: 200 },
+    ],
+  );
+});
+
 test('HTTP bridge rejects invalid compiled origin ports before dispatch', async t => {
   for (const port of [-1, 65536, 1.5, NaN, Infinity, '8080', null]) {
     let unexpectedBridge;

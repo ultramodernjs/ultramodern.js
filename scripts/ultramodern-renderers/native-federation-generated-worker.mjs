@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createOctaneWorkerFederationFixtures } from '../../tests/ultramodern-renderers/octane-federation-workers/fixtures.mjs';
 import {
+  authorGeneratedWorkerRoutes,
   generatedWorkerCoordinates,
   generatedWorkerDeploymentInput,
 } from '../../tests/ultramodern-renderers/octane-federation-workers/generated.mjs';
@@ -484,7 +485,11 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
         environment: { ...process.env },
       },
     );
-    return { id: app.id, services: config.deploy?.worker?.services ?? [] };
+    const authored = authorGeneratedWorkerRoutes(
+      config,
+      index === 0 ? generatedWorkerCoordinates.remotes : [],
+    );
+    return { id: app.id, services: authored.deploy?.worker?.services ?? [] };
   });
   verifyGeneratedWorkerServices(generation.workerServices);
   const compiled = await buildCompiledWorkerApplications({

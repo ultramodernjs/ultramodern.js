@@ -6,6 +6,7 @@ import test from 'node:test';
 import { assertGeneratedWorkerResult } from '../../../scripts/ultramodern-renderers/native-federation-generated-worker.mjs';
 import {
   authorGeneratedWorkerApplication,
+  authorGeneratedWorkerRoutes,
   generatedWorkerCoordinates,
   generatedWorkerDeploymentInput,
 } from './generated.mjs';
@@ -216,6 +217,50 @@ test('generated Worker receipts require public generation plus the entire indepe
   }
 });
 
+test('explicit route authoring extends native topology bindings without changing default fragments', () => {
+  const defaults = generatedWorkerCoordinates.remotes.map(remote =>
+    service(remote, false),
+  );
+  const config = {
+    server: { ssr: true },
+    deploy: { worker: { name: 'proof-host', services: defaults } },
+  };
+  const original = structuredClone(config);
+  const authored = authorGeneratedWorkerRoutes(
+    config,
+    generatedWorkerCoordinates.remotes,
+  );
+  assert.deepEqual(config, original);
+  assert.equal(authored.server, config.server);
+  assert.equal(authored.deploy.worker.name, config.deploy.worker.name);
+  for (const [index, binding] of authored.deploy.worker.services.entries()) {
+    assert.deepEqual(
+      {
+        ...binding,
+        fragments: binding.fragments.toSorted((a, b) =>
+          a.expose.localeCompare(b.expose),
+        ),
+      },
+      service(generatedWorkerCoordinates.remotes[index], true),
+    );
+    assert.equal(binding.fragments[0], defaults[index].fragments[0]);
+  }
+  assert.equal(authorGeneratedWorkerRoutes(config, []), config);
+  for (const invalid of [
+    [],
+    [defaults[0]],
+    [defaults[0], defaults[0], defaults[1]],
+  ])
+    assert.throws(
+      () =>
+        authorGeneratedWorkerRoutes(
+          { deploy: { worker: { services: invalid } } },
+          generatedWorkerCoordinates.remotes,
+        ),
+      /Expected one topology-owned Worker binding/u,
+    );
+});
+
 test('public source overlays retain generated strict inputs and never author renderer identities', t => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), 'worker-generation-input-'),
@@ -307,7 +352,11 @@ test('public source overlays retain generated strict inputs and never author ren
     'utf8',
   );
   assert.match(authoredConfig, /deployTarget: 'cloudflare'/u);
-  assert.doesNotMatch(authoredConfig, /\bservices\s*[:"]/u);
+  assert.match(
+    authoredConfig,
+    /defineConfig\(authorGeneratedWorkerRoutes\(config,/u,
+  );
+  assert.match(authoredConfig, /expose: ['"]\.\/Route['"]/u);
   assert.deepEqual(
     generatedWorkerDeploymentInput(generatedApp, overlayInput.services),
     { worker: { name: `proof-${generatedApp.id}`, ssr: true } },

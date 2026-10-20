@@ -14,7 +14,12 @@ export default defineConfig({
   server: { ssr: true },
   plugins: [i18nPlugin({ localeDetection: {
     languages: ['en', 'cs'], fallbackLanguage: 'en',
-    localisedUrls: { items: { en: 'items', cs: 'polozky' } },
+    localisedUrls: {
+      '/about': { en: '/about', cs: '/about' },
+      '/blocked': { en: '/blocked', cs: '/blocked' },
+      '/items': { en: '/items', cs: '/polozky' },
+      '/items/:id': { en: '/items/:id', cs: '/polozky/:id' },
+    },
   } })],
 });
 `,

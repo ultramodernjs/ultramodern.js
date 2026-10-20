@@ -199,6 +199,8 @@ export async function startBridge(runtime, workerName, { port = 0 } = {}) {
           headers: incoming.headers,
           ...(body.length > 0 ? { body } : {}),
           signal: controller.signal,
+          // The browser must receive redirects and update its own URL.
+          redirect: 'manual',
         },
       );
       record.status = response.status;
