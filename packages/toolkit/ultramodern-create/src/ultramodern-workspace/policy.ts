@@ -15,6 +15,7 @@ import { isRecord } from './types';
 import {
   BRACES_FORK_VERSION,
   CLOUDFLARE_COMPATIBILITY_DATE,
+  COMPILER_RELEASE_AGE_EXCEPTIONS,
   EFFECT_VERSION,
   NODE_VERSION,
   PNPM_VERSION,
@@ -237,6 +238,7 @@ export const ULTRAMODERN_WORKSPACE_POLICY = {
       'sharp@>=0.35.0 <0.35.5': SHARP_VERSION,
     },
     minimumReleaseAge: 1440,
+    minimumReleaseAgeExclude: COMPILER_RELEASE_AGE_EXCEPTIONS,
     minimumReleaseAgeStrict: true,
     minimumReleaseAgeIgnoreMissingTime: false,
     trustPolicy: 'no-downgrade',

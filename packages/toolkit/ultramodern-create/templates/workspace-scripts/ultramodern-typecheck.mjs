@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
-import os from 'node:os';
+import { constants as osConstants } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveEffectTsgoCompiler } from '@modern-js/app-tools-extensions/config';
@@ -11,36 +10,15 @@ const args = process.argv.slice(2);
 const workspaceRoot = process.env.ULTRAMODERN_WORKSPACE_ROOT
   ? resolve(process.env.ULTRAMODERN_WORKSPACE_ROOT)
   : join(dirname(fileURLToPath(import.meta.url)), '..');
-const cpuCount = Math.max(
-  1,
-  typeof os.availableParallelism === 'function'
-    ? os.availableParallelism()
-    : os.cpus().length,
-);
 
 function fail(message) {
   console.error(message);
   process.exit(1);
 }
 
-function parsePositiveInt(value, label) {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    fail(`${label} must be a positive integer.`);
-  }
-  return parsed;
-}
-
-function envPositiveInt(name, fallback) {
-  const value = process.env[name]?.trim();
-  return value ? parsePositiveInt(value, name) : fallback;
-}
-
 function readArgs() {
   let buildTarget;
   let projectTarget;
-  let checkers;
-  let builders;
   let emit = false;
   const passthrough = [];
 
@@ -75,24 +53,6 @@ function readArgs() {
       continue;
     }
 
-    if (arg === '--checkers') {
-      if (!next || next.startsWith('-')) {
-        fail('--checkers requires a positive integer.');
-      }
-      checkers = parsePositiveInt(next, '--checkers');
-      index += 1;
-      continue;
-    }
-
-    if (arg === '--builders') {
-      if (!next || next.startsWith('-')) {
-        fail('--builders requires a positive integer.');
-      }
-      builders = parsePositiveInt(next, '--builders');
-      index += 1;
-      continue;
-    }
-
     passthrough.push(arg);
   }
 
@@ -106,31 +66,14 @@ function readArgs() {
   return {
     mode: buildTarget ? 'build' : 'project',
     target: buildTarget ?? projectTarget ?? 'tsconfig.json',
-    checkers,
-    builders,
     emit,
     passthrough,
   };
 }
 
 const parsed = readArgs();
-const defaultBuilders = Math.min(8, Math.max(1, Math.floor(cpuCount / 2)));
-const builders =
-  parsed.builders ??
-  envPositiveInt('ULTRAMODERN_TSGO_BUILDERS', defaultBuilders);
-const defaultCheckers =
-  parsed.mode === 'build'
-    ? Math.min(4, Math.max(1, Math.floor(cpuCount / builders)))
-    : Math.min(8, Math.max(2, cpuCount - 1));
-const checkers =
-  parsed.checkers ??
-  envPositiveInt('ULTRAMODERN_TSGO_CHECKERS', defaultCheckers);
 const tsgoBin = resolveEffectTsgoCompiler({
   from: pathToFileURL(join(workspaceRoot, 'package.json')),
-});
-
-mkdirSync(join(workspaceRoot, 'node_modules/.cache/tsgo'), {
-  recursive: true,
 });
 
 const tsgoArgs =
@@ -140,10 +83,6 @@ const tsgoArgs =
         parsed.target,
         '--pretty',
         'false',
-        '--checkers',
-        String(checkers),
-        '--builders',
-        String(builders),
         '--stopBuildOnErrors',
         ...parsed.passthrough,
       ]
@@ -153,17 +92,22 @@ const tsgoArgs =
         ...(parsed.emit ? [] : ['--noEmit']),
         '--pretty',
         'false',
-        '--checkers',
-        String(checkers),
         ...parsed.passthrough,
       ];
 
 const result = spawnSync(tsgoBin, tsgoArgs, {
   stdio: 'inherit',
+  env: {
+    ...process.env,
+    TSRS_CHECKER_ASSIGNMENT: process.env.TSRS_CHECKER_ASSIGNMENT || 'go',
+  },
 });
 
 if (result.error) {
   throw result.error;
 }
 
-process.exit(result.status ?? 1);
+process.exit(
+  result.status ??
+    (result.signal ? 128 + osConstants.signals[result.signal] : 1),
+);

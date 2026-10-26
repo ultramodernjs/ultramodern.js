@@ -123,7 +123,8 @@
     "i18next": "26.4.6",
     "@babel/core": "7.29.7",
     "typescript": "7.0.2",
-    "@effect/tsgo": "0.53.1",
+    "@effect/tsgo": "0.59.0",
+    "tsrs": "0.20.0-ts7.1.0-beta",
     "@typescript/native": "npm:typescript@7.0.2"
   },
   "devDependencies": {

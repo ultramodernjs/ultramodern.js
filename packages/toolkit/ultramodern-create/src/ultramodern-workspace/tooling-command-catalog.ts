@@ -1,6 +1,7 @@
 export type GeneratedToolingCommandId =
   | 'validate'
   | 'typecheck'
+  | 'compilerPrepare'
   | 'mfTypes'
   | 'publicSurface'
   | 'backendFederationGenerate'
@@ -38,6 +39,12 @@ export const generatedToolingCommands = [
     rootScript: 'typecheck',
     templatePath: 'templates/workspace-scripts/ultramodern-typecheck.mjs',
     cwd: 'invocation',
+  }),
+  defineToolingCommand({
+    id: 'compilerPrepare',
+    command: 'compiler-prepare',
+    templatePath:
+      'templates/workspace-scripts/ultramodern-compiler-prepare.mjs',
   }),
   defineToolingCommand({
     id: 'mfTypes',

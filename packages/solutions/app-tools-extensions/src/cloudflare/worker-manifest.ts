@@ -1,5 +1,8 @@
 import path from 'node:path';
-import type {} from '@modern-js/server-runtime-extensions/server-config';
+import type {
+  BffEffectDataPlatformUserConfig,
+  BffEffectOpenApiUserConfig,
+} from '@modern-js/server-runtime-extensions/server-config';
 import { fs as fse } from '@modern-js/utils';
 import { getCloudflareWorkerRouteDataEntryName } from '../cloudflare-output-contract';
 import { readRouteSpec } from './artifacts';
@@ -71,8 +74,9 @@ const createEffectBffWorkerManifest = (
     },
   };
 
-  const openapi = bff?.effect?.openapi;
-  const dataPlatform = bff?.effect?.dataPlatform;
+  const openapi: BffEffectOpenApiUserConfig | undefined = bff?.effect?.openapi;
+  const dataPlatform: BffEffectDataPlatformUserConfig | undefined =
+    bff?.effect?.dataPlatform;
 
   return {
     ...(openapi === undefined ? {} : { openapi }),

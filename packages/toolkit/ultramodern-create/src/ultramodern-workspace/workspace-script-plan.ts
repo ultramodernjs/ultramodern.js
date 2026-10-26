@@ -18,7 +18,7 @@ import {
 import type { WorkspaceApp } from './types';
 
 export const GENERATED_POSTINSTALL_SCRIPT =
-  'ultramodern-create ultramodern skills install --postinstall';
+  'ultramodern-create ultramodern compiler-prepare && ultramodern-create ultramodern skills install --postinstall';
 
 // Recognize only flat && chains with quoted or escaped arguments. A caller
 // must reconstruct the entire command before treating these matches as owned.

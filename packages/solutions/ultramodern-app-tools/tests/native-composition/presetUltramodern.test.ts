@@ -44,6 +44,8 @@ describe('presetUltramodern config', () => {
         '@modern-js/runtime-renderer-extensions',
         '@modern-js/i18n-integration',
         'typescript',
+        'tsrs',
+        '@effect/tsgo',
         'react',
         'react-dom',
       ].map(
@@ -298,7 +300,7 @@ export default defineConfig({
       expect(unsupported.signal).toBeNull();
       expect(unsupported.status).not.toBe(0);
       expect(unsupported.stdout + unsupported.stderr).toContain(
-        'unsupported-type-checker: UltraModern requires native TypeScript 7.0.2; typescript.tsgo cannot be false',
+        'unsupported-type-checker: UltraModern requires an Effect-enabled native compiler; typescript.tsgo cannot be false',
       );
       expect(
         fs.existsSync(

@@ -22,10 +22,10 @@
     "test:ut:prepared": "node scripts/ci/run-prepared-unit-tests.mjs",
     "test:ut:update": "nx run @scripts/prebundle:bundle && rstest -u",
     "lint:package-json": "cd ./scripts/lint-package-json && pnpm start",
-    "prepare-build": "nx run-many -t build -p @modern-js/* --exclude=@modern-js/main-doc,@modern-js/module-tools-docs --maxParallel=4",
-    "prepare-build:local": "nx run-many -t build -p @modern-js/* --exclude=@modern-js/main-doc,@modern-js/module-tools-docs --maxParallel=8",
-    "prepare": "husky",
-    "build:required": "nx run-many -t build -p @modern-js/* --exclude=@modern-js/main-doc,@modern-js/module-tools-docs --maxParallel=4",
+    "prepare-build": "node ./scripts/with-effect-tsrs.mjs nx run-many -t build -p @modern-js/* --exclude=@modern-js/main-doc,@modern-js/module-tools-docs --maxParallel=4",
+    "prepare-build:local": "node ./scripts/with-effect-tsrs.mjs nx run-many -t build -p @modern-js/* --exclude=@modern-js/main-doc,@modern-js/module-tools-docs --maxParallel=8",
+    "prepare": "husky && node scripts/prepare-effect-compiler.mjs",
+    "build:required": "node ./scripts/with-effect-tsrs.mjs nx run-many -t build -p @modern-js/* --exclude=@modern-js/main-doc,@modern-js/module-tools-docs --maxParallel=4",
     "lint": "biome check",
     "change": "changeset add",
     "bump": "changeset version && pnpm install && oxfmt --write --no-error-on-unmatched-pattern \"packages/**/CHANGELOG.md\"",
@@ -65,7 +65,7 @@
     "ultramodern:build-bleedingdev-publish": "node scripts/ultramodern-publish/build-bleedingdev-packages.mjs",
     "ultramodern:source-create-proof": "node scripts/ultramodern-publish/validate-source-create-proof.mjs",
     "ultramodern:renderer-release": "node scripts/ultramodern-renderers/release.mjs",
-    "validate:typescript": "node scripts/typescript-critical.mjs",
+    "validate:typescript": "node ./scripts/with-effect-tsrs.mjs node scripts/typescript-critical.mjs",
     "test:scripts:after-build": "node --test scripts/__tests__/*.test.mjs scripts/ultramodern-supply/dts-plugin.test.mjs scripts/ultramodern-supply/mf-split-chunks.test.mjs scripts/boundary-guards/__tests__/*.test.js scripts/ultramodern-boundary-check/__tests__/*.test.js scripts/superapp-certification/__tests__/*.test.js scripts/native-compatibility/*.test.mjs scripts/ultramodern-production-readiness/__tests__/built-framework/*.test.js scripts/ultramodern-publish/__tests__/built-framework/*.test.mjs",
     "test:publish-tooling": "node --test scripts/lib/__tests__/*.test.js scripts/ultramodern-publish/__tests__/*.test.js scripts/ultramodern-publish/__tests__/*.test.mjs scripts/ultramodern-production-readiness/__tests__/*.test.js",
     "test:scripts": "pnpm --filter @scripts/prebundle start js-yaml && node --test scripts/__tests__/*.test.mjs scripts/ultramodern-supply/dts-plugin.test.mjs scripts/ultramodern-supply/mf-split-chunks.test.mjs scripts/lib/__tests__/*.test.js scripts/boundary-guards/__tests__/*.test.js scripts/ultramodern-boundary-check/__tests__/*.test.js scripts/superapp-certification/__tests__/*.test.js scripts/ultramodern-publish/__tests__/*.test.js scripts/ultramodern-publish/__tests__/*.test.mjs scripts/ultramodern-production-readiness/__tests__/*.test.js scripts/native-compatibility/*.test.mjs scripts/ultramodern-renderers/*.test.mjs scripts/ultramodern-production-readiness/__tests__/built-framework/*.test.js scripts/ultramodern-publish/__tests__/built-framework/*.test.mjs",
@@ -98,7 +98,7 @@
     "@changesets/cli": "^3.0.3",
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",
-    "@effect/tsgo": "0.53.1",
+    "@effect/tsgo": "0.59.0",
     "@modern-js/app-tools": "workspace:*",
     "@modern-js/app-tools-extensions": "workspace:*",
     "@modern-js/tsconfig": "workspace:*",
@@ -113,7 +113,8 @@
     "nx": "^23.3.0",
     "oxfmt": "0.73.0",
     "rimraf": "^6.1.3",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "tsrs": "0.20.0-ts7.1.0-beta"
   },
   "commitlint": {
     "extends": [

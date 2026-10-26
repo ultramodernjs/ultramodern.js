@@ -27,15 +27,20 @@ function collectPublicModernPackages() {
 }
 
 function collectBuildProjects() {
-  const output = execFileSync(
-    'pnpm',
-    ['exec', 'nx', 'show', 'projects', '--with-target', 'build', '--json'],
-    {
-      cwd: repoRoot,
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'inherit'],
-    },
-  );
+  const command = createReleaseCommand([
+    'exec',
+    'nx',
+    'show',
+    'projects',
+    '--with-target',
+    'build',
+    '--json',
+  ]);
+  const output = execFileSync(command.executable, command.args, {
+    cwd: repoRoot,
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
 
   return new Set(JSON.parse(output));
 }
@@ -72,6 +77,21 @@ export function createReleaseBuildArgs(packages) {
   ];
 }
 
+function createReleaseCommand(args) {
+  return {
+    executable: process.execPath,
+    args: [
+      path.join(repoRoot, 'scripts', 'with-effect-tsrs.mjs'),
+      'pnpm',
+      ...args,
+    ],
+  };
+}
+
+export function createReleaseBuildCommand(packages) {
+  return createReleaseCommand(createReleaseBuildArgs(packages));
+}
+
 function main(args) {
   if (args.length > 0) {
     throw new Error(`Unexpected argument(s): ${args.join(' ')}`);
@@ -90,7 +110,8 @@ function main(args) {
   }
 
   console.log(`Building ${packages.length} publishable @modern-js package(s).`);
-  run('pnpm', createReleaseBuildArgs(packages));
+  const command = createReleaseBuildCommand(packages);
+  run(command.executable, command.args);
 }
 
 if (

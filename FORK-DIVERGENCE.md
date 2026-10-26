@@ -33,6 +33,14 @@ every PR.
 
 ---
 
+### 2026-10-26 standalone Rslib declaration compiler routing
+
+The Rstest adapter and image plugin use the configured declaration compiler
+through the root helper instead of bypassing the shared release selection.
+Owner: `bleedingdev`. Disposition: `inline-patch`. Both configs keep their
+existing declaration defaults and output paths. No runtime module depends on
+the helper.
+
 ### 2026-10-09 dev restart under the ESM builds
 
 `appTools()` and the React runtime plugin cleared their statically imported `./plugins/analyze`, `../router/cli` and `./ssr` modules from the CommonJS require cache before a dev restart. The ESM builds resolve those paths through `createRequire`, which finds no `index.js` in a bundleless directory, so editing `modern.config.ts` during `dev` crashed the server. The steps had no effect even in CommonJS, because nothing re-reads the cleared entries, so they are removed. The defect is upstream behavior of both ESM builds.
@@ -1018,6 +1026,7 @@ five previously invalid advisory rows remain non-authorizing historical prose.
 {
   "schemaVersion": 1,
   "entries": [
+    {"path":"packages/cli/adapter-rstest/rslib.config.mts","owner":"bleedingdev","reason":"2026-10-26: Route standalone declaration emission through the configured release compiler without changing declaration defaults or output paths.","dispositions":["inline-patch"]},
     {"path":"packages/cli/builder/src/plugins/environmentDefaults.ts","owner":"bleedingdev","reason":"Preserve fully bundled web-worker outputs with Rsbuild 2.2.13, whose native externals plugin now applies browser externals to workers; clear browser globals in the existing environment-defaults adapter.","dispositions":["inline-patch"]},
     {"path":"packages/cli/builder/tests/default.test.ts","owner":"bleedingdev","reason":"Verify native worker compilation ignores browser-only React globals after the Rstack upgrade, including the actual bundler externals configuration.","dispositions":["inline-patch"]},
     {"path":"packages/server/create-request/tests/browser.test.ts","owner":"bleedingdev","reason":"Use a local HTTP server for browser request tests because Nock 15 and Happy DOM 21 response interception yields an object string instead of the JSON response; preserve real fetch, response identity and request configuration coverage.","dispositions":["inline-patch"]},
@@ -1247,7 +1256,7 @@ five previously invalid advisory rows remain non-authorizing historical prose.
     {"path":"packages/runtime/plugin-i18n/tests/i18nUtils.test.ts","owner":"bleedingdev","reason":"Verify native fs-backend namespace interop, locale defaults and initialization completion.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-i18n/tests/peerCohort.test.ts","owner":"bleedingdev","reason":"Verify React runtime peer cohort without overstating i18n peer floors.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-i18n/tests/type-fixture/i18nInstanceTypes.fixture.ts","owner":"bleedingdev","reason":"Compile native i18next instance compatibility after removing the overly broad index signature.","dispositions":["inline-patch"]},
-    {"path":"packages/runtime/plugin-image/rslib.config.mts","owner":"bleedingdev","reason":"Emit unbundled native declarations with explicit type-output ownership instead of duplicate declaration producers.","dispositions":["inline-patch"]},
+    {"path":"packages/runtime/plugin-image/rslib.config.mts","owner":"bleedingdev","reason":"Emit unbundled native declarations with explicit type-output ownership instead of duplicate declaration producers. 2026-10-26: Route standalone declaration emission through the configured release compiler without changing declaration defaults or output paths.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-runtime/CHANGELOG.md","owner":"bleedingdev","reason":"Retain exact upstream blob 2692d92ba5d020158005ad0defc35f966b0a6c68 from v3.9.0 ae639d9c1c70; this is per-file accepted-upstream evidence and does not advance either audited pin.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-runtime/rstest.config.mts","owner":"bleedingdev","reason":"Keep native browser suites in their browser project and isolate workerLifecycle.test.tsx in a dedicated Node test project. Only that project aliases Flight transport; it executes the real native SSR/HTML adapters and does not replace emitted Worker acceptance.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-runtime/src/cli/code.ts","owner":"bleedingdev","reason":"Observe the eager SSR handler promise before a renderer consumes it, preventing startup failures from terminating Node while preserving the original rejection for request-time reporting.","dispositions":["inline-patch"]},
@@ -2401,6 +2410,7 @@ five previously invalid advisory rows remain non-authorizing historical prose.
 <!-- fork-evidence:table -->
 | Upstream-owned path | Owner | Reason | Disposition |
 | --- | --- | --- | --- |
+| `packages/cli/adapter-rstest/rslib.config.mts` | bleedingdev | 2026-10-26: Route standalone declaration emission through the configured release compiler without changing declaration defaults or output paths. | `inline-patch` |
 | `packages/cli/builder/src/plugins/environmentDefaults.ts` | bleedingdev | Preserve fully bundled web-worker outputs with Rsbuild 2.2.13, whose native externals plugin now applies browser externals to workers; clear browser globals in the existing environment-defaults adapter. | `inline-patch` |
 | `packages/cli/builder/tests/default.test.ts` | bleedingdev | Verify native worker compilation ignores browser-only React globals after the Rstack upgrade, including the actual bundler externals configuration. | `inline-patch` |
 | `packages/server/create-request/tests/browser.test.ts` | bleedingdev | Use a local HTTP server for browser request tests because Nock 15 and Happy DOM 21 response interception yields an object string instead of the JSON response; preserve real fetch, response identity and request configuration coverage. | `inline-patch` |
@@ -2630,7 +2640,7 @@ five previously invalid advisory rows remain non-authorizing historical prose.
 | `packages/runtime/plugin-i18n/tests/i18nUtils.test.ts` | bleedingdev | Verify native fs-backend namespace interop, locale defaults and initialization completion. | `inline-patch` |
 | `packages/runtime/plugin-i18n/tests/peerCohort.test.ts` | bleedingdev | Verify React runtime peer cohort without overstating i18n peer floors. | `inline-patch` |
 | `packages/runtime/plugin-i18n/tests/type-fixture/i18nInstanceTypes.fixture.ts` | bleedingdev | Compile native i18next instance compatibility after removing the overly broad index signature. | `inline-patch` |
-| `packages/runtime/plugin-image/rslib.config.mts` | bleedingdev | Emit unbundled native declarations with explicit type-output ownership instead of duplicate declaration producers. | `inline-patch` |
+| `packages/runtime/plugin-image/rslib.config.mts` | bleedingdev | Emit unbundled native declarations with explicit type-output ownership instead of duplicate declaration producers. 2026-10-26: Route standalone declaration emission through the configured release compiler without changing declaration defaults or output paths. | `inline-patch` |
 | `packages/runtime/plugin-runtime/CHANGELOG.md` | bleedingdev | Retain exact upstream blob 2692d92ba5d020158005ad0defc35f966b0a6c68 from v3.9.0 ae639d9c1c70; this is per-file accepted-upstream evidence and does not advance either audited pin. | `inline-patch` |
 | `packages/runtime/plugin-runtime/rstest.config.mts` | bleedingdev | Keep native browser suites in their browser project and isolate workerLifecycle.test.tsx in a dedicated Node test project. Only that project aliases Flight transport; it executes the real native SSR/HTML adapters and does not replace emitted Worker acceptance. | `inline-patch` |
 | `packages/runtime/plugin-runtime/src/cli/code.ts` | bleedingdev | Observe the eager SSR handler promise before a renderer consumes it, preventing startup failures from terminating Node while preserving the original rejection for request-time reporting. | `inline-patch` |

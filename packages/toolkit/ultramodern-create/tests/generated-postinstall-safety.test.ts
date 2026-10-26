@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { generateUltramodernWorkspace } from '../src/ultramodern-workspace';
 import { workspaceTemplateDir } from '../src/ultramodern-workspace/fs-io';
+import { compilerBootstrapFixture } from './helpers/compiler-bootstrap';
 
 /**
  * Supply-chain guardrails for generated workspaces: a plain `pnpm install`
@@ -178,6 +179,8 @@ test('generated postinstall installs vendored Codex skills without formatting co
       failNetwork: true,
       topLevel: undefined,
     });
+    const compilerLog = path.join(tempRoot, 'effect-compiler.json');
+    compilerBootstrapFixture(workspaceDir, { compilerLog });
     const consumerSourcePath = path.join(workspaceDir, 'consumer.ts');
     const consumerSource = 'export const value={unchanged:true}\n';
     fs.writeFileSync(consumerSourcePath, consumerSource);
@@ -244,6 +247,10 @@ test('generated postinstall installs vendored Codex skills without formatting co
     });
 
     assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(fs.readFileSync(compilerLog, 'utf8')).args, [
+      'tsrs',
+      '--version',
+    ]);
     assert.equal(fs.readFileSync(consumerSourcePath, 'utf8'), consumerSource);
     assert.deepEqual(
       fs.readFileSync(

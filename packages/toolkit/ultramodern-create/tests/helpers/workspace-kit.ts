@@ -48,7 +48,7 @@ export function linkInstalledCompiler(workspaceDir: string) {
 
 export function linkInstalledEffectCompiler(workspaceDir: string) {
   linkInstalledCompilerPolicy(workspaceDir);
-  for (const name of ['typescript', '@effect/tsgo']) {
+  for (const name of ['typescript', 'tsrs', '@effect/tsgo']) {
     const compilerPath = path.join(workspaceDir, 'node_modules', name);
     if (!fs.existsSync(compilerPath)) {
       fs.mkdirSync(path.dirname(compilerPath), { recursive: true });

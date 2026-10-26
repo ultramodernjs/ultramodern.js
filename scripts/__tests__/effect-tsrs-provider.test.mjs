@@ -1,0 +1,180 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import test from 'node:test';
+import vm from 'node:vm';
+
+const source = readFileSync(
+  new URL('../tsrs-dts/compiler.cjs', import.meta.url),
+  'utf8',
+);
+const tsrsVersion = '0.20.0-ts7.1.0-beta';
+const typescriptCommit = '3e9236361fa97a9e6c685f4833ac457ae2d8c50a';
+const effectVersion = '0.59.0';
+const tsrsPath = '/fixture/node_modules/tsrs/package.json';
+const effectPath = '/fixture/node_modules/@effect/tsgo/package.json';
+const nativeRoot = '/fixture/node_modules/@effect/tsgo-darwin-arm64';
+
+function loadProvider(change = () => {}, environment = {}) {
+  const documents = {
+    [tsrsPath]: {
+      name: 'tsrs',
+      version: tsrsVersion,
+      tsrs: { typescriptVersion: '7.1.0-beta', typescriptCommit },
+      optionalDependencies: {
+        '@tsrs/darwin-arm64': tsrsVersion,
+        '@tsrs/darwin-x64': tsrsVersion,
+        '@tsrs/win32-x64': tsrsVersion,
+      },
+    },
+    [effectPath]: { name: '@effect/tsgo', version: effectVersion },
+    [`${nativeRoot}/package.json`]: {
+      name: '@effect/tsgo-darwin-arm64',
+      version: effectVersion,
+    },
+    [`${nativeRoot}/lib/upstream.json`]: {
+      schemaVersion: 5,
+      components: {
+        tsrs: {
+          [tsrsVersion]: {
+            gitHead: 'd197eeea709616d61930c2bd5eac048471e404b8',
+            typescript: { version: '7.1.0-beta', gitHead: typescriptCommit },
+          },
+        },
+      },
+    },
+  };
+  const artifacts = { present: true, size: 100 };
+  change(documents, artifacts);
+  const fixtureRequire = name => {
+    if (name === 'node:fs') {
+      return {
+        readFileSync(filename) {
+          if (!Object.hasOwn(documents, filename)) {
+            throw new Error(`Missing fixture metadata: ${filename}`);
+          }
+          return JSON.stringify(documents[filename]);
+        },
+        statSync() {
+          if (!artifacts.present) throw new Error('Missing supported binary');
+          return { isFile: () => true, size: artifacts.size };
+        },
+      };
+    }
+    if (name === 'node:module') return { createRequire: () => fixtureRequire };
+    if (name === 'node:path') return path;
+    if (name === path.join(path.dirname(tsrsPath), 'lib/platform.js')) {
+      return {
+        getPlatformPackageName: (os = 'darwin', arch = 'arm64') =>
+          `@tsrs/${os}-${arch}`,
+      };
+    }
+    if (name === '@effect/tsgo/lib/getExePath') {
+      return { default: () => '/fixture/effect-go/tsc' };
+    }
+    if (name === 'typescript/package.json') return { version: '7.0.2' };
+    throw new Error(`Unexpected fixture require: ${name}`);
+  };
+  fixtureRequire.resolve = name => {
+    if (name === 'tsrs/package.json') return tsrsPath;
+    if (name === '@effect/tsgo/package.json') return effectPath;
+    if (name === '@effect/tsgo-darwin-arm64/package.json') {
+      return `${nativeRoot}/package.json`;
+    }
+    throw new Error(`Unexpected fixture resolution: ${name}`);
+  };
+  const module = { exports: {} };
+  vm.runInNewContext(source, {
+    module,
+    require: fixtureRequire,
+    process: { platform: 'darwin', arch: 'arm64', env: environment },
+  });
+  return module.exports;
+}
+
+test('root provider selects the read-only metadata-bound Effect tsrs artifact', () => {
+  const provider = loadProvider();
+  assert.equal(
+    provider.getExePath(),
+    `${nativeRoot}/artifacts/tsrs/${tsrsVersion}/tsrs`,
+  );
+  assert.equal(provider.typescriptVersion, '7.1.0-beta');
+  assert.equal(provider.typescriptCommit, typescriptCommit);
+  assert.equal(provider.getCompilerPolicy('win32', 'x64').backend, 'tsrs');
+  assert.equal(
+    provider.getCompilerPolicy('win32', 'arm64').backend,
+    'effect-go',
+  );
+});
+
+test('only an undeclared host selects Effect-Go', () => {
+  const provider = loadProvider(documents => {
+    delete documents[tsrsPath].optionalDependencies['@tsrs/darwin-arm64'];
+  });
+  assert.equal(provider.getExePath(), '/fixture/effect-go/tsc');
+  assert.equal(provider.typescriptVersion, '7.0.2');
+});
+
+test('a broken supported artifact never selects Effect-Go', () => {
+  const missing = loadProvider((_, artifacts) => {
+    artifacts.present = false;
+  });
+  assert.throws(() => missing.getExePath(), /Missing supported binary/);
+  const empty = loadProvider((_, artifacts) => {
+    artifacts.size = 0;
+  });
+  assert.throws(() => empty.getExePath(), /nonempty file/);
+});
+
+test('root provider rejects mismatched native and upstream metadata', () => {
+  for (const change of [
+    documents => {
+      documents[`${nativeRoot}/package.json`].version = '0.58.0';
+    },
+    documents => {
+      documents[`${nativeRoot}/package.json`].name = '@effect/other-platform';
+    },
+    documents => {
+      documents[`${nativeRoot}/lib/upstream.json`].schemaVersion = 4;
+    },
+    documents => {
+      documents[`${nativeRoot}/lib/upstream.json`].components.tsrs[
+        tsrsVersion
+      ].typescript.gitHead = '0'.repeat(40);
+    },
+    documents => {
+      delete documents[`${nativeRoot}/lib/upstream.json`].components.tsrs[
+        tsrsVersion
+      ].gitHead;
+    },
+  ]) {
+    const provider = loadProvider(change);
+    assert.throws(
+      () => provider.getExePath(),
+      /does not provide matching tsrs/,
+    );
+  }
+});
+
+test('root provider rejects corrupt capability and embedded TypeScript metadata', () => {
+  for (const change of [
+    documents => {
+      documents[tsrsPath].optionalDependencies = {};
+    },
+    documents => {
+      documents[tsrsPath].tsrs.typescriptCommit = 'not-a-commit';
+    },
+    documents => {
+      documents[tsrsPath].tsrs.typescriptVersion = '7.0.2';
+    },
+  ]) {
+    assert.throws(() => loadProvider(change), /Invalid tsrs platform metadata/);
+  }
+  assert.throws(
+    () =>
+      loadProvider(documents => {
+        documents[tsrsPath].optionalDependencies['@tsrs/darwin-arm64'] = 'bad';
+      }),
+    /Native tsrs dependency does not match/,
+  );
+});

@@ -1,18 +1,19 @@
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
   existsSync,
   readFileSync,
   realpathSync,
-  statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { refreshTsgoCheckerConfig } from '@modern-js/builder';
 import type { Rspack, RspackChain } from '@rsbuild/core';
 import { type ParseError, parse, printParseErrorCode } from 'jsonc-parser';
+import { resolveEffectTsgoCompiler } from './build-config/build-environment';
 
 const execute = promisify(execFile);
 const name = 'UltramodernNativeTypeChecker';
@@ -20,43 +21,62 @@ const name = 'UltramodernNativeTypeChecker';
 export interface NativeTypeCheckerCommand {
   executable: string;
   args: readonly string[];
+  /** The selected package's native config API. tsrs has no --showConfig CLI. */
+  configApi?: string;
 }
 
-/** Launch the selected stable package through its declared public compiler bin. */
+/** Resolve the Effect-enabled native compiler from the application's origin. */
 export function resolveNativeTypeCheckerCommand(
-  packageJsonPath: string,
+  from: string,
 ): NativeTypeCheckerCommand {
-  const manifestFile = realpathSync(packageJsonPath);
-  const directory = path.dirname(manifestFile);
-  const manifest = JSON.parse(readFileSync(manifestFile, 'utf8')) as {
-    name?: unknown;
-    version?: unknown;
-    bin?: { tsc?: unknown };
+  const executable = resolveEffectTsgoCompiler({ from });
+  const version = execFileSync(executable, ['--version'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      TSRS_CHECKER_ASSIGNMENT: process.env.TSRS_CHECKER_ASSIGNMENT || 'go',
+    },
+    timeout: 10_000,
+  });
+  if (version.includes('(tsrs ')) {
+    return {
+      executable,
+      args: [],
+      configApi: createRequire(from).resolve('tsrs/sync'),
+    };
+  }
+  // TypeScript-Go supports --showConfig, including project references. Its
+  // older native config API lacks tsrs's diagnostics and reference fields.
+  return {
+    executable,
+    args: [],
   };
-  if (manifest.name !== 'typescript' || manifest.version !== '7.0.2') {
-    throw new Error(
-      `${name} requires typescript@7.0.2; found ${String(manifest.name)}@${String(manifest.version)} at ${manifestFile}.`,
-    );
-  }
-  const bin = manifest.bin?.tsc;
-  if (typeof bin !== 'string' || !bin || path.isAbsolute(bin)) {
-    throw new Error(`${name} requires the selected package's public tsc bin.`);
-  }
-  const launcher = realpathSync(path.resolve(directory, bin));
-  const relative = path.relative(directory, launcher);
-  if (
-    !relative ||
-    path.isAbsolute(relative) ||
-    relative === '..' ||
-    relative.startsWith(`..${path.sep}`) ||
-    !statSync(launcher).isFile()
-  ) {
-    throw new Error(
-      `${name} public tsc bin must belong to its selected package.`,
-    );
-  }
-  return { executable: process.execPath, args: [launcher] };
 }
+
+// Use the real native parser, not a handwritten tsconfig/extends interpreter.
+// Running the client in a child also applies assignment to its native API
+// process without changing the build/dev server's environment.
+const inspectNativeConfig = `
+  import { pathToFileURL } from 'node:url';
+  const [modulePath, compiler, configFile] = process.argv.slice(1);
+  const { API, formatDiagnostics } = await import(pathToFileURL(modulePath).href);
+  const api = new API({ tsserverPath: compiler });
+  try {
+    const config = api.parseConfigFile(configFile);
+    if (config.errors.length) {
+      process.stdout.write(formatDiagnostics(config.errors, api));
+      process.exitCode = 1;
+    } else {
+      process.stdout.write(JSON.stringify({
+        compilerOptions: config.options,
+        files: config.fileNames,
+        references: config.projectReferences,
+      }));
+    }
+  } finally {
+    api.close();
+  }
+`;
 
 interface TypeCheckerConfig {
   compilerOptions?: Record<string, unknown>;
@@ -230,25 +250,51 @@ export class UltramodernNativeTypeChecker {
   private async run(args: string[]): Promise<string> {
     try {
       const selected = this.options.compiler();
-      const command =
+      const command: NativeTypeCheckerCommand =
         typeof selected === 'string'
           ? { executable: selected, args: [] }
           : selected;
+      const inspect = args[0] === '--showConfig' && command.configApi;
       const result = await execute(
-        command.executable,
-        [...command.args, ...args],
+        inspect ? process.execPath : command.executable,
+        inspect
+          ? [
+              '--input-type=module',
+              '--eval',
+              inspectNativeConfig,
+              command.configApi!,
+              command.executable,
+              args[args.indexOf('--project') + 1],
+            ]
+          : [...command.args, ...args],
         {
           cwd: path.dirname(this.options.configFile),
+          // Apply to every command, including explicit paths and TSRS_BINARY.
+          // Keep caller selection; do not change the dev server's environment.
+          env: {
+            ...process.env,
+            TSRS_CHECKER_ASSIGNMENT:
+              process.env.TSRS_CHECKER_ASSIGNMENT || 'go',
+          },
           maxBuffer: 16 * 1024 * 1024,
+          ...(inspect ? { timeout: 10_000 } : {}),
         },
       );
       return result.stdout;
     } catch (cause) {
-      const output = cause as { stdout?: string; stderr?: string };
+      const output = cause as {
+        stdout?: string;
+        stderr?: string;
+        code?: number | string;
+        signal?: NodeJS.Signals;
+      };
       const diagnostics = `${output.stdout ?? ''}${output.stderr ?? ''}`;
-      throw new Error(
-        `${name} failed:\n${diagnostics || (cause instanceof Error ? cause.message : String(cause))}${missingJsxRuntimeHint(diagnostics)}`,
-        { cause },
+      throw Object.assign(
+        new Error(
+          `${name} failed:\n${diagnostics || (cause instanceof Error ? cause.message : String(cause))}${missingJsxRuntimeHint(diagnostics)}`,
+          { cause },
+        ),
+        { code: output.code, signal: output.signal },
       );
     }
   }
@@ -333,9 +379,7 @@ export class UltramodernNativeTypeChecker {
           }
         } catch (cause) {
           compilation.errors.push(
-            new Error(cause instanceof Error ? cause.message : String(cause), {
-              cause,
-            }),
+            cause instanceof Error ? cause : new Error(String(cause)),
           );
         }
       });

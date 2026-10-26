@@ -107,10 +107,17 @@ test.each(
           'tsconfig.json',
           '--pretty',
           'false',
-          '--checkers',
-          '1',
         ],
-        { cwd: root, encoding: 'utf8', timeout: 20_000 },
+        {
+          cwd: root,
+          encoding: 'utf8',
+          timeout: 20_000,
+          env: {
+            ...process.env,
+            TSRS_CHECKER_ASSIGNMENT:
+              process.env.TSRS_CHECKER_ASSIGNMENT || 'go',
+          },
+        },
       );
       const output = checked.stdout + checked.stderr;
       expect(checked.error).toBeUndefined();
@@ -192,8 +199,17 @@ export const load = () => {
       );
       const checked = spawnSync(
         resolveEffectTsgoCompiler({ from: path.join(root, 'page.tsx') }),
-        ['--project', 'tsconfig.json', '--pretty', 'false', '--checkers', '1'],
-        { cwd: root, encoding: 'utf8', timeout: 20_000 },
+        ['--project', 'tsconfig.json', '--pretty', 'false'],
+        {
+          cwd: root,
+          encoding: 'utf8',
+          timeout: 20_000,
+          env: {
+            ...process.env,
+            TSRS_CHECKER_ASSIGNMENT:
+              process.env.TSRS_CHECKER_ASSIGNMENT || 'go',
+          },
+        },
       );
       const output = checked.stdout + checked.stderr;
       expect(checked.error).toBeUndefined();
