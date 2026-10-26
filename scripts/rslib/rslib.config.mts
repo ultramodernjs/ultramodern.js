@@ -17,6 +17,12 @@ export default defineConfig({
         abortOnError: true,
         bundle: false,
         distPath: './dist/types',
+        ...(process.env.ULTRAMODERN_DTS_COMPILER_MODULE
+          ? {
+              tsgo: true,
+              typescriptPath: process.env.ULTRAMODERN_DTS_COMPILER_MODULE,
+            }
+          : {}),
       },
       autoExtension: true,
     },
