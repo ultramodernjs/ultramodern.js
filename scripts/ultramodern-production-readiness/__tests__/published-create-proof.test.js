@@ -848,6 +848,116 @@ test('bootstrap release policy binds one exact cohort and sidecar selector set',
   );
 });
 
+test('release acceptance shares authenticated compiler selectors across bootstrap, Tractor and workspace audit', async t => {
+  const { auditReleaseAgePolicy, releaseAgeExemptions } = await import(
+    '../published-create-proof/release-age-audit.mjs'
+  );
+  const { createAcceptanceReleaseAgeEnv } = await import(
+    '../published-create-proof/acceptance-profile.mjs'
+  );
+  const { resolveCreatePackage } = await import(
+    '../published-create-proof/package-cohort.mjs'
+  );
+  const { createTractorPnpmDlxArgs } = await import(
+    '../tractor-downstream/main.mjs'
+  );
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'compiler-age-set-'));
+  t.after(() => fs.rmSync(root, { force: true, recursive: true }));
+  const policyPath = path.join(root, 'release-age-policy.json');
+  writeJson(root, 'release-age-policy.json', {
+    schema: 'bleedingdev.ultramodern.release-age-exceptions',
+    schemaVersion: 2,
+    entries: [],
+  });
+  const release = makeBootstrapRelease();
+  Object.assign(release.createPackage.packageJson.dependencies, {
+    '@effect/tsgo': '0.59.0',
+    tsrs: '0.20.0-ts7.1.0-beta',
+    'unrelated-compiler': '9.9.9',
+  });
+  const createPackage = resolveCreatePackage(release);
+  const exclusions = releaseAgeExemptions(release, { policyPath });
+  assert.equal(exclusions.length, release.packages.length + 16);
+  assert(exclusions.includes('tsrs@0.20.0-ts7.1.0-beta'));
+  assert(exclusions.includes('@effect/tsgo-win32-x64@0.59.0'));
+  assert(!exclusions.includes('unrelated-compiler@9.9.9'));
+  assert(
+    createPackage.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude.every(
+      selector => exclusions.includes(selector),
+    ),
+  );
+  const env = createAcceptanceReleaseAgeEnv({}, createPackage, exclusions);
+  assert.deepEqual(
+    JSON.parse(env.pnpm_config_minimum_release_age_exclude),
+    exclusions,
+  );
+  assert.equal(env.pnpm_config_trust_policy_exclude, undefined);
+  assert.equal(env.pnpm_config_minimum_release_age, '1440');
+  assert.equal(env.pnpm_config_minimum_release_age_strict, 'true');
+  assert.equal(
+    env.pnpm_config_minimum_release_age_ignore_missing_time,
+    'false',
+  );
+  const args = createTractorPnpmDlxArgs(createPackage, exclusions, [
+    'ultramodern',
+    'validate',
+  ]);
+  assert.deepEqual(
+    args.filter(value =>
+      value.startsWith('--config.minimum-release-age-exclude='),
+    ),
+    exclusions.map(value => `--config.minimum-release-age-exclude=${value}`),
+  );
+  const workspace = {
+    minimumReleaseAge: 1440,
+    minimumReleaseAgeExclude: exclusions,
+    minimumReleaseAgeIgnoreMissingTime: false,
+    minimumReleaseAgeStrict: true,
+    trustPolicy: 'no-downgrade',
+    trustPolicyIgnoreAfter: 1440,
+  };
+  writeJson(root, 'pnpm-workspace.yaml', workspace);
+  // This tests exclusion-policy agreement, not an install or compiler run.
+  writeJson(root, 'pnpm-lock.yaml', {
+    lockfileVersion: '9.0',
+    importers: { '.': {} },
+    packages: {},
+    snapshots: {},
+  });
+  const auditOptions = {
+    projectDir: root,
+    release,
+    commandExclusions: exclusions,
+    registryUrl: 'https://registry.npmjs.org/',
+    policyPath,
+    parseYamlImpl: JSON.parse,
+    verifyYamlTool: false,
+    fetchImpl: () => {
+      throw new Error('Empty dependency closure must not fetch metadata');
+    },
+  };
+  const audit = await auditReleaseAgePolicy(auditOptions);
+  assert.deepEqual(audit.exactExclusions, exclusions);
+  for (const badExclusions of [
+    exclusions.filter(value => value !== 'tsrs@0.20.0-ts7.1.0-beta'),
+    [...exclusions, 'unrelated-compiler@9.9.9'].sort(),
+  ]) {
+    writeJson(root, 'pnpm-workspace.yaml', {
+      ...workspace,
+      minimumReleaseAgeExclude: badExclusions,
+    });
+    await assert.rejects(
+      auditReleaseAgePolicy(auditOptions),
+      /must list exactly the release cohort/u,
+    );
+  }
+  release.createPackage.packageJson.dependencies.tsrs = '^0.20.0';
+  assert.throws(
+    () => releaseAgeExemptions(release, { policyPath }),
+    /must use one exact bootstrap version/u,
+  );
+});
+
 test('generated workspace commands cannot inherit release-age or trust policy overrides', async t => {
   const { createAcceptanceWorkspaceEnv } = await import(
     '../published-create-proof/process.mjs'
