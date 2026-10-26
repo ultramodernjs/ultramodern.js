@@ -137,8 +137,8 @@ export type ResolveEffectTsgoCompilerOptions = {
 
 /**
  * Resolves the Effect-enabled native executable for checking and DTS builds.
- * On declared tsrs targets, use the provider's metadata-bound bundled tsrs.
- * Unsupported targets use Effect-Go. Missing declared artifacts remain fatal.
+ * Use metadata-bound tsrs where both tsrs and the Effect provider support it.
+ * Unsupported targets use Effect-Go. Missing supported artifacts remain fatal.
  */
 export function resolveEffectTsgoCompiler(
   options: ResolveEffectTsgoCompilerOptions,

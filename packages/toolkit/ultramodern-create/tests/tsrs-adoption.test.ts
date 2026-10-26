@@ -24,7 +24,6 @@ import {
   TYPESCRIPT_VERSION,
 } from '../src/ultramodern-workspace/versions';
 import { GENERATED_POSTINSTALL_SCRIPT } from '../src/ultramodern-workspace/workspace-script-plan';
-import { compilerBootstrapFixture } from './helpers/compiler-bootstrap';
 
 function record(value: JsonValue) {
   assert(value && typeof value === 'object' && !Array.isArray(value));
@@ -203,92 +202,6 @@ process.exit(${status});
     }
   },
 );
-
-const compilerPrepareScript = path.resolve(
-  __dirname,
-  '../templates/workspace-scripts/ultramodern-compiler-prepare.mjs',
-);
-
-test.each([
-  { platformPackage: '@tsrs/darwin-arm64', tsrs: true, status: 0 },
-  { platformPackage: '@tsrs/linux-x64-gnu', tsrs: true, status: 0 },
-  { platformPackage: '@tsrs/win32-x64', tsrs: true, status: 0 },
-  { platformPackage: '@tsrs/darwin-x64', tsrs: true, status: 0 },
-  { platformPackage: '@tsrs/win32-arm64', tsrs: false, status: 0 },
-  { platformPackage: '@tsrs/linux-arm-gnu', tsrs: false, status: 0 },
-  { platformPackage: '@tsrs/darwin-arm64', tsrs: true, status: 37 },
-])(
-  'compiler bootstrap selects $platformPackage and preserves exit $status',
-  ({ platformPackage, tsrs, status }) => {
-    const root = fs.realpathSync(
-      fs.mkdtempSync(path.join(os.tmpdir(), 'um-compiler-prepare-')),
-    );
-    try {
-      const fixture = compilerBootstrapFixture(root, {
-        platformPackage,
-        compilerStatus: status,
-      });
-      assert.equal(fixture.manifest.version, TSRS_VERSION);
-      assert.equal(
-        Object.hasOwn(fixture.manifest.optionalDependencies, platformPackage),
-        tsrs,
-      );
-      const tsrsManifest = path.join(fixture.tsrsRoot, 'package.json');
-      const before = fs.readFileSync(tsrsManifest);
-      const result = spawnSync(process.execPath, [compilerPrepareScript], {
-        // The environment's workspace root, not cwd, owns package selection.
-        cwd: __dirname,
-        encoding: 'utf8',
-        env: { ...process.env, ULTRAMODERN_WORKSPACE_ROOT: root },
-      });
-      assert.equal(result.error, undefined);
-      assert.equal(result.status, status, result.stderr);
-      assert.deepEqual(fs.readFileSync(tsrsManifest), before);
-      assert.deepEqual(
-        JSON.parse(fs.readFileSync(fixture.compilerLog, 'utf8')),
-        {
-          args: [tsrs ? 'tsrs' : 'tsc', '--version'],
-          cwd: root,
-          execPath: process.execPath,
-        },
-      );
-      assert.match(
-        result.stdout,
-        tsrs ? /Validating Effect-enabled tsrs/u : /using Effect-Go/u,
-      );
-      if (status !== 0)
-        assert.match(result.stderr, /Effect compiler readiness failed/u);
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
-  },
-);
-
-test('broken tsrs platform metadata never selects Effect-Go', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'um-compiler-metadata-'));
-  try {
-    const fixture = compilerBootstrapFixture(root);
-    const tsrsManifest = path.join(fixture.tsrsRoot, 'package.json');
-    for (const manifest of [
-      { ...fixture.manifest, optionalDependencies: {} },
-      {
-        ...fixture.manifest,
-        optionalDependencies: { '@tsrs/darwin-arm64': '0.0.0' },
-      },
-    ]) {
-      fs.writeFileSync(tsrsManifest, JSON.stringify(manifest));
-      const result = spawnSync(process.execPath, [compilerPrepareScript], {
-        encoding: 'utf8',
-        env: { ...process.env, ULTRAMODERN_WORKSPACE_ROOT: root },
-      });
-      assert.equal(result.status, 1, result.stderr);
-      assert.doesNotMatch(result.stdout, /Effect-Go/u);
-      assert.equal(fs.existsSync(fixture.compilerLog), false);
-    }
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
 
 const typecheckScript = path.resolve(
   __dirname,

@@ -7,6 +7,14 @@ import { fileURLToPath, type URL } from 'node:url';
 const EFFECT_TSGO_PACKAGE = '@effect/tsgo';
 const EFFECT_TSGO_BIN = 'effect-tsgo';
 const NATIVE_TYPESCRIPT_PACKAGES = ['typescript', '@typescript/native'];
+// @effect/tsgo@0.59.0 exports no tsrs capability API. Keep this exact contract
+// aligned with its CLI's tsrsReplacementTargets / resolveTsrs, not tsrs's list.
+const EFFECT_TSRS_PROVIDER_VERSION = '0.59.0';
+const EFFECT_TSRS_TARGETS = new Set([
+  '@tsrs/darwin-arm64',
+  '@tsrs/linux-x64-gnu',
+  '@tsrs/linux-arm64-gnu',
+]);
 type PackageJson = {
   name?: string;
   bin?: Record<string, string> | string;
@@ -338,15 +346,24 @@ export function resolveInstalledEffectCompiler(from: string | URL): string {
     stage = 'Native tsrs package resolution';
     const tsrsManifest = resolveTsrsManifest(from);
     const tsrsTarget = tsrsManifest ? tsrsPlatform(tsrsManifest) : undefined;
-    if (tsrsManifest && tsrsTarget?.supported) {
+    if (
+      tsrsTarget &&
+      effect.packageJson.version !== EFFECT_TSRS_PROVIDER_VERSION
+    ) {
+      throw new Error(
+        `Unreviewed Effect tsrs capability contract: ${effect.packageJson.version}`,
+      );
+    }
+    const configuredTsrsCompiler = process.env.TSRS_BINARY || undefined;
+    if (
+      tsrsManifest &&
+      tsrsTarget?.supported &&
+      (configuredTsrsCompiler || EFFECT_TSRS_TARGETS.has(tsrsTarget.nativeName))
+    ) {
       stage = 'Native tsrs validation';
       // TSRS_BINARY remains an explicit candidate selection. Automatic
       // discovery uses the Effect provider's bundled native replacement.
-      return resolveTsrsCompiler(
-        tsrsManifest,
-        effect,
-        process.env.TSRS_BINARY || undefined,
-      );
+      return resolveTsrsCompiler(tsrsManifest, effect, configuredTsrsCompiler);
     }
     if (
       tsrsTarget &&
@@ -354,7 +371,7 @@ export function resolveInstalledEffectCompiler(from: string | URL): string {
     ) {
       reportedUnsupportedTsrsTargets.add(tsrsTarget.nativeName);
       console.warn(
-        `[UltraModern] tsrs does not declare ${tsrsTarget.nativeName}; selecting the Effect-enabled TypeScript-Go compiler.`,
+        `[UltraModern] ${tsrsTarget.supported ? `@effect/tsgo@${effect.packageJson.version} does not provide a tsrs replacement for ${tsrsTarget.nativeName}` : `tsrs does not declare ${tsrsTarget.nativeName}`}; selecting the Effect-enabled TypeScript-Go compiler.`,
       );
     }
     stage = 'Native TypeScript package resolution';

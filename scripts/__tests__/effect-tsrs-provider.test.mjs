@@ -15,7 +15,11 @@ const tsrsPath = '/fixture/node_modules/tsrs/package.json';
 const effectPath = '/fixture/node_modules/@effect/tsgo/package.json';
 const nativeRoot = '/fixture/node_modules/@effect/tsgo-darwin-arm64';
 
-function loadProvider(change = () => {}, environment = {}) {
+function loadProvider(
+  change = () => {},
+  environment = {},
+  host = { platform: 'darwin', arch: 'arm64' },
+) {
   const documents = {
     [tsrsPath]: {
       name: 'tsrs',
@@ -25,6 +29,10 @@ function loadProvider(change = () => {}, environment = {}) {
         '@tsrs/darwin-arm64': tsrsVersion,
         '@tsrs/darwin-x64': tsrsVersion,
         '@tsrs/win32-x64': tsrsVersion,
+        '@tsrs/linux-x64-gnu': tsrsVersion,
+        '@tsrs/linux-arm64-gnu': tsrsVersion,
+        '@tsrs/linux-x64-musl': tsrsVersion,
+        '@tsrs/linux-arm64-musl': tsrsVersion,
       },
     },
     [effectPath]: { name: '@effect/tsgo', version: effectVersion },
@@ -65,8 +73,8 @@ function loadProvider(change = () => {}, environment = {}) {
     if (name === 'node:path') return path;
     if (name === path.join(path.dirname(tsrsPath), 'lib/platform.js')) {
       return {
-        getPlatformPackageName: (os = 'darwin', arch = 'arm64') =>
-          `@tsrs/${os}-${arch}`,
+        getPlatformPackageName: (os = host.platform, arch = host.arch) =>
+          `@tsrs/${os}-${arch}${os === 'linux' ? (host.musl ? '-musl' : '-gnu') : ''}`,
       };
     }
     if (name === '@effect/tsgo/lib/getExePath') {
@@ -84,12 +92,14 @@ function loadProvider(change = () => {}, environment = {}) {
     throw new Error(`Unexpected fixture resolution: ${name}`);
   };
   const module = { exports: {} };
+  const warnings = [];
   vm.runInNewContext(source, {
     module,
     require: fixtureRequire,
-    process: { platform: 'darwin', arch: 'arm64', env: environment },
+    console: { warn: message => warnings.push(message) },
+    process: { platform: host.platform, arch: host.arch, env: environment },
   });
-  return module.exports;
+  return { ...module.exports, warnings };
 }
 
 test('root provider selects the read-only metadata-bound Effect tsrs artifact', () => {
@@ -100,19 +110,62 @@ test('root provider selects the read-only metadata-bound Effect tsrs artifact', 
   );
   assert.equal(provider.typescriptVersion, '7.1.0-beta');
   assert.equal(provider.typescriptCommit, typescriptCommit);
-  assert.equal(provider.getCompilerPolicy('win32', 'x64').backend, 'tsrs');
+  assert.equal(provider.getCompilerPolicy('win32', 'x64').backend, 'effect-go');
+  assert.equal(
+    provider.getCompilerPolicy('darwin', 'x64').backend,
+    'effect-go',
+  );
+  assert.equal(provider.getCompilerPolicy('linux', 'x64').backend, 'tsrs');
+  assert.equal(provider.getCompilerPolicy('linux', 'arm64').backend, 'tsrs');
   assert.equal(
     provider.getCompilerPolicy('win32', 'arm64').backend,
     'effect-go',
   );
 });
 
-test('only an undeclared host selects Effect-Go', () => {
+test('an undeclared tsrs host selects Effect-Go', () => {
   const provider = loadProvider(documents => {
     delete documents[tsrsPath].optionalDependencies['@tsrs/darwin-arm64'];
   });
   assert.equal(provider.getExePath(), '/fixture/effect-go/tsc');
   assert.equal(provider.typescriptVersion, '7.0.2');
+});
+
+for (const host of [
+  { platform: 'win32', arch: 'x64' },
+  { platform: 'darwin', arch: 'x64' },
+  { platform: 'linux', arch: 'x64', musl: true },
+  { platform: 'linux', arch: 'arm64', musl: true },
+]) {
+  test(`Effect-Go handles declared tsrs host ${host.platform}-${host.arch}${host.musl ? '-musl' : ''} without a packaged Effect tsrs replacement`, () => {
+    const provider = loadProvider(undefined, {}, host);
+    assert.equal(provider.getCompilerPolicy().backend, 'effect-go');
+    assert.equal(provider.getExePath(), '/fixture/effect-go/tsc');
+    assert.equal(provider.typescriptVersion, '7.0.2');
+    assert.match(provider.warnings.join('\n'), /using Effect-Go/);
+    assert.equal(provider.getExePath(), '/fixture/effect-go/tsc');
+    assert.equal(provider.warnings.length, 1);
+  });
+}
+
+test('an explicit compiler remains selected on an unsupported replacement host', () => {
+  const provider = loadProvider(
+    undefined,
+    { EFFECT_TSGO_BIN: '/explicit/compiler' },
+    { platform: 'win32', arch: 'x64' },
+  );
+  assert.equal(provider.getExePath(), '/explicit/compiler');
+  assert.equal(provider.warnings.length, 0);
+});
+
+test('a new provider version requires a reviewed capability contract', () => {
+  assert.throws(
+    () =>
+      loadProvider(documents => {
+        documents[effectPath].version = '0.60.0';
+      }),
+    /Unreviewed Effect tsrs capability contract/,
+  );
 });
 
 test('a broken supported artifact never selects Effect-Go', () => {
@@ -175,6 +228,17 @@ test('root provider rejects corrupt capability and embedded TypeScript metadata'
       loadProvider(documents => {
         documents[tsrsPath].optionalDependencies['@tsrs/darwin-arm64'] = 'bad';
       }),
+    /Native tsrs dependency does not match/,
+  );
+  assert.throws(
+    () =>
+      loadProvider(
+        documents => {
+          documents[tsrsPath].optionalDependencies['@tsrs/win32-x64'] = 'bad';
+        },
+        {},
+        { platform: 'win32', arch: 'x64' },
+      ),
     /Native tsrs dependency does not match/,
   );
 });

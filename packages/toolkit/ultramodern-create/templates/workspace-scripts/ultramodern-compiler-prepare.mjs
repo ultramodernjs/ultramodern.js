@@ -36,9 +36,9 @@ if (
 ) {
   throw new Error(`Invalid tsrs platform identity: ${platformPackage}`);
 }
-const supportsTsrs = Object.hasOwn(tsrs.optionalDependencies, platformPackage);
+const declaresTsrs = Object.hasOwn(tsrs.optionalDependencies, platformPackage);
 if (
-  supportsTsrs &&
+  declaresTsrs &&
   tsrs.optionalDependencies[platformPackage] !== tsrs.version
 ) {
   throw new Error(
@@ -53,10 +53,21 @@ const effectBin =
 if (effect.name !== '@effect/tsgo' || typeof effectBin !== 'string') {
   throw new Error(`Invalid Effect compiler CLI metadata: ${effectManifestPath}`);
 }
+// @effect/tsgo@0.59.0 exports no tsrs capability API. Its CLI's
+// tsrsReplacementTargets / resolveTsrs contract is narrower than tsrs itself.
+const effectTsrsTargets = new Set([
+  '@tsrs/darwin-arm64',
+  '@tsrs/linux-x64-gnu',
+  '@tsrs/linux-arm64-gnu',
+]);
+if (effect.version !== '0.59.0') {
+  throw new Error(`Unreviewed Effect tsrs capability contract: ${effect.version}`);
+}
+const supportsTsrs = declaresTsrs && effectTsrsTargets.has(platformPackage);
 console.info(
   supportsTsrs
     ? `[ultramodern] Validating Effect-enabled tsrs ${tsrs.version} for ${platformPackage}.`
-    : `[ultramodern] tsrs ${tsrs.version} does not publish ${platformPackage}; using Effect-Go.`,
+    : `[ultramodern] ${declaresTsrs ? `@effect/tsgo@${effect.version} does not provide a tsrs replacement for ${platformPackage}` : `tsrs ${tsrs.version} does not publish ${platformPackage}`}; using Effect-Go.`,
 );
 const result = spawnSync(
   process.execPath,

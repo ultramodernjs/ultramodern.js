@@ -33,7 +33,7 @@ if (
 }
 if (policy.backend === 'effect-go') {
   console.error(
-    `tsrs does not publish ${policy.nativePackage}; using the Effect-Go compiler.`,
+    `The Effect tsrs replacement is unavailable for ${policy.nativePackage}; using the Effect-Go compiler.`,
   );
 }
 const args = process.argv.slice(2);

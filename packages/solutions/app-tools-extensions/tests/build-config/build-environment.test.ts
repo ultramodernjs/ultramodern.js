@@ -41,8 +41,13 @@ const { getPlatformPackageName } = tsrsRequire(
   join(dirname(tsrsManifestPath), 'lib/platform.js'),
 ) as { getPlatformPackageName: () => string };
 const tsrsSupported =
+  [
+    '@tsrs/darwin-arm64',
+    '@tsrs/linux-x64-gnu',
+    '@tsrs/linux-arm64-gnu',
+  ].includes(getPlatformPackageName()) &&
   tsrsManifest.optionalDependencies[getPlatformPackageName()] ===
-  tsrsManifest.version;
+    tsrsManifest.version;
 const tsrsTest = tsrsSupported ? test : test.skip;
 
 test('resolves the repository root origin to its actual declared Effect compiler cohort', async () => {
@@ -607,8 +612,9 @@ for (const target of [
   '@tsrs/win32-x64',
   '@tsrs/darwin-x64',
   '@tsrs/linux-x64-musl',
+  '@tsrs/linux-arm64-musl',
 ]) {
-  test(`selects Effect-Go only when tsrs does not declare ${target}`, async () => {
+  test(`selects Effect-Go when Effect does not package declared tsrs target ${target}`, async () => {
     const directory = mkdtempSync(join(tmpdir(), 'app-tools-effect-go-host-'));
     try {
       writeEffectTsgoPackage(directory);
@@ -619,7 +625,7 @@ for (const target of [
         ...tsrsManifest,
         optionalDependencies: { ...tsrsManifest.optionalDependencies },
       };
-      delete manifest.optionalDependencies[target];
+      manifest.optionalDependencies[target] = tsrsManifest.version;
       writeFileSync(join(owner, 'package.json'), JSON.stringify(manifest));
       writeFileSync(
         join(owner, 'lib/platform.js'),
@@ -661,22 +667,22 @@ for (const mutation of [
       mkdirSync(join(owner, 'lib'), { recursive: true });
       const manifest = {
         ...tsrsManifest,
-        optionalDependencies: { '@tsrs/fixture-host': tsrsManifest.version },
+        optionalDependencies: { '@tsrs/darwin-arm64': tsrsManifest.version },
       };
       if (mutation === 'target-version')
-        manifest.optionalDependencies['@tsrs/fixture-host'] = '0.17.0';
+        manifest.optionalDependencies['@tsrs/darwin-arm64'] = '0.17.0';
       if (mutation === 'missing-metadata')
         delete (manifest as Partial<typeof manifest>).optionalDependencies;
       if (mutation === 'empty-metadata')
         Reflect.deleteProperty(
           manifest.optionalDependencies,
-          '@tsrs/fixture-host',
+          '@tsrs/darwin-arm64',
         );
       writeFileSync(join(owner, 'package.json'), JSON.stringify(manifest));
       if (mutation !== 'missing-helper')
         writeFileSync(
           join(owner, 'lib/platform.js'),
-          'export const getPlatformPackageName = () => "@tsrs/fixture-host";',
+          'export const getPlatformPackageName = () => "@tsrs/darwin-arm64";',
         );
       writeFileSync(
         join(owner, 'lib/getExePath.js'),
@@ -1050,17 +1056,24 @@ test('selects the actual declared generator Effect artifact from an empty stagin
       nativeManifestPath,
     )(join(dirname(nativeManifestPath), 'lib/platform.js'));
     const supported =
+      [
+        '@tsrs/darwin-arm64',
+        '@tsrs/linux-x64-gnu',
+        '@tsrs/linux-arm64-gnu',
+      ].includes(getNativeName()) &&
       nativeManifest.optionalDependencies[getNativeName()] ===
-      nativeManifest.version;
-    const component = upstream.components.tsrs[nativeManifest.version];
-    assert.equal(
-      component.typescript.version,
-      nativeManifest.tsrs.typescriptVersion,
-    );
-    assert.equal(
-      component.typescript.gitHead,
-      nativeManifest.tsrs.typescriptCommit,
-    );
+        nativeManifest.version;
+    if (supported) {
+      const component = upstream.components.tsrs[nativeManifest.version];
+      assert.equal(
+        component.typescript.version,
+        nativeManifest.tsrs.typescriptVersion,
+      );
+      assert.equal(
+        component.typescript.gitHead,
+        nativeManifest.tsrs.typescriptCommit,
+      );
+    }
     const expectedCompiler = supported
       ? join(
           dirname(platformManifestPath),

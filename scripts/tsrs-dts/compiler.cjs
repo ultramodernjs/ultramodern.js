@@ -23,8 +23,21 @@ if (
 if (effect.name !== '@effect/tsgo' || typeof effect.version !== 'string') {
   throw new Error(`Invalid Effect compiler metadata: ${effectManifestPath}`);
 }
+// @effect/tsgo@0.59.0 exports no tsrs capability API. These are its CLI's
+// tsrsReplacementTargets / resolveTsrs targets, not all upstream tsrs targets.
+const effectTsrsTargets = new Set([
+  '@tsrs/darwin-arm64',
+  '@tsrs/linux-x64-gnu',
+  '@tsrs/linux-arm64-gnu',
+]);
+const reportedUnsupportedTargets = new Set();
 
 function getCompilerPolicy(platform = process.platform, arch = process.arch) {
+  if (effect.version !== '0.59.0') {
+    throw new Error(
+      `Unreviewed Effect tsrs capability contract: ${effect.version}`,
+    );
+  }
   const { getPlatformPackageName } = require(
     join(dirname(tsrsManifestPath), 'lib/platform.js'),
   );
@@ -44,12 +57,22 @@ function getCompilerPolicy(platform = process.platform, arch = process.arch) {
       `Native tsrs dependency does not match ${tsrs.version}: ${nativePackage}`,
     );
   }
+  if (!effectTsrsTargets.has(nativePackage)) {
+    return { backend: 'effect-go', nativePackage };
+  }
   return { backend: 'tsrs', nativePackage };
 }
 
 function getExePath() {
   if (process.env.EFFECT_TSGO_BIN) return process.env.EFFECT_TSGO_BIN;
-  if (getCompilerPolicy().backend === 'effect-go') {
+  const policy = getCompilerPolicy();
+  if (policy.backend === 'effect-go') {
+    if (!reportedUnsupportedTargets.has(policy.nativePackage)) {
+      reportedUnsupportedTargets.add(policy.nativePackage);
+      console.warn(
+        `[ultramodern] No declared tsrs replacement for ${policy.nativePackage} in @effect/tsgo@${effect.version}; using Effect-Go.`,
+      );
+    }
     return require('@effect/tsgo/lib/getExePath').default();
   }
   const effectRequire = createRequire(effectManifestPath);
