@@ -10,6 +10,7 @@
     "test": "node --experimental-strip-types --test profile-build.smoke.ts"
   },
   "devDependencies": {
+    "@effect/tsgo": "0.59.0",
     "@modern-js/app-tools": "workspace:*",
     "@modern-js/i18n-integration": "workspace:*",
     "@modern-js/plugin-i18n": "workspace:*",
@@ -29,6 +30,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tailwindcss": "4.3.3",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "tsrs": "0.20.0-ts7.1.0-beta"
   }
 }

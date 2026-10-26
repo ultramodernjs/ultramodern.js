@@ -7809,6 +7809,9 @@ importers:
 
   tests/integration/ultramodern-sandpack-profile-smoke:
     devDependencies:
+      '@effect/tsgo':
+        specifier: 0.59.0
+        version: 0.59.0
       '@modern-js/app-tools':
         specifier: workspace:*
         version: link:../../../packages/solutions/app-tools
@@ -7866,6 +7869,9 @@ importers:
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
+      tsrs:
+        specifier: 0.20.0-ts7.1.0-beta
+        version: 0.20.0-ts7.1.0-beta
       typescript:
         specifier: 7.0.2
         version: 7.0.2
