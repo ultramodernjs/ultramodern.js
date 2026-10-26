@@ -6,7 +6,10 @@ import {
   inspectNpmTarball,
   readVerifiedPackageArtifactBytes,
 } from '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs';
-import { expectedReleaseCohort } from '../published-create-proof/package-cohort.mjs';
+import {
+  compilerBootstrapSelectors,
+  expectedReleaseCohort,
+} from '../published-create-proof/package-cohort.mjs';
 import { validateExactExclusions } from '../published-create-proof/release-age-audit.mjs';
 import { collectPackageJsonFiles } from './contract.mjs';
 
@@ -142,10 +145,11 @@ export function prepareTractorCohortInstallation(
       sidecars,
       ([name, sidecarVersion]) => `${name}@${sidecarVersion}`,
     ),
+    ...compilerBootstrapSelectors(packed.packageJson),
   ].sort();
   if (!isDeepStrictEqual(producerExclusions, expectedExclusions)) {
     throw new Error(
-      'Producer pnpm minimumReleaseAgeExclude must select exactly the verified Modern.js cohort and sidecars',
+      'Producer pnpm minimumReleaseAgeExclude must select exactly the verified Modern.js cohort, sidecars and packed producer compiler selectors',
     );
   }
   if (trustPolicy !== 'no-downgrade' || trustPolicyIgnoreAfter !== 1440) {

@@ -730,6 +730,7 @@ function assertGeneratedCohort(projectDir, release) {
 export {
   assertBootstrapReleaseAgePolicy,
   assertGeneratedCohort,
+  compilerBootstrapSelectors,
   createPnpmDlxArgs,
   expectedReleaseCohort,
   packageJsonFiles,
