@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { rs } from '@rstest/core';
@@ -30,7 +36,9 @@ function writeJson(filename: string, content: unknown): void {
 }
 
 function fixture(target: string) {
-  const root = mkdtempSync(join(tmpdir(), 'effect-platform-capability-'));
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), 'effect-platform-capability-')),
+  );
   const owner = join(root, 'node_modules/tsrs');
   const provider = join(root, 'node_modules/@effect/tsgo');
   const platform = join(root, 'node_modules', effectName);
