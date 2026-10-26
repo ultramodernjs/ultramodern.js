@@ -103,30 +103,6 @@ function appById(apps: any[], id: string): any {
   return app;
 }
 
-/**
- * Resolves the native TypeScript 7 executable installed for this platform by
- * `typescript`. The native binary (rather than a package bin
- * shim) keeps `EFFECT_TSGO_BIN` spawnable without a shell on every OS.
- */
-function resolveInstalledTsgoExecutable() {
-  const typescriptManifest = createRequire(
-    path.join(packageRoot, 'package.json'),
-  ).resolve('typescript/package.json');
-  assert.equal(
-    JSON.parse(fs.readFileSync(typescriptManifest, 'utf8')).version,
-    '7.0.2',
-  );
-  const platformManifest = createRequire(typescriptManifest).resolve(
-    `@typescript/typescript-${process.platform}-${process.arch}/package.json`,
-  );
-
-  return path.join(
-    path.dirname(platformManifest),
-    'lib',
-    process.platform === 'win32' ? 'tsc.exe' : 'tsc',
-  );
-}
-
 test('referenced remote declaration prebuild emits declarations from a clean cache before the dependent shell build', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'um-declaration-'));
   const workspaceDir = path.join(tempRoot, 'integration-workspace');
@@ -215,17 +191,20 @@ test('referenced remote declaration prebuild emits declarations from a clean cac
       'src/index.d.ts',
     );
     const tsgoCache = path.join(workspaceDir, 'node_modules/.cache/tsgo');
-    const runDeclarationPrebuild = (command: string) =>
-      spawnSync(command, {
+    const runDeclarationPrebuild = (command: string) => {
+      const environment: NodeJS.ProcessEnv = {
+        ...hermeticEnv,
+        PATH: `${path.join(workspaceDir, 'node_modules/.bin')}${path.delimiter}${process.env.PATH ?? ''}`,
+      };
+      // Let the generated entry resolve the verified compiler from this workspace.
+      delete environment.EFFECT_TSGO_BIN;
+      return spawnSync(command, {
         cwd: workspaceDir,
         encoding: 'utf8',
-        env: {
-          ...hermeticEnv,
-          PATH: `${path.join(workspaceDir, 'node_modules/.bin')}${path.delimiter}${process.env.PATH ?? ''}`,
-          EFFECT_TSGO_BIN: resolveInstalledTsgoExecutable(),
-        },
+        env: environment,
         shell: true,
       });
+    };
     // Stand-in for `pnpm --filter "./apps/shell-super-app" run build`: the only
     // thing the dependent shell build needs from the prebuild is the referenced
     // remote's declaration output, so the mock gates on exactly that.

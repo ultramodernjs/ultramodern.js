@@ -120,13 +120,17 @@ export default function App() { return <main id="bare-react-cli" className={styl
         fs.mkdirSync(path.dirname(link), { recursive: true });
         fs.symlinkSync(owner, link, 'dir');
       }
-      expect(Object.keys(dependencies)).toHaveLength(12);
-      for (const name of ['@effect/tsgo', '@typescript/native']) {
-        expect(Object.hasOwn(dependencies, name)).toBe(false);
-        expect(owners.has(name)).toBe(false);
+      expect(Object.keys(dependencies)).toHaveLength(14);
+      for (const [name, present] of [
+        ['tsrs', true],
+        ['@effect/tsgo', true],
+        ['@typescript/native', false],
+      ] as const) {
+        expect(Object.hasOwn(dependencies, name)).toBe(present);
+        expect(owners.has(name)).toBe(present);
         expect(
           fs.existsSync(path.join(appDirectory, 'node_modules', name)),
-        ).toBe(false);
+        ).toBe(present);
       }
       fs.writeFileSync(
         path.join(appDirectory, 'package.json'),

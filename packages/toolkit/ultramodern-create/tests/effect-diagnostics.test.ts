@@ -20,13 +20,13 @@ import { Rpc } from "effect/rpc";
 export const response = HttpServerResponse.text("ready");
 export const ping = Rpc.make("Ping");
 `,
-    status: 0,
+    succeeds: true,
     code: 'TS377136',
   },
   {
     name: 'rejects ordinary type errors',
     source: 'export const value: string = 123;\n',
-    status: 1,
+    succeeds: false,
     code: 'TS2322',
   },
   {
@@ -34,7 +34,7 @@ export const ping = Rpc.make("Ping");
     source: `import * as Effect from "effect/Effect";
 Effect.log("forgotten");
 `,
-    status: 1,
+    succeeds: false,
     code: 'TS377001',
   },
   {
@@ -47,7 +47,7 @@ export const previewApi = () => 1;
 export const preview = previewApi();
 export const effect = Effect.succeed(1);
 `,
-    status: 1,
+    succeeds: false,
     code: 'TS377135',
   },
 ] as const;
@@ -57,12 +57,11 @@ test.each(
     ['project', 'build'].map(mode => ({
       ...fixture,
       mode,
-      status: fixture.status,
     })),
   ),
 )(
   'installed native Effect policy $name in $mode mode',
-  ({ source, status, code, mode }) => {
+  ({ source, succeeds, code, mode }) => {
     const root = fs.realpathSync.native(
       fs.mkdtempSync(path.join(os.tmpdir(), 'um-effect-diagnostics-')),
     );
@@ -121,11 +120,14 @@ test.each(
       );
       const output = checked.stdout + checked.stderr;
       expect(checked.error).toBeUndefined();
-      expect(checked.status).toBe(status);
+      expect(checked.signal).toBeNull();
       expect([...new Set(output.match(/\bTS\d+\b/g))]).toEqual([code]);
-      if (status === 0) {
+      if (succeeds) {
+        expect(checked.status).toBe(0);
         expect(output).toContain('message TS377136');
       } else {
+        expect(checked.status).toEqual(expect.any(Number));
+        expect(checked.status).not.toBe(0);
         expect(output).toContain(`error ${code}`);
       }
     } finally {
@@ -142,17 +144,17 @@ const installedPackage = (owner: string, name: string) =>
 test.each([
   {
     guard: 'import.meta.env.MODERN_TARGET',
-    status: 0,
+    succeeds: true,
     codes: [] as string[],
   },
   {
     guard: 'process.env.MODERN_TARGET',
-    status: 1,
+    succeeds: false,
     codes: ['TS377076'],
   },
 ])(
   'generated React shell type checking for the $guard browser guard',
-  ({ guard, status, codes }) => {
+  ({ guard, succeeds, codes }) => {
     const root = fs.realpathSync.native(
       fs.mkdtempSync(path.join(os.tmpdir(), 'um-shell-build-target-')),
     );
@@ -213,8 +215,17 @@ export const load = () => {
       );
       const output = checked.stdout + checked.stderr;
       expect(checked.error).toBeUndefined();
+      expect(checked.signal).toBeNull();
       expect([...new Set(output.match(/\bTS\d+\b/g))]).toEqual(codes);
-      expect(checked.status).toBe(status);
+      if (succeeds) {
+        expect(checked.status).toBe(0);
+      } else {
+        expect(checked.status).toEqual(expect.any(Number));
+        expect(checked.status).not.toBe(0);
+        for (const code of codes) {
+          expect(output).toContain(`error ${code}`);
+        }
+      }
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
