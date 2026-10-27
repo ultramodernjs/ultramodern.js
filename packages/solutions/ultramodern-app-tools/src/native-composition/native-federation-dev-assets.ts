@@ -151,7 +151,7 @@ export class NativeFederationDevAssetsPlugin {
         throw new Error(
           'Native development federation requires an explicit browser publicPath',
         );
-      const graphPrefix = nativeFederationDevGraphPublicPath(publicPath);
+      const graphPublicPath = publicPath;
       class GraphPublicPathRuntimeModule extends rspack.RuntimeModule {
         constructor() {
           super(
@@ -164,17 +164,20 @@ export class NativeFederationDevAssetsPlugin {
         }
         generate() {
           // Rspack generates once before its full hash exists, then regenerates
-          // fullHash modules during final hashing. Keep the native hash getter
-          // in the executable path; the completed hash changes this module's
-          // source so HMR includes and re-executes it on every changed graph.
-          return `/* graph ${this.compilation?.fullHash ?? 'pending'} */\n${rspack.RuntimeGlobals.publicPath} = ${JSON.stringify(graphPrefix)} + ${rspack.RuntimeGlobals.getFullHash}() + "/";`;
+          // fullHash modules during final hashing. Emit that completed graph
+          // directly: HMR may execute this module before installing its new
+          // hash getter, so reading the getter can address a different graph.
+          const graph = nativeFederationDevGraphPublicPath(
+            graphPublicPath,
+            this.compilation?.fullHash || undefined,
+          );
+          return `${rspack.RuntimeGlobals.publicPath} = ${JSON.stringify(graph)};`;
         }
       }
       compilation.hooks.additionalTreeRuntimeRequirements.tap(
         name,
         (chunk, requirements) => {
           if (chunk.name !== this.container) return;
-          requirements.add(rspack.RuntimeGlobals.getFullHash);
           requirements.add(rspack.RuntimeGlobals.publicPath);
           compilation.addRuntimeModule(
             chunk,
