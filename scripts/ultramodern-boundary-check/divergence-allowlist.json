@@ -4,14 +4,19 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1126,
-  "totalHunks": 3771,
-  "totalChangedLines": 86383,
+  "totalFiles": 1128,
+  "totalHunks": 3775,
+  "totalChangedLines": 86393,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/package.json",
       "hunks": 5,
       "changedLines": 20
+    },
+    {
+      "file": "packages/cli/adapter-rstest/rslib.config.mts",
+      "hunks": 2,
+      "changedLines": 5
     },
     {
       "file": "packages/cli/adapter-rstest/src/index.ts",
@@ -1592,6 +1597,11 @@
       "file": "packages/runtime/plugin-image/package.json",
       "hunks": 4,
       "changedLines": 21
+    },
+    {
+      "file": "packages/runtime/plugin-image/rslib.config.mts",
+      "hunks": 2,
+      "changedLines": 5
     },
     {
       "file": "packages/runtime/plugin-image/src/cli.ts",

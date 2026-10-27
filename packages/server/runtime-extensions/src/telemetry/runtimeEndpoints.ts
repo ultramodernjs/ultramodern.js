@@ -48,7 +48,7 @@ export const createRuntimeFallbackSignalMiddleware = (
   path: signalConfig.endpoint,
   method: 'post' as const,
   order: 'pre' as const,
-  handler: async (c: Context<ServerEnv>) => {
+  handler: async (c: Context<ServerEnv>): Promise<Response> => {
     try {
       enforceRuntimeFallbackSignalAuth(c, signalConfig);
       const { payload } = await parseRuntimeFallbackSignalPayload(
@@ -94,7 +94,7 @@ export const createRuntimeStatusMiddleware = ({
   path: DEFAULT_RUNTIME_STATUS_ENDPOINT,
   method: 'get' as const,
   order: 'pre' as const,
-  handler: async (c: Context<ServerEnv>) => {
+  handler: async (c: Context<ServerEnv>): Promise<Response> => {
     try {
       // Telemetry/health/trust internals are only disclosed to
       // authenticated callers. Without a configured auth token the

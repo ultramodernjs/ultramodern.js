@@ -7,6 +7,12 @@ publish_concurrency="$2"
 # Tractor's mise environment may select a different Node on PATH after setup.
 # Preserve the interpreter already bound to the accepted release toolchain.
 acceptance_node="${ULTRAMODERN_ACCEPTANCE_NODE:-node}"
+# The verifier resolves npm through PATH even when Node is absolute. Keep
+# npm from the same accepted installation ahead of Tractor's mise toolchain.
+if [[ -n "${ULTRAMODERN_ACCEPTANCE_NODE:-}" ]]; then
+  PATH="$(dirname "$acceptance_node"):$PATH"
+  export PATH
+fi
 read_release() {
   "$acceptance_node" -e 'const fs = require("node:fs"); process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).release[process.argv[2]])' \
     "$release_dir/manifest.json" "$1"

@@ -17,7 +17,10 @@ import {
 import { generateUltramodernWorkspace } from '../src/ultramodern-workspace';
 import { ULTRAMODERN_WORKSPACE_POLICY } from '../src/ultramodern-workspace/policy';
 import { assertWorkspaceDependencyOverrides } from '../src/ultramodern-workspace/validation/workspace';
-import { BRACES_FORK_VERSION } from '../src/ultramodern-workspace/versions';
+import {
+  BRACES_FORK_VERSION,
+  COMPILER_RELEASE_AGE_EXCEPTIONS,
+} from '../src/ultramodern-workspace/versions';
 
 function cohort() {
   return parseUltramodernReleaseCohort({
@@ -76,6 +79,10 @@ test('local source generation uses native workspace requests without copied rele
     assert.deepEqual(policy.overrides, {
       'braces@>=3.0.0 <3.0.4': 'npm:@bleedingdev/braces@3.0.4',
       'sharp@>=0.35.0 <0.35.5': '0.35.5',
+      'undici@>=7.0.0 <7.30.1': '7.30.1',
+      'undici@>=8.0.0 <8.12.2': '8.12.2',
+      'body-parser@>=2.0.0 <2.4.0': '2.4.0',
+      'dompurify@>=3.0.0 <3.4.17': '3.4.17',
     });
     assert.deepEqual(
       policy.overrides,
@@ -251,6 +258,7 @@ generateUltramodernWorkspace(JSON.parse(process.argv[2]));`,
     assert.deepEqual(
       policy.minimumReleaseAgeExclude,
       [
+        ...COMPILER_RELEASE_AGE_EXCEPTIONS,
         ...names.map(name => `@bleedingdev/modern-js-${name}@${version}`),
         ...sidecars.map(
           (item: { name: string; version: string }) =>
@@ -502,7 +510,7 @@ test('Braces producer policy matches the canonical reviewed sidecar', () => {
   );
 });
 
-test('workspace validation requires both reviewed dependency corrections', () => {
+test('workspace validation requires all reviewed dependency corrections', () => {
   const required = ULTRAMODERN_WORKSPACE_POLICY.pnpm.overrides;
   assert.throws(
     () => assertWorkspaceDependencyOverrides({}),
@@ -545,6 +553,13 @@ test('workspace validation rejects competing selectors but permits unrelated ove
     'micromatch@4>braces@3',
     'sharp',
     'minimizer-webpack-plugin>sharp@0.35.4',
+    'undici',
+    'undici@7',
+    'jsdom>undici@8',
+    'body-parser',
+    'express>body-parser',
+    'dompurify',
+    'mermaid>dompurify',
   ]) {
     assert.throws(
       () =>

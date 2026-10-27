@@ -252,7 +252,7 @@
     "@rslib/core": "1.0.3",
     "@scripts/rstest-config": "workspace:*",
     "@types/node": "^26.6.5",
-    "happy-dom": "^21.0.3",
+    "happy-dom": "^21.0.4",
     "i18next": "26.4.6",
     "octane": "https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz",
     "typescript": "7.0.2",

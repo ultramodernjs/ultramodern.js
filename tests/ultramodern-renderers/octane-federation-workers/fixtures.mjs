@@ -286,7 +286,7 @@ export default function Widget(props: RemoteProps) {
   const i18n = useI18n();
   useEffect(() => {
     let observations = globalThis.__octaneWorkerProof;
-    if (!observations) {
+    if (observations === undefined) {
       observations = { cleanups: {}, mounts: {} };
       globalThis.__octaneWorkerProof = observations;
     }

@@ -451,7 +451,7 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
     const dependencyNames = Object.keys(requests).filter(
       name =>
         cohortNames.has(name) ||
-        /^(?:@module-federation\/|@octanejs\/|@tanstack\/(?:router-core|start-storage-context|start-client-core|start-server-core)$|octane$|i18next$|typescript$|@types\/node$)/u.test(
+        /^(?:@module-federation\/|@octanejs\/|@tanstack\/(?:router-core|start-storage-context|start-client-core|start-server-core)$|@effect\/tsgo$|tsrs$|octane$|i18next$|typescript$|@types\/node$)/u.test(
           name,
         ),
     );

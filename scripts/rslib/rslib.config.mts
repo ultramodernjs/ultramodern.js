@@ -1,4 +1,5 @@
 import { defineConfig } from '@rslib/core';
+import { getDtsCompilerOptions } from '../tsrs-dts/rslib-options.mjs';
 
 export default defineConfig({
   lib: [
@@ -17,6 +18,7 @@ export default defineConfig({
         abortOnError: true,
         bundle: false,
         distPath: './dist/types',
+        ...getDtsCompilerOptions(),
       },
       autoExtension: true,
     },

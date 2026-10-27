@@ -44,6 +44,8 @@ describe('presetUltramodern config', () => {
         '@modern-js/runtime-renderer-extensions',
         '@modern-js/i18n-integration',
         'typescript',
+        'tsrs',
+        '@effect/tsgo',
         'react',
         'react-dom',
       ].map(
@@ -118,13 +120,17 @@ export default function App() { return <main id="bare-react-cli" className={styl
         fs.mkdirSync(path.dirname(link), { recursive: true });
         fs.symlinkSync(owner, link, 'dir');
       }
-      expect(Object.keys(dependencies)).toHaveLength(12);
-      for (const name of ['@effect/tsgo', '@typescript/native']) {
-        expect(Object.hasOwn(dependencies, name)).toBe(false);
-        expect(owners.has(name)).toBe(false);
+      expect(Object.keys(dependencies)).toHaveLength(14);
+      for (const [name, present] of [
+        ['tsrs', true],
+        ['@effect/tsgo', true],
+        ['@typescript/native', false],
+      ] as const) {
+        expect(Object.hasOwn(dependencies, name)).toBe(present);
+        expect(owners.has(name)).toBe(present);
         expect(
           fs.existsSync(path.join(appDirectory, 'node_modules', name)),
-        ).toBe(false);
+        ).toBe(present);
       }
       fs.writeFileSync(
         path.join(appDirectory, 'package.json'),
@@ -298,7 +304,7 @@ export default defineConfig({
       expect(unsupported.signal).toBeNull();
       expect(unsupported.status).not.toBe(0);
       expect(unsupported.stdout + unsupported.stderr).toContain(
-        'unsupported-type-checker: UltraModern requires native TypeScript 7.0.2; typescript.tsgo cannot be false',
+        'unsupported-type-checker: UltraModern requires an Effect-enabled native compiler; typescript.tsgo cannot be false',
       );
       expect(
         fs.existsSync(

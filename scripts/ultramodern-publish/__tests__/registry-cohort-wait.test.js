@@ -5,11 +5,18 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const { pathToFileURL } = require('node:url');
 
 const script = path.resolve(__dirname, '../wait-for-registry-cohort.sh');
+const npmRuntimeUrl = pathToFileURL(
+  path.resolve(
+    __dirname,
+    '../lib/prepare-bleedingdev-packages/npm-buffer-publisher.mjs',
+  ),
+).href;
 
 for (const explicitIdentity of [false, true]) {
-  test(`registry wait keeps the bound interpreter despite PATH drift (${explicitIdentity ? 'explicit' : 'manifest'} identity)`, t => {
+  test(`registry wait keeps the bound Node and npm despite PATH drift (${explicitIdentity ? 'explicit' : 'manifest'} identity)`, t => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-cohort-node-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     const manifest = {
@@ -20,7 +27,38 @@ for (const explicitIdentity of [false, true]) {
       JSON.stringify(manifest),
     );
     const calls = path.join(root, 'calls.jsonl');
-    const pinnedNode = path.join(root, 'accepted-node');
+    const acceptedBin = path.join(root, 'accepted-bin');
+    fs.mkdirSync(acceptedBin);
+    // Exercise the real PATH-based npm runtime loader and toolchain guard.
+    // Each fake installation supplies only the module metadata the loader
+    // needs; neither can publish or contact a registry.
+    for (const [bin, npmVersion] of [
+      [acceptedBin, '11.20.0'],
+      [root, '11.19.1'],
+    ]) {
+      const globalRoot = path.join(bin, 'global');
+      const npmRoot = path.join(globalRoot, 'npm');
+      const publisherRoot = path.join(npmRoot, 'node_modules/libnpmpublish');
+      fs.mkdirSync(publisherRoot, { recursive: true });
+      fs.writeFileSync(
+        path.join(npmRoot, 'package.json'),
+        JSON.stringify({ version: npmVersion }),
+      );
+      fs.writeFileSync(
+        path.join(publisherRoot, 'package.json'),
+        JSON.stringify({ version: '1.0.0', main: 'index.js' }),
+      );
+      fs.writeFileSync(
+        path.join(publisherRoot, 'index.js'),
+        'exports.publish = () => { throw new Error("fixture must not publish"); };\n',
+      );
+      fs.writeFileSync(
+        path.join(bin, 'npm'),
+        `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(globalRoot)}\n`,
+        { mode: 0o755 },
+      );
+    }
+    const pinnedNode = path.join(acceptedBin, 'node');
     fs.writeFileSync(
       pinnedNode,
       `#!${process.execPath}
@@ -32,7 +70,13 @@ if (args[0] === '-e') {
   process.exit(spawnSync(process.execPath, args, { stdio: 'inherit' }).status);
 }
 if (!args[0].endsWith('/prepare-bleedingdev-packages.mjs')) process.exit(87);
-process.exit(0);
+import(${JSON.stringify(npmRuntimeUrl)}).then(
+  ({ assertAcceptedPublishToolchain, loadNpmPublishingRuntime }) =>
+    assertAcceptedPublishToolchain(
+      { node: process.version, npm: '11.20.0', pnpm: '12.11.2' },
+      loadNpmPublishingRuntime(),
+    ),
+);
 `,
       { mode: 0o755 },
     );

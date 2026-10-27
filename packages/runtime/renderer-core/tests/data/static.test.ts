@@ -166,25 +166,31 @@ describe('static loader payloads', () => {
     prerenderedDocument(true);
     const controller = new AbortController();
     let cancelled: unknown;
-    let served!: () => void;
-    const fetched = new Promise<void>(resolve => {
-      served = resolve;
+    let reading!: () => void;
+    const bodyReadStarted = new Promise<void>(resolve => {
+      reading = resolve;
     });
     const requested: string[] = [];
     const client = createDataClient('products/(id)/page', identity, {
       fetch: (async (input: Request | URL) => {
         requested.push(String(input instanceof Request ? input.url : input));
-        served();
         // A body that is not coupled to the request signal.
         return new Response(
-          new ReadableStream({
-            start(source) {
-              source.enqueue(new TextEncoder().encode('{"status":'));
+          new ReadableStream(
+            {
+              start(source) {
+                source.enqueue(new TextEncoder().encode('{"status":'));
+              },
+              pull() {
+                reading();
+              },
+              cancel(reason) {
+                cancelled = reason;
+              },
             },
-            cancel(reason) {
-              cancelled = reason;
-            },
-          }),
+            // Do not prefetch. Pull marks the pending read after the first chunk.
+            { highWaterMark: 0 },
+          ),
         );
       }) as typeof fetch,
     });
@@ -193,11 +199,11 @@ describe('static loader payloads', () => {
         signal: controller.signal,
       }),
     });
-    await fetched;
-    await new Promise(resolve => setTimeout(resolve, 0));
-    controller.abort(new Error('superseded'));
+    await bodyReadStarted;
+    const reason = new Error('superseded');
+    controller.abort(reason);
     await expect(loading).rejects.toThrow('superseded');
-    expect(cancelled).toBeInstanceOf(Error);
+    expect(cancelled).toBe(reason);
     // An aborted read never falls back to a server data request.
     expect(requested).toHaveLength(1);
   });

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { resolveWorkerDeliveryUnitStamp } from '@modern-js/app-tools-extensions/cloudflare/delivery-unit';
@@ -30,23 +29,6 @@ import {
 } from './helpers/workspace-kit';
 
 const createBinPath = path.resolve(__dirname, '../bin/run.js');
-const typescriptManifest = createRequire(import.meta.url).resolve(
-  'typescript/package.json',
-);
-assert.equal(
-  JSON.parse(fs.readFileSync(typescriptManifest, 'utf8')).version,
-  '7.0.2',
-);
-const nativeCompilerRequire = createRequire(typescriptManifest);
-const nativeCompiler = path.join(
-  path.dirname(
-    nativeCompilerRequire.resolve(
-      `@typescript/typescript-${process.platform}-${process.arch}/package.json`,
-    ),
-  ),
-  'lib',
-  process.platform === 'win32' ? 'tsc.exe' : 'tsc',
-);
 
 function readJson(workspaceDir: string, relativePath: string): any {
   return JSON.parse(
@@ -314,16 +296,18 @@ if (argv.includes(process.env.ULTRAMODERN_TEST_FAIL_FILTER)) {
   }
 
   const rootPackage = readJson(workspaceDir, 'package.json');
+  const environment: NodeJS.ProcessEnv = {
+    ...prependCommandFixturePath(binDir),
+    ULTRAMODERN_CREATE_BIN: createBinPath,
+    ULTRAMODERN_TEST_BUILD_LOG: invocationLog,
+    ULTRAMODERN_TEST_FAIL_FILTER: options.failFilter ?? '',
+  };
+  // Let the generated entry resolve the verified compiler from this workspace.
+  delete environment.EFFECT_TSGO_BIN;
   const result = spawnSync(rootPackage.scripts.build, {
     cwd: workspaceDir,
     encoding: 'utf-8',
-    env: {
-      ...prependCommandFixturePath(binDir),
-      EFFECT_TSGO_BIN: nativeCompiler,
-      ULTRAMODERN_CREATE_BIN: createBinPath,
-      ULTRAMODERN_TEST_BUILD_LOG: invocationLog,
-      ULTRAMODERN_TEST_FAIL_FILTER: options.failFilter ?? '',
-    },
+    env: environment,
     shell: true,
   });
   const invocations = fs.existsSync(invocationLog)

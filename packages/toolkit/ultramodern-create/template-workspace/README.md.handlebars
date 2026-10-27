@@ -101,11 +101,20 @@ Generated CI does not call the local aggregate. It runs format, lint,
 typecheck, skills, i18n boundary validation, contract validation, and build as
 separate matrix jobs so failures are isolated and parallelizable.
 
-Type checking is TS7-first. `pnpm typecheck` runs
-`scripts/ultramodern-typecheck.mts` in TS-Go build mode over
-`tsconfig.json` project references, with `--checkers` and `--builders`
-enabled by default. The stable `typescript` package is pinned to TS7 so
-Modern/Rspack type checking uses TS-Go by default.
+`pnpm typecheck` runs the installed `ultramodern-create ultramodern typecheck`
+command over `tsconfig.json` project references. It uses the shared compiler
+resolver and defaults `TSRS_CHECKER_ASSIGNMENT` to `go`, preserving an explicit
+caller setting, without custom `--checkers` or `--builders` flags in build mode.
+The workspace pins `tsrs@0.20.0-ts7.1.0-beta` and `@effect/tsgo@0.59.0`.
+Postinstall runs `ultramodern-create ultramodern compiler-prepare` before skill
+setup. This uses installed tsrs platform metadata to run the official
+`effect-tsgo tsrs --version` readiness check on supported hosts, or
+`effect-tsgo tsc --version` with an explicit Effect-Go notice on hosts without
+a native tsrs package. Missing supported artifacts are fatal. These proxy
+commands use the provider's Effect-enabled binaries without modifying the
+package store.
+`typescript@7.0.2` remains a separate metadata/tool dependency;
+tsrs embeds TypeScript `7.1.0-beta`, not `7.0.2`.
 
 Read-only agent reference repositories under `repos/` (Effect and
 UltraModern.js source lookup using squashed git subtrees) are an explicit

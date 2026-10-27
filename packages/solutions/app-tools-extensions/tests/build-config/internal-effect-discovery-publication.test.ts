@@ -17,7 +17,9 @@ const require = createRequire(import.meta.url);
 const fixtureRoot = dirname(fileURLToPath(import.meta.url));
 const proof = JSON.parse(readFileSync(new URL('./proof.json', import.meta.url), 'utf8'));
 let discoverySpawns = 0;
-childProcess.execFileSync = () => {
+const execute = childProcess.execFileSync;
+childProcess.execFileSync = (file, args, options) => {
+  if (args?.length === 1 && args[0] === '--version') return execute(file, args, options);
   discoverySpawns += 1;
   throw new Error('Published Effect discovery must not spawn its provider');
 };
@@ -47,7 +49,6 @@ accessSync(cjsCompiler, constants.X_OK);
 const digest = filename => createHash('sha256').update(readFileSync(filename)).digest('hex');
 assert.equal(digest(proof.nativeCompilerPath), proof.nativeCompilerDigest);
 assert.equal(digest(proof.artifactPath), proof.artifactDigest);
-assert.notEqual(proof.nativeCompilerDigest, proof.artifactDigest);
 assert.equal(digest(cjsCompiler), proof.artifactDigest);
 assert.deepEqual(readFileSync(cjsCompiler), readFileSync(proof.artifactPath));
 assert.equal(discoverySpawns, 0);
@@ -123,27 +124,36 @@ try {
   }
 
   const compilerCohort = {};
-  for (const name of ['@effect/tsgo', 'typescript', '@typescript/native']) {
+  for (const name of ['@effect/tsgo', 'typescript', 'tsrs']) {
     const installation = linkDependency(generatorRoot, name);
     const specification = generatorManifest.dependencies[name];
     const installedVersion = installation.sourcePackageJson.version;
-    assert.equal(specification, name === '@typescript/native'
-      ? 'npm:' + installation.sourcePackageJson.name + '@' + installedVersion
-      : installedVersion, name + ' must match the generator exact dependency');
+    assert.equal(specification, installedVersion, name + ' must match the generator exact dependency');
     compilerCohort[name] = installation;
   }
   const effect = compilerCohort['@effect/tsgo'];
+  const tsrs = compilerCohort.tsrs;
+  const { getPlatformPackageName } = await import(pathToFileURL(join(tsrs.sourceDirectory, 'lib/platform.js')).href);
+  // Upstream tsrs support does not imply that Effect ships its replacement.
+  // This independent expectation matches the official 0.59.0 CLI targets.
+  assert.equal(effect.sourcePackageJson.version, '0.59.0');
+  const nativeName = getPlatformPackageName();
+  const supported = tsrs.sourcePackageJson.optionalDependencies[nativeName] === tsrs.sourcePackageJson.version
+    && ['@tsrs/darwin-arm64', '@tsrs/linux-x64-gnu', '@tsrs/linux-arm64-gnu'].includes(nativeName);
   const native = compilerCohort.typescript;
   const effectPlatformManifest = createRequire(join(effect.sourceDirectory, 'package.json')).resolve('@effect/tsgo-' + process.platform + '-' + process.arch + '/package.json');
   const nativePlatformManifest = createRequire(join(native.sourceDirectory, 'package.json')).resolve('@typescript/typescript-' + process.platform + '-' + process.arch + '/package.json');
   const upstream = JSON.parse(readFileSync(join(dirname(effectPlatformManifest), 'lib/upstream.json'), 'utf8'));
   assert.equal(upstream.schemaVersion, 5);
-  assert.equal(upstream.tags.typescript.latest, native.sourcePackageJson.version);
-  assert.equal(upstream.components.typescript[native.sourcePackageJson.version].gitHead, native.sourcePackageJson.gitHead);
-  assert.equal(upstream.components.typescript[native.sourcePackageJson.version].provider, 'typescript-go');
+  assert.equal(upstream.components.tsrs[tsrs.sourcePackageJson.version].typescript.version, tsrs.sourcePackageJson.tsrs.typescriptVersion);
+  assert.equal(upstream.components.tsrs[tsrs.sourcePackageJson.version].typescript.gitHead, tsrs.sourcePackageJson.tsrs.typescriptCommit);
   const binaryName = process.platform === 'win32' ? 'tsc.exe' : 'tsc';
-  const artifactPath = realpathSync(join(dirname(effectPlatformManifest), 'lib', binaryName));
-  const nativeCompilerPath = realpathSync(join(dirname(nativePlatformManifest), 'lib', binaryName));
+  const artifactPath = realpathSync(supported
+    ? join(dirname(effectPlatformManifest), 'artifacts/tsrs', tsrs.sourcePackageJson.version, process.platform === 'win32' ? 'tsrs.exe' : 'tsrs')
+    : join(dirname(effectPlatformManifest), 'lib', binaryName));
+  const nativeCompilerPath = supported
+    ? realpathSync((await import(pathToFileURL(join(tsrs.sourceDirectory, 'lib/getExePath.js')).href)).default())
+    : realpathSync(join(dirname(nativePlatformManifest), 'lib', binaryName));
   const digest = filename => createHash('sha256').update(readFileSync(filename)).digest('hex');
   const proof = {
     artifactPath,
@@ -156,7 +166,7 @@ try {
     type: 'module',
     dependencies: {
       [publishedManifest.name]: version,
-      ...Object.fromEntries(['@effect/tsgo', 'typescript', '@typescript/native'].map(name => [name, generatorManifest.dependencies[name]])),
+      ...Object.fromEntries(['@effect/tsgo', 'typescript', 'tsrs'].map(name => [name, generatorManifest.dependencies[name]])),
     },
   }));
   writeFileSync(join(fixtureRoot, 'proof.json'), JSON.stringify(proof));

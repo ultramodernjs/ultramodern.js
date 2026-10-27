@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { AppTools, CliPlugin } from '@modern-js/app-tools';
 import {
   configureUltramodernTypeChecker,
@@ -33,17 +34,16 @@ export const rendererTypeCheckerPlugin = (
           const options = chain.plugin(pluginId).get('args')?.[0];
           if (options?.typescript?.tsgo === false) {
             throw new Error(
-              'unsupported-type-checker: UltraModern requires native TypeScript 7.0.2; typescript.tsgo cannot be false',
+              'unsupported-type-checker: UltraModern requires an Effect-enabled native compiler; typescript.tsgo cannot be false',
             );
           }
-          const typescriptPath = options?.typescript?.typescriptPath;
-          if (typeof typescriptPath !== 'string' || !typescriptPath) {
-            throw new Error(
-              'unsupported-type-checker: UltraModern requires the selected native TypeScript 7.0.2 package',
-            );
-          }
+          const { appDirectory } = api.getAppContext();
+          // typescriptPath may point into pnpm's store or another installation.
+          // Native selection belongs to the app, not that package's realpath.
           configureUltramodernTypeChecker(chain, pluginId, () =>
-            resolveNativeTypeCheckerCommand(typescriptPath),
+            resolveNativeTypeCheckerCommand(
+              path.join(appDirectory, 'package.json'),
+            ),
           );
         },
       },

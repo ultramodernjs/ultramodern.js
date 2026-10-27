@@ -7,6 +7,11 @@ import type {
 } from '@modern-js/runtime-extensions/server-config';
 import type { BffUserConfig, ServerUserConfig } from '@modern-js/server-core';
 
+export type {
+  BffEffectDataPlatformUserConfig,
+  BffEffectOpenApiUserConfig,
+} from '@modern-js/runtime-extensions/server-config';
+
 type BffConfigExtension = Omit<BffRuntimeUserConfig, 'runtimeFramework'>;
 
 type ForkBffRuntimeRegistry = Record<

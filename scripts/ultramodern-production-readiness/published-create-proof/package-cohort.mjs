@@ -25,7 +25,57 @@ const bootstrapDependencyBlocks = Object.freeze([
 ]);
 const minimumReleaseAgeMinutes = 1440;
 const ultramodernCreateSourceName = '@modern-js/ultramodern-create';
-const authenticatedBootstrapSidecars = new WeakMap();
+const authenticatedBootstrapExtras = new WeakMap();
+// Only compiler package versions pinned by the authenticated packed generator
+// authorize these native-package identities. Other external dependencies do
+// not receive bootstrap exceptions.
+const compilerPlatformPackages = Object.freeze({
+  '@effect/tsgo': Object.freeze([
+    '@effect/tsgo-darwin-arm64',
+    '@effect/tsgo-darwin-x64',
+    '@effect/tsgo-linux-arm',
+    '@effect/tsgo-linux-arm64',
+    '@effect/tsgo-linux-x64',
+    '@effect/tsgo-win32-arm64',
+    '@effect/tsgo-win32-x64',
+  ]),
+  tsrs: Object.freeze([
+    '@tsrs/darwin-arm64',
+    '@tsrs/darwin-x64',
+    '@tsrs/linux-arm64-gnu',
+    '@tsrs/linux-arm64-musl',
+    '@tsrs/linux-x64-gnu',
+    '@tsrs/linux-x64-musl',
+    '@tsrs/win32-x64',
+  ]),
+});
+
+function compilerBootstrapSelectors(packageJson) {
+  const selectors = [];
+  for (const [compiler, platforms] of Object.entries(
+    compilerPlatformPackages,
+  )) {
+    const versions = bootstrapDependencyBlocks.flatMap(blockName =>
+      Object.hasOwn(packageJson[blockName] ?? {}, compiler)
+        ? [packageJson[blockName][compiler]]
+        : [],
+    );
+    if (versions.length === 0) continue;
+    const version = versions[0];
+    assertCondition(
+      typeof version === 'string' &&
+        version.trim() === version &&
+        /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.test(
+          version,
+        ) &&
+        versions.every(value => value === version),
+      `Authenticated generator compiler ${compiler} must use one exact bootstrap version, found ${versions.join(', ')}`,
+    );
+    selectors.push(`${compiler}@${version}`);
+    for (const platform of platforms) selectors.push(`${platform}@${version}`);
+  }
+  return selectors;
+}
 
 function assertCondition(condition, message) {
   if (!condition) {
@@ -384,6 +434,9 @@ function resolveBootstrapReleaseAgePolicy(release, cohort, createPackage) {
     const item = sidecarsByName.get(name);
     return `${item.name}@${item.version}`;
   });
+  const compilerSelectors = compilerBootstrapSelectors(
+    packagesByTarget.get(createPackage.targetName).packageJson,
+  );
   const policy = Object.freeze({
     minimumReleaseAge: minimumReleaseAgeMinutes,
     minimumReleaseAgeExclude: Object.freeze(
@@ -392,12 +445,16 @@ function resolveBootstrapReleaseAgePolicy(release, cohort, createPackage) {
           targetName => `${targetName}@${release.release.version}`,
         ),
         ...sidecarSelectors,
+        ...compilerSelectors,
       ].sort((left, right) => left.localeCompare(right)),
     ),
     minimumReleaseAgeIgnoreMissingTime: false,
     minimumReleaseAgeStrict: true,
   });
-  authenticatedBootstrapSidecars.set(policy, new Set(sidecarSelectors));
+  authenticatedBootstrapExtras.set(
+    policy,
+    new Set([...sidecarSelectors, ...compilerSelectors]),
+  );
   return policy;
 }
 
@@ -468,17 +525,17 @@ function assertBootstrapReleaseAgePolicy(createPackage) {
       exactExcludes.every(
         specifier =>
           typeof specifier === 'string' &&
-          /^@[^/]+\/[^@/]+@(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/u.test(
-            specifier,
-          ) &&
-          ((specifier.endsWith(`@${createIdentity.version}`) &&
-            specifier.startsWith(
-              `${createIdentity.packageName.slice(
-                0,
-                createIdentity.packageName.indexOf('/') + 1,
-              )}`,
-            )) ||
-            authenticatedBootstrapSidecars.get(policy)?.has(specifier)),
+          (authenticatedBootstrapExtras.get(policy)?.has(specifier) ||
+            (/^@[^/]+\/[^@/]+@(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/u.test(
+              specifier,
+            ) &&
+              specifier.endsWith(`@${createIdentity.version}`) &&
+              specifier.startsWith(
+                `${createIdentity.packageName.slice(
+                  0,
+                  createIdentity.packageName.indexOf('/') + 1,
+                )}`,
+              ))),
       ) &&
       new Set(exactExcludes).size === exactExcludes.length &&
       JSON.stringify(exactExcludes) ===
@@ -673,6 +730,7 @@ function assertGeneratedCohort(projectDir, release) {
 export {
   assertBootstrapReleaseAgePolicy,
   assertGeneratedCohort,
+  compilerBootstrapSelectors,
   createPnpmDlxArgs,
   expectedReleaseCohort,
   packageJsonFiles,

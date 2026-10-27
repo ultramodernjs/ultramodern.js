@@ -635,6 +635,170 @@ test('bootstrap rejects invalid sidecar observations and cannot forge sidecar ex
   );
 });
 
+test('bootstrap admits exact compiler and native pins from the authenticated packed generator', async () => {
+  const { createPnpmDlxArgs, resolveCreatePackage } = await import(
+    '../published-create-proof/package-cohort.mjs'
+  );
+  const release = makeBootstrapRelease();
+  const baseline =
+    resolveCreatePackage(release).bootstrapReleaseAgePolicy
+      .minimumReleaseAgeExclude;
+  Object.assign(release.createPackage.packageJson.dependencies, {
+    '@effect/tsgo': '0.59.0',
+    tsrs: '0.20.0-ts7.1.0-beta',
+    'unrelated-compiler': '9.9.9',
+    '@tsrs/unreviewed-host': '0.20.0-ts7.1.0-beta',
+  });
+  const compilerSelectors = [
+    '@effect/tsgo@0.59.0',
+    '@effect/tsgo-darwin-arm64@0.59.0',
+    '@effect/tsgo-darwin-x64@0.59.0',
+    '@effect/tsgo-linux-arm@0.59.0',
+    '@effect/tsgo-linux-arm64@0.59.0',
+    '@effect/tsgo-linux-x64@0.59.0',
+    '@effect/tsgo-win32-arm64@0.59.0',
+    '@effect/tsgo-win32-x64@0.59.0',
+    'tsrs@0.20.0-ts7.1.0-beta',
+    '@tsrs/darwin-arm64@0.20.0-ts7.1.0-beta',
+    '@tsrs/darwin-x64@0.20.0-ts7.1.0-beta',
+    '@tsrs/linux-arm64-gnu@0.20.0-ts7.1.0-beta',
+    '@tsrs/linux-arm64-musl@0.20.0-ts7.1.0-beta',
+    '@tsrs/linux-x64-gnu@0.20.0-ts7.1.0-beta',
+    '@tsrs/linux-x64-musl@0.20.0-ts7.1.0-beta',
+    '@tsrs/win32-x64@0.20.0-ts7.1.0-beta',
+  ];
+  const createPackage = resolveCreatePackage(release);
+  const policy = createPackage.bootstrapReleaseAgePolicy;
+  const expected = [...baseline, ...compilerSelectors].sort((left, right) =>
+    left.localeCompare(right),
+  );
+  assert.deepEqual(policy.minimumReleaseAgeExclude, expected);
+  assert.equal(policy.minimumReleaseAge, 1440);
+  assert.equal(policy.minimumReleaseAgeStrict, true);
+  assert.equal(policy.minimumReleaseAgeIgnoreMissingTime, false);
+  assert.equal(Object.isFrozen(policy.minimumReleaseAgeExclude), true);
+  const args = createPnpmDlxArgs(createPackage, ['my-app']);
+  assert.deepEqual(
+    args.filter(value =>
+      value.startsWith('--config.minimum-release-age-exclude='),
+    ),
+    expected.map(value => `--config.minimum-release-age-exclude=${value}`),
+  );
+  // Later edits to a manifest cannot expand the already-authenticated policy.
+  release.createPackage.packageJson.dependencies.tsrs = 'latest';
+  assert.deepEqual(
+    createPackage.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude,
+    expected,
+  );
+});
+
+test('bootstrap compiler exceptions ignore development, other packages and unauthenticated create metadata', async () => {
+  const { resolveCreatePackage } = await import(
+    '../published-create-proof/package-cohort.mjs'
+  );
+  const release = makeBootstrapRelease();
+  const baseline =
+    resolveCreatePackage(release).bootstrapReleaseAgePolicy
+      .minimumReleaseAgeExclude;
+  release.createPackage.packageJson.devDependencies = {
+    '@effect/tsgo': '0.59.0',
+    tsrs: '0.20.0-ts7.1.0-beta',
+  };
+  release.packages.find(
+    item => item.sourceName === '@modern-js/utils',
+  ).packageJson.dependencies = { tsrs: '0.20.0-ts7.1.0-beta' };
+  release.createPackage = {
+    ...release.createPackage,
+    packageJson: {
+      ...release.createPackage.packageJson,
+      dependencies: {
+        ...release.createPackage.packageJson.dependencies,
+        tsrs: '0.20.0-ts7.1.0-beta',
+      },
+    },
+  };
+  assert.deepEqual(
+    resolveCreatePackage(release).bootstrapReleaseAgePolicy
+      .minimumReleaseAgeExclude,
+    baseline,
+  );
+});
+
+test('bootstrap rejects inexact or conflicting authenticated compiler pins', async () => {
+  const { resolveCreatePackage } = await import(
+    '../published-create-proof/package-cohort.mjs'
+  );
+  for (const compiler of ['tsrs', '@effect/tsgo']) {
+    for (const version of [
+      'latest',
+      '*',
+      '^0.59.0',
+      '0.59.x',
+      '0.59.0 || 9.0.0',
+      '0.59.0-..',
+      'npm:unreviewed@0.59.0',
+      'https://example.test/compiler.tgz',
+      '0.59.0\n',
+    ]) {
+      const release = makeBootstrapRelease();
+      release.createPackage.packageJson.dependencies[compiler] = version;
+      assert.throws(
+        () => resolveCreatePackage(release),
+        /must use one exact bootstrap version/u,
+      );
+    }
+    const release = makeBootstrapRelease();
+    release.createPackage.packageJson.dependencies[compiler] = '0.59.0';
+    release.createPackage.packageJson.optionalDependencies = {
+      [compiler]: '0.58.0',
+    };
+    assert.throws(
+      () => resolveCreatePackage(release),
+      /must use one exact bootstrap version/u,
+    );
+  }
+});
+
+test('bootstrap compiler exemptions cannot be forged or broadened by cloning policy', async () => {
+  const { createPnpmDlxArgs, resolveCreatePackage } = await import(
+    '../published-create-proof/package-cohort.mjs'
+  );
+  const release = makeBootstrapRelease();
+  Object.assign(release.createPackage.packageJson.dependencies, {
+    '@effect/tsgo': '0.59.0',
+    tsrs: '0.20.0-ts7.1.0-beta',
+  });
+  const actual = resolveCreatePackage(release);
+  assert.doesNotThrow(() => createPnpmDlxArgs(actual, []));
+  for (const extra of [
+    undefined,
+    'tsrs@*',
+    'tsrs@0.19.0-ts7.1.0-beta',
+    '@tsrs/unreviewed-host@0.20.0-ts7.1.0-beta',
+    '@effect/other@0.59.0',
+    'unrelated@0.59.0',
+  ]) {
+    const exclusions = [
+      ...actual.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude,
+      ...(extra ? [extra] : []),
+    ].sort((left, right) => left.localeCompare(right));
+    assert.throws(
+      () =>
+        createPnpmDlxArgs(
+          {
+            ...actual,
+            bootstrapReleaseAgePolicy: {
+              ...actual.bootstrapReleaseAgePolicy,
+              minimumReleaseAgeExclude: exclusions,
+            },
+          },
+          [],
+        ),
+      /exact authenticated bootstrap release-age policy/u,
+    );
+  }
+});
+
 test('bootstrap release policy binds one exact cohort and sidecar selector set', async t => {
   const { releaseAgeExemptions } = await import(
     '../published-create-proof/release-age-audit.mjs'
@@ -682,6 +846,260 @@ test('bootstrap release policy binds one exact cohort and sidecar selector set',
     () => releaseAgeExemptions(release, { policyPath }),
     /Acceptance command release-age exclusions/u,
   );
+});
+
+test('release acceptance shares authenticated compiler selectors across bootstrap, Tractor and workspace audit', async t => {
+  const { auditReleaseAgePolicy, releaseAgeExemptions } = await import(
+    '../published-create-proof/release-age-audit.mjs'
+  );
+  const { createAcceptanceReleaseAgeEnv } = await import(
+    '../published-create-proof/acceptance-profile.mjs'
+  );
+  const { resolveCreatePackage } = await import(
+    '../published-create-proof/package-cohort.mjs'
+  );
+  const { createTractorPnpmDlxArgs } = await import(
+    '../tractor-downstream/main.mjs'
+  );
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'compiler-age-set-'));
+  t.after(() => fs.rmSync(root, { force: true, recursive: true }));
+  const policyPath = path.join(root, 'release-age-policy.json');
+  writeJson(root, 'release-age-policy.json', {
+    schema: 'bleedingdev.ultramodern.release-age-exceptions',
+    schemaVersion: 2,
+    entries: [],
+  });
+  const release = makeBootstrapRelease();
+  Object.assign(release.createPackage.packageJson.dependencies, {
+    '@effect/tsgo': '0.59.0',
+    tsrs: '0.20.0-ts7.1.0-beta',
+    'unrelated-compiler': '9.9.9',
+  });
+  const createPackage = resolveCreatePackage(release);
+  const exclusions = releaseAgeExemptions(release, { policyPath });
+  assert.equal(exclusions.length, release.packages.length + 16);
+  assert(exclusions.includes('tsrs@0.20.0-ts7.1.0-beta'));
+  assert(exclusions.includes('@effect/tsgo-win32-x64@0.59.0'));
+  assert(!exclusions.includes('unrelated-compiler@9.9.9'));
+  assert(
+    createPackage.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude.every(
+      selector => exclusions.includes(selector),
+    ),
+  );
+  const env = createAcceptanceReleaseAgeEnv({}, createPackage, exclusions);
+  assert.deepEqual(
+    JSON.parse(env.pnpm_config_minimum_release_age_exclude),
+    exclusions,
+  );
+  assert.equal(env.pnpm_config_trust_policy_exclude, undefined);
+  assert.equal(env.pnpm_config_minimum_release_age, '1440');
+  assert.equal(env.pnpm_config_minimum_release_age_strict, 'true');
+  assert.equal(
+    env.pnpm_config_minimum_release_age_ignore_missing_time,
+    'false',
+  );
+  const args = createTractorPnpmDlxArgs(createPackage, exclusions, [
+    'ultramodern',
+    'validate',
+  ]);
+  assert.deepEqual(
+    args.filter(value =>
+      value.startsWith('--config.minimum-release-age-exclude='),
+    ),
+    exclusions.map(value => `--config.minimum-release-age-exclude=${value}`),
+  );
+  const workspace = {
+    minimumReleaseAge: 1440,
+    minimumReleaseAgeExclude: exclusions,
+    minimumReleaseAgeIgnoreMissingTime: false,
+    minimumReleaseAgeStrict: true,
+    trustPolicy: 'no-downgrade',
+    trustPolicyIgnoreAfter: 1440,
+  };
+  writeJson(root, 'pnpm-workspace.yaml', workspace);
+  // This tests exclusion-policy agreement, not an install or compiler run.
+  writeJson(root, 'pnpm-lock.yaml', {
+    lockfileVersion: '9.0',
+    importers: { '.': {} },
+    packages: {},
+    snapshots: {},
+  });
+  const auditOptions = {
+    projectDir: root,
+    release,
+    commandExclusions: exclusions,
+    registryUrl: 'https://registry.npmjs.org/',
+    policyPath,
+    parseYamlImpl: JSON.parse,
+    verifyYamlTool: false,
+    fetchImpl: () => {
+      throw new Error('Empty dependency closure must not fetch metadata');
+    },
+  };
+  const audit = await auditReleaseAgePolicy(auditOptions);
+  assert.deepEqual(audit.exactExclusions, exclusions);
+  for (const badExclusions of [
+    exclusions.filter(value => value !== 'tsrs@0.20.0-ts7.1.0-beta'),
+    [...exclusions, 'unrelated-compiler@9.9.9'].sort(),
+  ]) {
+    writeJson(root, 'pnpm-workspace.yaml', {
+      ...workspace,
+      minimumReleaseAgeExclude: badExclusions,
+    });
+    await assert.rejects(
+      auditReleaseAgePolicy(auditOptions),
+      /must list exactly the release cohort/u,
+    );
+  }
+  release.createPackage.packageJson.dependencies.tsrs = '^0.20.0';
+  assert.throws(
+    () => releaseAgeExemptions(release, { policyPath }),
+    /must use one exact bootstrap version/u,
+  );
+});
+
+test('release-age audit honors only authenticated compiler pins with verified registry metadata', async t => {
+  const { auditReleaseAgePolicy, releaseAgeExemptions } = await import(
+    '../published-create-proof/release-age-audit.mjs'
+  );
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'compiler-age-audit-'));
+  t.after(() => fs.rmSync(root, { force: true, recursive: true }));
+  const policyPath = path.join(root, 'release-age-policy.json');
+  writeJson(root, 'release-age-policy.json', {
+    schema: 'bleedingdev.ultramodern.release-age-exceptions',
+    schemaVersion: 2,
+    entries: [],
+  });
+  const release = makeNormalAcceptanceRelease();
+  Object.assign(release.createPackage.packageJson.dependencies, {
+    '@effect/tsgo': '0.59.0',
+    tsrs: '0.20.0-ts7.1.0-beta',
+    'unrelated-compiler': '9.9.9',
+  });
+  release.createPackage.packageJson.devDependencies = {
+    '@effect/tsgo-dev-only': '0.59.0',
+  };
+  release.packages[1].packageJson.dependencies.tsrs = '0.19.0-ts7.1.0-beta';
+  const exclusions = releaseAgeExemptions(release, { policyPath });
+  const cohort = new Set(
+    release.packages.map(item => `${item.targetName}@${item.version}`),
+  );
+  const compilerSelectors = exclusions.filter(value => !cohort.has(value));
+  assert.equal(compilerSelectors.length, 16);
+  const identities = compilerSelectors.map(selector => {
+    const separator = selector.lastIndexOf('@');
+    return {
+      name: selector.slice(0, separator),
+      version: selector.slice(separator + 1),
+      integrity: `sha512-${Buffer.from(selector).toString('base64')}`,
+    };
+  });
+  writeJson(root, 'pnpm-workspace.yaml', {
+    minimumReleaseAge: 1440,
+    minimumReleaseAgeExclude: exclusions,
+    minimumReleaseAgeIgnoreMissingTime: false,
+    minimumReleaseAgeStrict: true,
+    trustPolicy: 'no-downgrade',
+    trustPolicyIgnoreAfter: 1440,
+  });
+  const writeLock = entries =>
+    writeJson(root, 'pnpm-lock.yaml', {
+      lockfileVersion: '9.0',
+      importers: {
+        '.': {
+          dependencies: Object.fromEntries(
+            entries.map(item => [
+              item.name,
+              { specifier: item.version, version: item.version },
+            ]),
+          ),
+        },
+      },
+      packages: Object.fromEntries(
+        entries.map(item => [
+          `${item.name}@${item.version}`,
+          { resolution: { integrity: item.integrity } },
+        ]),
+      ),
+      snapshots: Object.fromEntries(
+        entries.map(item => [`${item.name}@${item.version}`, {}]),
+      ),
+    });
+  writeLock(identities);
+  let registryIntegrity;
+  let publishedAt = '2026-10-27T12:00:00.000Z';
+  const options = {
+    projectDir: root,
+    release,
+    commandExclusions: exclusions,
+    registryUrl: 'https://registry.npmjs.org/',
+    policyPath,
+    now: new Date('2026-10-27T12:15:00.000Z'),
+    parseYamlImpl: JSON.parse,
+    verifyYamlTool: false,
+    fetchImpl: async url => {
+      assert.equal(new URL(url).origin, 'https://registry.npmjs.org');
+      const name = decodeURIComponent(new URL(url).pathname.slice(1));
+      const item = identities.find(identity => identity.name === name);
+      assert(item, `Unexpected registry package ${name}`);
+      return new Response(
+        JSON.stringify({
+          time: { [item.version]: publishedAt },
+          versions: {
+            [item.version]: {
+              dist: { integrity: registryIntegrity ?? item.integrity },
+            },
+          },
+        }),
+        { status: 200 },
+      );
+    },
+  };
+  const audit = await auditReleaseAgePolicy(options);
+  assert.equal(audit.approvals.length, 16);
+  assert(
+    audit.approvals.every(
+      item => item.authority === 'authenticated-generator-compiler',
+    ),
+  );
+  assert.deepEqual(
+    audit.approvals.map(item => `${item.package}@${item.version}`).sort(),
+    compilerSelectors,
+  );
+  assert(audit.approvals.every(item => item.integrity));
+  registryIntegrity = 'sha512-ZGlmZmVyZW50';
+  await assert.rejects(
+    auditReleaseAgePolicy(options),
+    /Registry metadata integrity mismatch/u,
+  );
+  registryIntegrity = undefined;
+  for (publishedAt of [undefined, '2026-10-28T00:00:00.000Z']) {
+    await assert.rejects(
+      auditReleaseAgePolicy(options),
+      /Registry publication time is (?:missing or invalid|in the future)/u,
+    );
+  }
+  publishedAt = '2026-10-27T12:00:00.000Z';
+  for (const [name, version] of [
+    ['unrelated-compiler', '9.9.9'],
+    ['@effect/tsgo-dev-only', '0.59.0'],
+    ['@tsrs/unreviewed-host', '0.20.0-ts7.1.0-beta'],
+    ['tsrs', '0.19.0-ts7.1.0-beta'],
+    ['@effect/tsgo', '0.58.0'],
+  ]) {
+    const item = {
+      name,
+      version,
+      integrity: 'sha512-dW5hcHByb3ZlZA==',
+    };
+    identities.unshift(item);
+    writeLock([item]);
+    await assert.rejects(
+      auditReleaseAgePolicy(options),
+      /immature package\(s\) without an exact, unexpired approval/u,
+    );
+    identities.shift();
+  }
 });
 
 test('generated workspace commands cannot inherit release-age or trust policy overrides', async t => {

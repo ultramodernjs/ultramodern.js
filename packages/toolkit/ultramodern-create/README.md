@@ -96,7 +96,7 @@ workspaces declare an engine baseline of Node `>=26` with pnpm `12+`.
 `packageManager`, `.mise.toml`, generated validation, and CI should all agree
 on those values; do not reintroduce Corepack or older pnpm aliases.
 
-The current React dependency cohort also pins `@effect/tsgo@0.45.0`,
+The current React dependency cohort also pins `@effect/tsgo@0.59.0`,
 `@tanstack/react-router@1.170.41`, `@tanstack/router-core@1.171.34`,
 `@tanstack/history@1.162.4`, and the Module Federation integration `2.9.2`
 cohort, `@module-federation/node@2.7.52`. Move these only through the
@@ -120,15 +120,32 @@ pnpm --filter @modern-js/ultramodern-create build
 ```
 
 That command lets Rslib emit runtime modules and declarations together through
-the installed stable TypeScript 7 backend. The same declaration configuration
+the repository's compiler integration. The same declaration configuration
 stays active during `rslib build --watch`. Run
 `pnpm --filter @modern-js/ultramodern-create test` when changing generator behavior; it
 includes a boundary test that scans generator sources, templates, and generated
 workspace output for compiler API imports.
 
-All renderer profiles use exact stable `typescript@7.0.2`. React and Solid apps
-use the generated TS-Go check; Octane apps use `octane-tsc` with their native
-TS7 checker. Modern/Rspack and `@effect/tsgo` also use TS-Go by default.
+Generated workspaces and apps pin `tsrs@0.20.0-ts7.1.0-beta` and
+`@effect/tsgo@0.59.0`. Root postinstall runs
+`ultramodern-create ultramodern compiler-prepare` before skills install.
+The installed tsrs platform metadata selects the official
+`effect-tsgo tsrs --version` readiness check on supported hosts.
+Hosts without a declared native tsrs package use `effect-tsgo tsc --version`
+and print an explicit Effect-Go notice. Missing supported artifacts remain
+fatal. These official proxy commands run the provider's Effect-enabled
+binaries without changing the package store.
+The shared compiler resolver selects the provider's tsrs for generated React and
+Solid checks and Modern/Rspack builds, or Effect-Go on unsupported tsrs hosts.
+The installed typecheck command sets
+`TSRS_CHECKER_ASSIGNMENT` to the caller's explicit value or `go` by default,
+and does not add `--checkers` or `--builders` in build mode. Octane apps retain
+`octane-tsc` for their native TS7 checker.
+All renderer profiles retain exact stable `typescript@7.0.2` for metadata and
+tool dependencies. This is separate from tsrs's embedded TypeScript
+`7.1.0-beta`. Only these exact compiler releases and their declared native
+platform packages receive a release-age exception; the strict 24-hour gate
+still applies to other packages apart from the authenticated release cohort.
 Generated app/package source must not
 depend on compiler API internals. If a future AST utility is needed, keep it
 behind a dedicated TypeScript adapter and test it against stable `typescript`.

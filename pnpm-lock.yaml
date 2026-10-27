@@ -182,12 +182,14 @@ overrides:
   minimatch@3>brace-expansion: 1.1.21
   minimatch@9>brace-expansion: 2.1.7
   brace-expansion@>=5.0.0 <5.0.12: 5.0.12
-  undici@>=7.0.0 <7.29.1: 7.29.1
+  undici@>=7.0.0 <7.30.1: 7.30.1
+  undici@>=8.0.0 <8.12.2: 8.12.2
+  body-parser@>=2.0.0 <2.4.0: 2.4.0
   yaml@>=1.0.0 <1.10.3: 1.10.3
   yaml@>=2.0.0 <2.9.1: 2.9.1
   qs@>=6.0.0 <6.16.0: 6.16.0
   smol-toml@>=1.0.0 <1.9.0: 1.9.0
-  dompurify@>=3.0.0 <3.4.16: 3.4.16
+  dompurify@>=3.0.0 <3.4.17: 3.4.17
   serialize-javascript@>=7.0.0 <7.1.2: 7.1.2
   ws@>=7.0.0 <7.5.11: 7.5.11
   ws@>=8.0.0 <8.21.3: 8.21.3
@@ -245,8 +247,8 @@ importers:
         specifier: ^21.2.3
         version: 21.2.3
       '@effect/tsgo':
-        specifier: 0.53.1
-        version: 0.53.1
+        specifier: 0.59.0
+        version: 0.59.0
       '@modern-js/app-tools':
         specifier: workspace:*
         version: link:packages/solutions/app-tools
@@ -261,7 +263,7 @@ importers:
         version: link:packages/toolkit/ultramodern-create
       '@rstest/core':
         specifier: 0.12.3
-        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
+        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
       '@scripts/build':
         specifier: workspace:*
         version: link:scripts/build
@@ -289,6 +291,9 @@ importers:
       rimraf:
         specifier: ^6.1.3
         version: 6.1.3
+      tsrs:
+        specifier: 0.20.0-ts7.1.0-beta
+        version: 0.20.0-ts7.1.0-beta
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -962,7 +967,7 @@ importers:
         version: 10.4.2
       '@testing-library/jest-dom':
         specifier: ^7.0.1
-        version: 7.0.1(@testing-library/dom@10.4.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 7.0.1(@testing-library/dom@10.4.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -1102,7 +1107,7 @@ importers:
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
       vitest:
         specifier: ^5.0.5
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/cli/adapter-rstest:
     dependencies:
@@ -1111,7 +1116,7 @@ importers:
         version: link:../../solutions/app-tools
       '@rstest/adapter-rsbuild':
         specifier: ^0.12.3
-        version: 0.12.3(@rsbuild/core@2.2.13(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0))(@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0)))
+        version: 0.12.3(@rsbuild/core@2.2.13(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0))(@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0)))
     devDependencies:
       '@modern-js/rslib':
         specifier: workspace:*
@@ -1130,7 +1135,7 @@ importers:
         version: 1.0.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(typescript@7.0.2)
       '@rstest/core':
         specifier: 0.12.3
-        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
+        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
@@ -1890,7 +1895,7 @@ importers:
         version: 1.0.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(typescript@7.0.2)
       '@rstest/core':
         specifier: 0.12.3
-        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
+        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
@@ -2431,8 +2436,8 @@ importers:
         specifier: ^26.6.5
         version: 26.6.5
       happy-dom:
-        specifier: ^21.0.3
-        version: 21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+        specifier: ^21.0.4
+        version: 21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       i18next:
         specifier: 26.4.6
         version: 26.4.6(typescript@7.0.2)
@@ -3438,7 +3443,7 @@ importers:
         version: 1.0.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(typescript@7.0.2)
       '@rstest/core':
         specifier: 0.12.3
-        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
+        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
@@ -3591,8 +3596,8 @@ importers:
         specifier: ^26.6.5
         version: 26.6.5
       happy-dom:
-        specifier: ^21.0.3
-        version: 21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+        specifier: ^21.0.4
+        version: 21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       ioredis:
         specifier: ^6.0.0
         version: 6.0.0(supports-color@10.2.2)
@@ -3684,7 +3689,7 @@ importers:
         version: 1.0.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(typescript@7.0.2)
       '@rstest/core':
         specifier: 0.12.3
-        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
+        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
@@ -3723,8 +3728,8 @@ importers:
         specifier: ^8.0.7
         version: 8.0.7
       '@effect/tsgo':
-        specifier: 0.53.1
-        version: 0.53.1
+        specifier: 0.59.0
+        version: 0.59.0
       '@modern-js/app-tools':
         specifier: workspace:*
         version: link:../../solutions/app-tools
@@ -3803,6 +3808,9 @@ importers:
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
+      tsrs:
+        specifier: 0.20.0-ts7.1.0-beta
+        version: 0.20.0-ts7.1.0-beta
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -3905,8 +3913,8 @@ importers:
         specifier: ^26.6.5
         version: 26.6.5
       happy-dom:
-        specifier: ^21.0.3
-        version: 21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+        specifier: ^21.0.4
+        version: 21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       rxjs:
         specifier: 7.8.2
         version: 7.8.2
@@ -4275,14 +4283,16 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  scripts/tsrs-dts: {}
+
   scripts/ultramodern-production-readiness:
     dependencies:
       '@babel/core':
         specifier: 7.29.7
         version: 7.29.7(supports-color@10.2.2)
       happy-dom:
-        specifier: ^21.0.3
-        version: 21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+        specifier: ^21.0.4
+        version: 21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)
 
   tests:
     devDependencies:
@@ -4297,7 +4307,7 @@ importers:
         version: link:../packages/toolkit/utils
       '@rstest/core':
         specifier: 0.12.3
-        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
+        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../scripts/rstest-config
@@ -6621,10 +6631,10 @@ importers:
         version: link:../../../../packages/cli/plugin-bff
       '@rstest/core':
         specifier: 0.12.3
-        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
+        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
       '@testing-library/jest-dom':
         specifier: ^7.0.1
-        version: 7.0.1(@testing-library/dom@10.4.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 7.0.1(@testing-library/dom@10.4.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -6638,8 +6648,8 @@ importers:
         specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
       happy-dom:
-        specifier: ^21.0.3
-        version: 21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+        specifier: ^21.0.4
+        version: 21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -6664,13 +6674,13 @@ importers:
         version: link:../../../../packages/solutions/app-tools
       '@rstest/browser':
         specifier: 0.12.3
-        version: 0.12.3(@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0)))(bufferutil@4.1.0)(playwright@1.64.1)(utf-8-validate@5.0.10)
+        version: 0.12.3(@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0)))(bufferutil@4.1.0)(playwright@1.64.1)(utf-8-validate@5.0.10)
       '@rstest/browser-react':
         specifier: 0.12.3
-        version: 0.12.3(@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.12.3(@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@rstest/core':
         specifier: 0.12.3
-        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
+        version: 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
@@ -7799,6 +7809,9 @@ importers:
 
   tests/integration/ultramodern-sandpack-profile-smoke:
     devDependencies:
+      '@effect/tsgo':
+        specifier: 0.59.0
+        version: 0.59.0
       '@modern-js/app-tools':
         specifier: workspace:*
         version: link:../../../packages/solutions/app-tools
@@ -7856,6 +7869,9 @@ importers:
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
+      tsrs:
+        specifier: 0.20.0-ts7.1.0-beta
+        version: 0.20.0-ts7.1.0-beta
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -9167,43 +9183,43 @@ packages:
       '@opentelemetry/sdk-trace-web':
         optional: true
 
-  '@effect/tsgo-darwin-arm64@0.53.1':
-    resolution: {integrity: sha512-wje3jvSaN3ttD7sBm9Bw/E8xHq2ZQWMJNg1YAGCj3/tiwUxHDUjKrt1LC/HLju+OnTBSsSvkUE8jXUT3OdQY4A==}
+  '@effect/tsgo-darwin-arm64@0.59.0':
+    resolution: {integrity: sha512-YSZ2XvbJDD47/XKTlX2AKjjsuoStSUGvBj63+/s2cqnklcg1E3Oj6cEZ0isz/FCgtdm+FN4blKUExXk0SpjSxg==}
     cpu: [arm64]
     os: [darwin]
 
-  '@effect/tsgo-darwin-x64@0.53.1':
-    resolution: {integrity: sha512-x4mNzV8WLPZ71Vu7vyOJiJGTNOrfYR0g5+Zg9Q9ZieKCVSJkWJvOIOND+EvT9gUP4qdTYQh4kzGbe/T+kSrilg==}
+  '@effect/tsgo-darwin-x64@0.59.0':
+    resolution: {integrity: sha512-OLCCjL8/HWwR6FwTyI1dubGHFLknggsFT/agOyUuqmIKmdyL22vwOOqjRUq4sZzfw2RuoSb7m3DtHjI6egD4Nw==}
     cpu: [x64]
     os: [darwin]
 
-  '@effect/tsgo-linux-arm64@0.53.1':
-    resolution: {integrity: sha512-p2HrEKCh0EAY2G9MYS5vjJy2ZX27UyjZRgy2SUQu8PUVHLq3TAGTsX0d6I7LlNbRsUFxmI4HgypP6IPAUnjUwQ==}
+  '@effect/tsgo-linux-arm64@0.59.0':
+    resolution: {integrity: sha512-xZvgnF2r20bX1ddeyDpDc0cpzlhhttKMSUHMp1XnoNzLW0ijHtz8x6hAcOn1Dawzeix5Rs6oVFcHZFH2HnL1+g==}
     cpu: [arm64]
     os: [linux]
 
-  '@effect/tsgo-linux-arm@0.53.1':
-    resolution: {integrity: sha512-y29MekM4Riv1MjnRS0ST49ttmvHoVdPNmpR3aivmNlOWIKXXm4XSGx0F+PEnblq8dESWeSXmAcC0mcETUq880A==}
+  '@effect/tsgo-linux-arm@0.59.0':
+    resolution: {integrity: sha512-R1xipuJZuwXX1Q0la5EIWiPXXmu9kYHcMHCdAU/66+4dBthXG2jKaa+BjBQ3kTyGRxJeO6bWuXFj59zwtps52g==}
     cpu: [arm]
     os: [linux]
 
-  '@effect/tsgo-linux-x64@0.53.1':
-    resolution: {integrity: sha512-dvvZGUW2DhQGjP+28v7Q977it6CLw44rh+OhP/+3snk0IeoMiRtnmtd6k42ny3/uvexJFAgLc2ch0ttwwGc/LQ==}
+  '@effect/tsgo-linux-x64@0.59.0':
+    resolution: {integrity: sha512-Tny6/a6CPteKIlrCutgRDqUagwtXjv+ebZudPV6N3t6Nz7MTfy5Y2RrPerPdrTAHrL5jg1EjdcZvryYriFYM4Q==}
     cpu: [x64]
     os: [linux]
 
-  '@effect/tsgo-win32-arm64@0.53.1':
-    resolution: {integrity: sha512-9AvAoqT6QDhVKSaVx2PpgBxFJNbOP8gjBz+Q9cCJTaiOFFMxpuSvsrU1+ttDh4XuaWn3mJXtdQDSrEHlepuhoQ==}
+  '@effect/tsgo-win32-arm64@0.59.0':
+    resolution: {integrity: sha512-EMl5ma7WVQZ3vM3ew+raNauKjNV5Hqg4XVg3bjWJ6IPxrHvT/5YDK6B/mLTwrb6WZ2lCpY2GhZymI2OB9HefQA==}
     cpu: [arm64]
     os: [win32]
 
-  '@effect/tsgo-win32-x64@0.53.1':
-    resolution: {integrity: sha512-XTKMzsK3I78oApuTTcOx6orxGOqkGeDZBDHYiJQ6vIlwiKaeyZqCWm2fUtAgkvyxDyY5g4JXm8Qd23RVRSoxmg==}
+  '@effect/tsgo-win32-x64@0.59.0':
+    resolution: {integrity: sha512-q4Sg/uaUQHllzH/GFh5KooosPbjCJWX2KshnoFRcz0cYK3nd2Q2IyPmtMlGMRCk19uPBs1MDkbGFyRTKSC5mAw==}
     cpu: [x64]
     os: [win32]
 
-  '@effect/tsgo@0.53.1':
-    resolution: {integrity: sha512-0LW8VI1+HvC+S5KOpReuAneN4T93ipcd8aKNXpy2DubBfm6ShWhBtWxtxPSaQ9M25gAtQs6w/D9NEmXqgd8uGg==}
+  '@effect/tsgo@0.59.0':
+    resolution: {integrity: sha512-w7jKzhc4h+3gO/arsVU281xN2btAoh8BiXy6pSuoe4nS38pREw3d1IbPQzbxnC85AHIE5xfJxV0v7iUgNJS79A==}
     hasBin: true
 
   '@emnapi/core@1.10.0':
@@ -10402,18 +10418,21 @@ packages:
   '@opentelemetry/sdk-trace-base@2.12.0':
     resolution: {integrity: sha512-JOERgZCxRM06FEJ5kEWxlSRChah6MmXDx3KwCruqEv/iEyLkTokCSemf2y1w8oIHtfrr8EVTpzebq/31vn2Cpg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.12.0':
     resolution: {integrity: sha512-9DufH1IlmQMoKAfot5y/FhTP1RnmhLb5K6eKmJO/bvzPjYwPAazoiAUbTZFdPbqxOXN0FEbhZx/e6SB1Og4jmg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-web@2.12.0':
     resolution: {integrity: sha512-y0hCzbnBHScmioF0drJOyaPk1sQf2wwbIuy3rWlM0Fcx8mLfPDvFsQ7tJ+zMm8yAqI06rSlFKkL7ZpcrFOqAdQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -12853,6 +12872,52 @@ packages:
   '@tsconfig/strictest@2.0.8':
     resolution: {integrity: sha512-XnQ7vNz5HRN0r88GYf1J9JJjqtZPiHt2woGJOo2dYqyHGGcd6OLGqSlBB6p1j9mpzja6Oe5BoPqWmeDx6X9rLw==}
 
+  '@tsrs/darwin-arm64@0.20.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-mhHj8QGUmdJDBvJEnMXx5P/jvAKXYU3hy/z3qxrWBo8XHlbLES32PgC0ZpTRbJA960ReTpVqqvCOYaC6EL32/Q==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@tsrs/darwin-x64@0.20.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-CsRUnyYRLrhmChS7ol7LgmdqMXTu+mVlDU+7JgbW8RpkJRGLZ/zgEDEOeD8qrndt8rpP9oW1T1SJ36HSzB3/sg==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@tsrs/linux-arm64-gnu@0.20.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-VNwpdI/iICwQMMlS/MoSZCvKFByEn2+g7D0HREWG+3r3GRayXgbLv8iaNSHKT3QGcu8pXr3lH9170ghJQi2zRg==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@tsrs/linux-arm64-musl@0.20.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-cXnqPpmj5gzeGi4u1OV0ctd5df5t4ivwyeToCa4pBrKtjYodu0EeAo5Y76SHbJwggbiA1gzEJVj1vvuciQm5mQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@tsrs/linux-x64-gnu@0.20.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-jlhJSrO9lxNh0TF5EU1i+Frok5sRWsBvCuQhmdqMZKIN2pSHsDZl3CSmKUsJ4tNr50np9USCPpkkxwby2Eiqhg==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@tsrs/linux-x64-musl@0.20.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-pestGEPplhEPzIERc7zwuQ5zhh9ZwMSvAPNQy5TM0je/QuaizmM1zKoPYJ4NiaPzLh2M25HtP4HcpumTqmF3KQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@tsrs/win32-x64@0.20.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-sstxBfhjjOSYvSHFfSmROau2oGAVNLwAnj+H0h+ywLo7N7ueFKIDk14HAkIYa/F9iVboiICCpHDY/pmBO71sSg==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [win32]
+
   '@tsrx/core@0.5.5':
     resolution: {integrity: sha512-22Eym4Dtxm1d4INJHT560WQC9cxKT/YWXKztM7utjzHLtVB8egSycFmFt3D9g01Tb6G4g7GiF5YpgCOexx15uA==}
 
@@ -14074,8 +14139,8 @@ packages:
   bluebird@3.7.2:
     resolution: {integrity: sha512-XpNj6GDQzdfW+r2Wnn7xiSAd7TM3jzkxGXBGTtWKuSXv1xUV+azxAm8jdWZN06QTQk+2N2XB9jRDkvbmQmcRtg==}
 
-  body-parser@2.3.0:
-    resolution: {integrity: sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw==}
+  body-parser@2.4.0:
+    resolution: {integrity: sha512-Ifk1KcLrxaGt1occQagQNFNNOqRt1LFuehEnHHzB8Z6cRgIxRU1TBaiIsUiCdA+gy5PL7Y1IX31DNKkRmxtXjQ==}
     engines: {node: '>=18'}
 
   body-scroll-lock@4.0.0-beta.0:
@@ -15163,8 +15228,8 @@ packages:
     resolution: {integrity: sha512-gYzvtM72ZtxQO0T048kd6HWSbbGCNOUwcnfQ01cqIJ4X2IYKFFHZ5mKvrQETcFXxsRObZulDaKmy//R7TPtsBg==}
     engines: {node: '>=20.19.0'}
 
-  dompurify@3.4.16:
-    resolution: {integrity: sha512-sqo+pNp3qRhCIpbgRi1y8Tgk27Bo2Ry7w0dC1NBeNTdZChWjz9Xb/KOoZbRP/R6pQZ80Qw8YhXw13hWWBbMRnQ==}
+  dompurify@3.4.17:
+    resolution: {integrity: sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==}
 
   domutils@3.2.2:
     resolution: {integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==}
@@ -15872,8 +15937,8 @@ packages:
     engines: {node: '>=0.4.7'}
     hasBin: true
 
-  happy-dom@21.0.3:
-    resolution: {integrity: sha512-PesNgu5BnIEmAwzKGewB3K1ORFeznFZJ4JrRz89ea1wkHnxskdpzX9sN/+zb4KO6k8oSMhyJSj/cwXAFrYBBNA==}
+  happy-dom@21.0.4:
+    resolution: {integrity: sha512-tFm+GaLBgo6o0awHnvHaNoraVo27qJ+2tZEtZ+cIa08hXbeitrxAJajLI05hsUy/2/YTKcUjQYzHe5mCcraLBw==}
     engines: {node: '>=20.0.0'}
 
   has-flag@3.0.0:
@@ -20013,6 +20078,11 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
+  tsrs@0.20.0-ts7.1.0-beta:
+    resolution: {integrity: sha512-8NifAn2tcna3t/nluu1yFvp0fYE28vElDpnD4jiWik69+MDjiHgxdjH8sUYUEFmf/2hl6QIE5ExVGpJzQbBDPw==}
+    engines: {node: '>=16.20.0'}
+    hasBin: true
+
   tsscmp@1.0.6:
     resolution: {integrity: sha512-LxhtAkPDTkVCMQjt2h6eBVY28KCjikZqZfMcC15YBeNjkgUpdCfBu5HoiOTDu86v6smE8yOjyEktJ8hlbANHQA==}
     engines: {node: '>=0.6.x'}
@@ -20140,12 +20210,12 @@ packages:
   undici-types@8.9.0:
     resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
 
-  undici@7.29.1:
-    resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
+  undici@7.30.1:
+    resolution: {integrity: sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==}
     engines: {node: '>=20.18.1'}
 
-  undici@8.12.1:
-    resolution: {integrity: sha512-usz3OVQBeh1LxNn0DzU0voLXMgn5CU/WUdpBsY6Ti5afNao+vTkmn4H/NxoXolc10cOqe2+YIG0Hspq2rsl64w==}
+  undici@8.12.2:
+    resolution: {integrity: sha512-XtuDWVdqTLr3NAxm2ly9/hU6kUsJOgGh1RASzMBbsw6aWCOaQzHdW+QQDfdERjfJ2V5vL5pRPa4RetO9UfivDg==}
     engines: {node: '>=22.19.0'}
 
   unhead@2.1.17:
@@ -22286,36 +22356,36 @@ snapshots:
       '@opentelemetry/sdk-trace-node': 2.12.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-web': 2.12.0(@opentelemetry/api@1.9.1)
 
-  '@effect/tsgo-darwin-arm64@0.53.1':
+  '@effect/tsgo-darwin-arm64@0.59.0':
     optional: true
 
-  '@effect/tsgo-darwin-x64@0.53.1':
+  '@effect/tsgo-darwin-x64@0.59.0':
     optional: true
 
-  '@effect/tsgo-linux-arm64@0.53.1':
+  '@effect/tsgo-linux-arm64@0.59.0':
     optional: true
 
-  '@effect/tsgo-linux-arm@0.53.1':
+  '@effect/tsgo-linux-arm@0.59.0':
     optional: true
 
-  '@effect/tsgo-linux-x64@0.53.1':
+  '@effect/tsgo-linux-x64@0.59.0':
     optional: true
 
-  '@effect/tsgo-win32-arm64@0.53.1':
+  '@effect/tsgo-win32-arm64@0.59.0':
     optional: true
 
-  '@effect/tsgo-win32-x64@0.53.1':
+  '@effect/tsgo-win32-x64@0.59.0':
     optional: true
 
-  '@effect/tsgo@0.53.1':
+  '@effect/tsgo@0.59.0':
     optionalDependencies:
-      '@effect/tsgo-darwin-arm64': 0.53.1
-      '@effect/tsgo-darwin-x64': 0.53.1
-      '@effect/tsgo-linux-arm': 0.53.1
-      '@effect/tsgo-linux-arm64': 0.53.1
-      '@effect/tsgo-linux-x64': 0.53.1
-      '@effect/tsgo-win32-arm64': 0.53.1
-      '@effect/tsgo-win32-x64': 0.53.1
+      '@effect/tsgo-darwin-arm64': 0.59.0
+      '@effect/tsgo-darwin-x64': 0.59.0
+      '@effect/tsgo-linux-arm': 0.59.0
+      '@effect/tsgo-linux-arm64': 0.59.0
+      '@effect/tsgo-linux-x64': 0.59.0
+      '@effect/tsgo-win32-arm64': 0.59.0
+      '@effect/tsgo-win32-x64': 0.59.0
 
   '@emnapi/core@1.10.0':
     dependencies:
@@ -23371,7 +23441,7 @@ snapshots:
       adm-zip: 0.6.1
       isomorphic-ws: 5.0.0(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))
       typescript: 7.0.2
-      undici: 7.29.1
+      undici: 7.30.1
       ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@5.0.10)
     transitivePeerDependencies:
       - bufferutil
@@ -25192,21 +25262,21 @@ snapshots:
       - core-js
       - supports-color
 
-  '@rstest/adapter-rsbuild@0.12.3(@rsbuild/core@2.2.13(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0))(@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0)))':
+  '@rstest/adapter-rsbuild@0.12.3(@rsbuild/core@2.2.13(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0))(@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0)))':
     dependencies:
       '@rsbuild/core': 2.2.13(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)
-      '@rstest/core': 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
+      '@rstest/core': 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
 
-  '@rstest/browser-react@0.12.3(@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@rstest/browser-react@0.12.3(@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
-      '@rstest/core': 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
+      '@rstest/core': 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
 
-  '@rstest/browser@0.12.3(@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0)))(bufferutil@4.1.0)(playwright@1.64.1)(utf-8-validate@5.0.10)':
+  '@rstest/browser@0.12.3(@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0)))(bufferutil@4.1.0)(playwright@1.64.1)(utf-8-validate@5.0.10)':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
-      '@rstest/core': 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
+      '@rstest/core': 0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))
       convert-source-map: 2.0.0
       open-editor: 6.0.0
       pathe: 2.0.3
@@ -25218,13 +25288,13 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))':
+  '@rstest/core@0.12.3(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))':
     dependencies:
       '@rsbuild/core': 2.2.13(@module-federation/runtime-tools@2.9.2)(core-js@3.50.0)
       '@types/chai': 5.2.3
       cjs-module-lexer: 2.3.0
     optionalDependencies:
-      happy-dom: 21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+      happy-dom: 21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       jsdom: 30.1.3(@noble/hashes@2.4.0)
     transitivePeerDependencies:
       - '@module-federation/runtime-tools'
@@ -25714,7 +25784,7 @@ snapshots:
       picocolors: 1.1.1
       redent: 3.0.0
 
-  '@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
       '@adobe/css-tools': 4.5.0
       '@testing-library/dom': 10.4.2
@@ -25724,7 +25794,7 @@ snapshots:
       picocolors: 1.1.1
       redent: 3.0.0
     optionalDependencies:
-      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@testing-library/react@16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
@@ -25751,6 +25821,27 @@ snapshots:
   '@tsconfig/node16@1.0.4': {}
 
   '@tsconfig/strictest@2.0.8': {}
+
+  '@tsrs/darwin-arm64@0.20.0-ts7.1.0-beta':
+    optional: true
+
+  '@tsrs/darwin-x64@0.20.0-ts7.1.0-beta':
+    optional: true
+
+  '@tsrs/linux-arm64-gnu@0.20.0-ts7.1.0-beta':
+    optional: true
+
+  '@tsrs/linux-arm64-musl@0.20.0-ts7.1.0-beta':
+    optional: true
+
+  '@tsrs/linux-x64-gnu@0.20.0-ts7.1.0-beta':
+    optional: true
+
+  '@tsrs/linux-x64-musl@0.20.0-ts7.1.0-beta':
+    optional: true
+
+  '@tsrs/win32-x64@0.20.0-ts7.1.0-beta':
+    optional: true
 
   '@tsrx/core@0.5.5':
     dependencies:
@@ -27060,7 +27151,7 @@ snapshots:
 
   bluebird@3.7.2: {}
 
-  body-parser@2.3.0(supports-color@10.2.2):
+  body-parser@2.4.0(supports-color@10.2.2):
     dependencies:
       bytes: 3.1.2
       content-type: 2.1.0
@@ -27068,7 +27159,7 @@ snapshots:
       http-errors: 2.0.1
       iconv-lite: 0.7.3
       on-finished: 2.4.1
-      qs: 6.16.0
+      qs: 6.16.1
       raw-body: 3.0.2
       type-is: 2.1.0
     transitivePeerDependencies:
@@ -28196,7 +28287,7 @@ snapshots:
     dependencies:
       domelementtype: 3.0.0
 
-  dompurify@3.4.16:
+  dompurify@3.4.17:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -28587,7 +28678,7 @@ snapshots:
   express@5.3.0(supports-color@10.2.2):
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.3.0(supports-color@10.2.2)
+      body-parser: 2.4.0(supports-color@10.2.2)
       content-disposition: 2.0.1
       content-type: 2.1.0
       cookie: 0.7.2
@@ -29023,7 +29114,7 @@ snapshots:
     optionalDependencies:
       uglify-js: 3.19.3
 
-  happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10):
+  happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10):
     dependencies:
       '@types/node': 26.6.5
       '@types/whatwg-mimetype': 3.0.2
@@ -30056,7 +30147,7 @@ snapshots:
       saxes: 6.0.0
       symbol-tree: 3.2.4
       tough-cookie: 6.0.2
-      undici: 8.12.1
+      undici: 8.12.2
       w3c-xmlserializer: 5.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -30081,7 +30172,7 @@ snapshots:
       parse5: 8.0.1
       saxes: 6.0.0
       tough-cookie: 6.0.2
-      undici: 8.12.1
+      undici: 8.12.2
       w3c-xmlserializer: 6.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -30733,7 +30824,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
       dayjs: 1.11.23
-      dompurify: 3.4.16
+      dompurify: 3.4.17
       elkjs: 0.9.3
       es-toolkit: 1.52.0
       katex: 0.18.10
@@ -31079,7 +31170,7 @@ snapshots:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.35.5(@types/node@26.6.5)
-      undici: 7.29.1
+      undici: 7.30.1
       workerd: 1.20261012.1
       ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       youch: 4.1.0-beta.10
@@ -31381,7 +31472,7 @@ snapshots:
       tmp: 0.2.7
       tsconfig-paths: 4.2.0
       tslib: 2.8.1
-      undici: 7.29.1
+      undici: 7.30.1
       util-deprecate: 1.0.2
       wcwidth: 1.0.1
       which: 3.0.1
@@ -33981,6 +34072,16 @@ snapshots:
 
   tslib@2.8.1: {}
 
+  tsrs@0.20.0-ts7.1.0-beta:
+    optionalDependencies:
+      '@tsrs/darwin-arm64': 0.20.0-ts7.1.0-beta
+      '@tsrs/darwin-x64': 0.20.0-ts7.1.0-beta
+      '@tsrs/linux-arm64-gnu': 0.20.0-ts7.1.0-beta
+      '@tsrs/linux-arm64-musl': 0.20.0-ts7.1.0-beta
+      '@tsrs/linux-x64-gnu': 0.20.0-ts7.1.0-beta
+      '@tsrs/linux-x64-musl': 0.20.0-ts7.1.0-beta
+      '@tsrs/win32-x64': 0.20.0-ts7.1.0-beta
+
   tsscmp@1.0.6: {}
 
   tsx@4.23.15:
@@ -34119,9 +34220,9 @@ snapshots:
 
   undici-types@8.9.0: {}
 
-  undici@7.29.1: {}
+  undici@7.30.1: {}
 
-  undici@8.12.1: {}
+  undici@8.12.2: {}
 
   unhead@2.1.17:
     dependencies:
@@ -34318,7 +34419,7 @@ snapshots:
       tsx: 4.23.15
       yaml: 2.9.1
 
-  vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)):
+  vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/mocker': 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -34337,7 +34438,7 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/node': 26.6.5
-      happy-dom: 21.0.3(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+      happy-dom: 21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       jsdom: 30.1.3(@noble/hashes@2.4.0)
     transitivePeerDependencies:
       - msw

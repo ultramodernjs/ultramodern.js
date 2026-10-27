@@ -142,17 +142,25 @@ function writeSharedPackages(
 }
 
 // The catalog pins one exact release cohort. The workspace keeps pnpm's strict
-// 24h release-age gate for everything else but exempts exactly the cohort and
-// sidecar versions authenticated by this create package, so freshly released
-// framework packages and their owned transitive dependencies install.
+// 24h release-age gate for everything else but exempts the reviewed compiler
+// releases and exact cohort and sidecar versions authenticated by this create
+// package, so freshly released framework packages and their owned transitive
+// dependencies install.
 // A catalog for any other release gets no exemption: this package cannot
 // authenticate that cohort, so it installs once it is 24h old.
 function renderCatalogPolicy(
   packageSource: ResolvedPackageSource,
   primaryShell: WorkspaceApp,
 ) {
+  const compilerExclusions =
+    ULTRAMODERN_WORKSPACE_POLICY.pnpm.minimumReleaseAgeExclude;
+  const renderExclusions = (selectors: readonly string[]) =>
+    `minimumReleaseAgeExclude:\n${[...new Set(selectors)]
+      .sort()
+      .map(selector => `  - ${JSON.stringify(selector)}`)
+      .join('\n')}\n\n`;
   if (packageSource.strategy !== 'install') {
-    return '';
+    return renderExclusions(compilerExclusions);
   }
   // The catalog is workspace policy: it must not offer packages that belong
   // to another renderer than the one the workspace was generated for.
@@ -180,12 +188,10 @@ function renderCatalogPolicy(
       modernPackageSpecifier(item.sourceName, packageSource) ===
       `npm:${item.targetName}@${item.version}`,
   );
-  const exclude =
-    cohort && pinsShippedCohort
-      ? `minimumReleaseAgeExclude:\n${releaseCohortSelectors(cohort)
-          .map(selector => `  - ${JSON.stringify(selector)}`)
-          .join('\n')}\n\n`
-      : '';
+  const exclude = renderExclusions([
+    ...compilerExclusions,
+    ...(cohort && pinsShippedCohort ? releaseCohortSelectors(cohort) : []),
+  ]);
   return `catalogs:\n  ultramodern:\n${catalog}\n\n${exclude}`;
 }
 

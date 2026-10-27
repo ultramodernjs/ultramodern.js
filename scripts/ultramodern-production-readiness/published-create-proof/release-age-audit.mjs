@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mergePnpmLockfileDocuments } from '../../lib/pnpm-lockfile-documents.mjs';
+import { resolveCreatePackage } from './package-cohort.mjs';
 import { run } from './process.mjs';
 
 const YAML_NAME = 'js-yaml';
@@ -834,16 +835,30 @@ function releaseAgeExemptions(release, { policyPath, now = new Date() } = {}) {
     );
     return `${item.name}@${item.version}`;
   });
+  const releaseSelectors = validateExactExclusions(
+    [...cohort, ...sidecarSelectors].sort(compareCodeUnits),
+    'Acceptance command release-age exclusions',
+  );
   return validateExactExclusions(
     [
       ...new Set([
-        ...cohort,
+        ...releaseSelectors,
         ...readActiveReleaseAgeExceptionSelectors(policyPath, { now }),
-        ...sidecarSelectors,
+        ...authenticatedBootstrapExclusions(release),
       ]),
     ].sort(compareCodeUnits),
     'Acceptance command release-age exclusions',
   );
+}
+
+function authenticatedBootstrapExclusions(release) {
+  // Use the same authenticated packed producer as pnpm dlx. A release without
+  // a producer grants no compiler exceptions; malformed producer metadata
+  // must fail rather than infer exceptions from arbitrary dependencies.
+  return release.createPackage
+    ? resolveCreatePackage(release).bootstrapReleaseAgePolicy
+        .minimumReleaseAgeExclude
+    : [];
 }
 
 function packumentUrl(registryUrl, packageName) {
@@ -1000,6 +1015,15 @@ function approveImmaturePackages({ metadata, policy, release, now }) {
       item,
     ]),
   );
+  // pnpm and the generated workspace already use these exact compiler pins
+  // from the authenticated packed generator. Honor the same set in the
+  // closure audit, after registry metadata has verified lock integrity and
+  // publication time. Cohort and sidecar bytes retain their manifest checks.
+  const compilerSelectors = new Set(
+    authenticatedBootstrapExclusions(release).filter(
+      key => !releaseByIdentity.has(key) && !sidecars.has(key),
+    ),
+  );
   const exactExclusions = [];
   const approvals = [];
   const rejected = [];
@@ -1047,6 +1071,20 @@ function approveImmaturePackages({ metadata, policy, release, now }) {
         source: {
           commit: release.source.commit,
           manifestSha256: release.manifestSha256,
+        },
+      });
+      continue;
+    }
+    if (compilerSelectors.has(key)) {
+      exactExclusions.push(key);
+      approvals.push({
+        authority: 'authenticated-generator-compiler',
+        package: item.name,
+        version: item.version,
+        integrity: item.integrity,
+        source: {
+          createPackage: release.createPackage.targetName,
+          createVersion: release.createPackage.version,
         },
       });
       continue;
@@ -1222,10 +1260,13 @@ async function auditReleaseAgePolicy({
   // Ordinary installs must use the exact authenticated producer policy.
   const cohortSelectors = validateExactExclusions(
     [
-      ...release.packages.map(item => `${item.targetName}@${item.version}`),
-      ...(release.sidecars?.packages ?? []).map(
-        item => `${item.name}@${item.version}`,
-      ),
+      ...new Set([
+        ...release.packages.map(item => `${item.targetName}@${item.version}`),
+        ...(release.sidecars?.packages ?? []).map(
+          item => `${item.name}@${item.version}`,
+        ),
+        ...authenticatedBootstrapExclusions(release),
+      ]),
     ].sort(compareCodeUnits),
     'Authenticated generated workspace release-age exclusions',
   );
@@ -1233,7 +1274,7 @@ async function auditReleaseAgePolicy({
   assertCondition(
     JSON.stringify(persistedExclusions) === JSON.stringify(cohortSelectors),
     [
-      'Generated pnpm workspace minimumReleaseAgeExclude must list exactly the release cohort and verified sidecars.',
+      'Generated pnpm workspace minimumReleaseAgeExclude must list exactly the release cohort and verified sidecars, plus authenticated producer compiler selectors.',
       `Expected: ${cohortSelectors.join(', ')}`,
       `Found: ${Array.isArray(persistedExclusions) ? persistedExclusions.join(', ') || '(empty)' : String(persistedExclusions)}`,
     ].join('\n'),

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
@@ -13,69 +14,287 @@ import {
 
 const require = createRequire(import.meta.url);
 const compilerManifestPath = require.resolve('typescript/package.json');
-const compilerManifest = JSON.parse(
-  fs.readFileSync(compilerManifestPath, 'utf8'),
-) as { version: string };
-if (compilerManifest.version !== '7.0.2') {
-  throw new Error(
-    `Native checker fixtures require TypeScript 7.0.2; resolved ${compilerManifest.version}.`,
-  );
-}
-// The package bin is a Node.js launcher; use its own resolver for the Go executable.
-const { default: getExePath } = await import(
-  pathToFileURL(
-    path.join(path.dirname(compilerManifestPath), 'lib/getExePath.js'),
-  ).href
+const tsrsManifestPath = require.resolve('tsrs/package.json');
+const tsrsManifest = JSON.parse(fs.readFileSync(tsrsManifestPath, 'utf8'));
+const { getPlatformPackageName } = require(
+  path.join(path.dirname(tsrsManifestPath), 'lib/platform.js'),
 );
-const compiler: string = getExePath();
+const nativeName = getPlatformPackageName();
+const tsrsSupported =
+  tsrsManifest.optionalDependencies[nativeName] === tsrsManifest.version &&
+  [
+    '@tsrs/darwin-arm64',
+    '@tsrs/linux-x64-gnu',
+    '@tsrs/linux-arm64-gnu',
+  ].includes(nativeName);
+// Resolve the real native compiler. Unsupported tsrs hosts retain Effect-Go.
+const compilerCommand = resolveNativeTypeCheckerCommand(compilerManifestPath);
 
-test('the selected stable native checker uses its real public bin and rejects invalid package owners', () => {
-  const directory = path.dirname(compilerManifestPath);
-  const metadata = JSON.parse(fs.readFileSync(compilerManifestPath, 'utf8'));
+test('the native checker selects the host-supported bundled Effect compiler instead of the vanilla TypeScript package bin', () => {
   const selected = resolveNativeTypeCheckerCommand(compilerManifestPath);
-  expect(selected.executable).toBe(process.execPath);
-  expect(selected.args).toEqual([
-    fs.realpathSync(path.resolve(directory, metadata.bin.tsc)),
-  ]);
-  const root = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), 'native-checker-owner-')),
+  const effectManifest = require.resolve('@effect/tsgo/package.json');
+  const effect = JSON.parse(fs.readFileSync(effectManifest, 'utf8'));
+  expect(effect.version).toBe('0.59.0');
+  const effectPlatform = createRequire(effectManifest).resolve(
+    `@effect/tsgo-${process.platform}-${process.arch}/package.json`,
   );
-  const owner = path.join(root, 'package');
-  const manifest = path.join(owner, 'package.json');
+  const expected = tsrsSupported
+    ? path.join(
+        path.dirname(effectPlatform),
+        'artifacts/tsrs',
+        tsrsManifest.version,
+        process.platform === 'win32' ? 'tsrs.exe' : 'tsrs',
+      )
+    : path.join(
+        path.dirname(effectPlatform),
+        'lib',
+        process.platform === 'win32' ? 'tsc.exe' : 'tsc',
+      );
+  expect(selected.executable).toBe(fs.realpathSync(expected));
+  const version = execFileSync(selected.executable, ['--version'], {
+    encoding: 'utf8',
+  });
+  expect(version).toContain(`+effect-tsgo.${effect.version}`);
+  if (tsrsSupported) expect(version).toContain(`tsrs ${tsrsManifest.version}`);
+  expect(selected.args).toEqual([]);
+});
+
+test('the checker preserves real TypeScript and Effect failures and their exit codes', async () => {
+  const root = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'native-checker-effect-')),
+  );
+  const configFile = path.join(root, 'tsconfig.json');
+  const source = path.join(root, 'index.ts');
   try {
-    fs.mkdirSync(owner);
-    const write = (override: Record<string, unknown>) =>
-      fs.writeFileSync(manifest, JSON.stringify({ ...metadata, ...override }));
-    for (const override of [
-      { name: '@typescript/native-preview' },
-      { version: '6.0.3' },
-      { version: '7.0.2-dev.20261004' },
+    fs.mkdirSync(path.join(root, 'node_modules'));
+    fs.symlinkSync(
+      path.dirname(require.resolve('effect/package.json')),
+      path.join(root, 'node_modules/effect'),
+      'dir',
+    );
+    fs.writeFileSync(
+      configFile,
+      JSON.stringify({
+        compilerOptions: {
+          target: 'ESNext',
+          module: 'ESNext',
+          moduleResolution: 'Bundler',
+          strict: true,
+          types: [],
+          plugins: [
+            {
+              name: '@effect/language-service',
+              diagnosticSeverity: { floatingEffect: 'error' },
+            },
+          ],
+        },
+        files: ['index.ts'],
+      }),
+    );
+    const selected = resolveNativeTypeCheckerCommand(compilerManifestPath);
+    const checker = new UltramodernNativeTypeChecker({
+      compiler: () => selected,
+      configFile,
+      build: false,
+      configOverwrite: { compilerOptions: { strict: true } },
+    });
+    for (const [authored, diagnostic] of [
+      ['export const broken: string = 1;', 'TS2322'],
+      ['import { Effect } from "effect"; Effect.succeed(1);', 'floatingEffect'],
     ]) {
-      write(override);
-      expect(() => resolveNativeTypeCheckerCommand(manifest)).toThrow(
-        'requires typescript@7.0.2',
+      fs.writeFileSync(source, authored);
+      let directFailure: any;
+      try {
+        execFileSync(
+          selected.executable,
+          ['--project', configFile, '--noEmit', '--pretty', 'false'],
+          {
+            encoding: 'utf8',
+            env: { ...process.env, TSRS_CHECKER_ASSIGNMENT: 'locality' },
+          },
+        );
+      } catch (error) {
+        directFailure = error;
+      }
+      expect(directFailure?.status).toBeGreaterThan(0);
+      const failure = await checker.check().then(
+        () => undefined,
+        (error: Error & { code: number; cause: { code: number } }) => error,
       );
+      expect(failure?.message).toContain(diagnostic);
+      expect(failure?.code).toBe(directFailure.status);
+      expect(failure?.cause.code).toBe(directFailure.status);
+      expect(
+        fs
+          .readdirSync(root)
+          .filter(file => file.startsWith('.ultramodern-native-checker.')),
+      ).toEqual([]);
     }
-    for (const bin of [undefined, {}, { tsc: path.join(root, 'tsc') }]) {
-      write({ bin });
-      expect(() => resolveNativeTypeCheckerCommand(manifest)).toThrow(
-        "requires the selected package's public tsc bin",
-      );
-    }
-    fs.writeFileSync(path.join(root, 'tsc'), 'throw new Error("foreign bin");');
-    write({ bin: { tsc: '../tsc' } });
-    expect(() => resolveNativeTypeCheckerCommand(manifest)).toThrow(
-      'public tsc bin must belong to its selected package',
-    );
-    fs.symlinkSync(path.join(root, 'tsc'), path.join(owner, 'tsc'));
-    write({ bin: { tsc: 'tsc' } });
-    expect(() => resolveNativeTypeCheckerCommand(manifest)).toThrow(
-      'public tsc bin must belong to its selected package',
-    );
+    fs.writeFileSync(source, 'export const valid: string = "checked";');
+    await checker.check();
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('every checker subprocess preserves explicit assignment or defaults to Go without changing the parent environment', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'native-checker-env-'));
+  const previous = process.env.TSRS_CHECKER_ASSIGNMENT;
+  const configFile = path.join(root, 'tsconfig.json');
+  const probe = path.join(root, 'probe.cjs');
+  const log = path.join(root, 'children.jsonl');
+  try {
+    fs.writeFileSync(configFile, JSON.stringify({ files: ['index.ts'] }));
+    fs.writeFileSync(
+      probe,
+      `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ assignment: process.env.TSRS_CHECKER_ASSIGNMENT, args }) + '\\n');
+if (args.includes('--showConfig')) console.log(JSON.stringify({ files: ['index.ts'], references: [{ path: './lib' }] }));
+else if (!args.includes('--build')) { console.log('error TS2322: TypeScript diagnostic'); console.error('error TS99999: Effect diagnostic'); process.exit(2); }
+`,
+    );
+    fs.chmodSync(probe, 0o700);
+    // Direct paths may be renamed custom candidates. No basename heuristic
+    // may decide whether they receive the chosen assignment.
+    const commands = [
+      { executable: process.execPath, args: [probe] },
+      ...(process.platform === 'win32' ? [] : [probe]),
+    ];
+    for (const assignment of ['locality', '', undefined]) {
+      if (assignment === undefined) delete process.env.TSRS_CHECKER_ASSIGNMENT;
+      else process.env.TSRS_CHECKER_ASSIGNMENT = assignment;
+      fs.writeFileSync(log, '');
+      for (const command of commands) {
+        const checker = new UltramodernNativeTypeChecker({
+          compiler: () => command,
+          configFile,
+          build: false,
+          configOverwrite: { compilerOptions: { strict: true } },
+        });
+        const failure = await checker
+          .check()
+          .catch((error: Error & { code: number }) => error);
+        expect(failure).toMatchObject({ code: 2 });
+        expect((failure as Error).message).toContain('TypeScript diagnostic');
+        expect((failure as Error).message).toContain('Effect diagnostic');
+        expect(process.env.TSRS_CHECKER_ASSIGNMENT).toBe(assignment);
+      }
+      const children = fs
+        .readFileSync(log, 'utf8')
+        .trim()
+        .split('\n')
+        .map(line => JSON.parse(line));
+      expect(
+        children.every(child => child.assignment === (assignment || 'go')),
+      ).toBe(true);
+      expect(children.some(child => child.args.includes('--showConfig'))).toBe(
+        true,
+      );
+      expect(children.some(child => child.args.includes('--build'))).toBe(true);
+      expect(children.some(child => child.args.includes('--noEmit'))).toBe(
+        true,
+      );
+    }
+    expect(
+      fs
+        .readdirSync(root)
+        .filter(file => file.startsWith('.ultramodern-native-checker.')),
+    ).toEqual([]);
+  } finally {
+    if (previous === undefined) delete process.env.TSRS_CHECKER_ASSIGNMENT;
+    else process.env.TSRS_CHECKER_ASSIGNMENT = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('watch rebuilds on checker-only inputs and removes projections after failure and recovery', async () => {
+  const root = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'native-checker-watch-')),
+  );
+  const configFile = path.join(root, 'tsconfig.json');
+  const source = path.join(root, 'checked.ts');
+  let host: ReturnType<typeof rspack> | undefined;
+  let watcher: ReturnType<ReturnType<typeof rspack>['watch']> | undefined;
+  try {
+    fs.writeFileSync(path.join(root, 'entry.js'), 'console.log("bundled");');
+    fs.writeFileSync(source, 'export const checked: string = "valid";');
+    fs.writeFileSync(
+      configFile,
+      JSON.stringify({
+        compilerOptions: { types: [], module: 'ESNext', strict: true },
+        files: ['checked.ts'],
+      }),
+    );
+    host = rspack({
+      context: root,
+      mode: 'development',
+      devtool: false,
+      entry: './entry.js',
+      output: { path: path.join(root, 'dist') },
+      plugins: [
+        new UltramodernNativeTypeChecker({
+          compiler: () => resolveNativeTypeCheckerCommand(compilerManifestPath),
+          configFile,
+          build: false,
+          configOverwrite: { compilerOptions: { strict: true } },
+        }),
+      ],
+    });
+    await new Promise<void>((resolve, reject) => {
+      let builds = 0;
+      const timeout = setTimeout(
+        () => reject(new Error('Checker-only watch input did not invalidate')),
+        15_000,
+      );
+      watcher = host!.watch({ aggregateTimeout: 20 }, (error, stats) => {
+        try {
+          if (error) throw error;
+          expect(stats).toBeDefined();
+          expect(stats!.compilation.fileDependencies.has(source)).toBe(true);
+          expect(
+            fs
+              .readdirSync(root)
+              .filter(file => file.startsWith('.ultramodern-native-checker.')),
+          ).toEqual([]);
+          builds += 1;
+          if (builds === 2) {
+            expect(stats!.toString({ all: false, errors: true })).toContain(
+              'TS2322',
+            );
+            expect(stats!.hasErrors()).toBe(true);
+            fs.writeFileSync(
+              source,
+              'export const checked: string = "recovered";',
+            );
+          } else {
+            expect(stats!.hasErrors()).toBe(false);
+            if (builds === 1)
+              fs.writeFileSync(source, 'export const checked: string = 1;');
+            else {
+              clearTimeout(timeout);
+              resolve();
+            }
+          }
+        } catch (cause) {
+          clearTimeout(timeout);
+          reject(cause);
+        }
+      });
+    });
+  } finally {
+    if (watcher)
+      await new Promise<void>((resolve, reject) =>
+        watcher!.close(error => (error ? reject(error) : resolve())),
+      );
+    if (host)
+      await new Promise<void>((resolve, reject) =>
+        host!.close(error => (error ? reject(error) : resolve())),
+      );
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}, 20_000);
 
 test('the resolved checker overwrite reaches native JSX and type inputs without changing authored config', async () => {
   const root = fs.realpathSync.native(
@@ -116,7 +335,7 @@ test('the resolved checker overwrite reaches native JSX and type inputs without 
     fs.writeFileSync(configFile, config);
     await expect(
       new UltramodernNativeTypeChecker({
-        compiler: () => compiler,
+        compiler: () => compilerCommand,
         configFile,
         build: false,
       }).check(),
@@ -241,7 +460,7 @@ test('the checker overwrite selects inputs before validation and preserves the a
     fs.writeFileSync(configFile, config);
     const options = {
       build: false,
-      compiler: () => compiler,
+      compiler: () => compilerCommand,
       configFile,
     };
     await expect(
@@ -327,7 +546,7 @@ test.each([
       fs.writeFileSync(configFile, config);
       const options = {
         build: false,
-        compiler: () => compiler,
+        compiler: () => compilerCommand,
         configFile,
       };
       await expect(
@@ -386,7 +605,7 @@ test('checks and rebuilds referenced projects without overriding their emit cont
     write('tsconfig.json', { files: [], references: [{ path: './app' }] });
     const checker = new UltramodernNativeTypeChecker({
       build: true,
-      compiler: () => compiler,
+      compiler: () => compilerCommand,
       configFile: path.join(root, 'tsconfig.json'),
       configOverwrite: { compilerOptions: { strict: true, noEmit: true } },
     });
@@ -403,64 +622,86 @@ test('checks and rebuilds referenced projects without overriding their emit cont
   }
 });
 
-test('ordinary project checks build references but emit no app output and surface compiler failures', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'native-project-check-'));
-  try {
-    fs.mkdirSync(path.join(root, 'lib'));
-    fs.writeFileSync(
-      path.join(root, 'lib/index.ts'),
-      'export interface Value { name: string }',
+test.each(['selected', 'effect-go'])(
+  '%s ordinary project checks build references but emit no app output and surface compiler failures',
+  async backend => {
+    let selected = compilerCommand;
+    if (backend === 'effect-go') {
+      const previous = process.env.EFFECT_TSGO_BIN;
+      try {
+        process.env.EFFECT_TSGO_BIN =
+          require('@effect/tsgo/lib/getExePath').default();
+        selected = resolveNativeTypeCheckerCommand(compilerManifestPath);
+        expect(selected.configApi).toBeUndefined();
+      } finally {
+        if (previous === undefined) delete process.env.EFFECT_TSGO_BIN;
+        else process.env.EFFECT_TSGO_BIN = previous;
+      }
+    }
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'native-project-check-'),
     );
-    fs.writeFileSync(
-      path.join(root, 'lib/tsconfig.json'),
-      JSON.stringify({
-        compilerOptions: {
-          composite: true,
-          declaration: true,
-          emitDeclarationOnly: true,
-          types: [],
-        },
-        files: ['index.ts'],
-      }),
-    );
-    fs.writeFileSync(
-      path.join(root, 'index.ts'),
-      "import type { Value } from './lib'; export const value: Value = { name: 'ok' };",
-    );
-    fs.writeFileSync(
-      path.join(root, 'tsconfig.json'),
-      JSON.stringify({
-        compilerOptions: { types: [] },
-        files: ['index.ts'],
-        references: [{ path: './lib' }],
-      }),
-    );
-    const options = {
-      build: false,
-      compiler: () => compiler,
-      configFile: path.join(root, 'tsconfig.json'),
-    };
-    await new UltramodernNativeTypeChecker(options).check();
-    expect(fs.existsSync(path.join(root, 'index.js'))).toBe(false);
-    expect(fs.existsSync(path.join(root, 'index.d.ts'))).toBe(false);
-    expect(fs.existsSync(path.join(root, 'lib/index.d.ts'))).toBe(true);
-    fs.writeFileSync(
-      path.join(root, 'lib/index.ts'),
-      'export interface Value { name: number }',
-    );
-    await expect(
-      new UltramodernNativeTypeChecker(options).check(),
-    ).rejects.toThrow('TS2322');
-    await expect(
-      new UltramodernNativeTypeChecker({
+    try {
+      fs.mkdirSync(path.join(root, 'lib'));
+      fs.writeFileSync(
+        path.join(root, 'lib/index.ts'),
+        'export interface Value { name: string }',
+      );
+      fs.writeFileSync(
+        path.join(root, 'lib/tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            composite: true,
+            declaration: true,
+            emitDeclarationOnly: true,
+            types: [],
+          },
+          files: ['index.ts'],
+        }),
+      );
+      fs.writeFileSync(
+        path.join(root, 'index.ts'),
+        "import type { Value } from './lib'; export const value: Value = { name: 'ok' };",
+      );
+      fs.writeFileSync(
+        path.join(root, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: { types: [] },
+          files: ['index.ts'],
+          references: [{ path: './lib' }],
+        }),
+      );
+      const options = {
+        build: false,
+        compiler: () => selected,
+        configFile: path.join(root, 'tsconfig.json'),
+      };
+      await new UltramodernNativeTypeChecker(options).check();
+      await new UltramodernNativeTypeChecker({
         ...options,
-        compiler: () => path.join(root, 'missing'),
-      }).check(),
-    ).rejects.toThrow(/UltramodernNativeTypeChecker failed:\n.*ENOENT/);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
+        configOverwrite: { compilerOptions: { strict: true } },
+      }).check();
+      expect(fs.existsSync(path.join(root, 'index.js'))).toBe(false);
+      expect(fs.existsSync(path.join(root, 'index.d.ts'))).toBe(false);
+      expect(fs.existsSync(path.join(root, 'lib/index.d.ts'))).toBe(true);
+      fs.writeFileSync(
+        path.join(root, 'lib/index.ts'),
+        'export interface Value { name: number }',
+      );
+      await expect(
+        new UltramodernNativeTypeChecker(options).check(),
+      ).rejects.toThrow('TS2322');
+      await expect(
+        new UltramodernNativeTypeChecker({
+          ...options,
+          compiler: () => path.join(root, 'missing'),
+        }).check(),
+      ).rejects.toThrow(/UltramodernNativeTypeChecker failed:\n.*ENOENT/);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 
 test('the rspack plugin regenerates a generated checker config from the project tsconfig before each check', async () => {
   // The builder writes the checker config to `<app>/.modern-js/tsgo/` once.
@@ -519,7 +760,7 @@ test('the rspack plugin regenerates a generated checker config from the project 
   // its declarations instead of compiling `lib`'s source inside its own program.
   await new UltramodernNativeTypeChecker({
     build: true,
-    compiler: () => compiler,
+    compiler: () => compilerCommand,
     configFile: path.join(root, 'lib/tsconfig.json'),
   }).check();
   const build = rspack({
@@ -541,7 +782,7 @@ test('the rspack plugin regenerates a generated checker config from the project 
       new UltramodernNativeTypeChecker({
         build: false,
         configFile: generated,
-        compiler: () => compiler,
+        compiler: () => compilerCommand,
       }),
     ],
   });
@@ -610,7 +851,7 @@ test('the rspack plugin keeps a missing project tsconfig registered so its retur
       new UltramodernNativeTypeChecker({
         build: false,
         configFile: path.join(root, 'app/.modern-js/tsgo/tsconfig.abc.json'),
-        compiler: () => compiler,
+        compiler: () => compilerCommand,
       }),
     ],
   });
@@ -682,7 +923,7 @@ test('the rspack plugin keeps a newly referenced project whose tsconfig is absen
       new UltramodernNativeTypeChecker({
         build: false,
         configFile: path.join(root, 'app/.modern-js/tsgo/tsconfig.abc.json'),
-        compiler: () => compiler,
+        compiler: () => compilerCommand,
       }),
     ],
   });
@@ -756,7 +997,7 @@ test('the rspack plugin reports type errors as build errors and registers refere
       new UltramodernNativeTypeChecker({
         build: true,
         configFile: path.join(root, 'app/tsconfig.json'),
-        compiler: () => compiler,
+        compiler: () => compilerCommand,
       }),
     ],
   });
@@ -808,7 +1049,7 @@ test('a missing renderer JSX runtime failure names the selected jsxImportSource'
       }),
     );
     const failure = await new UltramodernNativeTypeChecker({
-      compiler: () => compiler,
+      compiler: () => compilerCommand,
       configFile,
       build: false,
       configOverwrite: { compilerOptions: { jsxImportSource: 'octane' } },

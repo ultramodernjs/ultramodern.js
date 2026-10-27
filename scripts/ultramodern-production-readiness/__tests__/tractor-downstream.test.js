@@ -11,7 +11,7 @@ const runnerPromise = import('../tractor-downstream/main.mjs');
 const producerEffectDependencies = {
   effect: '4.0.0',
   '@effect/opentelemetry': '4.0.0',
-  '@effect/tsgo': '0.53.1',
+  '@effect/tsgo': '0.59.0',
 };
 const producerReactDependencies = {
   react: '19.3.0',
@@ -1270,6 +1270,9 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
   const { prepareTractorCohortInstallation } = await import(
     '../tractor-downstream/cohort-install.mjs'
   );
+  const { compilerBootstrapSelectors } = await import(
+    '../published-create-proof/package-cohort.mjs'
+  );
   const root = fixture();
   try {
     writeAuthenticatedCohort(root);
@@ -1317,6 +1320,11 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
         name: '@bleedingdev/modern-js-ultramodern-create',
         version: next.release.version,
         publishConfig: { access: 'public' },
+        dependencies: {
+          '@effect/tsgo': '0.59.0',
+          tsrs: '0.20.0-ts7.1.0-beta',
+          'unrelated-compiler': '9.9.9',
+        },
       }),
     );
     const artifactPath = path.join(root, 'candidate.tgz');
@@ -1464,6 +1472,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
         ...next.sidecars.packages.map(
           ({ name, version }) => `${name}@${version}`,
         ),
+        ...compilerBootstrapSelectors(next.createPackage.packageJson),
       ].sort(),
       trustPolicy: 'no-downgrade',
       trustPolicyIgnoreAfter: 1440,
@@ -1519,6 +1528,17 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       parseYaml(policyText).minimumReleaseAgeExclude,
       producerOptions.minimumReleaseAgeExclude,
     );
+    const compilerExclusions = compilerBootstrapSelectors(
+      next.createPackage.packageJson,
+    );
+    assert.equal(compilerExclusions.length, 16);
+    assert(compilerExclusions.includes('tsrs@0.20.0-ts7.1.0-beta'));
+    assert(compilerExclusions.includes('@effect/tsgo-win32-x64@0.59.0'));
+    assert(
+      !parseYaml(policyText).minimumReleaseAgeExclude.includes(
+        'unrelated-compiler@9.9.9',
+      ),
+    );
     assert.equal(parseYaml(policyText).minimumReleaseAge, 1440);
     assert.equal(parseYaml(policyText).minimumReleaseAgeStrict, true);
     assert.equal(
@@ -1546,7 +1566,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
     assert.deepEqual(
       JSON.parse(fs.readFileSync(shellManifestFile, 'utf8')).devDependencies,
       {
-        '@effect/tsgo': '0.53.1',
+        '@effect/tsgo': '0.59.0',
         '@types/react': '19.3.0',
         '@types/react-dom': '19.3.0',
       },
@@ -1690,6 +1710,21 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       producerOptions.minimumReleaseAgeExclude.filter(
         selector => !selector.startsWith('@bleedingdev/mf-sdk@'),
       ),
+      producerOptions.minimumReleaseAgeExclude.filter(
+        selector => selector !== 'tsrs@0.20.0-ts7.1.0-beta',
+      ),
+      producerOptions.minimumReleaseAgeExclude.filter(
+        selector => selector !== '@effect/tsgo-win32-x64@0.59.0',
+      ),
+      producerOptions.minimumReleaseAgeExclude.map(selector =>
+        selector === 'tsrs@0.20.0-ts7.1.0-beta'
+          ? 'tsrs@0.18.0-ts7.1.0-dev.20260929'
+          : selector,
+      ),
+      [
+        ...producerOptions.minimumReleaseAgeExclude,
+        'unrelated-compiler@9.9.9',
+      ].sort(),
       [...producerOptions.minimumReleaseAgeExclude, 'sharp@0.35.5'].sort(),
       ['@bleedingdev/*'],
     ]) {

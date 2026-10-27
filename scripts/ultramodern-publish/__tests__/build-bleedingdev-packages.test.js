@@ -8,6 +8,53 @@ const test = require('node:test');
 
 const scriptPath = path.resolve(__dirname, '../build-bleedingdev-packages.mjs');
 
+test('release builds propagate the actual Effect tsrs compiler and DTS adapter', async t => {
+  const { createReleaseBuildCommand } = await import(
+    '../build-bleedingdev-packages.mjs'
+  );
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'modern-release-build-compiler-'),
+  );
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const packageManager = path.join(root, 'pnpm.cjs');
+  fs.writeFileSync(
+    packageManager,
+    `console.log(JSON.stringify({
+      args: process.argv.slice(2),
+      compiler: process.env.EFFECT_TSGO_BIN,
+      assignment: process.env.TSRS_CHECKER_ASSIGNMENT,
+      adapter: process.env.ULTRAMODERN_DTS_COMPILER_MODULE
+    }));\n`,
+  );
+  const command = createReleaseBuildCommand([
+    '@modern-js/app-tools-extensions',
+  ]);
+  const result = spawnSync(command.executable, command.args, {
+    encoding: 'utf8',
+    env: { ...process.env, npm_execpath: packageManager },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const selected = JSON.parse(result.stdout);
+  assert.equal(selected.assignment, 'go');
+  assert.equal(
+    path.basename(selected.compiler),
+    process.platform === 'win32' ? 'tsrs.exe' : 'tsrs',
+  );
+  assert.match(selected.adapter, /scripts[/\\]tsrs-dts[/\\]version\.cjs$/);
+  assert.deepEqual(selected.args, [
+    'exec',
+    'nx',
+    'run-many',
+    '-t',
+    'build',
+    '-p',
+    '@modern-js/app-tools-extensions',
+    '--maxParallel=8',
+    '--skipNxCache',
+    '--skipRemoteCache',
+  ]);
+});
+
 test('release build rejects dirty source before inspecting Nx projects', t => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), 'modern-release-build-dirty-'),

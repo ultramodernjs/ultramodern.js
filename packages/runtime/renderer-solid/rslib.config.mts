@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type RslibConfig } from '@rslib/core';
+import { getDtsCompilerOptions } from '../../../scripts/tsrs-dts/rslib-options.mjs';
 
 function nativeBindingTools(server: boolean): RslibConfig['tools'] {
   return {
@@ -60,6 +61,7 @@ export default defineConfig({
         abortOnError: true,
         bundle: false,
         distPath: './dist/types',
+        ...getDtsCompilerOptions(),
       },
     },
     {

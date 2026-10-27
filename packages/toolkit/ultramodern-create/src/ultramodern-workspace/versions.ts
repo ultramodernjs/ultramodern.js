@@ -31,7 +31,36 @@ export const RSBUILD_PLUGIN_TAILWINDCSS_VERSION = '2.0.3';
 // The cohort consumes upstream Effect without a patch or sidecar.
 // See FORK-DIVERGENCE.md, packages/toolkit/ultramodern-create.
 export const EFFECT_VERSION = '4.0.5';
-export const EFFECT_TSGO_VERSION = '0.53.1';
+export const EFFECT_TSGO_VERSION = '0.59.0';
+export const TSRS_VERSION = '0.20.0-ts7.1.0-beta';
+// Reviewed 2026-10-26 npm release metadata. Only these exact compiler releases
+// and their declared platform packages bypass the normal 24h release-age gate.
+export const COMPILER_RELEASE_AGE_EXCEPTIONS = Object.freeze(
+  [
+    `@effect/tsgo@${EFFECT_TSGO_VERSION}`,
+    ...[
+      'darwin-arm64',
+      'darwin-x64',
+      'linux-arm',
+      'linux-arm64',
+      'linux-x64',
+      'win32-arm64',
+      'win32-x64',
+    ].map(platform => `@effect/tsgo-${platform}@${EFFECT_TSGO_VERSION}`),
+    `tsrs@${TSRS_VERSION}`,
+    ...[
+      'darwin-arm64',
+      'darwin-x64',
+      'linux-arm64-gnu',
+      'linux-arm64-musl',
+      'linux-x64-gnu',
+      'linux-x64-musl',
+      'win32-x64',
+    ].map(platform => `@tsrs/${platform}@${TSRS_VERSION}`),
+  ].sort(),
+);
+// Stable TypeScript remains available to metadata/AST tooling. It is not the
+// TypeScript revision embedded in tsrs.
 export const TYPESCRIPT_STABLE_VERSION = '7.0.2';
 export const TYPESCRIPT_VERSION = TYPESCRIPT_STABLE_VERSION;
 export const OXLINT_VERSION = '1.88.0';
@@ -89,6 +118,7 @@ export const ULTRAMODERN_PACKAGE_PINS = {
     '@types/react': TYPES_REACT_VERSION,
     '@types/react-dom': TYPES_REACT_DOM_VERSION,
     tailwindcss: `^${TAILWIND_VERSION}`,
+    tsrs: TSRS_VERSION,
     typescript: TYPESCRIPT_VERSION,
     wrangler: WRANGLER_VERSION,
     'zephyr-rspack-plugin': ZEPHYR_RSPACK_PLUGIN_VERSION,
@@ -101,6 +131,7 @@ export const ULTRAMODERN_PACKAGE_PINS = {
     miniflare: MINIFLARE_VERSION,
     oxlint: OXLINT_VERSION,
     oxfmt: OXFMT_VERSION,
+    tsrs: TSRS_VERSION,
     ultracite: ULTRACITE_VERSION,
     wrangler: WRANGLER_VERSION,
     'zephyr-agent': ZEPHYR_AGENT_VERSION,

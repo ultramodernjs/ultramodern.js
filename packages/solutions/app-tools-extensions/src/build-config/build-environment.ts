@@ -36,12 +36,13 @@ if (typeof owningName !== 'string' || owningName.length === 0) {
 const {
   effectCompilerDiscoveryFailureStage,
   resolveInstalledEffectCompiler,
+  validateConfiguredEffectCompiler,
 }: typeof import('./internal-effect-discovery') = createRequire(
   owningModuleUrl,
 )(`${owningName}/internal-effect-discovery`);
 
 const EFFECT_TSGO_RESOLUTION_ERROR =
-  'Unable to resolve the Effect TS-Go compiler. Install "@effect/tsgo" and a native TypeScript backend for this build config, or set EFFECT_TSGO_BIN.';
+  'Unable to resolve the Effect TS-Go compiler. Install "@effect/tsgo" and a native TypeScript backend for this build config, or set EFFECT_TSGO_BIN. Bundled tsrs requires matching installed tsrs metadata.';
 const executableEffectTsgoCompilers = new Map<string, string>();
 
 function effectTsgoResolutionError(
@@ -58,17 +59,14 @@ function effectTsgoResolutionError(
 }
 
 function resolveExecutableEffectTsgoCompiler(compilerPath: string): string {
-  if (process.platform === 'win32') {
-    return compilerPath;
-  }
-
   const sourcePath = realpathSync(compilerPath);
   const source = lstatSync(sourcePath);
-  if (!source.isFile()) {
+  if (!source.isFile() || source.size === 0) {
     throw new Error(
-      `Effect TS-Go compiler path is not a regular file: ${sourcePath}`,
+      `Effect TS-Go compiler path is not a nonempty regular file: ${sourcePath}`,
     );
   }
+  if (process.platform === 'win32') return compilerPath;
 
   try {
     accessSync(sourcePath, constants.X_OK);
@@ -138,7 +136,9 @@ export type ResolveEffectTsgoCompilerOptions = {
 };
 
 /**
- * Resolves the Effect TS-Go executable used by Module Federation DTS builds.
+ * Resolves the Effect-enabled native executable for checking and DTS builds.
+ * Use metadata-bound tsrs where both tsrs and the Effect provider support it.
+ * Unsupported targets use Effect-Go. Missing supported artifacts remain fatal.
  */
 export function resolveEffectTsgoCompiler(
   options: ResolveEffectTsgoCompilerOptions,
@@ -148,7 +148,9 @@ export function resolveEffectTsgoCompiler(
 
   if (configuredCompiler) {
     try {
-      return resolveExecutableEffectTsgoCompiler(configuredCompiler);
+      const compiler = resolveExecutableEffectTsgoCompiler(configuredCompiler);
+      validateConfiguredEffectCompiler(compiler, options.from);
+      return compiler;
     } catch (cause) {
       throw effectTsgoResolutionError(
         cause,

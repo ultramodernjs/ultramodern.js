@@ -159,7 +159,7 @@ test('root package json pins workspace package versions and bridge workspace glo
   assert.equal(rootScripts['format:check'], 'oxfmt --check .');
   assert.equal(
     rootScripts.postinstall,
-    'ultramodern-create ultramodern skills install --postinstall',
+    'ultramodern-create ultramodern compiler-prepare && ultramodern-create ultramodern skills install --postinstall',
   );
   assert.equal(
     packageRecord(rootPackageJson.devDependencies)['cross-env'],

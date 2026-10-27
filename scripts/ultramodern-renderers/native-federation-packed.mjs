@@ -33,7 +33,7 @@ import {
 
 const readJson = filename => JSON.parse(fs.readFileSync(filename, 'utf8'));
 const nativeDependency = name =>
-  /^(?:@module-federation\/|@octanejs\/|@solidjs\/|@tanstack\/(?:router-core|start-storage-context|start-client-core|start-server-core)$|@tsrx\/oxc$|octane$|solid-js$|i18next$|typescript$|@types\/node$)/u.test(
+  /^(?:@module-federation\/|@octanejs\/|@solidjs\/|@tanstack\/(?:router-core|start-storage-context|start-client-core|start-server-core)$|@tsrx\/oxc$|@effect\/tsgo$|tsrs$|octane$|solid-js$|i18next$|typescript$|@types\/node$)/u.test(
     name,
   );
 const inside = (parent, child) => {
@@ -45,6 +45,28 @@ const inside = (parent, child) => {
     !path.isAbsolute(relative)
   );
 };
+
+/** Independent builds retain the verified seed consumer's exact compiler cohort. */
+export function packedCompilerRequests(packageRequests) {
+  const requests = Object.fromEntries(
+    ['@effect/tsgo', 'tsrs', 'typescript'].map(name => {
+      const version = packageRequests[name];
+      assert(
+        typeof version === 'string',
+        `Packed consumer is missing the ${name} compiler pin`,
+      );
+      assert(
+        version.trim() === version &&
+          /^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/u.test(
+            version,
+          ),
+        `Packed consumer compiler pin for ${name} must be one exact version`,
+      );
+      return [name, version];
+    }),
+  );
+  return requests;
+}
 
 /** Authored i18n proofs use the consumer's pin or the authenticated cohort's pin. */
 export function packedI18nextRequest({ packageRequests, release }) {
@@ -565,6 +587,10 @@ export function packedNativeFederationManifest(manifest, context) {
       readJson(path.join(directory, 'package.json')).version,
     );
   }
+  Object.assign(
+    devDependencies,
+    packedCompilerRequests(context.packageRequests),
+  );
   return { ...manifest, dependencies, devDependencies };
 }
 

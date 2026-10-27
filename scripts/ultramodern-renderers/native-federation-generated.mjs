@@ -255,7 +255,7 @@ export function authenticateGeneratedNativeFederationApp(
   const dependencyNames = Object.keys(dependencies).filter(
     name =>
       artifacts.has(name) ||
-      /^(?:@module-federation\/|@octanejs\/|@solidjs\/|octane$|solid-js$|typescript$|@types\/node$)/u.test(
+      /^(?:@module-federation\/|@octanejs\/|@solidjs\/|@effect\/tsgo$|tsrs$|octane$|solid-js$|typescript$|@types\/node$)/u.test(
         name,
       ),
   );

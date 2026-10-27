@@ -30,7 +30,45 @@ const compilerBasename = process.platform === 'win32' ? 'tsc.exe' : 'tsc';
 const nativeGitHead = '2bd066d87f5bafd315be9f40889d0a60b9e58e0b';
 const nativeVersion = '7.0.2';
 const nextNativeVersion = '7.1.0';
-const effectVersion = '0.45.0';
+const fixtureRequire = createRequire(import.meta.url);
+const effectVersion = JSON.parse(
+  readFileSync(fixtureRequire.resolve('@effect/tsgo/package.json'), 'utf8'),
+).version;
+const tsrsManifestPath = fixtureRequire.resolve('tsrs/package.json');
+const tsrsManifest = JSON.parse(readFileSync(tsrsManifestPath, 'utf8'));
+const tsrsRequire = createRequire(tsrsManifestPath);
+const { getPlatformPackageName } = tsrsRequire(
+  join(dirname(tsrsManifestPath), 'lib/platform.js'),
+) as { getPlatformPackageName: () => string };
+const tsrsSupported =
+  [
+    '@tsrs/darwin-arm64',
+    '@tsrs/linux-x64-gnu',
+    '@tsrs/linux-arm64-gnu',
+  ].includes(getPlatformPackageName()) &&
+  tsrsManifest.optionalDependencies[getPlatformPackageName()] ===
+    tsrsManifest.version;
+const tsrsTest = tsrsSupported ? test : test.skip;
+
+test('resolves the repository root origin to its actual declared Effect compiler cohort', async () => {
+  const from = join(import.meta.dirname, '../../../../../package.json');
+  const rootRequire = createRequire(from);
+  const root = JSON.parse(readFileSync(from, 'utf8'));
+  const effect = rootRequire('@effect/tsgo/package.json');
+  const tsrs = rootRequire('tsrs/package.json');
+  assert.equal(effect.version, root.devDependencies['@effect/tsgo']);
+  assert.equal(tsrs.version, root.devDependencies.tsrs);
+  await withEnvironment('EFFECT_TSGO_BIN', undefined, () =>
+    withEnvironment('TSRS_BINARY', undefined, () => {
+      const compiler = resolveEffectTsgoCompiler({ from });
+      const version = execFileSync(compiler, ['--version'], {
+        encoding: 'utf8',
+      });
+      assert.ok(version.includes(`+effect-tsgo.${effect.version}`));
+      if (tsrsSupported) assert.ok(version.includes(`tsrs ${tsrs.version}`));
+    }),
+  );
+});
 
 async function withEnvironment<T>(
   name: string,
@@ -189,6 +227,51 @@ function writeCompiler(compilerPath: string, mode: number): void {
     `#!/usr/bin/env node\nconsole.log('fixture compiler');\n`,
   );
   chmodSync(compilerPath, mode);
+}
+
+function writeTsrsPackage(directory: string): string {
+  const owner = join(directory, 'node_modules/tsrs');
+  mkdirSync(join(owner, 'lib'), { recursive: true });
+  writeFileSync(join(owner, 'package.json'), JSON.stringify(tsrsManifest));
+  copyFileSync(
+    join(dirname(tsrsManifestPath), 'lib/platform.js'),
+    join(owner, 'lib/platform.js'),
+  );
+  // Bundled discovery must not resolve, execute, or mutate the installed
+  // native tsrs binary. The official provider proxy does not need it either.
+  writeFileSync(
+    join(owner, 'lib/getExePath.js'),
+    'throw new Error("Installed tsrs binary must not be used");',
+  );
+  const effectManifest = fixtureRequire.resolve('@effect/tsgo/package.json');
+  const effectPlatformManifest = createRequire(effectManifest).resolve(
+    `${effectPlatformName}/package.json`,
+  );
+  const metadata = JSON.parse(
+    readFileSync(
+      join(dirname(effectPlatformManifest), 'lib/upstream.json'),
+      'utf8',
+    ),
+  );
+  writeFileSync(effectMetadataPath(directory), JSON.stringify(metadata));
+  const relativeArtifact = join(
+    'artifacts/tsrs',
+    tsrsManifest.version,
+    process.platform === 'win32' ? 'tsrs.exe' : 'tsrs',
+  );
+  const compiler = join(
+    directory,
+    'node_modules',
+    effectPlatformName,
+    relativeArtifact,
+  );
+  mkdirSync(dirname(compiler), { recursive: true });
+  symlinkSync(
+    join(dirname(effectPlatformManifest), relativeArtifact),
+    compiler,
+    'file',
+  );
+  return compiler;
 }
 
 for (const format of ['cjs', 'esm-node']) {
@@ -391,16 +474,234 @@ test('deduplicates Unix executable copies while retaining native Windows paths',
   }
 });
 
-test('resolves and executes a platform-native compiler override directly', async () => {
+test('rejects an executable override that is not an Effect-enabled compiler', async () => {
   await withEnvironment('EFFECT_TSGO_BIN', process.execPath, () => {
-    const compiler = resolveEffectTsgoCompiler({ from: import.meta.url });
-    assert.equal(compiler, process.execPath);
-    assert.equal(
-      execFileSync(compiler, ['--version'], { encoding: 'utf-8' }).trim(),
-      process.version,
+    assert.throws(
+      () => resolveEffectTsgoCompiler({ from: import.meta.url }),
+      /Configured compiler validation failed.*Effect-enabled native compiler/su,
     );
   });
 });
+
+tsrsTest(
+  'prefers verified bundled tsrs using real capability metadata from the requesting origin',
+  async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'app-tools-effect-tsrs-'));
+    try {
+      writeEffectTsgoPackage(directory);
+      const compiler = writeTsrsPackage(directory);
+      await withEnvironment('EFFECT_TSGO_BIN', undefined, () =>
+        withEnvironment('TSRS_BINARY', undefined, () => {
+          assert.equal(
+            resolveEffectTsgoCompiler({
+              from: join(directory, 'modern.config.ts'),
+            }),
+            realpathSync(compiler),
+          );
+          assert.equal(existsSync(join(directory, 'cli-started')), false);
+        }),
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+tsrsTest(
+  'validates explicit and TSRS_BINARY selections with truthful aliases without changing assignment in the parent',
+  async () => {
+    const directory = mkdtempSync(
+      join(tmpdir(), 'app-tools-effect-tsrs-override-'),
+    );
+    try {
+      writeEffectTsgoPackage(directory);
+      const compiler = writeTsrsPackage(directory);
+      const manifestFile = join(directory, 'node_modules/tsrs/package.json');
+      const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
+      manifest.name = '@ont-os/tsrs-candidate';
+      writeFileSync(manifestFile, JSON.stringify(manifest));
+      const renamed = join(directory, 'selected-compiler');
+      symlinkSync(compiler, renamed, 'file');
+      const from = join(directory, 'modern.config.ts');
+      await withEnvironment(
+        'TSRS_CHECKER_ASSIGNMENT',
+        'round-robin',
+        async () => {
+          await withEnvironment('EFFECT_TSGO_BIN', renamed, () => {
+            assert.equal(resolveEffectTsgoCompiler({ from }), renamed);
+          });
+          await withEnvironment('EFFECT_TSGO_BIN', undefined, () =>
+            withEnvironment('TSRS_BINARY', renamed, () => {
+              assert.equal(
+                resolveEffectTsgoCompiler({ from }),
+                realpathSync(renamed),
+              );
+            }),
+          );
+          assert.equal(process.env.TSRS_CHECKER_ASSIGNMENT, 'round-robin');
+        },
+      );
+      await withEnvironment('EFFECT_TSGO_BIN', undefined, () =>
+        withEnvironment('TSRS_BINARY', process.execPath, () => {
+          assert.throws(
+            () => resolveEffectTsgoCompiler({ from }),
+            /Native tsrs validation failed.*Effect-enabled tsrs/su,
+          );
+        }),
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+for (const mutation of [
+  'target-version',
+  'embedded-commit',
+  'missing-artifact',
+  'unpatched',
+] as const) {
+  tsrsTest(
+    `does not fall back to TypeScript when installed tsrs has ${mutation}`,
+    async () => {
+      const directory = mkdtempSync(
+        join(tmpdir(), 'app-tools-effect-tsrs-invalid-'),
+      );
+      try {
+        writeEffectTsgoPackage(directory);
+        const compiler = writeTsrsPackage(directory);
+        // A fallback artifact exists, but must never hide a broken tsrs selection.
+        writeCompiler(effectCompilerPath(directory), 0o700);
+        if (mutation === 'target-version') {
+          const filename = join(directory, 'node_modules/tsrs/package.json');
+          const manifest = JSON.parse(readFileSync(filename, 'utf8'));
+          manifest.optionalDependencies[getPlatformPackageName()] = '0.17.0';
+          writeFileSync(filename, JSON.stringify(manifest));
+        } else if (mutation === 'embedded-commit') {
+          const filename = effectMetadataPath(directory);
+          const metadata = JSON.parse(readFileSync(filename, 'utf8'));
+          metadata.components.tsrs[tsrsManifest.version].typescript.gitHead =
+            'f'.repeat(40);
+          writeFileSync(filename, JSON.stringify(metadata));
+        } else if (mutation === 'missing-artifact') {
+          rmSync(dirname(compiler), { recursive: true, force: true });
+        } else {
+          rmSync(compiler);
+          writeCompiler(compiler, 0o700);
+        }
+        await withEnvironment('EFFECT_TSGO_BIN', undefined, () =>
+          withEnvironment('TSRS_BINARY', undefined, () => {
+            assert.throws(
+              () =>
+                resolveEffectTsgoCompiler({
+                  from: join(directory, 'modern.config.ts'),
+                }),
+              /Native tsrs (?:package resolution|validation) failed/u,
+            );
+          }),
+        );
+        assert.equal(existsSync(join(directory, 'cli-started')), false);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+}
+
+for (const target of [
+  '@tsrs/win32-x64',
+  '@tsrs/darwin-x64',
+  '@tsrs/linux-x64-musl',
+  '@tsrs/linux-arm64-musl',
+]) {
+  test(`selects Effect-Go when Effect does not package declared tsrs target ${target}`, async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'app-tools-effect-go-host-'));
+    try {
+      writeEffectTsgoPackage(directory);
+      writeCompiler(effectCompilerPath(directory), 0o700);
+      const owner = join(directory, 'node_modules/tsrs');
+      mkdirSync(join(owner, 'lib'), { recursive: true });
+      const manifest = {
+        ...tsrsManifest,
+        optionalDependencies: { ...tsrsManifest.optionalDependencies },
+      };
+      manifest.optionalDependencies[target] = tsrsManifest.version;
+      writeFileSync(join(owner, 'package.json'), JSON.stringify(manifest));
+      writeFileSync(
+        join(owner, 'lib/platform.js'),
+        `export const getPlatformPackageName = () => ${JSON.stringify(target)};`,
+      );
+      writeFileSync(
+        join(owner, 'lib/getExePath.js'),
+        'throw new Error("Unsupported tsrs resolver must not run");',
+      );
+      await withEnvironment('EFFECT_TSGO_BIN', undefined, () => {
+        assert.equal(
+          resolveEffectTsgoCompiler({
+            from: join(directory, 'modern.config.ts'),
+          }),
+          realpathSync(effectCompilerPath(directory)),
+        );
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const mutation of [
+  'declared-missing-binary',
+  'target-version',
+  'missing-helper',
+  'missing-metadata',
+  'empty-metadata',
+]) {
+  test(`does not treat ${mutation} as an unsupported tsrs host`, async () => {
+    const directory = mkdtempSync(
+      join(tmpdir(), 'app-tools-effect-tsrs-capability-'),
+    );
+    try {
+      writeEffectTsgoPackage(directory);
+      writeCompiler(effectCompilerPath(directory), 0o700);
+      const owner = join(directory, 'node_modules/tsrs');
+      mkdirSync(join(owner, 'lib'), { recursive: true });
+      const manifest = {
+        ...tsrsManifest,
+        optionalDependencies: { '@tsrs/darwin-arm64': tsrsManifest.version },
+      };
+      if (mutation === 'target-version')
+        manifest.optionalDependencies['@tsrs/darwin-arm64'] = '0.17.0';
+      if (mutation === 'missing-metadata')
+        delete (manifest as Partial<typeof manifest>).optionalDependencies;
+      if (mutation === 'empty-metadata')
+        Reflect.deleteProperty(
+          manifest.optionalDependencies,
+          '@tsrs/darwin-arm64',
+        );
+      writeFileSync(join(owner, 'package.json'), JSON.stringify(manifest));
+      if (mutation !== 'missing-helper')
+        writeFileSync(
+          join(owner, 'lib/platform.js'),
+          'export const getPlatformPackageName = () => "@tsrs/darwin-arm64";',
+        );
+      writeFileSync(
+        join(owner, 'lib/getExePath.js'),
+        'export default function getExePath() { throw new Error("Missing declared native binary"); }',
+      );
+      await withEnvironment('EFFECT_TSGO_BIN', undefined, () => {
+        assert.throws(
+          () =>
+            resolveEffectTsgoCompiler({
+              from: join(directory, 'modern.config.ts'),
+            }),
+          /Native tsrs (?:package resolution|validation) failed/u,
+        );
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
 
 test('resolves Effect TS-Go from the requesting module origin', async () => {
   const originDirectory = mkdtempSync(
@@ -727,9 +1028,7 @@ test('selects the actual declared generator Effect artifact from an empty stagin
     const effectManifestPath = generatorRequire.resolve(
       '@effect/tsgo/package.json',
     );
-    const nativeManifestPath = generatorRequire.resolve(
-      'typescript/package.json',
-    );
+    const nativeManifestPath = generatorRequire.resolve('tsrs/package.json');
     const effectManifest = JSON.parse(
       readFileSync(effectManifestPath, 'utf-8'),
     );
@@ -740,10 +1039,9 @@ test('selects the actual declared generator Effect artifact from an empty stagin
       effectManifest.version,
       generatorManifest.dependencies['@effect/tsgo'],
     );
-    assert.ok(generatorManifest.dependencies['@typescript/native']);
-    assert.equal(generatorManifest.dependencies.typescript, '7.0.2');
-    assert.equal(nativeManifest.name, 'typescript');
-    assert.match(nativeManifest.version, /^7\./u);
+    assert.equal(nativeManifest.version, generatorManifest.dependencies.tsrs);
+    assert.equal(nativeManifest.name, 'tsrs');
+    assert.match(nativeManifest.tsrs.typescriptVersion, /^7\./u);
     const platformManifestPath = createRequire(effectManifestPath).resolve(
       `${effectPlatformName}/package.json`,
     );
@@ -754,31 +1052,38 @@ test('selects the actual declared generator Effect artifact from an empty stagin
       ),
     );
     assert.equal(upstream.schemaVersion, 5);
-    assert.equal(upstream.tags.typescript.latest, nativeManifest.version);
-    assert.equal(
-      upstream.components.typescript[nativeManifest.version].gitHead,
-      nativeManifest.gitHead,
-    );
-    assert.equal(
-      upstream.components.typescript[nativeManifest.version].provider,
-      'typescript-go',
-    );
-    const nativePlatformManifest = createRequire(nativeManifestPath).resolve(
-      `${nativePlatformName}/package.json`,
-    );
-    const nativeCompiler = join(
-      dirname(nativePlatformManifest),
-      'lib',
-      compilerBasename,
-    );
-    const expectedCompiler = join(
-      dirname(platformManifestPath),
-      'lib',
-      compilerBasename,
-    );
+    const { getPlatformPackageName: getNativeName } = createRequire(
+      nativeManifestPath,
+    )(join(dirname(nativeManifestPath), 'lib/platform.js'));
+    const supported =
+      [
+        '@tsrs/darwin-arm64',
+        '@tsrs/linux-x64-gnu',
+        '@tsrs/linux-arm64-gnu',
+      ].includes(getNativeName()) &&
+      nativeManifest.optionalDependencies[getNativeName()] ===
+        nativeManifest.version;
+    if (supported) {
+      const component = upstream.components.tsrs[nativeManifest.version];
+      assert.equal(
+        component.typescript.version,
+        nativeManifest.tsrs.typescriptVersion,
+      );
+      assert.equal(
+        component.typescript.gitHead,
+        nativeManifest.tsrs.typescriptCommit,
+      );
+    }
+    const expectedCompiler = supported
+      ? join(
+          dirname(platformManifestPath),
+          'artifacts/tsrs',
+          nativeManifest.version,
+          process.platform === 'win32' ? 'tsrs.exe' : 'tsrs',
+        )
+      : join(dirname(platformManifestPath), 'lib', compilerBasename);
     const digest = (filename: string) =>
       createHash('sha256').update(readFileSync(filename)).digest('hex');
-    assert.notEqual(digest(nativeCompiler), digest(expectedCompiler));
     await withEnvironment('EFFECT_TSGO_BIN', undefined, () => {
       withWorkingDirectory(directory, () => {
         const compiler = resolveEffectTsgoCompiler({

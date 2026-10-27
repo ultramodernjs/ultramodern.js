@@ -15,6 +15,7 @@ import { isRecord } from './types';
 import {
   BRACES_FORK_VERSION,
   CLOUDFLARE_COMPATIBILITY_DATE,
+  COMPILER_RELEASE_AGE_EXCEPTIONS,
   EFFECT_VERSION,
   NODE_VERSION,
   PNPM_VERSION,
@@ -235,8 +236,13 @@ export const ULTRAMODERN_WORKSPACE_POLICY = {
     overrides: {
       'braces@>=3.0.0 <3.0.4': `npm:@bleedingdev/braces@${BRACES_FORK_VERSION}`,
       'sharp@>=0.35.0 <0.35.5': SHARP_VERSION,
+      'undici@>=7.0.0 <7.30.1': '7.30.1',
+      'undici@>=8.0.0 <8.12.2': '8.12.2',
+      'body-parser@>=2.0.0 <2.4.0': '2.4.0',
+      'dompurify@>=3.0.0 <3.4.17': '3.4.17',
     },
     minimumReleaseAge: 1440,
+    minimumReleaseAgeExclude: COMPILER_RELEASE_AGE_EXCEPTIONS,
     minimumReleaseAgeStrict: true,
     minimumReleaseAgeIgnoreMissingTime: false,
     trustPolicy: 'no-downgrade',

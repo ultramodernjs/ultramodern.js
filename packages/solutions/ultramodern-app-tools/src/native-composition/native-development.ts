@@ -170,6 +170,8 @@ export class NativeDevelopment {
     number
   >();
   private generation = 0;
+  /** Server imports clear CommonJS cache entries; publications must not overlap. */
+  private publication: Promise<void> = Promise.resolve();
   private closed = false;
   private ready: ReadonlyMap<string, NativeDevelopmentSnapshot> | undefined;
   private failure: { readonly error: unknown } | undefined;
@@ -445,48 +447,56 @@ export class NativeDevelopment {
             );
           }
         });
-        api.onDevCompileDone(async ({ stats }) => {
+        api.onDevCompileDone(({ stats }) => {
           const epoch = this.epoch;
-          const results = 'stats' in stats ? stats.stats : [stats];
-          if (
-            this.closed ||
-            results.some(result => {
-              const version = this.compilationVersions.get(result.compilation);
-              return (
-                version === undefined ||
-                version !==
-                  this.compilerVersions.get(result.compilation.compiler)
+          const publishNext = async () => {
+            if (this.closed || epoch !== this.epoch) return;
+            const results = 'stats' in stats ? stats.stats : [stats];
+            if (
+              results.some(result => {
+                const version = this.compilationVersions.get(
+                  result.compilation,
+                );
+                return (
+                  version === undefined ||
+                  version !==
+                    this.compilerVersions.get(result.compilation.compiler)
+                );
+              })
+            )
+              return;
+            // Rsbuild already reports compile errors; requests surface them too.
+            if (stats.hasErrors())
+              return this.fail(
+                new Error('Native development compilation failed'),
               );
-            })
-          )
-            return;
-          // Rsbuild already reports compile errors; requests surface them too.
-          if (stats.hasErrors())
-            return this.fail(
-              new Error('Native development compilation failed'),
-            );
-          try {
-            const publication = await this.publish(stats);
-            if (this.closed || epoch !== this.epoch) return;
-            this.retainedFederationAssets =
-              publication.retainedFederationAssets;
-            this.federationAssets = new Map([
-              ...publication.federationAssets,
-              ...this.retainedFederationAssets,
-            ]);
-            this.federationRevision = publication.federationRevision;
-            this.federationGraph = publication.federationGraph;
-            this.ready = publication.entries;
-            this.failure = undefined;
-            this.notify();
-          } catch (error) {
-            if (this.closed || epoch !== this.epoch) return;
-            this.fail(error);
-            api.logger.error(
-              'Native development could not load the compiled application.',
-              error,
-            );
-          }
+            try {
+              const publication = await this.publish(stats);
+              if (this.closed || epoch !== this.epoch) return;
+              this.retainedFederationAssets =
+                publication.retainedFederationAssets;
+              this.federationAssets = new Map([
+                ...publication.federationAssets,
+                ...this.retainedFederationAssets,
+              ]);
+              this.federationRevision = publication.federationRevision;
+              this.federationGraph = publication.federationGraph;
+              this.ready = publication.entries;
+              this.failure = undefined;
+              this.notify();
+            } catch (error) {
+              if (this.closed || epoch !== this.epoch) return;
+              this.fail(error);
+              api.logger.error(
+                'Native development could not load the compiled application.',
+                error,
+              );
+            }
+          };
+          // A sibling compiler can finish while an earlier aggregate hook is
+          // still publishing. Recheck freshness when its queued turn starts.
+          this.publication = this.publication.then(publishNext, publishNext);
+          return this.publication;
         });
         api.onCloseDevServer(() => this.close());
       },
@@ -724,6 +734,7 @@ export class NativeDevelopment {
     this.closed = true;
     this.ready = undefined;
     this.notify();
+    await this.publication.catch(() => {});
     this.retained.clear();
     this.federationAssets = new Map();
     this.federationRevision = undefined;
