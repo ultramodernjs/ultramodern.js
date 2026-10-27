@@ -958,6 +958,150 @@ test('release acceptance shares authenticated compiler selectors across bootstra
   );
 });
 
+test('release-age audit honors only authenticated compiler pins with verified registry metadata', async t => {
+  const { auditReleaseAgePolicy, releaseAgeExemptions } = await import(
+    '../published-create-proof/release-age-audit.mjs'
+  );
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'compiler-age-audit-'));
+  t.after(() => fs.rmSync(root, { force: true, recursive: true }));
+  const policyPath = path.join(root, 'release-age-policy.json');
+  writeJson(root, 'release-age-policy.json', {
+    schema: 'bleedingdev.ultramodern.release-age-exceptions',
+    schemaVersion: 2,
+    entries: [],
+  });
+  const release = makeNormalAcceptanceRelease();
+  Object.assign(release.createPackage.packageJson.dependencies, {
+    '@effect/tsgo': '0.59.0',
+    tsrs: '0.20.0-ts7.1.0-beta',
+    'unrelated-compiler': '9.9.9',
+  });
+  release.createPackage.packageJson.devDependencies = {
+    '@effect/tsgo-dev-only': '0.59.0',
+  };
+  release.packages[1].packageJson.dependencies.tsrs = '0.19.0-ts7.1.0-beta';
+  const exclusions = releaseAgeExemptions(release, { policyPath });
+  const cohort = new Set(
+    release.packages.map(item => `${item.targetName}@${item.version}`),
+  );
+  const compilerSelectors = exclusions.filter(value => !cohort.has(value));
+  assert.equal(compilerSelectors.length, 16);
+  const identities = compilerSelectors.map(selector => {
+    const separator = selector.lastIndexOf('@');
+    return {
+      name: selector.slice(0, separator),
+      version: selector.slice(separator + 1),
+      integrity: `sha512-${Buffer.from(selector).toString('base64')}`,
+    };
+  });
+  writeJson(root, 'pnpm-workspace.yaml', {
+    minimumReleaseAge: 1440,
+    minimumReleaseAgeExclude: exclusions,
+    minimumReleaseAgeIgnoreMissingTime: false,
+    minimumReleaseAgeStrict: true,
+    trustPolicy: 'no-downgrade',
+    trustPolicyIgnoreAfter: 1440,
+  });
+  const writeLock = entries =>
+    writeJson(root, 'pnpm-lock.yaml', {
+      lockfileVersion: '9.0',
+      importers: {
+        '.': {
+          dependencies: Object.fromEntries(
+            entries.map(item => [
+              item.name,
+              { specifier: item.version, version: item.version },
+            ]),
+          ),
+        },
+      },
+      packages: Object.fromEntries(
+        entries.map(item => [
+          `${item.name}@${item.version}`,
+          { resolution: { integrity: item.integrity } },
+        ]),
+      ),
+      snapshots: Object.fromEntries(
+        entries.map(item => [`${item.name}@${item.version}`, {}]),
+      ),
+    });
+  writeLock(identities);
+  let registryIntegrity;
+  let publishedAt = '2026-10-27T12:00:00.000Z';
+  const options = {
+    projectDir: root,
+    release,
+    commandExclusions: exclusions,
+    registryUrl: 'https://registry.npmjs.org/',
+    policyPath,
+    now: new Date('2026-10-27T12:15:00.000Z'),
+    parseYamlImpl: JSON.parse,
+    verifyYamlTool: false,
+    fetchImpl: async url => {
+      assert.equal(new URL(url).origin, 'https://registry.npmjs.org');
+      const name = decodeURIComponent(new URL(url).pathname.slice(1));
+      const item = identities.find(identity => identity.name === name);
+      assert(item, `Unexpected registry package ${name}`);
+      return new Response(
+        JSON.stringify({
+          time: { [item.version]: publishedAt },
+          versions: {
+            [item.version]: {
+              dist: { integrity: registryIntegrity ?? item.integrity },
+            },
+          },
+        }),
+        { status: 200 },
+      );
+    },
+  };
+  const audit = await auditReleaseAgePolicy(options);
+  assert.equal(audit.approvals.length, 16);
+  assert(
+    audit.approvals.every(
+      item => item.authority === 'authenticated-generator-compiler',
+    ),
+  );
+  assert.deepEqual(
+    audit.approvals.map(item => `${item.package}@${item.version}`).sort(),
+    compilerSelectors,
+  );
+  assert(audit.approvals.every(item => item.integrity));
+  registryIntegrity = 'sha512-ZGlmZmVyZW50';
+  await assert.rejects(
+    auditReleaseAgePolicy(options),
+    /Registry metadata integrity mismatch/u,
+  );
+  registryIntegrity = undefined;
+  for (publishedAt of [undefined, '2026-10-28T00:00:00.000Z']) {
+    await assert.rejects(
+      auditReleaseAgePolicy(options),
+      /Registry publication time is (?:missing or invalid|in the future)/u,
+    );
+  }
+  publishedAt = '2026-10-27T12:00:00.000Z';
+  for (const [name, version] of [
+    ['unrelated-compiler', '9.9.9'],
+    ['@effect/tsgo-dev-only', '0.59.0'],
+    ['@tsrs/unreviewed-host', '0.20.0-ts7.1.0-beta'],
+    ['tsrs', '0.19.0-ts7.1.0-beta'],
+    ['@effect/tsgo', '0.58.0'],
+  ]) {
+    const item = {
+      name,
+      version,
+      integrity: 'sha512-dW5hcHByb3ZlZA==',
+    };
+    identities.unshift(item);
+    writeLock([item]);
+    await assert.rejects(
+      auditReleaseAgePolicy(options),
+      /immature package\(s\) without an exact, unexpired approval/u,
+    );
+    identities.shift();
+  }
+});
+
 test('generated workspace commands cannot inherit release-age or trust policy overrides', async t => {
   const { createAcceptanceWorkspaceEnv } = await import(
     '../published-create-proof/process.mjs'

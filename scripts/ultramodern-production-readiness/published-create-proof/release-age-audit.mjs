@@ -1015,6 +1015,15 @@ function approveImmaturePackages({ metadata, policy, release, now }) {
       item,
     ]),
   );
+  // pnpm and the generated workspace already use these exact compiler pins
+  // from the authenticated packed generator. Honor the same set in the
+  // closure audit, after registry metadata has verified lock integrity and
+  // publication time. Cohort and sidecar bytes retain their manifest checks.
+  const compilerSelectors = new Set(
+    authenticatedBootstrapExclusions(release).filter(
+      key => !releaseByIdentity.has(key) && !sidecars.has(key),
+    ),
+  );
   const exactExclusions = [];
   const approvals = [];
   const rejected = [];
@@ -1062,6 +1071,20 @@ function approveImmaturePackages({ metadata, policy, release, now }) {
         source: {
           commit: release.source.commit,
           manifestSha256: release.manifestSha256,
+        },
+      });
+      continue;
+    }
+    if (compilerSelectors.has(key)) {
+      exactExclusions.push(key);
+      approvals.push({
+        authority: 'authenticated-generator-compiler',
+        package: item.name,
+        version: item.version,
+        integrity: item.integrity,
+        source: {
+          createPackage: release.createPackage.targetName,
+          createVersion: release.createPackage.version,
         },
       });
       continue;
