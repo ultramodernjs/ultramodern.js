@@ -1,12 +1,27 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { generateOctaneAppSources } from '../../../runtime/renderer-octane/src/plugin/create';
 import { generateSolidAppSources } from '../../../runtime/renderer-solid/src/plugin/create';
 
 const repoRoot = path.resolve(import.meta.dirname, '../../../..');
-const compilerWrapper = path.join(repoRoot, 'scripts/with-effect-tsrs.mjs');
+const require = createRequire(import.meta.url);
+const compilerProvider = require(
+  path.join(repoRoot, 'scripts/tsrs-dts/compiler.cjs'),
+);
+// Resolve through the same reviewed provider as the launcher, but capture only
+// compiler output. Supported fallback notices are not TypeScript diagnostics.
+// Check the official Go backend locally too, even when this host selects tsrs.
+// The pinned tsrs and Go CLIs reject these diagnostics with 2 and 1 respectively.
+const compilers = new Map<string, number>([
+  [
+    compilerProvider.getExePath(),
+    compilerProvider.getCompilerPolicy().backend === 'tsrs' ? 2 : 1,
+  ],
+  [require('@effect/tsgo/lib/getExePath').default(), 1],
+]);
 const policy = JSON.parse(
   fs.readFileSync(
     path.resolve(import.meta.dirname, '../templates/tsconfig.base.json'),
@@ -58,11 +73,20 @@ test.each([
           files: ['page.data.ts'],
         }),
       );
-      const compile = () => {
+      const compile = (compiler: string) => {
         const result = spawnSync(
-          process.execPath,
-          [compilerWrapper, '--project', root, '--pretty', 'false'],
-          { cwd: root, encoding: 'utf8', timeout: 30_000 },
+          compiler,
+          ['--project', root, '--pretty', 'false'],
+          {
+            cwd: root,
+            encoding: 'utf8',
+            timeout: 30_000,
+            env: {
+              ...process.env,
+              TSRS_CHECKER_ASSIGNMENT:
+                process.env.TSRS_CHECKER_ASSIGNMENT || 'go',
+            },
+          },
         );
         if (result.error) throw result.error;
         return {
@@ -70,7 +94,9 @@ test.each([
           output: `${result.stdout}${result.stderr}`,
         };
       };
-      expect(compile()).toEqual({ status: 0, output: '' });
+      for (const compiler of compilers.keys()) {
+        expect(compile(compiler)).toEqual({ status: 0, output: '' });
+      }
       fs.appendFileSync(
         dataPath,
         `
@@ -80,10 +106,12 @@ export async function invalidControl(flag: string): Promise<number> {
 }
 `,
       );
-      const invalid = compile();
-      expect(invalid.status).toBe(2);
-      for (const diagnostic of ['TS377081', 'TS377029', 'TS2322']) {
-        expect(invalid.output).toContain(diagnostic);
+      for (const [compiler, diagnosticExitCode] of compilers) {
+        const invalid = compile(compiler);
+        expect(invalid.status).toBe(diagnosticExitCode);
+        for (const diagnostic of ['TS377081', 'TS377029', 'TS2322']) {
+          expect(invalid.output).toContain(diagnostic);
+        }
       }
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
