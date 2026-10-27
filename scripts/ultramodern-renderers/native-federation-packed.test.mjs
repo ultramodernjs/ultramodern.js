@@ -8,6 +8,7 @@ import test from 'node:test';
 import { registerOwnedRoot } from '../ultramodern-production-readiness/react-rsc-worker-proof/lifecycle.mjs';
 import { nativeStartSharedPeers } from './native-federation-inputs.mjs';
 import {
+  packedCompilerRequests,
   packedI18nextRequest,
   packedNativeFederationManifest,
   retirePackedNativeFederationInstaller,
@@ -23,6 +24,34 @@ assert(
   process.env.OWNED_TEMP_DIR,
   'Run these filesystem tests through owned-temp-dir',
 );
+
+const compilerPins = {
+  '@effect/tsgo': '0.59.0',
+  tsrs: '0.20.0-ts7.1.0-beta',
+  typescript: '7.0.0-test',
+};
+
+test('independent fixtures retain only the seed compiler cohort and reject inexact pins', () => {
+  const requests = { ...compilerPins, unrelated: '9.9.9' };
+  assert.deepEqual(packedCompilerRequests(requests), compilerPins);
+  assert.deepEqual(requests, { ...compilerPins, unrelated: '9.9.9' });
+  for (const name of Object.keys(compilerPins)) {
+    for (const value of [
+      undefined,
+      '^0.59.0',
+      'latest',
+      'workspace:*',
+      'npm:unreviewed@0.59.0',
+      'https://example.test/compiler.tgz',
+      '0.59.0\n',
+    ]) {
+      assert.throws(
+        () => packedCompilerRequests({ ...compilerPins, [name]: value }),
+        /compiler pin|compiler pins/u,
+      );
+    }
+  }
+});
 
 test('authored i18n consumers use the authenticated cohort pin when the seed has no i18n', () => {
   const context = {
@@ -501,6 +530,8 @@ test('uses candidate aliases and preserves maintained Octane downloads and tooli
           'https://github.com/bleedingdev/octane/releases/download/test/octane.tgz',
         '@module-federation/enhanced': '2.9.2',
         '@tsrx/oxc': '0.20.0',
+        '@effect/tsgo': '0.59.0',
+        tsrs: '0.20.0-ts7.1.0-beta',
         typescript: '7.0.0-test',
         '@types/node': '26.0.0',
       },
@@ -565,6 +596,8 @@ test('uses candidate aliases and preserves maintained Octane downloads and tooli
       /missing the @tsrx\/oxc dependency pin/u,
     );
     assert.equal(manifest.devDependencies.typescript, '7.0.0-test');
+    assert.equal(manifest.devDependencies['@effect/tsgo'], '0.59.0');
+    assert.equal(manifest.devDependencies.tsrs, '0.20.0-ts7.1.0-beta');
     assert.throws(
       () =>
         packedNativeFederationManifest(
@@ -622,7 +655,7 @@ test('retains an explicitly supplied core archive in real host and remote fixtur
         cohort: { artifacts: [] },
         packageRequests: {
           ...packageRequests,
-          typescript: '7.0.0-test',
+          ...compilerPins,
           '@types/node': '26.0.0',
         },
         packageRoots: { typescript, '@types/node': nodeTypes },
@@ -999,6 +1032,8 @@ function packedWorkspaceFixture() {
   const workspaceRoot = supplied.appRoot;
   const runtime = externalPackage(supplied, 'octane', '0.13.8');
   const typescript = externalPackage(supplied, 'typescript', '7.0.0-test');
+  const effectCompiler = externalPackage(supplied, '@effect/tsgo', '0.59.0');
+  const tsrs = externalPackage(supplied, 'tsrs', '0.20.0-ts7.1.0-beta');
   const nodeTypes = externalPackage(supplied, '@types/node', '26.0.0');
   const app = path.join(workspaceRoot, 'apps/host');
   fs.mkdirSync(app, { recursive: true });
@@ -1026,7 +1061,7 @@ function packedWorkspaceFixture() {
       cohort: supplied.cohort,
       packageRequests: {
         octane: '0.13.8',
-        typescript: '7.0.0-test',
+        ...compilerPins,
         '@types/node': '26.0.0',
       },
       packageRoots: { typescript, '@types/node': nodeTypes },
@@ -1044,6 +1079,8 @@ function packedWorkspaceFixture() {
     [supplied.sourceName]: supplied.directory,
     octane: runtime,
     typescript,
+    '@effect/tsgo': effectCompiler,
+    tsrs,
     '@types/node': nodeTypes,
     [name]: options.sharedPackage.directory,
   }))
@@ -1058,7 +1095,12 @@ test('authored packed workspace keeps exact aliases, strict policy and one share
     assert.equal(roots[0][supplied.sourceName], supplied.directory);
     assert.deepEqual(
       Object.keys(roots[0]).toSorted(),
-      [supplied.sourceName, 'octane', 'typescript', '@types/node'].toSorted(),
+      [
+        supplied.sourceName,
+        'octane',
+        ...Object.keys(compilerPins),
+        '@types/node',
+      ].toSorted(),
     );
     assert.throws(
       () =>

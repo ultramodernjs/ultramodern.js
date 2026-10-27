@@ -53,6 +53,7 @@ import { checkInstalledCohort, readCohort } from './installed-cohort.mjs';
 import { runPackedNativeFederationGeneratedProof } from './native-federation-generated.mjs';
 import {
   installedBin,
+  packedCompilerRequests,
   runPackedNativeFederationProof,
 } from './native-federation-packed.mjs';
 import {
@@ -671,9 +672,9 @@ async function main() {
               ),
               devDependencies: {
                 ...resolveFixtureDependencies(app.devDependencies, release),
-                typescript: readJson(
-                  path.join(appRoot, 'node_modules/typescript/package.json'),
-                ).version,
+                ...packedCompilerRequests(
+                  readJson(path.join(appRoot, 'package.json')).devDependencies,
+                ),
               },
             });
             const { allowBuilds } = parseYaml(
