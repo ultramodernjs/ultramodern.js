@@ -9,8 +9,8 @@ import { rendererTypeCheckerPlugin } from '../../src/native-composition/type-che
 
 const require = createRequire(import.meta.url);
 
-test('the configured build checker resolves the app cohort rather than typescriptPath in another installation', async () => {
-  const root = fs.realpathSync(
+async function verifyAppCohort(selection: 'automatic' | 'effect-go') {
+  const root = fs.realpathSync.native(
     fs.mkdtempSync(path.join(os.tmpdir(), 'native-checker-app-origin-')),
   );
   const appDirectory = path.join(root, 'app');
@@ -29,7 +29,11 @@ test('the configured build checker resolves the app cohort rather than typescrip
       path.join(foreignDirectory, 'package.json'),
       JSON.stringify({ name: 'typescript', version: '7.0.2' }),
     );
-    for (const name of ['tsrs', '@effect/tsgo', 'typescript']) {
+    const dependencies =
+      selection === 'automatic'
+        ? ['tsrs', '@effect/tsgo', 'typescript']
+        : ['@effect/tsgo', 'typescript'];
+    for (const name of dependencies) {
       const target = path.join(appDirectory, 'node_modules', name);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.symlinkSync(
@@ -91,23 +95,26 @@ test('the configured build checker resolves the app cohort rather than typescrip
       { CHAIN_ID: { PLUGIN: { TS_CHECKER: 'checker' } } },
     );
     const appRequire = createRequire(path.join(appDirectory, 'package.json'));
-    const tsrsManifest = appRequire('tsrs/package.json');
+    const tsrsManifest =
+      selection === 'automatic' ? appRequire('tsrs/package.json') : undefined;
     const effectManifest = appRequire.resolve('@effect/tsgo/package.json');
     const effect = JSON.parse(fs.readFileSync(effectManifest, 'utf8'));
     const effectPlatform = createRequire(effectManifest).resolve(
       `@effect/tsgo-${process.platform}-${process.arch}/package.json`,
     );
-    const { getPlatformPackageName } = appRequire(
-      path.join(
-        path.dirname(appRequire.resolve('tsrs/package.json')),
-        'lib/platform.js',
-      ),
-    );
+    const nativeName = tsrsManifest
+      ? appRequire(
+          path.join(
+            path.dirname(appRequire.resolve('tsrs/package.json')),
+            'lib/platform.js',
+          ),
+        ).getPlatformPackageName()
+      : undefined;
     // Check the provider's replacement support as well as upstream tsrs support.
     // Keep the expected artifact independent from the resolver under test.
     expect(effect.version).toBe('0.59.0');
-    const nativeName = getPlatformPackageName();
     const supported =
+      tsrsManifest &&
       tsrsManifest.optionalDependencies[nativeName] === tsrsManifest.version &&
       [
         '@tsrs/darwin-arm64',
@@ -145,11 +152,10 @@ test('the configured build checker resolves the app cohort rather than typescrip
     );
     expect(stats.hasErrors()).toBe(true);
     expect(stats.toString({ all: false, errors: true })).toContain('TS2322');
-    expect(
-      stats.compilation.fileDependencies.has(
-        path.join(appDirectory, 'checked.ts'),
-      ),
-    ).toBe(true);
+    // Windows watchers expand short-name aliases to their native spelling.
+    expect([...stats.compilation.fileDependencies]).toContain(
+      fs.realpathSync.native(path.join(appDirectory, 'checked.ts')),
+    );
   } finally {
     if (compiler)
       await new Promise<void>((resolve, reject) =>
@@ -161,4 +167,9 @@ test('the configured build checker resolves the app cohort rather than typescrip
     }
     fs.rmSync(root, { recursive: true, force: true });
   }
-});
+}
+
+test.each(['automatic', 'effect-go'] as const)(
+  'the configured build checker resolves the app cohort rather than typescriptPath in another installation (%s)',
+  verifyAppCohort,
+);
