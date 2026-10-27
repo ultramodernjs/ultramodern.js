@@ -3,6 +3,7 @@ import type {
   ToolsNormalizedConfig,
 } from '@modern-js/server-core';
 import { fs, logger } from '@modern-js/utils';
+import type { LibConfig } from '@rslib/core';
 import * as path from 'path';
 
 export interface Pattern {
@@ -13,6 +14,7 @@ export interface Pattern {
 
 export interface IConfig {
   alias?: SourceNormalizedConfig['alias'];
+  sourceMap?: NonNullable<LibConfig['output']>['sourceMap'];
 }
 
 export interface CompileOptions {

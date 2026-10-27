@@ -4,7 +4,10 @@ import { fs } from '@modern-js/utils';
 import { bffPlugin } from '../src/cli';
 import { createBffGenerator } from '../src/cli/generator';
 
-async function fixture(source = 'export const value: number = 1;') {
+async function fixture(
+  source = 'export const value: number = 1;',
+  sourceMap?: boolean,
+) {
   const appDirectory = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), 'native-bff-hooks-')),
   );
@@ -39,12 +42,27 @@ async function fixture(source = 'export const value: number = 1;') {
       source: {},
       resolve: {},
       server: {},
-      output: {},
+      output: { sourceMap },
       bff: {},
     }),
   };
   return { appDirectory, context, hooks, ...createBffGenerator(api as never) };
 }
+
+test('forwards disabled source maps to the BFF compiler', async () => {
+  const { appDirectory, compileApi } = await fixture(undefined, false);
+  try {
+    await compileApi();
+    const output = path.join(appDirectory, 'dist/api/index.js');
+    expect(require(output).value).toBe(1);
+    expect(fs.existsSync(`${output}.map`)).toBe(false);
+    expect(await fs.readFile(output, 'utf8')).not.toContain(
+      'sourceMappingURL=',
+    );
+  } finally {
+    await fs.remove(appDirectory);
+  }
+});
 
 test('runs before and after around actual compilation with the same context', async () => {
   const { appDirectory, hooks, compileApi } = await fixture();
