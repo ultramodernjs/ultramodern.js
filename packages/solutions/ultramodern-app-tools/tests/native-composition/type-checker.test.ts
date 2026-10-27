@@ -103,9 +103,17 @@ test('the configured build checker resolves the app cohort rather than typescrip
         'lib/platform.js',
       ),
     );
+    // Check the provider's replacement support as well as upstream tsrs support.
+    // Keep the expected artifact independent from the resolver under test.
+    expect(effect.version).toBe('0.59.0');
+    const nativeName = getPlatformPackageName();
     const supported =
-      tsrsManifest.optionalDependencies[getPlatformPackageName()] ===
-      tsrsManifest.version;
+      tsrsManifest.optionalDependencies[nativeName] === tsrsManifest.version &&
+      [
+        '@tsrs/darwin-arm64',
+        '@tsrs/linux-x64-gnu',
+        '@tsrs/linux-arm64-gnu',
+      ].includes(nativeName);
     const expected = supported
       ? path.join(
           path.dirname(effectPlatform),
