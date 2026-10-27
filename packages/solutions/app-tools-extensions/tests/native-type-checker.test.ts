@@ -19,34 +19,43 @@ const tsrsManifest = JSON.parse(fs.readFileSync(tsrsManifestPath, 'utf8'));
 const { getPlatformPackageName } = require(
   path.join(path.dirname(tsrsManifestPath), 'lib/platform.js'),
 );
+const nativeName = getPlatformPackageName();
 const tsrsSupported =
-  tsrsManifest.optionalDependencies[getPlatformPackageName()] ===
-  tsrsManifest.version;
+  tsrsManifest.optionalDependencies[nativeName] === tsrsManifest.version &&
+  [
+    '@tsrs/darwin-arm64',
+    '@tsrs/linux-x64-gnu',
+    '@tsrs/linux-arm64-gnu',
+  ].includes(nativeName);
 // Resolve the real native compiler. Unsupported tsrs hosts retain Effect-Go.
 const compilerCommand = resolveNativeTypeCheckerCommand(compilerManifestPath);
 
 test('the native checker selects the host-supported bundled Effect compiler instead of the vanilla TypeScript package bin', () => {
   const selected = resolveNativeTypeCheckerCommand(compilerManifestPath);
-  if (tsrsSupported) {
-    const effectManifest = require.resolve('@effect/tsgo/package.json');
-    const effectPlatform = createRequire(effectManifest).resolve(
-      `@effect/tsgo-${process.platform}-${process.arch}/package.json`,
-    );
-    expect(selected.executable).toBe(
-      fs.realpathSync(
-        path.join(
-          path.dirname(effectPlatform),
-          'artifacts/tsrs',
-          tsrsManifest.version,
-          process.platform === 'win32' ? 'tsrs.exe' : 'tsrs',
-        ),
-      ),
-    );
-  } else {
-    expect(path.basename(selected.executable)).toBe(
-      process.platform === 'win32' ? 'tsc.exe' : 'tsc',
-    );
-  }
+  const effectManifest = require.resolve('@effect/tsgo/package.json');
+  const effect = JSON.parse(fs.readFileSync(effectManifest, 'utf8'));
+  expect(effect.version).toBe('0.59.0');
+  const effectPlatform = createRequire(effectManifest).resolve(
+    `@effect/tsgo-${process.platform}-${process.arch}/package.json`,
+  );
+  const expected = tsrsSupported
+    ? path.join(
+        path.dirname(effectPlatform),
+        'artifacts/tsrs',
+        tsrsManifest.version,
+        process.platform === 'win32' ? 'tsrs.exe' : 'tsrs',
+      )
+    : path.join(
+        path.dirname(effectPlatform),
+        'lib',
+        process.platform === 'win32' ? 'tsc.exe' : 'tsc',
+      );
+  expect(selected.executable).toBe(fs.realpathSync(expected));
+  const version = execFileSync(selected.executable, ['--version'], {
+    encoding: 'utf8',
+  });
+  expect(version).toContain(`+effect-tsgo.${effect.version}`);
+  if (tsrsSupported) expect(version).toContain(`tsrs ${tsrsManifest.version}`);
   expect(selected.args).toEqual([]);
 });
 
