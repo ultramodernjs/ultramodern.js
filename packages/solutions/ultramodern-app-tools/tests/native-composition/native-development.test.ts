@@ -7,6 +7,7 @@ import {
 } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { inspect } from 'node:util';
 import vm from 'node:vm';
 import {
   type RendererBuildIdentities,
@@ -1042,6 +1043,8 @@ describe('native development', () => {
     const entryUrl = new URL('remoteEntry.js', initialPublicPath);
     const entryBytes = await (await fetch(entryUrl)).text();
     const scripts: { url: string; source: string }[] = [];
+    const scriptFailures: { url: string; error: string }[] = [];
+    let nextPublicPath = '<not published>';
     const pending = new Set<ReturnType<typeof setTimeout>>();
     interface ScriptElement {
       src: string;
@@ -1102,9 +1105,15 @@ describe('native development', () => {
               vm.runInContext(source, context, { filename: element.src });
               element.onload?.({ type: 'load', target: element });
             })
-            .catch(error =>
-              element.onerror?.({ type: 'error', target: element, error }),
-            );
+            .catch(error => {
+              // Rspack's loader discards event.error. Preserve the actual
+              // HTTP/VM failure instead of reporting only ChunkLoadError.
+              scriptFailures.push({
+                url: element.src,
+                error: inspect(error),
+              });
+              element.onerror?.({ type: 'error', target: element, error });
+            });
         },
         removeChild: (element: ScriptElement) => {
           const index = elements.indexOf(element);
@@ -1129,7 +1138,7 @@ describe('native development', () => {
       app.editRemoteLazy('REMOTE_LAZY_AFTER_HOT_APPLY');
       await completed.promise;
       const nextManifest = await (await fetch(manifestUrl)).json();
-      const nextPublicPath = nextManifest.metaData.publicPath;
+      nextPublicPath = nextManifest.metaData.publicPath;
       expect(nextPublicPath).not.toBe(initialPublicPath);
       expect(await widget.hotUpdate()).not.toBeNull();
       const beforeLazy = scripts.length;
@@ -1145,6 +1154,16 @@ describe('native development', () => {
         ),
       ).toBe(true);
       expect(await (await fetch(entryUrl)).text()).toBe(entryBytes);
+    } catch (error) {
+      throw new Error(
+        `Native federation hot apply failed: ${JSON.stringify({
+          initialPublicPath,
+          nextPublicPath,
+          loadedScripts: scripts.map(script => script.url),
+          scriptFailures,
+        })}`,
+        { cause: error },
+      );
     } finally {
       for (const timer of pending) clearTimeout(timer);
     }
