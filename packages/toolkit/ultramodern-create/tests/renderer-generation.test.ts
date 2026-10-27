@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
+import { createRequire, stripTypeScriptTypes } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -332,10 +332,24 @@ declare const ULTRAMODERN_SITE_URL: string;
         files[`${appDirectory}/src/routes/page.data.ts`]!,
         /export (?:async )?function loader\(/u,
       );
-      assert.match(
+      const dataSource = stripTypeScriptTypes(
         files[`${appDirectory}/src/routes/page.data.ts`]!,
-        /export async function action\(/u,
       );
+      const dataModule = await import(
+        `data:text/javascript;base64,${Buffer.from(dataSource).toString('base64')}`
+      );
+      const actionResult = dataModule.action({
+        request: new Request('http://localhost/', {
+          method: 'POST',
+          body: new URLSearchParams({ name: 'Ada' }),
+          headers: { 'x-conformance-private': 'private-action' },
+        }),
+      });
+      assert.ok(actionResult instanceof Promise);
+      assert.deepEqual(await actionResult, {
+        saved: 'Ada',
+        privateValue: 'private-action',
+      });
       assert.match(
         files[`${appDirectory}/src/routes/layout.tsx`]!,
         renderer === 'solid'
