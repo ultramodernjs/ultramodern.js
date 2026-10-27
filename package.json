@@ -25,7 +25,7 @@
     "prepare-build": "node ./scripts/with-effect-tsrs.mjs nx run-many -t build -p @modern-js/* --exclude=@modern-js/main-doc,@modern-js/module-tools-docs --maxParallel=4",
     "prepare-build:local": "node ./scripts/with-effect-tsrs.mjs nx run-many -t build -p @modern-js/* --exclude=@modern-js/main-doc,@modern-js/module-tools-docs --maxParallel=8",
     "prepare": "husky && node scripts/prepare-effect-compiler.mjs",
-    "build:required": "node ./scripts/with-effect-tsrs.mjs nx run-many -t build -p @modern-js/* --exclude=@modern-js/main-doc,@modern-js/module-tools-docs --maxParallel=4",
+    "build:required": "node ./scripts/with-effect-tsrs.mjs nx run-many -t build -p @modern-js/* --exclude=@modern-js/main-doc,@modern-js/module-tools-docs --maxParallel=4 --skipRemoteCache",
     "lint": "biome check",
     "change": "changeset add",
     "bump": "changeset version && pnpm install && oxfmt --write --no-error-on-unmatched-pattern \"packages/**/CHANGELOG.md\"",
