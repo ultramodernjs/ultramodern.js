@@ -4,9 +4,9 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1128,
-  "totalHunks": 3775,
-  "totalChangedLines": 86393,
+  "totalFiles": 1129,
+  "totalHunks": 3776,
+  "totalChangedLines": 86467,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/package.json",
@@ -296,7 +296,7 @@
     {
       "file": "packages/cli/plugin-bff/tests/bffBuildHooks.test.ts",
       "hunks": 1,
-      "changedLines": 119
+      "changedLines": 137
     },
     {
       "file": "packages/cli/plugin-bff/tests/clientGenerator.test.ts",
@@ -3266,7 +3266,7 @@
     {
       "file": "packages/server/utils/src/common/index.ts",
       "hunks": 7,
-      "changedLines": 38
+      "changedLines": 40
     },
     {
       "file": "packages/server/utils/src/compilers/rslib.ts",
@@ -3352,6 +3352,11 @@
       "file": "packages/server/utils/tests/helpers.ts",
       "hunks": 3,
       "changedLines": 24
+    },
+    {
+      "file": "packages/server/utils/tests/sourceMaps.test.ts",
+      "hunks": 1,
+      "changedLines": 51
     },
     {
       "file": "packages/server/utils/tests/ts.test.ts",
@@ -3846,7 +3851,7 @@
     {
       "file": "packages/solutions/app-tools/tests/serverBuild.test.ts",
       "hunks": 1,
-      "changedLines": 61
+      "changedLines": 64
     },
     {
       "file": "packages/solutions/app-tools/tests/types.test.ts",

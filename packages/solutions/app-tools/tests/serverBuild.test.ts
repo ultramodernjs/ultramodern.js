@@ -29,7 +29,10 @@ describe('server build compilation policy', () => {
     let afterBuild: (() => Promise<void>) | undefined;
     const api = {
       getAppContext: () => context,
-      getNormalizedConfig: () => ({ source: { alias: {} } }),
+      getNormalizedConfig: () => ({
+        source: { alias: {} },
+        output: { sourceMap: false },
+      }),
       onAfterBuild: (callback: () => Promise<void>) => {
         afterBuild = callback;
       },
@@ -51,7 +54,7 @@ describe('server build compilation policy', () => {
 
       expect(compile).toHaveBeenCalledWith(
         appDirectory,
-        { alias: {} },
+        { alias: {}, sourceMap: false },
         expect.objectContaining({ excludeFiles }),
       );
     } finally {

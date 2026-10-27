@@ -63,7 +63,7 @@ export default (): CliPlugin<AppTools> => ({
       if (sourceDirs.length > 0) {
         await compile(
           appDirectory,
-          { alias },
+          { alias, sourceMap: modernConfig.output?.sourceMap },
           {
             sourceDirs,
             distDir,

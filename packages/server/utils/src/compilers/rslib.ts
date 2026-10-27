@@ -344,7 +344,7 @@ export const compileServerSources = async (
             target: 'node',
             distPath: { root: distDir },
             cleanDistPath: false,
-            sourceMap: { js: 'source-map' },
+            sourceMap: config.sourceMap ?? { js: 'source-map' },
           },
           // Concurrent server compiles of one app would share the cache.
           performance: { buildCache: false },
