@@ -19,7 +19,8 @@ export interface VerifyCloudflareOutputMutationPolicyOptions {
   excludePaths?: string[];
 }
 
-const SOURCE_SCAN_FILE_PATTERN = /\.(?:[cm]?[jt]s|json)$/u;
+const SOURCE_SCAN_FILE_PATTERN = /\.(?:[cm]?[jt]sx?)$/u;
+const DECLARATION_FILE_PATTERN = /\.d\.[cm]?ts$/u;
 const SOURCE_SCAN_IGNORED_DIRECTORY_NAMES = new Set([
   '.codex',
   '.fastcontext',
@@ -115,7 +116,11 @@ export const walkFiles = async (root: string): Promise<string[]> => {
       continue;
     }
 
-    if (SOURCE_SCAN_FILE_PATTERN.test(entry.name)) {
+    if (
+      entry.name === 'package.json' ||
+      (SOURCE_SCAN_FILE_PATTERN.test(entry.name) &&
+        !DECLARATION_FILE_PATTERN.test(entry.name))
+    ) {
       files.push(entryPath);
     }
   }
@@ -151,8 +156,38 @@ export const verifyCloudflareOutputMutationPolicy = async (
       }
       throw error;
     }
+    let executableSources = [source];
+    if (path.basename(file) === 'package.json') {
+      try {
+        const manifest: unknown = JSON.parse(source);
+        if (!isRecord(manifest)) {
+          throw new TypeError('Package metadata must be an object.');
+        }
+        const scripts = Object.hasOwn(manifest, 'scripts')
+          ? manifest.scripts
+          : {};
+        if (!isRecord(scripts)) {
+          throw new TypeError('Package scripts must be an object.');
+        }
+        const commands = Object.values(scripts);
+        if (
+          !commands.every((value): value is string => typeof value === 'string')
+        ) {
+          throw new TypeError('Package scripts must contain only strings.');
+        }
+        executableSources = commands;
+      } catch {
+        addIssue(issues, {
+          code: 'invalid-package',
+          message:
+            'Cannot verify executable package lifecycle scripts: invalid package metadata.',
+          path: file,
+        });
+        continue;
+      }
+    }
     for (const forbidden of FORBIDDEN_MUTATION_PATTERNS) {
-      if (forbidden.pattern.test(source)) {
+      if (executableSources.some(value => forbidden.pattern.test(value))) {
         addIssue(issues, {
           code: forbidden.code,
           message: forbidden.message,
@@ -167,3 +202,6 @@ export const verifyCloudflareOutputMutationPolicy = async (
     issues,
   };
 };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
