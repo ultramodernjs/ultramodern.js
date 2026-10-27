@@ -151,6 +151,7 @@ export class NativeFederationDevAssetsPlugin {
         throw new Error(
           'Native development federation requires an explicit browser publicPath',
         );
+      const graphPublicPath = publicPath;
       class GraphPublicPathRuntimeModule extends rspack.RuntimeModule {
         constructor() {
           super(
@@ -167,7 +168,7 @@ export class NativeFederationDevAssetsPlugin {
           // directly: HMR may execute this module before installing its new
           // hash getter, so reading the getter can address a different graph.
           const graph = nativeFederationDevGraphPublicPath(
-            publicPath,
+            graphPublicPath,
             this.compilation?.fullHash || undefined,
           );
           return `${rspack.RuntimeGlobals.publicPath} = ${JSON.stringify(graph)};`;
