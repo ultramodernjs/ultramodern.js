@@ -214,27 +214,28 @@ export function loader({ request }: DataHandlerInput) {
   };
 }
 
-export async function action({ request }: DataHandlerInput) {
-  const form = await request.formData();
-  const name = form.get('name');
-  if (typeof name !== 'string' || !name.trim())
-    return Response.json(
-      { fieldErrors: { name: 'Name required' } },
-      { status: 422 },
-    );
-  if (form.get('intent') === 'redirect')
-    return new Response(null, {
-      headers: {
-        location: '/about',
-        'set-cookie': 'conformance-saved=1; Path=/; SameSite=Lax',
-      },
-      status: 303,
-    });
-  if (form.get('intent') === 'throw') throw new Error('Native action failure');
-  return {
-    saved: name,
-    privateValue: request.headers.get('x-conformance-private'),
-  };
+export function action({ request }: DataHandlerInput) {
+  return request.formData().then(form => {
+    const name = form.get('name');
+    if (typeof name !== 'string' || name.trim().length === 0)
+      return Response.json(
+        { fieldErrors: { name: 'Name required' } },
+        { status: 422 },
+      );
+    if (form.get('intent') === 'redirect')
+      return new Response(null, {
+        headers: {
+          location: '/about',
+          'set-cookie': 'conformance-saved=1; Path=/; SameSite=Lax',
+        },
+        status: 303,
+      });
+    if (form.get('intent') === 'throw') throw new Error('Native action failure');
+    return {
+      saved: name,
+      privateValue: request.headers.get('x-conformance-private'),
+    };
+  });
 }
 `,
       },
