@@ -332,7 +332,7 @@ async function replacementApp(
   manualContainerHmr = false,
   browserModule = false,
   initialPublication?: {
-    hold(address: URL): Promise<void>;
+    hold(address: URL, rebuildSibling: () => void): Promise<void>;
     manifestRequest(request: IncomingMessage, response: ServerResponse): void;
   },
 ) {
@@ -429,6 +429,8 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
     | { readonly name: string; readonly body: string }[]
     | undefined;
   let compilationFailure: Error | undefined;
+  let compilers: Rspack.Compiler[] = [];
+  let lastDoneCompiler: Rspack.Compiler | undefined;
   let clientCompiler: Rspack.Compiler | undefined;
   let beforeAggregateCompile: (() => Promise<void>) | undefined;
   let afterAggregateCompile: (() => void) | undefined;
@@ -445,12 +447,6 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
     name: 'test-replacement-compiler',
     setup(api) {
       if (initialPublication) {
-        beforeAggregateCompile = () =>
-          initialPublication.hold(
-            new URL(
-              `http://${api.context.devServer!.hostname}:${api.context.devServer!.port}/`,
-            ),
-          );
         api.onBeforeStartDevServer(({ server }) => {
           server.httpServer?.on('request', (request, response) => {
             if (
@@ -462,9 +458,18 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
         });
       }
       api.onAfterCreateCompiler(({ compiler }) => {
-        clientCompiler = (
-          'compilers' in compiler ? compiler.compilers : [compiler]
-        ).find(candidate => candidate.options.name === 'client');
+        compilers = 'compilers' in compiler ? compiler.compilers : [compiler];
+        clientCompiler = compilers.find(
+          candidate => candidate.options.name === 'client',
+        );
+        if (initialPublication)
+          for (const candidate of compilers)
+            candidate.hooks.done.tap(
+              { name: 'InitialPublicationControl', stage: -Infinity },
+              () => {
+                lastDoneCompiler = candidate;
+              },
+            );
       });
       api.onDevCompileDone({
         order: 'post',
@@ -483,6 +488,26 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
         serverCompilation = ('stats' in stats ? stats.stats : [stats]).find(
           result => result.compilation.name === 'server',
         )?.compilation;
+        // A sibling compiler can enter another aggregate callback while the
+        // first is held. Initial publication stays gated in every invocation.
+        if (initialPublication)
+          await initialPublication.hold(
+            new URL(
+              `http://${api.context.devServer!.hostname}:${api.context.devServer!.port}/`,
+            ),
+            () => {
+              const sibling = compilers.find(
+                candidate => candidate !== lastDoneCompiler,
+              );
+              if (!sibling?.watching)
+                throw new Error('No watching sibling compiler');
+              fs.appendFileSync(
+                sibling.options.name === 'client' ? clientEntry : serverEntry,
+                '\nglobalThis.initialPublicationRebuild = true;\n',
+              );
+              sibling.watching.invalidate();
+            },
+          );
         const callback = beforeAggregateCompile;
         beforeAggregateCompile = undefined;
         await callback?.();
@@ -847,8 +872,13 @@ describe('native development', () => {
   }, 300_000);
 
   it('holds initial browser manifest discovery until its completed graph is published', async () => {
-    const publicationReached = Promise.withResolvers<URL>();
+    const publicationReached = Promise.withResolvers<{
+      address: URL;
+      rebuildSibling: () => void;
+    }>();
+    const overlappingPublication = Promise.withResolvers<void>();
     const resumePublication = Promise.withResolvers<void>();
+    let publicationCalls = 0;
     const received = new Map(
       ['GET', 'HEAD', 'ABORT'].map(method => [
         method,
@@ -856,8 +886,11 @@ describe('native development', () => {
       ]),
     );
     const starting = replacementApp(false, true, false, false, {
-      async hold(address) {
-        publicationReached.resolve(address);
+      async hold(address, rebuildSibling) {
+        publicationCalls++;
+        if (publicationCalls === 1)
+          publicationReached.resolve({ address, rebuildSibling });
+        else overlappingPublication.resolve();
         await resumePublication.promise;
       },
       manifestRequest(request, response) {
@@ -871,7 +904,7 @@ describe('native development', () => {
     let get: Promise<Response> | undefined;
     let head: Promise<Response> | undefined;
     try {
-      const address = await publicationReached.promise;
+      const { address, rebuildSibling } = await publicationReached.promise;
       const manifest = new URL('/replacement-assets/mf-manifest.json', address);
       let discovered = 0;
       get = fetch(manifest, { signal: AbortSignal.timeout(30_000) }).then(
@@ -907,6 +940,11 @@ describe('native development', () => {
       abort.abort();
       await abandoned;
       await canceled;
+      // A second aggregate callback must not bypass the initial hold while the
+      // first callback is pending. Drive a real sibling compiler rebuild.
+      rebuildSibling();
+      await overlappingPublication.promise;
+      expect(publicationCalls).toBeGreaterThan(1);
       // The ordinary emitted container is already available from Rsbuild;
       // holding discovery cannot be explained by a stopped HTTP server.
       const ordinaryEntry = await fetch(
@@ -1492,6 +1530,46 @@ describe('native development', () => {
       app.authority.resolveSnapshot(app.identity, AbortSignal.timeout(1_000)),
     ).rejects.toThrow(/closed/iu);
     expect(fs.existsSync(manifest)).toBe(false);
+  }, 300_000);
+
+  it('finishes an active publication before removing its dev manifest on close', async () => {
+    const app = await replacementApp(false);
+    await until(app, 'first:replacement-compiler');
+    const manifest = path.join(
+      app.root,
+      'dist',
+      RENDERER_DEVELOPMENT_DIRECTORY,
+      RENDERER_BUILD_MANIFEST_FILE,
+    );
+    const validate =
+      app.compilerArtifacts.validateClientManifest.getMockImplementation();
+    if (!validate) throw new Error('No compiler manifest validator');
+    const validationReached = Promise.withResolvers<void>();
+    const resumeValidation = Promise.withResolvers<void>();
+    const compiled = Promise.withResolvers<void>();
+    app.compilerArtifacts.validateClientManifest.mockImplementationOnce(
+      async (...args) => {
+        validationReached.resolve();
+        await resumeValidation.promise;
+        return validate(...args);
+      },
+    );
+    let closing: Promise<void> | undefined;
+    try {
+      app.afterNextAggregateCompile(() => compiled.resolve());
+      app.edit('closing');
+      await validationReached.promise;
+      closing = app.authority.close();
+      await expect(
+        app.authority.resolveSnapshot(app.identity, AbortSignal.timeout(1_000)),
+      ).rejects.toThrow(/closed/iu);
+      resumeValidation.resolve();
+      await Promise.all([closing, compiled.promise]);
+      expect(fs.existsSync(manifest)).toBe(false);
+    } finally {
+      resumeValidation.resolve();
+      await closing;
+    }
   }, 300_000);
 
   it.each([
