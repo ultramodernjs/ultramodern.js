@@ -9,6 +9,7 @@ on:
   # Triggers the workflow on pull request events but only for the main branch
   pull_request:
     branches: [main, main-ultramodern]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
   merge_group:
 
@@ -30,11 +31,15 @@ permissions:
 jobs:
   ut-mac-shards:
     # The type of runner that the job will run on
-    # Keep the configured pool for normal CI. Manual recovery runs can use
-    # GitHub-hosted macOS without changing shared Depot configuration.
+    # Keep the configured pool by default. A PR-scoped label runs the same
+    # required check on GitHub-hosted macOS when the configured pool is blocked.
+    # A workflow_dispatch alone does not replace the PR-associated check suite.
     runs-on: >-
-      ${{ github.event_name == 'workflow_dispatch' &&
-          inputs.runner_backend == 'github-hosted' && 'macos-26' ||
+      ${{ (github.event_name == 'workflow_dispatch' &&
+           inputs.runner_backend == 'github-hosted' ||
+           github.event_name == 'pull_request' &&
+           contains(github.event.pull_request.labels.*.name, 'ci:github-hosted-macos')) &&
+          'macos-26' ||
           vars.DEPOT_MACOS_RUNNER || 'macos-26' }}
     strategy:
       fail-fast: false
