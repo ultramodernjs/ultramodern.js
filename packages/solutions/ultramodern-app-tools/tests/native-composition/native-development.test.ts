@@ -425,7 +425,9 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
   };
   let poison = false;
   let serverCompilation: Rspack.Compilation | undefined;
-  let clientCompilation: Rspack.Compilation | undefined;
+  let browserHotManifests:
+    | { readonly name: string; readonly body: string }[]
+    | undefined;
   let compilationFailure: Error | undefined;
   let clientCompiler: Rspack.Compiler | undefined;
   let beforeAggregateCompile: (() => Promise<void>) | undefined;
@@ -480,9 +482,6 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
           : undefined;
         serverCompilation = ('stats' in stats ? stats.stats : [stats]).find(
           result => result.compilation.name === 'server',
-        )?.compilation;
-        clientCompilation = ('stats' in stats ? stats.stats : [stats]).find(
-          result => result.compilation.name === 'client',
         )?.compilation;
         const callback = beforeAggregateCompile;
         beforeAggregateCompile = undefined;
@@ -603,6 +602,25 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
                       ),
                       { immutable: false },
                     );
+                  // getAssets() returns live wrappers with lazy source getters.
+                  // Freeze the bytes while this compilation owns its assets,
+                  // before the test yields to HTTP or a subsequent rebuild.
+                  browserHotManifests = current
+                    .getAssets()
+                    .filter(asset =>
+                      asset.name.endsWith('.hot-update.json.mjs'),
+                    )
+                    .map(asset => {
+                      const source = asset.source;
+                      if (!source)
+                        throw new Error(
+                          `Missing emitted hot-manifest source: ${asset.name}`,
+                        );
+                      return {
+                        name: asset.name,
+                        body: source.buffer().toString('utf8'),
+                      };
+                    });
                 },
               ),
             );
@@ -688,11 +706,9 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
       return serverCompilation;
     },
     browserHotUpdateManifests() {
-      if (!clientCompilation)
+      if (!browserHotManifests)
         throw new Error('No completed client compilation');
-      return clientCompilation
-        .getAssets()
-        .filter(asset => asset.name.endsWith('.hot-update.json.mjs'));
+      return browserHotManifests;
     },
     removeFederatedImport() {
       fs.writeFileSync(widget, 'export const marker = "second-remote";\n');
@@ -800,8 +816,9 @@ describe('native development', () => {
     await completed.promise;
     const manifests = app.browserHotUpdateManifests();
     expect(manifests.length).toBeGreaterThan(0);
+    const retainedBodies = manifests.map(manifest => manifest.body);
     for (const manifest of manifests) {
-      const expected = Buffer.from(manifest.source.source()).toString();
+      const expected = manifest.body;
       expect(expected).toContain('export default');
       const live = await fetch(
         new URL(`/replacement-assets/${manifest.name}`, app.address),
@@ -817,6 +834,16 @@ describe('native development', () => {
       );
       expect(await namespaced.text()).toBe(expected);
     }
+    const rebuilt = Promise.withResolvers<void>();
+    app.afterNextAggregateCompile(() => rebuilt.resolve());
+    app.editRemoteLazy('REMOTE_LAZY_ESM_NEXT_APPLY');
+    await rebuilt.promise;
+    const nextManifests = app.browserHotUpdateManifests();
+    expect(nextManifests.length).toBeGreaterThan(0);
+    expect(nextManifests.map(manifest => manifest.name)).not.toEqual(
+      manifests.map(manifest => manifest.name),
+    );
+    expect(manifests.map(manifest => manifest.body)).toEqual(retainedBodies);
   }, 300_000);
 
   it('holds initial browser manifest discovery until its completed graph is published', async () => {
