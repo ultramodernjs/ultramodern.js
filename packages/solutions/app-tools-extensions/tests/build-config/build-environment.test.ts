@@ -522,7 +522,12 @@ tsrsTest(
       const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
       manifest.name = '@ont-os/tsrs-candidate';
       writeFileSync(manifestFile, JSON.stringify(manifest));
-      const renamed = join(directory, 'selected-compiler');
+      const renamed = join(
+        directory,
+        process.platform === 'win32'
+          ? 'selected-compiler.exe'
+          : 'selected-compiler',
+      );
       symlinkSync(compiler, renamed, 'file');
       const from = join(directory, 'modern.config.ts');
       await withEnvironment(

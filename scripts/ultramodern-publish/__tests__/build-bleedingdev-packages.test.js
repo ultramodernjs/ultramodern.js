@@ -31,11 +31,15 @@ test('release builds propagate the actual Effect tsrs compiler and DTS adapter',
   ]);
   const result = spawnSync(command.executable, command.args, {
     encoding: 'utf8',
-    env: { ...process.env, npm_execpath: packageManager },
+    env: {
+      ...process.env,
+      TSRS_CHECKER_ASSIGNMENT: '',
+      npm_execpath: packageManager,
+    },
   });
   assert.equal(result.status, 0, result.stderr);
   const selected = JSON.parse(result.stdout);
-  assert.equal(selected.assignment, 'go');
+  assert.equal(selected.assignment, 'locality');
   assert.equal(
     path.basename(selected.compiler),
     process.platform === 'win32' ? 'tsrs.exe' : 'tsrs',
