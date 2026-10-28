@@ -32,8 +32,8 @@ test('the exported app retains TypeScript tooling and Effect versions', () => {
   assert.equal(rootManifest.devDependencies.typescript, '7.0.2');
   assert.equal(profileManifest.devDependencies.typescript, '7.0.2');
   assert.equal(smokeManifest.devDependencies.typescript, '7.0.2');
-  assert.equal(profileManifest.dependencies.effect, '4.0.5');
-  assert.equal(smokeManifest.devDependencies.effect, '4.0.5');
+  assert.equal(profileManifest.dependencies.effect, '4.0.7');
+  assert.equal(smokeManifest.devDependencies.effect, '4.0.7');
 });
 
 test('the exported app keeps the build checker enabled', () => {

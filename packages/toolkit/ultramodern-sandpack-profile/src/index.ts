@@ -25,7 +25,7 @@ const packageJson = `${JSON.stringify(
       '@modern-js/plugin-tanstack':
         'npm:@bleedingdev/modern-js-plugin-tanstack@latest',
       '@modern-js/runtime': 'npm:@bleedingdev/modern-js-runtime@latest',
-      effect: '4.0.5',
+      effect: '4.0.7',
       i18next: '26.4.6',
       react: '19.3.1',
       'react-dom': '19.3.1',

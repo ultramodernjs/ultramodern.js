@@ -30,7 +30,7 @@ export const RSBUILD_PLUGIN_TAILWINDCSS_VERSION = '2.0.3';
 // Effect 4 builds router params by assignment without string code generation.
 // The cohort consumes upstream Effect without a patch or sidecar.
 // See FORK-DIVERGENCE.md, packages/toolkit/ultramodern-create.
-export const EFFECT_VERSION = '4.0.5';
+export const EFFECT_VERSION = '4.0.7';
 export const EFFECT_TSGO_VERSION = '0.59.0';
 export const TSRS_VERSION = '0.20.0-ts7.1.0-beta';
 // Reviewed 2026-10-26 npm release metadata. Only these exact compiler releases

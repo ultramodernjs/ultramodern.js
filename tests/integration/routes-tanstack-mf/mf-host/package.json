@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
   },
   "dependencies": {
-    "@effect/opentelemetry": "4.0.5",
+    "@effect/opentelemetry": "4.0.7",
     "@modern-js/bff-effect": "workspace:*",
     "@modern-js/federation-runtime": "workspace:*",
     "@modern-js/plugin-bff-extensions": "workspace:*",
@@ -18,7 +18,7 @@
     "@module-federation/modern-js-v3": "2.9.2",
     "@module-federation/runtime": "2.9.2",
     "@tanstack/react-router": "1.170.44",
-    "effect": "4.0.5",
+    "effect": "4.0.7",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

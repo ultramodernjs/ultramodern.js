@@ -17,7 +17,7 @@
     "@modern-js/runtime": "workspace:*",
     "@modern-js/server-runtime": "workspace:*",
     "bff-api-app": "workspace:*",
-    "effect": "4.0.5",
+    "effect": "4.0.7",
     "express": "^5.3.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

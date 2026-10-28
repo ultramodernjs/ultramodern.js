@@ -237,8 +237,8 @@
     "esbuild": "^0.28.2"
   },
   "peerDependencies": {
-    "@effect/opentelemetry": "4.0.5",
-    "effect": "4.0.5"
+    "@effect/opentelemetry": "4.0.7",
+    "effect": "4.0.7"
   },
   "peerDependenciesMeta": {
     "@effect/opentelemetry": {
@@ -249,7 +249,7 @@
     }
   },
   "devDependencies": {
-    "@effect/opentelemetry": "4.0.5",
+    "@effect/opentelemetry": "4.0.7",
     "@modern-js/plugin": "workspace:*",
     "@modern-js/rslib": "workspace:*",
     "@rsbuild/core": "2.2.13",
@@ -257,7 +257,7 @@
     "@scripts/rstest-config": "workspace:*",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
-    "effect": "4.0.5"
+    "effect": "4.0.7"
   },
   "sideEffects": false,
   "publishConfig": {
