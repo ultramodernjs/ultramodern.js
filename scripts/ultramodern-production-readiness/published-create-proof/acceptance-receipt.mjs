@@ -1,7 +1,7 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readReleaseManifest } from '../../ultramodern-publish/lib/source-create-proof/release-manifest.mjs';
 import {
   assertOperationalIndependenceEvidenceMatchesReceipt,
   assertOperationalIndependenceResultDetails,
@@ -14,6 +14,7 @@ import {
   resolutionParityResultId,
   runtimeIdentityBinding,
 } from './acceptance-contract.mjs';
+import { authenticatedCompilerTrustExclusions } from './package-cohort.mjs';
 import { canonicalJson, sha256 } from './release-age-audit.mjs';
 
 const acceptanceReceiptSchema =
@@ -656,15 +657,20 @@ function assertAcceptanceReceipt(
 
   const expectedTrustExclusions =
     receipt.mode === 'source'
-      ? receipt.binding.artifacts.packages
-          .map(item => `${item.targetName}@${item.version}`)
-          .sort()
+      ? [
+          ...receipt.binding.artifacts.packages.map(
+            item => `${item.targetName}@${item.version}`,
+          ),
+          // Extra selectors require the verified packed generator, never
+          // self-declared receipt metadata or an arbitrary caller allowlist.
+          ...authenticatedCompilerTrustExclusions(release),
+        ].sort()
       : [];
   assertCondition(
     Array.isArray(receipt.registry.sourceCandidateTrustPolicyExclude) &&
       JSON.stringify(receipt.registry.sourceCandidateTrustPolicyExclude) ===
         JSON.stringify(expectedTrustExclusions),
-    'Acceptance receipt registry trust exclusions must equal the exact source cohort and be empty after publication',
+    'Acceptance receipt registry trust exclusions must equal the exact source cohort plus authenticated packed compiler exceptions and be empty after publication',
   );
 
   const resultIds = Array.isArray(receipt.results)
@@ -765,6 +771,12 @@ function assertAcceptanceReceipt(
     'ERP-10 acceptance receipt must not mix optional results into the profile',
   );
 
+  if (runIdentity) {
+    assertCondition(
+      receipt.binding.runIdentity === runIdentity,
+      `Acceptance receipt run identity must be ${runIdentity}, found ${receipt.binding.runIdentity}`,
+    );
+  }
   if (release) {
     assertCondition(
       JSON.stringify(receipt.binding) ===
@@ -778,12 +790,6 @@ function assertAcceptanceReceipt(
           ),
         ),
       'Acceptance receipt binding does not match the strict release manifest',
-    );
-  }
-  if (runIdentity) {
-    assertCondition(
-      receipt.binding.runIdentity === runIdentity,
-      `Acceptance receipt run identity must be ${runIdentity}, found ${receipt.binding.runIdentity}`,
     );
   }
   if (requirePassed) {
@@ -882,96 +888,6 @@ function verifyAcceptanceReceiptOperationalEvidence(receipt, receiptPath) {
   });
 }
 
-function assertAcceptanceReceiptIdentity(receipt, { manifest, runIdentity }) {
-  assertExactKeys(
-    manifest.source,
-    ['commit', 'repository'],
-    'Release manifest source',
-  );
-  assertExactKeys(
-    manifest.release,
-    ['tag', 'version'],
-    'Release manifest release',
-  );
-  assertCondition(
-    digestPattern.test(manifest.sha256),
-    'Release manifest SHA-256 is invalid',
-  );
-  assertCondition(
-    digestPattern.test(manifest.cohortDigest),
-    'Release manifest cohort digest is invalid',
-  );
-  assertCondition(
-    Number.isSafeInteger(manifest.packageCount) && manifest.packageCount > 0,
-    'Release manifest package count is invalid',
-  );
-  for (const [label, value] of Object.entries({
-    'Release manifest source commit': manifest.source.commit,
-    'Release manifest source repository': manifest.source.repository,
-    'Release manifest tag': manifest.release.tag,
-    'Release manifest version': manifest.release.version,
-    'Release run identity': runIdentity,
-  })) {
-    assertCondition(
-      typeof value === 'string' && value.length > 0,
-      `${label} is missing`,
-    );
-  }
-
-  assertAcceptanceReceipt(receipt, {
-    profileId: 'erp-10',
-    runIdentity,
-    expectedMode: 'source',
-  });
-  assertCondition(
-    receipt.binding.source.commit === manifest.source.commit &&
-      receipt.binding.source.repository === manifest.source.repository &&
-      receipt.binding.release.tag === manifest.release.tag &&
-      receipt.binding.release.version === manifest.release.version &&
-      receipt.binding.manifest.sha256 === manifest.sha256 &&
-      receipt.binding.manifest.cohortDigest === manifest.cohortDigest &&
-      receipt.binding.manifest.packageCount === manifest.packageCount &&
-      receipt.binding.supplyChain.releaseManifestSha256 === manifest.sha256,
-    'Acceptance receipt does not match the release manifest identity',
-  );
-  return receipt;
-}
-
-function readAcceptanceReceiptManifest(manifestPath) {
-  const { path: resolvedPath, value } = readRegularJson(
-    manifestPath,
-    'Release manifest',
-  );
-  assertCondition(
-    isPlainObject(value),
-    'Release manifest must be a JSON object',
-  );
-  assertExactKeys(
-    value.source,
-    ['commit', 'repository'],
-    'Release manifest source',
-  );
-  assertExactKeys(
-    value.release,
-    ['tag', 'version'],
-    'Release manifest release',
-  );
-  assertCondition(
-    Array.isArray(value.packages) && value.packages.length > 0,
-    'Release manifest packages are invalid',
-  );
-  return {
-    cohortDigest: value.cohortDigest,
-    packageCount: value.packages.length,
-    release: value.release,
-    sha256: crypto
-      .createHash('sha256')
-      .update(fs.readFileSync(resolvedPath))
-      .digest('hex'),
-    source: value.source,
-  };
-}
-
 function parseVerificationArgs(argv) {
   const values = new Map();
   let verify = false;
@@ -1014,15 +930,17 @@ function parseVerificationArgs(argv) {
 
 function verifyAcceptanceReceiptCli(argv = process.argv.slice(2)) {
   const options = parseVerificationArgs(argv);
-  const manifest = readAcceptanceReceiptManifest(options.manifestPath);
+  const release = readReleaseManifest({ manifestPath: options.manifestPath });
   const receipt = readAcceptanceReceipt(options.receiptPath);
-  assertAcceptanceReceiptIdentity(receipt, {
-    manifest,
+  assertAcceptanceReceipt(receipt, {
+    release,
+    profileId: 'erp-10',
     runIdentity: options.runIdentity,
+    expectedMode: 'source',
   });
   verifyAcceptanceReceiptOperationalEvidence(receipt, options.receiptPath);
   process.stdout.write(
-    `Verified ERP-10 acceptance receipt for ${manifest.release.version}.\n`,
+    `Verified ERP-10 acceptance receipt for ${release.release.version}.\n`,
   );
 }
 

@@ -22,35 +22,78 @@ const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 async function createReceiptFixture(root, mode = 'source') {
   const receiptApi = await import(pathToFileURL(receiptCliPath));
   const { bindSupplyChainEvidence, createAcceptanceReceipt } = receiptApi;
-  const release = {
+  const { createReleaseArtifacts } = await import(
+    '../../ultramodern-publish/prepare-bleedingdev-packages.mjs'
+  );
+  const { readReleaseManifest } = await import(
+    '../../ultramodern-publish/lib/source-create-proof/release-manifest.mjs'
+  );
+  const { createTemplateRequiredFiles } = await import(
+    '../../ultramodern-publish/lib/prepare-bleedingdev-packages/constants.mjs'
+  );
+  const version = '3.4.0-ultramodern.2';
+  const aliases = {
+    '@modern-js/ultramodern-create':
+      '@bleedingdev/modern-js-ultramodern-create',
+    '@modern-js/i18n-utils': '@bleedingdev/modern-js-i18n-utils',
+  };
+  const packages = Object.entries(aliases).map(([sourceName, targetName]) => {
+    const packageDir = path.join(root, 'staged', sourceName.split('/')[1]);
+    const isCreate = sourceName === '@modern-js/ultramodern-create';
+    const exports = {
+      '.': './index.js',
+      './ultramodern-workspace': './index.js',
+      './ultramodern-workspace/codesmith': './index.js',
+    };
+    fs.mkdirSync(packageDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(packageDir, 'package.json'),
+      JSON.stringify({
+        name: targetName,
+        version,
+        exports,
+        publishConfig: { access: 'public', exports },
+        dependencies: isCreate
+          ? {
+              '@modern-js/i18n-utils': `npm:${aliases['@modern-js/i18n-utils']}@${version}`,
+              '@module-federation/dts-plugin': '2.8.0',
+              '@module-federation/modern-js-v3': '2.8.0',
+              '@module-federation/runtime': '2.8.0',
+            }
+          : {},
+        ...(isCreate ? { ultramodern: { frameworkVersion: version } } : {}),
+      }),
+    );
+    for (const file of [
+      'index.js',
+      ...(isCreate ? createTemplateRequiredFiles : []),
+    ]) {
+      const target = path.join(packageDir, file);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, 'fixture\n');
+    }
+    return {
+      sourceName,
+      targetName,
+      version,
+      packageDir: path.relative(repoRoot, packageDir),
+    };
+  });
+  const releaseDir = path.join(root, 'release');
+  createReleaseArtifacts({
+    aliases,
+    outDir: releaseDir,
+    packages,
     source: {
       commit: '1'.repeat(40),
       repository: 'BleedingDev/ultramodern.js',
     },
-    release: { tag: 'latest', version: '3.4.0-ultramodern.2' },
-    manifestSha256: digest('release manifest'),
-    cohortDigest: digest('release cohort'),
-    packages: [
-      {
-        targetName: '@bleedingdev/modern-js-ultramodern-create',
-        version: '3.4.0-ultramodern.2',
-        integrity: 'sha512-create',
-        packageJson: {
-          dependencies: {
-            '@module-federation/dts-plugin': '2.8.0',
-            '@module-federation/modern-js-v3': '2.8.0',
-            '@module-federation/runtime': '2.8.0',
-          },
-        },
-      },
-    ],
-    createPackage: {
-      sourceName: '@modern-js/ultramodern-create',
-      targetName: '@bleedingdev/modern-js-ultramodern-create',
-      version: '3.4.0-ultramodern.2',
-      integrity: 'sha512-create',
-    },
-  };
+    tag: 'latest',
+    tools: { node: process.version, npm: '11.0.0', pnpm: '11.17.0' },
+    version,
+  });
+  const manifestPath = path.join(releaseDir, 'manifest.json');
+  const release = readReleaseManifest({ manifestPath });
   const runIdentity = 'github:BleedingDev/ultramodern.js:run:123:attempt:1';
   const receipt = createAcceptanceReceipt({
     release,
@@ -92,19 +135,6 @@ async function createReceiptFixture(root, mode = 'source') {
     registryMetadataSha256: digest('registry'),
     releaseManifestSha256: release.manifestSha256,
   });
-  const manifest = {
-    aliases: {},
-    cohortDigest: release.cohortDigest,
-    dependencyGraph: {},
-    packages: release.packages,
-    publishOrder: [],
-    release: release.release,
-    schema: 'bleedingdev.ultramodern.release-manifest',
-    schemaVersion: 2,
-    source: release.source,
-    tools: {},
-  };
-  const manifestPath = path.join(root, 'manifest.json');
   const receiptPath = path.join(root, 'acceptance-receipt.json');
   const operationalEvidence = await createOperationalAcceptanceReceiptFixture({
     evidencePath: path.join(
@@ -140,11 +170,6 @@ async function createReceiptFixture(root, mode = 'source') {
       );
     }
   }
-  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  release.manifestSha256 = digest(fs.readFileSync(manifestPath));
-  receipt.binding.manifest.sha256 = release.manifestSha256;
-  receipt.binding.supplyChain.releaseManifestSha256 =
-    receipt.binding.manifest.sha256;
   fs.writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
   return {
     manifestPath,
@@ -284,7 +309,7 @@ test('producer receipt preserves runtime-only MF identity and distinct native ta
         receipt => {
           receipt.binding.manifest.cohortDigest = 'f'.repeat(64);
         },
-        /does not match the release manifest identity/,
+        /binding does not match the strict release manifest/,
       ],
       [
         'cross-platform MicroVertical delivery drift',
@@ -511,7 +536,9 @@ test('runtime projection retains the complete authenticated artifact cohort', as
         ).version = '2.9.0';
       },
       receipt => {
-        receipt.binding.artifacts.packages[0].integrity = 'sha512-foreign';
+        receipt.binding.artifacts.packages.find(
+          item => item.targetName === receipt.binding.create.targetName,
+        ).integrity = 'sha512-foreign';
         receipt.binding.create.integrity = 'sha512-foreign';
       },
     ]) {
