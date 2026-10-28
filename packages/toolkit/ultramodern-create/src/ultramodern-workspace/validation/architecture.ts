@@ -55,6 +55,21 @@ export function assertCompilerArchitecture(
       '.ts',
       '.tsx',
     ]);
+    const appDirectories = new Set(
+      workspaceValidationContract.apps.map(app => path.join(root, app.path)),
+    );
+    // Build artifacts are not authored application source. Match these only at
+    // package roots: src/build or src/dist can still contain application code.
+    const generatedDirectories = new Set([
+      'dist',
+      'dist-cloudflare',
+      'build',
+      '.output',
+      '.modern',
+      '.modern-js',
+      '.modernjs',
+      '.mf',
+    ]);
     const collectCompilerInputs = (relativeDirectory: string) => {
       const absoluteDirectory = path.join(root, relativeDirectory);
       if (!fs.existsSync(absoluteDirectory)) {
@@ -67,6 +82,12 @@ export function assertCompilerArchitecture(
         for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
           const absoluteEntry = path.join(current, entry.name);
           if (entry.isDirectory()) {
+            if (
+              entry.name === 'node_modules' ||
+              (appDirectories.has(current) &&
+                generatedDirectories.has(entry.name))
+            )
+              continue;
             queue.push(absoluteEntry);
           } else if (sourceExtensions.has(path.extname(entry.name))) {
             files.push(absoluteEntry);
