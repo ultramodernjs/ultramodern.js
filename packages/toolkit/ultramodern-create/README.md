@@ -50,6 +50,17 @@ a second compiler or base app-tools plugin.
 | Solid 2 RC | `solid-js`, `@solidjs/web` | `@modern-js/renderer-solid/router` |
 | Octane | `octane` | `@modern-js/renderer-octane/router` |
 
+React apps default to TanStack Redact on the client, Node SSR and Cloudflare
+workerd SSR. The framework supplies patched `@tanstack/redact@0.2.1` and
+`rsbuild-redact-plugin@0.1.0`; generated manifests and configs do not declare
+either package. Keep the React/React DOM authoring pins unchanged. Set the
+top-level `redact: false` in `modern.config.ts` to use real React, or
+`redact: { viewTransitions: true }` for experimental native View Transitions.
+RSC apps always stay on real React. Redact is experimental: libraries using
+React internals may require opt-out, and its streaming chunk-size/backpressure
+semantics differ from React. See the [runtime guide](../../document/docs/en/guides/get-started/ultramodern.mdx#default-react-runtime-tanstack-redact)
+for patch details and limits.
+
 Solid and Octane previews support plain Node SSR with hydration and CSR. They
 require the admitted package cohort and reject unsupported capabilities:
 Module Federation, Worker deployment, RSC, SSG, framework i18n, SVG component

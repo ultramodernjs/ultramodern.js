@@ -42,6 +42,14 @@
       "labels": ["dependencies", "pin-lattice"]
     },
     {
+      "description": "Redact is a patched framework-owned runtime; update its patch and Rsbuild integration together after SSR, hydration and real-React opt-out qualification.",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["@tanstack/redact", "rsbuild-redact-plugin"],
+      "groupName": "redact (patched runtime lattice)",
+      "dependencyDashboardApproval": true,
+      "labels": ["dependencies", "pin-lattice"]
+    },
+    {
       "description": "Fork pin lattice: react-router/react-router-dom are pinned to an exact version via pnpm-workspace.yaml overrides; a package.json bump silently no-ops until the override moves with it.",
       "matchManagers": ["npm"],
       "matchPackageNames": ["react-router", "react-router-dom"],

@@ -91,6 +91,46 @@ source. SVG URLs remain supported. The
 defines the current preview profile and pinned dependencies. The federation,
 i18n and Cloudflare examples below describe the React profile.
 
+### Default React runtime: TanStack Redact
+
+React applications use TanStack Redact on both the client and the server
+(Node SSR and Cloudflare workerd SSR). It provides a lightweight React 19-compatible
+runtime while keeping normal `react` / `react-dom` imports, JSX and types.
+Upgrading the framework enables it without application edits:
+`@modern-js/ultramodern-app-tools` supplies exact dependencies
+`@tanstack/redact@0.2.1` and `rsbuild-redact-plugin@0.1.0` and resolves the runtime
+from its own installation. Do not install either package or register a Redact
+plugin in the app. Keep the generated React and React DOM pins: they provide the
+real React runtime for opt-out and RSC applications. RSC applications stay on
+React on both server and client.
+
+The top-level `redact` option is optional. Omit it for the default runtime, use
+`false` for real React, or pass `{ viewTransitions: true }` to enable Redact's
+experimental native View Transitions (off by default):
+
+```ts title="modern.config.ts"
+import { defineConfig } from '@modern-js/ultramodern-app-tools';
+
+export default defineConfig({
+  redact: false, // Or: { viewTransitions: true }
+  server: { ssr: { mode: 'stream' } },
+});
+```
+
+UltraModern requires its patched Redact 0.2.1 build. The patch fixes `useId`
+identity across streamed Suspense and hydration, duplicate IDs on later client
+mounts with `identifierPrefix`, streamed boundaries in table/SVG/MathML contexts,
+and prefixed hexadecimal boundary/segment IDs and reveal ordering with deferred
+scripts. An unpatched runtime fails the build rather than silently shipping.
+The normal 24-hour third-party release-age gate still applies; neither package
+has an age exemption.
+
+Redact is experimental, not a guarantee of compatibility with every React
+library. Libraries that depend on React internals may need `redact: false`.
+Its stream implementation does not reproduce React's `progressiveChunkSize`
+tuning or writable/Web Stream backpressure semantics; do not rely on identical
+chunk sizes, buffering or scheduling.
+
 Localized Cloudflare SSR workspaces redirect `/` on the server to the negotiated locale. For example, `Accept-Language: cs-CZ` returns `302` with `Location: /cs`, `Cache-Control: private, no-store`, and `Vary` covering locale detection headers. Validate the deployed Worker with:
 
 ```bash
