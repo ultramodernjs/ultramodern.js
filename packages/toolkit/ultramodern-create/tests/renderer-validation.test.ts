@@ -356,6 +356,61 @@ test('headless units cannot carry UI identity or renderer dependencies', () => {
   );
 });
 
+test('Redact and its build plugin belong exclusively to the React stack', () => {
+  for (const name of ['@tanstack/redact', 'rsbuild-redact-plugin']) {
+    const version = name === '@tanstack/redact' ? '0.2.1' : '0.1.0';
+    for (const specifier of [name, `${name}/server`]) {
+      assert.equal(isForeignRendererPackage(specifier, 'react'), false);
+      for (const renderer of ['solid', 'octane', 'none'] as const) {
+        assert.equal(isForeignRendererPackage(specifier, renderer), true);
+        for (const group of [
+          'dependencies',
+          'devDependencies',
+          'optionalDependencies',
+          'peerDependencies',
+        ]) {
+          for (const [dependency, request, catalogs] of [
+            [specifier, version, {}],
+            ['runtime-alias', `npm:${specifier}@${version}`, {}],
+            [
+              'runtime-alias',
+              'catalog:ui',
+              {
+                catalogs: {
+                  ui: { 'runtime-alias': `npm:${specifier}@${version}` },
+                },
+              },
+            ],
+          ] as const) {
+            const manifest = {
+              name: 'fixture',
+              [group]: { [dependency]: request },
+            };
+            assert.throws(
+              () =>
+                assertRendererDependencies(
+                  manifest,
+                  renderer,
+                  undefined,
+                  catalogs,
+                ),
+              /foreign renderer package/u,
+            );
+            assert.doesNotThrow(() =>
+              assertRendererDependencies(
+                manifest,
+                'react',
+                undefined,
+                catalogs,
+              ),
+            );
+          }
+        }
+      }
+    }
+  }
+});
+
 test('authored renderer ABI pins resolve explicit catalogs and reject mismatches before projection', () => {
   const generation = getRendererGenerationProfile('solid');
   const version = generation.profile.hydration.version;

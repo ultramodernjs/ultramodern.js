@@ -162,6 +162,10 @@ export function isForeignRendererPackage(
     name.startsWith('react-router-dom/') ||
     (name === '@types/react' && renderer !== 'octane') ||
     name === '@types/react-dom' ||
+    name === '@tanstack/redact' ||
+    name.startsWith('@tanstack/redact/') ||
+    name === 'rsbuild-redact-plugin' ||
+    name.startsWith('rsbuild-redact-plugin/') ||
     name === '@tanstack/react-router' ||
     name.startsWith('@tanstack/react-router/') ||
     name === '@modern-js/renderer-react' ||

@@ -270,6 +270,15 @@ generateUltramodernWorkspace(JSON.parse(process.argv[2]));`,
       policy.overrides,
       ULTRAMODERN_WORKSPACE_POLICY.pnpm.overrides,
     );
+    for (const name of ['@tanstack/redact', 'rsbuild-redact-plugin']) {
+      assert.equal(
+        policy.minimumReleaseAgeExclude.some((selector: string) =>
+          selector.includes(name),
+        ),
+        false,
+        `${name} must pass the ordinary third-party release-age gate`,
+      );
+    }
     assert.equal(policy.minimumReleaseAge, 1440);
     assert.equal(policy.minimumReleaseAgeStrict, true);
     assert.equal(policy.minimumReleaseAgeIgnoreMissingTime, false);
