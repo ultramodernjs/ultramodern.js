@@ -23,6 +23,7 @@ import { resolveSdkServerPlugin } from '../../native-composition/server-plugin-r
 import { rendererTypeCheckerPlugin } from '../../native-composition/type-checker';
 import { reactRendererBuildMetadataPlugin } from './build-metadata';
 import { ultramodernModuleFederationRecoveryPlugin } from './module-federation-recovery-plugin';
+import { ultramodernRedactIntegrationPlugin } from './redact-integration-plugin';
 import { ultramodernRouterIntegrationPlugin } from './router-integration-plugin';
 import { rscDisabledRuntimePlugin } from './rsc-disabled-plugin';
 import { createReactRscWorkerIntegrationPlugin } from './rsc-worker-integration';
@@ -101,6 +102,7 @@ export const composeReactRenderer = (
     ultramodernI18nIntegrationPlugin(),
     ultramodernRouterIntegrationPlugin(),
     ultramodernSSRIntegrationPlugin(),
+    ultramodernRedactIntegrationPlugin(),
     ultramodernModuleFederationRecoveryPlugin(),
     federationRenderer.plugin,
     backendFederationBuildPlugin({

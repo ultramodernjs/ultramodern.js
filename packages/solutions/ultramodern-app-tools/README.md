@@ -25,6 +25,45 @@ The selector belongs to this config import. Do not add another `appTools()` or
 native application source and dependencies, then a dev-server restart and a
 document reload. The generated entries own mounting and hydration.
 
+## Default React runtime
+
+React applications use the framework's exact `@tanstack/redact@0.2.1` runtime
+by default, on the client, Node SSR and Cloudflare workerd SSR. Keep authoring
+normal React 19 imports; no application dependency or template edits enable it.
+The framework owns Redact, `rsbuild-redact-plugin@0.1.0`, and a React 19 copy for
+the public plugin's version check under pnpm's strict dependency isolation.
+CSR uses that public plugin; SSR uses a fork-owned integration with the same
+exact aliases, including canonical Redact imports, in every environment.
+Custom Document compilers inherit these aliases instead of forcing real React
+externals; the native compiler respects explicit runtime aliases.
+
+```ts
+export default defineConfig({
+  // Omit for Redact with view transitions disabled.
+  redact: { viewTransitions: true },
+  server: { ssr: true },
+});
+```
+
+Set `redact: false` to use real React throughout the application. Invalid values
+fail configuration validation. **RSC applications always use real React**, on
+both server and client: Flight requires React internals Redact does not provide.
+The CLI logs this limitation once rather than mixing runtimes.
+
+Enabled builds require the reviewed pnpm patch whose first line in Redact's
+`dist/server/stream.js` is `// ultramodern-redact-patch: v1`. Missing patches
+fail the build with installation guidance and the `redact: false` escape hatch;
+there is no configuration bypass. The patch fixes streamed Suspense IDs,
+post-hydration IDs, namespace-sensitive segments and deferred reveal ordering.
+
+Federated hosts and remotes must choose the same runtime. Their existing
+renderer manifest contract publishes the effective runtime and hydration
+identity (Redact `0.2.1`, or actual React for opt-out/RSC), and rejects mismatches
+before remote initialization. Shared React, JSX and Redact requests use canonical
+singleton keys with honest runtime versions and strict version matching, not
+React 19 version numbers attached to Redact factories. The React authoring
+profile continues to describe React's API/compiler, not the runtime override.
+
 ## Native application imports
 
 | Renderer | Component authoring | Application router |
