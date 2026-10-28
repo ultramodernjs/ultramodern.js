@@ -159,6 +159,10 @@ test('fresh workspace YAML admits only exact reviewed compiler and runtime relea
     assert.equal(policy.minimumReleaseAgeIgnoreMissingTime, false);
     assert.equal(policy.trustPolicy, 'no-downgrade');
     assert.deepEqual(policy.trustPolicyExclude, COMPILER_TRUST_EXCEPTIONS);
+    assert.deepEqual(
+      policy.ultramodernManagedCompilerTrustExclusions,
+      COMPILER_TRUST_EXCEPTIONS,
+    );
     assert.equal(policy.blockExoticSubdeps, true);
     assert.equal(policy.strictDepBuilds, true);
   } finally {

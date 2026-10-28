@@ -170,7 +170,7 @@ function writeTractorWorkspace(workspace) {
   );
   fs.writeFileSync(
     path.join(workspace, 'pnpm-workspace.yaml'),
-    "catalogs:\n  ultramodern:\n    '@modern-js/i18n-utils': npm:@bleedingdev/modern-js-i18n-utils@0.0.0-previous\ntrustPolicyExclude:\n  - tsrs@0.18.0-ts7.1.0-dev.20260929\n",
+    "catalogs:\n  ultramodern:\n    '@modern-js/i18n-utils': npm:@bleedingdev/modern-js-i18n-utils@0.0.0-previous\ntrustPolicyExclude:\n  - tsrs@0.18.0-ts7.1.0-dev.20260929\nultramodernManagedCompilerTrustExclusions:\n  - tsrs@0.18.0-ts7.1.0-dev.20260929\n",
   );
   writeJson(path.join(workspace, 'topology/reference-topology.json'), {
     verticals: verticalIds.map(id => ({ api: true, id, kind: 'vertical' })),
