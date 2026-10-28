@@ -12,6 +12,9 @@ import {
   manifestFixture,
   requestCoordinate,
 } from './worker-federation.fixture';
+import { deferred, useDeadlineClock } from './worker-federation-clock.fixture';
+
+afterEach(() => rstest.useRealTimers());
 
 const manifest = manifestFixture();
 const admitted = admitWorkerFederationExpose({
@@ -155,23 +158,25 @@ test('retains both the expose failure and a failing native release', async () =>
 });
 
 test('releases a preparation resolving after the deadline without importing', async () => {
-  let finish!: (value: string) => void;
-  let released!: () => void;
-  const releaseCompleted = new Promise<void>(resolve => {
-    released = resolve;
-  });
+  useDeadlineClock();
+  const preparing = deferred();
+  const preparation = deferred<string>();
+  const releaseCompleted = deferred();
   const { handler, calls } = handlerFixture({
     requestTimeout: 20,
-    prepare: () =>
-      new Promise<string>(resolve => {
-        finish = resolve;
-      }),
-    release: released,
+    prepare: () => {
+      preparing.resolve();
+      return preparation.promise;
+    },
+    release: () => releaseCompleted.resolve(),
   });
-  expect((await handler(requestFixture()))?.status).toBe(504);
+  const pending = handler(requestFixture());
+  await preparing.promise;
+  await rstest.advanceTimersByTimeAsync(20);
+  expect((await pending)?.status).toBe(504);
   expect(calls).toEqual(['native admission']);
-  finish(nativeRequest);
-  await releaseCompleted;
+  preparation.resolve(nativeRequest);
+  await releaseCompleted.promise;
   expect(calls).toEqual(['native admission', 'release']);
 });
 
@@ -197,18 +202,27 @@ test('request abort releases an admitted handle once and preserves its reason', 
 });
 
 test('the same outer deadline bounds native release without blocking later requests', async () => {
+  useDeadlineClock();
+  const releasing = deferred();
   let healthy = false;
   const { handler, calls } = handlerFixture({
     requestTimeout: 20,
-    release: () => (healthy ? Promise.resolve() : new Promise(() => undefined)),
+    release: () => {
+      releasing.resolve();
+      return healthy ? Promise.resolve() : new Promise(() => undefined);
+    },
   });
-  expect((await handler(requestFixture()))?.status).toBe(504);
+  const pending = handler(requestFixture());
+  await releasing.promise;
+  await rstest.advanceTimersByTimeAsync(20);
+  expect((await pending)?.status).toBe(504);
   healthy = true;
   expect((await handler(requestFixture()))?.status).toBe(200);
   expect(calls.filter(value => value === 'release')).toHaveLength(2);
 });
 
 test('a hot failing native release cannot return before checking its expired deadline', async () => {
+  useDeadlineClock();
   let clock = 0;
   rstest.spyOn(performance, 'now').mockImplementation(() => clock);
   const { handler, calls } = handlerFixture({
@@ -372,17 +386,22 @@ test('rejects a registry which does not match the complete static publication', 
 });
 
 test('bounds a stalled ingress body before any expose runs', async () => {
+  useDeadlineClock();
+  const reading = deferred();
   let canceled = false;
   const body = new ReadableStream({
     start(controller) {
       controller.enqueue(new TextEncoder().encode('{'));
+    },
+    pull() {
+      reading.resolve();
     },
     cancel() {
       canceled = true;
     },
   });
   const { handler, calls } = handlerFixture({ requestTimeout: 20 });
-  const response = await handler(
+  const pending = handler(
     new Request(admitted.endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -390,19 +409,31 @@ test('bounds a stalled ingress body before any expose runs', async () => {
       duplex: 'half',
     } as RequestInit),
   );
+  await reading.promise;
+  await rstest.advanceTimersByTimeAsync(20);
+  const response = await pending;
   expect(response?.status).toBe(504);
   expect(canceled).toBe(true);
   expect(calls).toEqual([]);
 });
 
 test('bounds native rendering, forwards abort, and accepts a fresh request after recovery', async () => {
+  useDeadlineClock();
+  const rendering = deferred();
   let healthy = false;
   const { handler, executions } = handlerFixture({
     requestTimeout: 20,
-    render: () =>
-      healthy ? Promise.resolve(nativeSnapshot) : new Promise(() => undefined),
+    render: () => {
+      rendering.resolve();
+      return healthy
+        ? Promise.resolve(nativeSnapshot)
+        : new Promise(() => undefined);
+    },
   });
-  expect((await handler(requestFixture()))?.status).toBe(504);
+  const pending = handler(requestFixture());
+  await rendering.promise;
+  await rstest.advanceTimersByTimeAsync(20);
+  expect((await pending)?.status).toBe(504);
   expect((executions[1] as { signal: AbortSignal }).signal.aborted).toBe(true);
   healthy = true;
   expect((await handler(requestFixture()))?.status).toBe(200);

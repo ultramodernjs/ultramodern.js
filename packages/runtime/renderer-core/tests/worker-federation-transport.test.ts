@@ -10,6 +10,7 @@ import {
   workerFederationEnvelope,
   workerFederationWireJson,
 } from '../src/worker-federation/contract';
+import * as workerFederationLease from '../src/worker-federation/lease';
 import { WORKER_FEDERATION_MAX_BODY_BYTES } from '../src/worker-federation/lease';
 import {
   createWorkerFederationTransport,
@@ -20,6 +21,9 @@ import {
   manifestFixture,
   requestCoordinate,
 } from './worker-federation.fixture';
+import { deferred, useDeadlineClock } from './worker-federation-clock.fixture';
+
+afterEach(() => rstest.useRealTimers());
 
 const coordinate = { remote: 'tractor', expose: './Widget', locale: 'en' };
 const nativePayload =
@@ -188,6 +192,7 @@ test.each([
 test.each(['admission', 'snapshot'] as const)(
   'a reused admission or repeated snapshot cannot return after its caller deadline (%s)',
   async kind => {
+    useDeadlineClock();
     const { transport, counts } = fixture({ requestTimeout: 100 });
     await transport.request({ ...coordinate, payload: nativePayload });
     const now = rstest
@@ -287,6 +292,7 @@ test('rejects an oversized raw native payload before cache or manifest allocatio
 });
 
 test('hot manifest reads retain the request budget spent encoding its native payload', async () => {
+  useDeadlineClock();
   let clock = 0;
   let pulls = 0;
   let canceled = false;
@@ -331,6 +337,7 @@ test('hot manifest reads retain the request budget spent encoding its native pay
 });
 
 test('response validation cannot commit success after the outer budget expires', async () => {
+  useDeadlineClock();
   let clock = 0;
   let expire = true;
   rstest.spyOn(performance, 'now').mockImplementation(() => clock);
@@ -395,6 +402,7 @@ test('rejects an oversized declared manifest without reading and admits a fresh 
 test.each([undefined, '1'])(
   'streamed response overflow with Content-Length %s cancels without awaiting it and retries',
   async contentLength => {
+    useDeadlineClock();
     let healthy = false;
     let canceled = false;
     const { transport, counts } = fixture({
@@ -629,9 +637,29 @@ afterEach(async () => {
 test.each(['http503', 'header-hang', 'body-hang', 'manifest-body-hang'])(
   'bounds real HTTP %s through the full body and retries after recovery in the same transport',
   async failure => {
+    useDeadlineClock();
+    const stalled = deferred();
     let healthy = false;
     let manifestRequests = 0;
     let renderRequests = 0;
+    let bodyReads = 0;
+    const readBody = workerFederationLease.readWorkerFederationJsonBody;
+    rstest
+      .spyOn(workerFederationLease, 'readWorkerFederationJsonBody')
+      .mockImplementation((...args) => {
+        const reading = readBody(...args);
+        bodyReads++;
+        // Wait for the client body reader, not merely the server's write:
+        // headers and a partial body must arrive before expiring the lease.
+        if (
+          !healthy &&
+          ((failure === 'manifest-body-hang' && bodyReads === 1) ||
+            (failure === 'body-hang' && bodyReads === 2))
+        ) {
+          stalled.resolve();
+        }
+        return reading;
+      });
     const server = http.createServer(async (request, response) => {
       if (request.url === '/mf-manifest.json') {
         manifestRequests++;
@@ -649,7 +677,10 @@ test.each(['http503', 'header-hang', 'body-hang', 'manifest-body-hang'])(
         response.writeHead(503).end('native snapshot unavailable');
         return;
       }
-      if (!healthy && failure === 'header-hang') return;
+      if (!healthy && failure === 'header-hang') {
+        stalled.resolve();
+        return;
+      }
       if (!healthy && failure === 'body-hang') {
         response.writeHead(200, { 'content-type': 'application/json' });
         response.write('{');
@@ -688,9 +719,18 @@ test.each(['http503', 'header-hang', 'body-hang', 'manifest-body-hang'])(
       admitRendererContract,
       requestTimeout: 100,
     });
-    await expect(
-      transport.request({ ...coordinate, payload: nativePayload }),
-    ).rejects.toThrow(failure === 'http503' ? '503' : 'deadline');
+    const pending = transport.request({
+      ...coordinate,
+      payload: nativePayload,
+    });
+    const rejected = expect(pending).rejects.toThrow(
+      failure === 'http503' ? '503' : 'deadline',
+    );
+    if (failure !== 'http503') {
+      await stalled.promise;
+      await rstest.advanceTimersByTimeAsync(100);
+    }
+    await rejected;
     healthy = true;
     expect(
       (await transport.request({ ...coordinate, payload: nativePayload }))
