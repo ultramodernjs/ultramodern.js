@@ -261,7 +261,7 @@ test('consumer manifests preserve audited upstream compilers and select the supp
         );
         assert.throws(
           () => createConsumer(target, { tempDir: root }),
-          error => error === stopped,
+          error => error.cause === stopped,
         );
       }
       assert.deepEqual(emitted.upstream, {
@@ -857,4 +857,59 @@ test('acceptance subprocess failure is the runner exit status', () =>
       },
     );
     assert.equal(result.status, 23, result.stderr);
+  }));
+
+test('consumer install timeout reports captured output and identity before cleaning its owned workspace', () =>
+  ownedDirectory(root => {
+    const timeout = Object.assign(new Error('spawnSync pnpm ETIMEDOUT'), {
+      code: 'ETIMEDOUT',
+      stdout: Buffer.from('Resolving pinned upstream dependencies'),
+      stderr: Buffer.from('Registry request stalled'),
+    });
+    let appDir;
+    const createConsumer = nativeConsumer(
+      assert,
+      fs,
+      path,
+      process,
+      fileURLToPath(new URL('../../', import.meta.url)),
+      fileURLToPath(
+        new URL(
+          '../../tests/integration/native-compatibility/fixture',
+          import.meta.url,
+        ),
+      ),
+      generatorTestTempParent,
+      () => ({ '@modern-js/app-tools': '3.8.2' }),
+      () => ({}),
+      () => assert.fail('Upstream consumer must not read fork overrides'),
+      () => {},
+      (command, args, options) => {
+        assert.equal(command, 'pnpm');
+        assert.deepEqual(args, ['install', '--no-frozen-lockfile']);
+        assert.equal(options.timeout, 300_000);
+        assert.equal(options.stdio, 'pipe');
+        appDir = options.cwd;
+        throw timeout;
+      },
+    );
+    assert.throws(
+      () => createConsumer('upstream', { tempDir: root }),
+      error => {
+        assert.equal(error.cause, timeout);
+        assert.match(
+          error.message,
+          /Native upstream consumer install failed after \d+ms/u,
+        );
+        assert.ok(error.message.includes(appDir));
+        assert.match(error.message, /ETIMEDOUT/u);
+        assert.match(
+          error.message,
+          /stdout:\nResolving pinned upstream dependencies/u,
+        );
+        assert.match(error.message, /stderr:\nRegistry request stalled/u);
+        return true;
+      },
+    );
+    assert.deepEqual(fs.readdirSync(root), []);
   }));

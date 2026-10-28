@@ -304,6 +304,10 @@ async function generateUltramodernWorkspaceInPlace(
             `  ${JSON.stringify(selector)}: ${JSON.stringify(specifier)}`,
         )
         .join('\n')}\n\n`,
+      compilerTrustExceptionsYaml: `trustPolicyExclude:
+${ULTRAMODERN_WORKSPACE_POLICY.pnpm.trustPolicyExclude
+  .map(selector => `  - ${JSON.stringify(selector)}`)
+  .join('\n')}\n`,
       effectVersion: EFFECT_VERSION,
       i18nextVersion: I18NEXT_VERSION,
       workspacePackageLinkingYaml: Object.entries(workspacePackageLinkingPolicy)

@@ -255,7 +255,7 @@
     "@types/babel__traverse": "7.28.0",
     "@types/node": "^26.6.5",
     "core-js": "^3.50.0",
-    "effect": "4.0.5",
+    "effect": "4.0.7",
     "miniflare": "5.20261012.0-beta",
     "ndepe": "^0.1.13",
     "@loadable/component": "5.16.7",

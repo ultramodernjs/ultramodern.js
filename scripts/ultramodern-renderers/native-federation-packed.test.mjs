@@ -26,8 +26,8 @@ assert(
 );
 
 const compilerPins = {
-  '@effect/tsgo': '0.59.0',
-  tsrs: '0.20.0-ts7.1.0-beta',
+  '@effect/tsgo': '0.63.0',
+  tsrs: '0.20.1-ts7.1.0-beta',
   typescript: '7.0.0-test',
 };
 
@@ -38,12 +38,12 @@ test('independent fixtures retain only the seed compiler cohort and reject inexa
   for (const name of Object.keys(compilerPins)) {
     for (const value of [
       undefined,
-      '^0.59.0',
+      '^0.63.0',
       'latest',
       'workspace:*',
-      'npm:unreviewed@0.59.0',
+      'npm:unreviewed@0.63.0',
       'https://example.test/compiler.tgz',
-      '0.59.0\n',
+      '0.63.0\n',
     ]) {
       assert.throws(
         () => packedCompilerRequests({ ...compilerPins, [name]: value }),
@@ -530,8 +530,8 @@ test('uses candidate aliases and preserves maintained Octane downloads and tooli
           'https://github.com/bleedingdev/octane/releases/download/test/octane.tgz',
         '@module-federation/enhanced': '2.9.2',
         '@tsrx/oxc': '0.20.0',
-        '@effect/tsgo': '0.59.0',
-        tsrs: '0.20.0-ts7.1.0-beta',
+        '@effect/tsgo': '0.63.0',
+        tsrs: '0.20.1-ts7.1.0-beta',
         typescript: '7.0.0-test',
         '@types/node': '26.0.0',
       },
@@ -596,8 +596,8 @@ test('uses candidate aliases and preserves maintained Octane downloads and tooli
       /missing the @tsrx\/oxc dependency pin/u,
     );
     assert.equal(manifest.devDependencies.typescript, '7.0.0-test');
-    assert.equal(manifest.devDependencies['@effect/tsgo'], '0.59.0');
-    assert.equal(manifest.devDependencies.tsrs, '0.20.0-ts7.1.0-beta');
+    assert.equal(manifest.devDependencies['@effect/tsgo'], '0.63.0');
+    assert.equal(manifest.devDependencies.tsrs, '0.20.1-ts7.1.0-beta');
     assert.throws(
       () =>
         packedNativeFederationManifest(
@@ -1032,8 +1032,8 @@ function packedWorkspaceFixture() {
   const workspaceRoot = supplied.appRoot;
   const runtime = externalPackage(supplied, 'octane', '0.13.8');
   const typescript = externalPackage(supplied, 'typescript', '7.0.0-test');
-  const effectCompiler = externalPackage(supplied, '@effect/tsgo', '0.59.0');
-  const tsrs = externalPackage(supplied, 'tsrs', '0.20.0-ts7.1.0-beta');
+  const effectCompiler = externalPackage(supplied, '@effect/tsgo', '0.63.0');
+  const tsrs = externalPackage(supplied, 'tsrs', '0.20.1-ts7.1.0-beta');
   const nodeTypes = externalPackage(supplied, '@types/node', '26.0.0');
   const app = path.join(workspaceRoot, 'apps/host');
   fs.mkdirSync(app, { recursive: true });

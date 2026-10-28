@@ -11,7 +11,7 @@ const runnerPromise = import('../tractor-downstream/main.mjs');
 const producerEffectDependencies = {
   effect: '4.0.0',
   '@effect/opentelemetry': '4.0.0',
-  '@effect/tsgo': '0.59.0',
+  '@effect/tsgo': '0.63.0',
 };
 const producerReactDependencies = {
   react: '19.3.0',
@@ -1321,8 +1321,8 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
         version: next.release.version,
         publishConfig: { access: 'public' },
         dependencies: {
-          '@effect/tsgo': '0.59.0',
-          tsrs: '0.20.0-ts7.1.0-beta',
+          '@effect/tsgo': '0.63.0',
+          tsrs: '0.20.1-ts7.1.0-beta',
           'unrelated-compiler': '9.9.9',
         },
       }),
@@ -1532,8 +1532,8 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       next.createPackage.packageJson,
     );
     assert.equal(compilerExclusions.length, 16);
-    assert(compilerExclusions.includes('tsrs@0.20.0-ts7.1.0-beta'));
-    assert(compilerExclusions.includes('@effect/tsgo-win32-x64@0.59.0'));
+    assert(compilerExclusions.includes('tsrs@0.20.1-ts7.1.0-beta'));
+    assert(compilerExclusions.includes('@effect/tsgo-win32-x64@0.63.0'));
     assert(
       !parseYaml(policyText).minimumReleaseAgeExclude.includes(
         'unrelated-compiler@9.9.9',
@@ -1566,7 +1566,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
     assert.deepEqual(
       JSON.parse(fs.readFileSync(shellManifestFile, 'utf8')).devDependencies,
       {
-        '@effect/tsgo': '0.59.0',
+        '@effect/tsgo': '0.63.0',
         '@types/react': '19.3.0',
         '@types/react-dom': '19.3.0',
       },
@@ -1711,13 +1711,13 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
         selector => !selector.startsWith('@bleedingdev/mf-sdk@'),
       ),
       producerOptions.minimumReleaseAgeExclude.filter(
-        selector => selector !== 'tsrs@0.20.0-ts7.1.0-beta',
+        selector => selector !== 'tsrs@0.20.1-ts7.1.0-beta',
       ),
       producerOptions.minimumReleaseAgeExclude.filter(
-        selector => selector !== '@effect/tsgo-win32-x64@0.59.0',
+        selector => selector !== '@effect/tsgo-win32-x64@0.63.0',
       ),
       producerOptions.minimumReleaseAgeExclude.map(selector =>
-        selector === 'tsrs@0.20.0-ts7.1.0-beta'
+        selector === 'tsrs@0.20.1-ts7.1.0-beta'
           ? 'tsrs@0.18.0-ts7.1.0-dev.20260929'
           : selector,
       ),

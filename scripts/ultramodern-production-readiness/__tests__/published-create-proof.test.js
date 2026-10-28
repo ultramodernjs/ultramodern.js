@@ -644,28 +644,28 @@ test('bootstrap admits exact compiler and native pins from the authenticated pac
     resolveCreatePackage(release).bootstrapReleaseAgePolicy
       .minimumReleaseAgeExclude;
   Object.assign(release.createPackage.packageJson.dependencies, {
-    '@effect/tsgo': '0.59.0',
-    tsrs: '0.20.0-ts7.1.0-beta',
+    '@effect/tsgo': '0.63.0',
+    tsrs: '0.20.1-ts7.1.0-beta',
     'unrelated-compiler': '9.9.9',
-    '@tsrs/unreviewed-host': '0.20.0-ts7.1.0-beta',
+    '@tsrs/unreviewed-host': '0.20.1-ts7.1.0-beta',
   });
   const compilerSelectors = [
-    '@effect/tsgo@0.59.0',
-    '@effect/tsgo-darwin-arm64@0.59.0',
-    '@effect/tsgo-darwin-x64@0.59.0',
-    '@effect/tsgo-linux-arm@0.59.0',
-    '@effect/tsgo-linux-arm64@0.59.0',
-    '@effect/tsgo-linux-x64@0.59.0',
-    '@effect/tsgo-win32-arm64@0.59.0',
-    '@effect/tsgo-win32-x64@0.59.0',
-    'tsrs@0.20.0-ts7.1.0-beta',
-    '@tsrs/darwin-arm64@0.20.0-ts7.1.0-beta',
-    '@tsrs/darwin-x64@0.20.0-ts7.1.0-beta',
-    '@tsrs/linux-arm64-gnu@0.20.0-ts7.1.0-beta',
-    '@tsrs/linux-arm64-musl@0.20.0-ts7.1.0-beta',
-    '@tsrs/linux-x64-gnu@0.20.0-ts7.1.0-beta',
-    '@tsrs/linux-x64-musl@0.20.0-ts7.1.0-beta',
-    '@tsrs/win32-x64@0.20.0-ts7.1.0-beta',
+    '@effect/tsgo@0.63.0',
+    '@effect/tsgo-darwin-arm64@0.63.0',
+    '@effect/tsgo-darwin-x64@0.63.0',
+    '@effect/tsgo-linux-arm@0.63.0',
+    '@effect/tsgo-linux-arm64@0.63.0',
+    '@effect/tsgo-linux-x64@0.63.0',
+    '@effect/tsgo-win32-arm64@0.63.0',
+    '@effect/tsgo-win32-x64@0.63.0',
+    'tsrs@0.20.1-ts7.1.0-beta',
+    '@tsrs/darwin-arm64@0.20.1-ts7.1.0-beta',
+    '@tsrs/darwin-x64@0.20.1-ts7.1.0-beta',
+    '@tsrs/linux-arm64-gnu@0.20.1-ts7.1.0-beta',
+    '@tsrs/linux-arm64-musl@0.20.1-ts7.1.0-beta',
+    '@tsrs/linux-x64-gnu@0.20.1-ts7.1.0-beta',
+    '@tsrs/linux-x64-musl@0.20.1-ts7.1.0-beta',
+    '@tsrs/win32-x64@0.20.1-ts7.1.0-beta',
   ];
   const createPackage = resolveCreatePackage(release);
   const policy = createPackage.bootstrapReleaseAgePolicy;
@@ -692,6 +692,166 @@ test('bootstrap admits exact compiler and native pins from the authenticated pac
   );
 });
 
+test('bootstrap authenticates only reviewed exact Effect runtime releases and the bounded tsrs trust exception', async () => {
+  const { createPnpmDlxArgs, resolveCreatePackage } = await import(
+    '../published-create-proof/package-cohort.mjs'
+  );
+  const release = makeBootstrapRelease();
+  const baseline =
+    resolveCreatePackage(release).bootstrapReleaseAgePolicy
+      .minimumReleaseAgeExclude;
+  const runtimeSelectors = ['effect@4.0.7', '@effect/opentelemetry@4.0.7'];
+  release.createPackage.packageJson.ultramodern.bootstrapReleaseAgeExclude =
+    runtimeSelectors;
+  const packedProducer = resolveCreatePackage(release);
+  assert.deepEqual(
+    packedProducer.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude,
+    [...baseline, ...runtimeSelectors].sort((a, b) => a.localeCompare(b)),
+  );
+  for (const invalid of [
+    ['effect@*'],
+    ['effect@^4.0.7'],
+    ['effect@4.0.8'],
+    ['unrelated@4.0.7'],
+    ['effect@4.0.7', 'effect@4.0.7'],
+    'effect@4.0.7',
+  ]) {
+    release.createPackage.packageJson.ultramodern.bootstrapReleaseAgeExclude =
+      invalid;
+    assert.throws(
+      () => resolveCreatePackage(release),
+      /only reviewed exact Effect releases/u,
+    );
+  }
+  // Authenticated policies remain fixed after the producer object is edited.
+  assert.doesNotThrow(() => createPnpmDlxArgs(packedProducer, []));
+  release.createPackage.packageJson.ultramodern.bootstrapReleaseAgeExclude =
+    runtimeSelectors;
+  release.createPackage.packageJson.dependencies.tsrs = '0.20.1-ts7.1.0-beta';
+  const args = createPnpmDlxArgs(resolveCreatePackage(release), []);
+  assert(args.includes('--config.trust-policy=no-downgrade'));
+  assert(args.includes('--config.trust-policy-ignore-after=1440'));
+  assert.deepEqual(
+    args.filter(arg => arg.startsWith('--config.trust-policy-exclude=')),
+    ['--config.trust-policy-exclude=tsrs@0.20.1-ts7.1.0-beta'],
+  );
+});
+
+test('authenticated compiler trust survives source bootstrap and published or source continuation without broadening', async t => {
+  const { createPnpmDlxArgs, resolveCreatePackage } = await import(
+    '../published-create-proof/package-cohort.mjs'
+  );
+  const { createAcceptanceWorkspaceEnv } = await import(
+    '../published-create-proof/process.mjs'
+  );
+  const { readInstalledPolicyEnvironment } = await import(
+    '../published-create-proof/acceptance-continuation.mjs'
+  );
+  const root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'compiler-trust-continuation-')),
+  );
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const release = makeBootstrapRelease();
+  release.createPackage.packageJson.dependencies.tsrs = '0.20.1-ts7.1.0-beta';
+  const createPackage = resolveCreatePackage(release);
+  const compiler = 'tsrs@0.20.1-ts7.1.0-beta';
+  const cohort = release.packages
+    .map(item => `${item.targetName}@${item.version}`)
+    .sort();
+  const expected = [...cohort, compiler].sort();
+  const sourceEnv = createAcceptanceWorkspaceEnv(
+    {},
+    {
+      mode: 'source',
+      release,
+      registryEnv: { PNPM_CONFIG_TRUST_POLICY_EXCLUDE: JSON.stringify(cohort) },
+    },
+  );
+  assert.deepEqual(
+    JSON.parse(sourceEnv.pnpm_config_trust_policy_exclude),
+    expected,
+  );
+  for (const selectors of [cohort, expected]) {
+    const args = createPnpmDlxArgs(createPackage, [], {
+      pnpm_config_trust_policy_exclude: JSON.stringify(selectors),
+    });
+    assert.deepEqual(
+      args.filter(arg => arg.startsWith('--config.trust-policy-exclude=')),
+      expected.map(selector => `--config.trust-policy-exclude=${selector}`),
+    );
+  }
+  for (const invalid of [
+    ['*'],
+    [...expected, 'foreign@1.0.0'],
+    cohort.slice(1),
+  ]) {
+    assert.throws(
+      () =>
+        createPnpmDlxArgs(createPackage, [], {
+          pnpm_config_trust_policy_exclude: JSON.stringify(invalid),
+        }),
+      /exact authenticated source cohort/u,
+    );
+  }
+  const policy = {
+    ...createPackage.bootstrapReleaseAgePolicy,
+    trustPolicy: 'no-downgrade',
+    trustPolicyIgnoreAfter: 1440,
+    trustPolicyExclude: [compiler],
+  };
+  const writePolicy = value =>
+    fs.writeFileSync(
+      path.join(root, 'pnpm-workspace.yaml'),
+      Object.entries(value)
+        .map(([key, item]) => `${key}: ${JSON.stringify(item)}`)
+        .join('\n') + '\n',
+    );
+  writePolicy(policy);
+  writeJson(root, 'node_modules/.pnpm-workspace-state-v1.json', {
+    settings: { ...policy, trustPolicyExclude: expected },
+  });
+  const continued = readInstalledPolicyEnvironment(
+    root,
+    {},
+    { mode: 'source', release },
+  );
+  assert.deepEqual(
+    JSON.parse(continued.pnpm_config_trust_policy_exclude),
+    expected,
+  );
+  writeJson(root, 'node_modules/.pnpm-workspace-state-v1.json', {
+    settings: policy,
+  });
+  const published = readInstalledPolicyEnvironment(
+    root,
+    {},
+    { mode: 'published', release },
+  );
+  assert.equal(published.pnpm_config_trust_policy_exclude, undefined);
+  assert.equal(
+    readInstalledPolicyEnvironment(root).pnpm_config_trust_policy_exclude,
+    undefined,
+  );
+  writePolicy({
+    ...policy,
+    trustPolicyExclude: [compiler, 'foreign@1.0.0'].sort(),
+  });
+  assert.throws(
+    () =>
+      readInstalledPolicyEnvironment(root, {}, { mode: 'published', release }),
+    /native consumer trust policy/u,
+  );
+  writePolicy(policy);
+  writeJson(root, 'node_modules/.pnpm-workspace-state-v1.json', {
+    settings: { ...policy, trustPolicyExclude: [] },
+  });
+  assert.throws(
+    () =>
+      readInstalledPolicyEnvironment(root, {}, { mode: 'published', release }),
+    /installed authenticated exact compiler/u,
+  );
+});
+
 test('bootstrap compiler exceptions ignore development, other packages and unauthenticated create metadata', async () => {
   const { resolveCreatePackage } = await import(
     '../published-create-proof/package-cohort.mjs'
@@ -701,19 +861,19 @@ test('bootstrap compiler exceptions ignore development, other packages and unaut
     resolveCreatePackage(release).bootstrapReleaseAgePolicy
       .minimumReleaseAgeExclude;
   release.createPackage.packageJson.devDependencies = {
-    '@effect/tsgo': '0.59.0',
-    tsrs: '0.20.0-ts7.1.0-beta',
+    '@effect/tsgo': '0.63.0',
+    tsrs: '0.20.1-ts7.1.0-beta',
   };
   release.packages.find(
     item => item.sourceName === '@modern-js/utils',
-  ).packageJson.dependencies = { tsrs: '0.20.0-ts7.1.0-beta' };
+  ).packageJson.dependencies = { tsrs: '0.20.1-ts7.1.0-beta' };
   release.createPackage = {
     ...release.createPackage,
     packageJson: {
       ...release.createPackage.packageJson,
       dependencies: {
         ...release.createPackage.packageJson.dependencies,
-        tsrs: '0.20.0-ts7.1.0-beta',
+        tsrs: '0.20.1-ts7.1.0-beta',
       },
     },
   };
@@ -732,13 +892,13 @@ test('bootstrap rejects inexact or conflicting authenticated compiler pins', asy
     for (const version of [
       'latest',
       '*',
-      '^0.59.0',
+      '^0.63.0',
       '0.59.x',
-      '0.59.0 || 9.0.0',
-      '0.59.0-..',
-      'npm:unreviewed@0.59.0',
+      '0.63.0 || 9.0.0',
+      '0.63.0-..',
+      'npm:unreviewed@0.63.0',
       'https://example.test/compiler.tgz',
-      '0.59.0\n',
+      '0.63.0\n',
     ]) {
       const release = makeBootstrapRelease();
       release.createPackage.packageJson.dependencies[compiler] = version;
@@ -748,7 +908,7 @@ test('bootstrap rejects inexact or conflicting authenticated compiler pins', asy
       );
     }
     const release = makeBootstrapRelease();
-    release.createPackage.packageJson.dependencies[compiler] = '0.59.0';
+    release.createPackage.packageJson.dependencies[compiler] = '0.63.0';
     release.createPackage.packageJson.optionalDependencies = {
       [compiler]: '0.58.0',
     };
@@ -765,8 +925,8 @@ test('bootstrap compiler exemptions cannot be forged or broadened by cloning pol
   );
   const release = makeBootstrapRelease();
   Object.assign(release.createPackage.packageJson.dependencies, {
-    '@effect/tsgo': '0.59.0',
-    tsrs: '0.20.0-ts7.1.0-beta',
+    '@effect/tsgo': '0.63.0',
+    tsrs: '0.20.1-ts7.1.0-beta',
   });
   const actual = resolveCreatePackage(release);
   assert.doesNotThrow(() => createPnpmDlxArgs(actual, []));
@@ -774,9 +934,9 @@ test('bootstrap compiler exemptions cannot be forged or broadened by cloning pol
     undefined,
     'tsrs@*',
     'tsrs@0.19.0-ts7.1.0-beta',
-    '@tsrs/unreviewed-host@0.20.0-ts7.1.0-beta',
-    '@effect/other@0.59.0',
-    'unrelated@0.59.0',
+    '@tsrs/unreviewed-host@0.20.1-ts7.1.0-beta',
+    '@effect/other@0.63.0',
+    'unrelated@0.63.0',
   ]) {
     const exclusions = [
       ...actual.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude,
@@ -871,15 +1031,15 @@ test('release acceptance shares authenticated compiler selectors across bootstra
   });
   const release = makeBootstrapRelease();
   Object.assign(release.createPackage.packageJson.dependencies, {
-    '@effect/tsgo': '0.59.0',
-    tsrs: '0.20.0-ts7.1.0-beta',
+    '@effect/tsgo': '0.63.0',
+    tsrs: '0.20.1-ts7.1.0-beta',
     'unrelated-compiler': '9.9.9',
   });
   const createPackage = resolveCreatePackage(release);
   const exclusions = releaseAgeExemptions(release, { policyPath });
   assert.equal(exclusions.length, release.packages.length + 16);
-  assert(exclusions.includes('tsrs@0.20.0-ts7.1.0-beta'));
-  assert(exclusions.includes('@effect/tsgo-win32-x64@0.59.0'));
+  assert(exclusions.includes('tsrs@0.20.1-ts7.1.0-beta'));
+  assert(exclusions.includes('@effect/tsgo-win32-x64@0.63.0'));
   assert(!exclusions.includes('unrelated-compiler@9.9.9'));
   assert(
     createPackage.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude.every(
@@ -939,7 +1099,7 @@ test('release acceptance shares authenticated compiler selectors across bootstra
   const audit = await auditReleaseAgePolicy(auditOptions);
   assert.deepEqual(audit.exactExclusions, exclusions);
   for (const badExclusions of [
-    exclusions.filter(value => value !== 'tsrs@0.20.0-ts7.1.0-beta'),
+    exclusions.filter(value => value !== 'tsrs@0.20.1-ts7.1.0-beta'),
     [...exclusions, 'unrelated-compiler@9.9.9'].sort(),
   ]) {
     writeJson(root, 'pnpm-workspace.yaml', {
@@ -972,20 +1132,24 @@ test('release-age audit honors only authenticated compiler pins with verified re
   });
   const release = makeNormalAcceptanceRelease();
   Object.assign(release.createPackage.packageJson.dependencies, {
-    '@effect/tsgo': '0.59.0',
-    tsrs: '0.20.0-ts7.1.0-beta',
+    '@effect/tsgo': '0.63.0',
+    tsrs: '0.20.1-ts7.1.0-beta',
     'unrelated-compiler': '9.9.9',
   });
   release.createPackage.packageJson.devDependencies = {
-    '@effect/tsgo-dev-only': '0.59.0',
+    '@effect/tsgo-dev-only': '0.63.0',
   };
   release.packages[1].packageJson.dependencies.tsrs = '0.19.0-ts7.1.0-beta';
+  release.createPackage.packageJson.ultramodern.bootstrapReleaseAgeExclude = [
+    'effect@4.0.7',
+    '@effect/opentelemetry@4.0.7',
+  ];
   const exclusions = releaseAgeExemptions(release, { policyPath });
   const cohort = new Set(
     release.packages.map(item => `${item.targetName}@${item.version}`),
   );
   const compilerSelectors = exclusions.filter(value => !cohort.has(value));
-  assert.equal(compilerSelectors.length, 16);
+  assert.equal(compilerSelectors.length, 18);
   const identities = compilerSelectors.map(selector => {
     const separator = selector.lastIndexOf('@');
     return {
@@ -1056,7 +1220,7 @@ test('release-age audit honors only authenticated compiler pins with verified re
     },
   };
   const audit = await auditReleaseAgePolicy(options);
-  assert.equal(audit.approvals.length, 16);
+  assert.equal(audit.approvals.length, 18);
   assert(
     audit.approvals.every(
       item => item.authority === 'authenticated-generator-compiler',
@@ -1082,8 +1246,8 @@ test('release-age audit honors only authenticated compiler pins with verified re
   publishedAt = '2026-10-27T12:00:00.000Z';
   for (const [name, version] of [
     ['unrelated-compiler', '9.9.9'],
-    ['@effect/tsgo-dev-only', '0.59.0'],
-    ['@tsrs/unreviewed-host', '0.20.0-ts7.1.0-beta'],
+    ['@effect/tsgo-dev-only', '0.63.0'],
+    ['@tsrs/unreviewed-host', '0.20.1-ts7.1.0-beta'],
     ['tsrs', '0.19.0-ts7.1.0-beta'],
     ['@effect/tsgo', '0.58.0'],
   ]) {

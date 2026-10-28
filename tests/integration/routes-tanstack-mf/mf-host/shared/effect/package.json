@@ -3,6 +3,6 @@
   "name": "@modern-js-test/routes-tanstack-mf-host-shared-effect",
   "dependencies": {
     "@modern-js/bff-effect": "workspace:*",
-    "effect": "4.0.5"
+    "effect": "4.0.7"
   }
 }

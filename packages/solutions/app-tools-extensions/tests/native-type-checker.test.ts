@@ -24,6 +24,8 @@ const tsrsSupported =
   tsrsManifest.optionalDependencies[nativeName] === tsrsManifest.version &&
   [
     '@tsrs/darwin-arm64',
+    '@tsrs/darwin-x64',
+    '@tsrs/win32-x64',
     '@tsrs/linux-x64-gnu',
     '@tsrs/linux-arm64-gnu',
   ].includes(nativeName);
@@ -34,7 +36,7 @@ test('the native checker selects the host-supported bundled Effect compiler inst
   const selected = resolveNativeTypeCheckerCommand(compilerManifestPath);
   const effectManifest = require.resolve('@effect/tsgo/package.json');
   const effect = JSON.parse(fs.readFileSync(effectManifest, 'utf8'));
-  expect(effect.version).toBe('0.59.0');
+  expect(effect.version).toBe('0.63.0');
   const effectPlatform = createRequire(effectManifest).resolve(
     `@effect/tsgo-${process.platform}-${process.arch}/package.json`,
   );

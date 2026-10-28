@@ -84,8 +84,8 @@
   },
   "peerDependencies": {
     "@modern-js/app-tools": "workspace:^3.9.3",
-    "@effect/opentelemetry": "4.0.5",
-    "effect": "4.0.5"
+    "@effect/opentelemetry": "4.0.7",
+    "effect": "4.0.7"
   },
   "peerDependenciesMeta": {
     "@effect/opentelemetry": {
@@ -96,7 +96,7 @@
     }
   },
   "devDependencies": {
-    "@effect/opentelemetry": "4.0.5",
+    "@effect/opentelemetry": "4.0.7",
     "@modern-js/app-tools": "workspace:*",
     "@modern-js/bff-effect": "workspace:*",
     "@modern-js/builder": "workspace:*",
@@ -108,7 +108,7 @@
     "@rslib/core": "1.0.3",
     "@scripts/rstest-config": "workspace:*",
     "@types/node": "^26.6.5",
-    "effect": "4.0.5",
+    "effect": "4.0.7",
     "esbuild": "^0.28.2",
     "typescript": "7.0.2",
     "zod": "^4.6.7"

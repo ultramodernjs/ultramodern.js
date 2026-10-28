@@ -10,7 +10,7 @@ function createWorkspace(
 ) {
   runImpl(
     'pnpm',
-    createPnpmDlxArgs(createPackage, [projectName, '--lang', 'en']),
+    createPnpmDlxArgs(createPackage, [projectName, '--lang', 'en'], env),
     {
       cwd: workDir,
       env,
@@ -21,7 +21,11 @@ function createWorkspace(
 function addVertical(projectDir, vertical, createPackage, env, runImpl = run) {
   runImpl(
     'pnpm',
-    createPnpmDlxArgs(createPackage, [vertical, '--vertical', '--lang', 'en']),
+    createPnpmDlxArgs(
+      createPackage,
+      [vertical, '--vertical', '--lang', 'en'],
+      env,
+    ),
     { cwd: projectDir, env },
   );
 }

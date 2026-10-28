@@ -17,7 +17,9 @@ import type {
   ResolvedPackageSource,
 } from '../src/ultramodern-workspace/types';
 import {
-  COMPILER_RELEASE_AGE_EXCEPTIONS,
+  BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
+  COMPILER_TRUST_EXCEPTIONS,
+  EFFECT_RUNTIME_RELEASE_AGE_EXCEPTIONS,
   EFFECT_TSGO_VERSION,
   EFFECT_VERSION,
   TSRS_VERSION,
@@ -37,9 +39,9 @@ test.each(['workspace', 'install'] as const)(
       strategy,
       modernPackageVersion: '3.8.3',
     } satisfies ResolvedPackageSource;
-    assert.equal(TSRS_VERSION, '0.20.0-ts7.1.0-beta');
-    assert.equal(EFFECT_TSGO_VERSION, '0.59.0');
-    assert.equal(EFFECT_VERSION, '4.0.5');
+    assert.equal(TSRS_VERSION, '0.20.1-ts7.1.0-beta');
+    assert.equal(EFFECT_TSGO_VERSION, '0.63.0');
+    assert.equal(EFFECT_VERSION, '4.0.7');
     assert.equal(TYPESCRIPT_VERSION, '7.0.2');
     for (const renderer of ['react', 'solid', 'octane', 'none'] as const) {
       const app =
@@ -102,8 +104,19 @@ test('compiler adoption preserves strict supply-chain and diagnostic policies', 
       ),
     ];
   });
-  assert.deepEqual(policy.minimumReleaseAgeExclude, compilerExceptions.sort());
-  assert.equal(policy.minimumReleaseAgeExclude.length, 16);
+  assert.deepEqual(
+    policy.minimumReleaseAgeExclude,
+    [...compilerExceptions, ...EFFECT_RUNTIME_RELEASE_AGE_EXCEPTIONS].sort(),
+  );
+  assert.deepEqual(policy.trustPolicyExclude, COMPILER_TRUST_EXCEPTIONS);
+  const producer = JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'),
+  );
+  assert.deepEqual(
+    producer.ultramodern.bootstrapReleaseAgeExclude,
+    EFFECT_RUNTIME_RELEASE_AGE_EXCEPTIONS,
+  );
+  assert.equal(policy.minimumReleaseAgeExclude.length, 18);
   assert(
     policy.minimumReleaseAgeExclude.every(
       selector =>
@@ -122,7 +135,7 @@ test('compiler adoption preserves strict supply-chain and diagnostic policies', 
   );
 });
 
-test('fresh workspace YAML admits only exact reviewed compiler releases', async () => {
+test('fresh workspace YAML admits only exact reviewed compiler and runtime releases', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'um-tsrs-policy-'));
   try {
     const workspace = path.join(root, 'workspace');
@@ -139,12 +152,13 @@ test('fresh workspace YAML admits only exact reviewed compiler releases', async 
     ) as Record<string, unknown>;
     assert.deepEqual(
       policy.minimumReleaseAgeExclude,
-      COMPILER_RELEASE_AGE_EXCEPTIONS,
+      BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
     );
     assert.equal(policy.minimumReleaseAge, 1440);
     assert.equal(policy.minimumReleaseAgeStrict, true);
     assert.equal(policy.minimumReleaseAgeIgnoreMissingTime, false);
     assert.equal(policy.trustPolicy, 'no-downgrade');
+    assert.deepEqual(policy.trustPolicyExclude, COMPILER_TRUST_EXCEPTIONS);
     assert.equal(policy.blockExoticSubdeps, true);
     assert.equal(policy.strictDepBuilds, true);
   } finally {
@@ -267,7 +281,7 @@ test.skipIf(process.platform === 'win32').each([
       writeExecutable(
         compiler,
         `if (process.argv[2] === '--version') {
-  console.log('Version 7.0.2+effect-tsgo.0.59.0');
+  console.log('Version 7.0.2+effect-tsgo.0.63.0');
   process.exit(0);
 }
 require('node:fs').writeFileSync(${JSON.stringify(log)}, JSON.stringify({
@@ -295,7 +309,7 @@ else process.exit(${status});
       assert.equal(result.status, status, result.stderr);
       assert.deepEqual(JSON.parse(fs.readFileSync(log, 'utf8')), {
         args: expected,
-        assignment: assignment ?? 'go',
+        assignment: assignment || 'locality',
         inherited: 'preserved',
         cwd: fs.realpathSync(root),
       });

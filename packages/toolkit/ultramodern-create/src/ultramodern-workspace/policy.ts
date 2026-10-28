@@ -13,9 +13,10 @@ import { createLocalisedUrlsMap } from './routes';
 import type { JsonValue, WorkspaceApp } from './types';
 import { isRecord } from './types';
 import {
+  BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
   BRACES_FORK_VERSION,
   CLOUDFLARE_COMPATIBILITY_DATE,
-  COMPILER_RELEASE_AGE_EXCEPTIONS,
+  COMPILER_TRUST_EXCEPTIONS,
   EFFECT_VERSION,
   NODE_VERSION,
   PNPM_VERSION,
@@ -242,10 +243,11 @@ export const ULTRAMODERN_WORKSPACE_POLICY = {
       'dompurify@>=3.0.0 <3.4.17': '3.4.17',
     },
     minimumReleaseAge: 1440,
-    minimumReleaseAgeExclude: COMPILER_RELEASE_AGE_EXCEPTIONS,
+    minimumReleaseAgeExclude: BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
     minimumReleaseAgeStrict: true,
     minimumReleaseAgeIgnoreMissingTime: false,
     trustPolicy: 'no-downgrade',
+    trustPolicyExclude: COMPILER_TRUST_EXCEPTIONS,
     trustPolicyIgnoreAfter: 1440,
     blockExoticSubdeps: true,
     engineStrict: true,

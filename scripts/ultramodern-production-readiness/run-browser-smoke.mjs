@@ -37,7 +37,7 @@ import {
   createSmokeTargets,
   orderTargetsForLocalStartup,
 } from './browser-smoke/targets.mjs';
-
+import { authenticatedCompilerTrustExclusions } from './published-create-proof/package-cohort.mjs';
 import { createAcceptanceWorkspaceEnv } from './published-create-proof/process.mjs';
 import {
   parseYamlFile,
@@ -171,13 +171,35 @@ export function createAcceptedNodeProofEnvironment(
       : settings.trustPolicyExclude,
     'Continuation installed trust exclusions',
   );
-  if (nativeTrustExclusions.length > 0) {
+  // Plain consumer browser continuation has no release harness context. It
+  // may retain this reviewed exact compiler exception, never another release.
+  const compilerTrustExclusions = context.release
+    ? authenticatedCompilerTrustExclusions(context.release)
+    : nativeTrustExclusions.includes('tsrs@0.20.1-ts7.1.0-beta')
+      ? ['tsrs@0.20.1-ts7.1.0-beta']
+      : [];
+  if (
+    JSON.stringify(nativeTrustExclusions) !==
+    JSON.stringify(compilerTrustExclusions)
+  ) {
     throw new BrowserSmokeError(
-      'Continuation requires native consumer trust policy without exclusions',
+      'Continuation requires native consumer trust policy without exclusions other than the authenticated exact compiler',
     );
   }
   let trustContext;
-  if (savedTrustExclusions.length > 0) {
+  if (
+    !compilerTrustExclusions.every(selector =>
+      savedTrustExclusions.includes(selector),
+    )
+  ) {
+    throw new BrowserSmokeError(
+      'Continuation requires the installed authenticated exact compiler trust exclusions',
+    );
+  }
+  const candidateTrustExclusions = savedTrustExclusions.filter(
+    selector => !compilerTrustExclusions.includes(selector),
+  );
+  if (candidateTrustExclusions.length > 0) {
     if (context.mode !== 'source' || !context.release) {
       throw new BrowserSmokeError(
         'Saved source candidate trust exclusions require an authenticated release. Use run-release-acceptance.mjs --continue-from source-node or source-workerd.',
@@ -187,7 +209,9 @@ export function createAcceptedNodeProofEnvironment(
       mode: 'source',
       release: context.release,
       registryEnv: {
-        PNPM_CONFIG_TRUST_POLICY_EXCLUDE: JSON.stringify(savedTrustExclusions),
+        PNPM_CONFIG_TRUST_POLICY_EXCLUDE: JSON.stringify(
+          candidateTrustExclusions,
+        ),
       },
     };
   }

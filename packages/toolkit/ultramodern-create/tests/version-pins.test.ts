@@ -18,8 +18,8 @@ import { generateUltramodernWorkspace } from '../src/ultramodern-workspace';
 import { ULTRAMODERN_WORKSPACE_POLICY } from '../src/ultramodern-workspace/policy';
 import { assertWorkspaceDependencyOverrides } from '../src/ultramodern-workspace/validation/workspace';
 import {
+  BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
   BRACES_FORK_VERSION,
-  COMPILER_RELEASE_AGE_EXCEPTIONS,
 } from '../src/ultramodern-workspace/versions';
 
 function cohort() {
@@ -258,7 +258,7 @@ generateUltramodernWorkspace(JSON.parse(process.argv[2]));`,
     assert.deepEqual(
       policy.minimumReleaseAgeExclude,
       [
-        ...COMPILER_RELEASE_AGE_EXCEPTIONS,
+        ...BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
         ...names.map(name => `@bleedingdev/modern-js-${name}@${version}`),
         ...sidecars.map(
           (item: { name: string; version: string }) =>

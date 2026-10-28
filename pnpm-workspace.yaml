@@ -150,14 +150,22 @@ allowedDeprecatedVersions:
   trim: 0.0.1
 
 minimumReleaseAgeExclude:
-  - 'tsrs@0.20.0-ts7.1.0-beta'
-  - '@tsrs/darwin-arm64@0.20.0-ts7.1.0-beta'
-  - '@tsrs/darwin-x64@0.20.0-ts7.1.0-beta'
-  - '@tsrs/linux-arm64-gnu@0.20.0-ts7.1.0-beta'
-  - '@tsrs/linux-arm64-musl@0.20.0-ts7.1.0-beta'
-  - '@tsrs/linux-x64-gnu@0.20.0-ts7.1.0-beta'
-  - '@tsrs/linux-x64-musl@0.20.0-ts7.1.0-beta'
-  - '@tsrs/win32-x64@0.20.0-ts7.1.0-beta'
+  - '@effect/tsgo@0.63.0'
+  - '@effect/tsgo-darwin-arm64@0.63.0'
+  - '@effect/tsgo-darwin-x64@0.63.0'
+  - '@effect/tsgo-linux-arm@0.63.0'
+  - '@effect/tsgo-linux-arm64@0.63.0'
+  - '@effect/tsgo-linux-x64@0.63.0'
+  - '@effect/tsgo-win32-arm64@0.63.0'
+  - '@effect/tsgo-win32-x64@0.63.0'
+  - 'tsrs@0.20.1-ts7.1.0-beta'
+  - '@tsrs/darwin-arm64@0.20.1-ts7.1.0-beta'
+  - '@tsrs/darwin-x64@0.20.1-ts7.1.0-beta'
+  - '@tsrs/linux-arm64-gnu@0.20.1-ts7.1.0-beta'
+  - '@tsrs/linux-arm64-musl@0.20.1-ts7.1.0-beta'
+  - '@tsrs/linux-x64-gnu@0.20.1-ts7.1.0-beta'
+  - '@tsrs/linux-x64-musl@0.20.1-ts7.1.0-beta'
+  - '@tsrs/win32-x64@0.20.1-ts7.1.0-beta'
   - '@biomejs/biome@2.5.15'
   - '@biomejs/cli-darwin-arm64@2.5.15'
   - '@biomejs/cli-darwin-x64@2.5.15'
@@ -170,6 +178,7 @@ minimumReleaseAgeExclude:
   - '@csstools/cascade-layer-name-parser@3.0.2'
   - '@csstools/css-parser-algorithms@4.0.2'
   - '@effect/opentelemetry@4.0.0 || 4.0.5'
+  - '@effect/opentelemetry@4.0.7'
   - '@effect/tsgo-darwin-arm64@0.53.0 || 0.53.1 || 0.57.0 || 0.59.0'
   - '@effect/tsgo-darwin-x64@0.53.0 || 0.53.1 || 0.57.0 || 0.59.0'
   - '@effect/tsgo-linux-arm64@0.53.0 || 0.53.1 || 0.57.0 || 0.59.0'
@@ -213,6 +222,7 @@ minimumReleaseAgeExclude:
   - '@vitest/spy@5.0.3 || 5.0.5'
   - dotenv@18.0.5
   - effect@4.0.0 || 4.0.5
+  - effect@4.0.7
   - miniflare@5.20260930.0-alpha
   - pg-cloudflare@1.4.1
   - pg-connection-string@2.14.1
@@ -237,3 +247,7 @@ minimumReleaseAgeExclude:
   - i18next@26.4.6
   - js-yaml@5.5.0
   - react-i18next@17.0.18
+
+# Reviewed exact compiler release; keep no-downgrade for every other release.
+trustPolicyExclude:
+  - 'tsrs@0.20.1-ts7.1.0-beta'

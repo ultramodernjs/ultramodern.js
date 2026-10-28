@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { createProcessEnv, repoRoot, runCommand } from './constants.mjs';
+import { authenticatedCompilerTrustExclusions } from './package-cohort.mjs';
 
 function run(command, args, options = {}) {
   const result = runCommand(command, args, {
@@ -208,7 +209,9 @@ function createAcceptanceWorkspaceEnv(
         'Source candidate trust exclusions must equal the exact authenticated release cohort',
       );
     }
-    env.pnpm_config_trust_policy_exclude = JSON.stringify(selectors);
+    env.pnpm_config_trust_policy_exclude = JSON.stringify(
+      [...selectors, ...authenticatedCompilerTrustExclusions(release)].sort(),
+    );
   }
   return env;
 }

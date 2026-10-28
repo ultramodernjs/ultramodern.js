@@ -83,7 +83,7 @@ test.each(
         JSON.parse(
           fs.readFileSync(effectRequire.resolve('effect/package.json'), 'utf8'),
         ).version,
-      ).toBe('4.0.5');
+      ).toBe('4.0.7');
       fs.writeFileSync(
         path.join(root, 'tsconfig.json'),
         JSON.stringify(createTsConfigBase()),

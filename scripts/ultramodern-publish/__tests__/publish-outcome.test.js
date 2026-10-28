@@ -40,13 +40,17 @@ async function outcomeApi() {
 // createPublishOutcome: release artifacts, a source-mode and a published-mode
 // acceptance receipt, and the report a passing Tractor downstream acceptance
 // run produces for that exact release.
-async function createEvidenceFixture() {
+async function createEvidenceFixture({
+  compilerVersion,
+  receiptsOnly = false,
+} = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'publish-outcome-'));
   const at = (...parts) => path.join(root, ...parts);
   const releaseDir = at('release');
   const manifestPath = path.join(releaseDir, 'manifest.json');
   const receiptPath = path.join(releaseDir, 'acceptance-receipt.json');
-  const operationalEvidencePath = at(
+  const operationalEvidencePath = path.join(
+    releaseDir,
     'acceptance-receipt.operational-independence.json',
   );
   const publishedReceiptPath = at('published-acceptance-receipt.json');
@@ -74,6 +78,7 @@ async function createEvidenceFixture() {
       dependencies: {
         '@modern-js/i18n-utils': `npm:${i18nTarget}@${release.version}`,
         '@module-federation/runtime': '2.8.0',
+        ...(compilerVersion ? { tsrs: compilerVersion } : {}),
       },
       exports: exportsMap,
       sourceName: createSourceName,
@@ -135,7 +140,23 @@ async function createEvidenceFixture() {
     manifestPath,
   });
   const manifestSha256 = acceptanceRelease.manifestSha256;
+  const { createAcceptanceWorkspaceEnv } = await import(
+    '../../ultramodern-production-readiness/published-create-proof/process.mjs'
+  );
+  const cohort = acceptanceRelease.packages
+    .map(item => `${item.targetName}@${item.version}`)
+    .sort();
   const createReceipt = async (mode, targetPath, evidencePath) => {
+    const env = createAcceptanceWorkspaceEnv(
+      {},
+      {
+        mode,
+        release: acceptanceRelease,
+        registryEnv: {
+          PNPM_CONFIG_TRUST_POLICY_EXCLUDE: JSON.stringify(cohort),
+        },
+      },
+    );
     const receipt = receiptApi.createAcceptanceReceipt({
       createPackage: {
         exactSpecifier: `${createTargetName}@${release.version}`,
@@ -146,12 +167,9 @@ async function createEvidenceFixture() {
       profile: { id: 'erp-10', verticalCount: 10 },
       registry: {
         cohortPackages: 'verified',
-        sourceCandidateTrustPolicyExclude:
-          mode === 'source'
-            ? acceptanceRelease.packages
-                .map(item => `${item.targetName}@${item.version}`)
-                .sort()
-            : [],
+        sourceCandidateTrustPolicyExclude: JSON.parse(
+          env.pnpm_config_trust_policy_exclude ?? '[]',
+        ),
         externalDependencies: 'verified',
         resolution: 'verified',
         url: 'https://registry.npmjs.org/',
@@ -187,6 +205,15 @@ async function createEvidenceFixture() {
   await createReceipt('source', receiptPath, operationalEvidencePath);
   await createReceipt('published', publishedReceiptPath, undefined);
 
+  if (receiptsOnly) {
+    return {
+      root,
+      manifestPath,
+      receiptPath,
+      publishedReceiptPath,
+      acceptanceRelease,
+    };
+  }
   const { baselineRevision: tractorBaselineRevision } =
     await runTractorAcceptanceFixture({ manifestPath, root: at('published') });
   fs.renameSync(
@@ -671,5 +698,84 @@ test('workflow identity commands bind immutable bytes and distinct producer/publ
     );
   } finally {
     fs.rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('packed compiler trust flows from workspace environment through receipt and standalone verification', async t => {
+  const fixture = await createEvidenceFixture({
+    compilerVersion: '0.20.1-ts7.1.0-beta',
+    receiptsOnly: true,
+  });
+  t.after(() => fs.rmSync(fixture.root, { force: true, recursive: true }));
+  const { assertAcceptanceReceipt } = await import(
+    '../../ultramodern-production-readiness/published-create-proof/acceptance-receipt.mjs'
+  );
+  const compiler = 'tsrs@0.20.1-ts7.1.0-beta';
+  const verify = () =>
+    spawnSync(
+      process.execPath,
+      [
+        path.resolve(
+          __dirname,
+          '../../ultramodern-production-readiness/published-create-proof/acceptance-receipt.mjs',
+        ),
+        '--verify',
+        '--manifest',
+        fixture.manifestPath,
+        '--receipt',
+        fixture.receiptPath,
+        '--run-identity',
+        producerRunIdentity,
+      ],
+      { encoding: 'utf8' },
+    );
+  for (const [mode, receiptPath] of [
+    ['source', fixture.receiptPath],
+    ['published', fixture.publishedReceiptPath],
+  ]) {
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
+    const validate = value =>
+      assertAcceptanceReceipt(value, {
+        release: fixture.acceptanceRelease,
+        runIdentity: producerRunIdentity,
+        expectedMode: mode,
+      });
+    assert.equal(validate(receipt), receipt);
+    const selectors = receipt.registry.sourceCandidateTrustPolicyExclude;
+    assert.equal(selectors.includes(compiler), mode === 'source');
+    for (const exclusions of [
+      [...selectors, '*'],
+      [...selectors, 'foreign@1.0.0'],
+      [...selectors, compiler],
+      [...selectors.filter(value => value !== compiler), 'tsrs@0.19.0'],
+      ...(mode === 'source'
+        ? [selectors.filter(value => value !== compiler)]
+        : []),
+    ]) {
+      const forged = structuredClone(receipt);
+      forged.registry.sourceCandidateTrustPolicyExclude = exclusions.sort();
+      assert.throws(() => validate(forged), /trust exclusions/u);
+      if (mode === 'source') {
+        fs.writeFileSync(receiptPath, JSON.stringify(forged));
+        const rejected = verify();
+        assert.notEqual(rejected.status, 0);
+        assert.match(rejected.stderr, /trust exclusions/u);
+      }
+    }
+    if (mode === 'source') {
+      assert.throws(
+        () => assertAcceptanceReceipt(receipt),
+        /trust exclusions/u,
+      );
+      const staleRelease = structuredClone(fixture.acceptanceRelease);
+      staleRelease.createPackage.packageJson.dependencies.tsrs = '0.19.0';
+      assert.throws(
+        () => assertAcceptanceReceipt(receipt, { release: staleRelease }),
+        /trust exclusions/u,
+      );
+      fs.writeFileSync(receiptPath, JSON.stringify(receipt));
+      const result = verify();
+      assert.equal(result.status, 0, result.stderr);
+    }
   }
 });

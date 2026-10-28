@@ -20,7 +20,7 @@ test('DTS adapter reports the embedded TypeScript version and resolves Effect ts
   assert.ok(result.stdout.includes(`+effect-tsgo.${provider.effectVersion}`));
 });
 
-test('compiler launcher selects Go assignment and the supported Rslib adapter', () => {
+test('compiler launcher selects locality assignment and the supported Rslib adapter', () => {
   const result = spawnSync(
     process.execPath,
     [
@@ -34,7 +34,7 @@ test('compiler launcher selects Go assignment and the supported Rslib adapter', 
   );
   assert.equal(result.status, 0, result.stderr);
   const value = JSON.parse(result.stdout);
-  assert.equal(value.assignment, 'go');
+  assert.equal(value.assignment, 'locality');
   assert.equal(value.adapter, adapter);
   assert.equal(value.compiler, provider.getExePath());
 });
@@ -49,8 +49,8 @@ test('compiler policy distinguishes unpublished targets from broken installs', (
 
 test('compiler launcher preserves explicit assignment and defaults empty assignment', () => {
   for (const [assignment, expected] of [
-    ['locality', 'locality'],
-    ['', 'go'],
+    ['go', 'go'],
+    ['', 'locality'],
   ]) {
     const result = spawnSync(
       process.execPath,

@@ -26,6 +26,7 @@ const bootstrapDependencyBlocks = Object.freeze([
 const minimumReleaseAgeMinutes = 1440;
 const ultramodernCreateSourceName = '@modern-js/ultramodern-create';
 const authenticatedBootstrapExtras = new WeakMap();
+const authenticatedBootstrapTrustCohorts = new WeakMap();
 // Only compiler package versions pinned by the authenticated packed generator
 // authorize these native-package identities. Other external dependencies do
 // not receive bootstrap exceptions.
@@ -74,7 +75,23 @@ function compilerBootstrapSelectors(packageJson) {
     selectors.push(`${compiler}@${version}`);
     for (const platform of platforms) selectors.push(`${platform}@${version}`);
   }
-  return selectors;
+  // This metadata is authenticated with the packed producer. Admit only the
+  // two reviewed runtime releases, never arbitrary dependencies or selectors.
+  const runtimeSelectors =
+    packageJson.ultramodern?.bootstrapReleaseAgeExclude ?? [];
+  const reviewedRuntimeSelectors = new Set([
+    'effect@4.0.7',
+    '@effect/opentelemetry@4.0.7',
+  ]);
+  assertCondition(
+    Array.isArray(runtimeSelectors) &&
+      runtimeSelectors.every(selector =>
+        reviewedRuntimeSelectors.has(selector),
+      ) &&
+      new Set(runtimeSelectors).size === runtimeSelectors.length,
+    'Authenticated generator runtime exceptions must name only reviewed exact Effect releases',
+  );
+  return [...selectors, ...runtimeSelectors];
 }
 
 function assertCondition(condition, message) {
@@ -455,6 +472,10 @@ function resolveBootstrapReleaseAgePolicy(release, cohort, createPackage) {
     policy,
     new Set([...sidecarSelectors, ...compilerSelectors]),
   );
+  authenticatedBootstrapTrustCohorts.set(
+    policy,
+    release.packages.map(item => `${item.targetName}@${item.version}`).sort(),
+  );
   return policy;
 }
 
@@ -548,8 +569,45 @@ function assertBootstrapReleaseAgePolicy(createPackage) {
   return policy;
 }
 
-function createPnpmDlxArgs(createPackage, forwardedArgs) {
+function authenticatedCompilerTrustExclusions(release) {
+  if (!release?.createPackage) return [];
+  const policy = resolveCreatePackage(release).bootstrapReleaseAgePolicy;
+  return policy.minimumReleaseAgeExclude.includes('tsrs@0.20.1-ts7.1.0-beta')
+    ? ['tsrs@0.20.1-ts7.1.0-beta']
+    : [];
+}
+
+function createPnpmDlxArgs(createPackage, forwardedArgs, environment = {}) {
   const policy = assertBootstrapReleaseAgePolicy(createPackage);
+  const compilerTrust = policy.minimumReleaseAgeExclude.includes(
+    'tsrs@0.20.1-ts7.1.0-beta',
+  )
+    ? ['tsrs@0.20.1-ts7.1.0-beta']
+    : [];
+  let trustExclusions = compilerTrust;
+  if (
+    compilerTrust.length &&
+    environment.pnpm_config_trust_policy_exclude !== undefined
+  ) {
+    let provided;
+    try {
+      provided = JSON.parse(environment.pnpm_config_trust_policy_exclude);
+    } catch {
+      throw new Error(
+        'Bootstrap trust requires exact authenticated source cohort selectors',
+      );
+    }
+    const cohort = authenticatedBootstrapTrustCohorts.get(policy);
+    const withCompiler = [...cohort, ...compilerTrust].sort();
+    assertCondition(
+      [cohort, withCompiler, compilerTrust].some(
+        expected => JSON.stringify(provided) === JSON.stringify(expected),
+      ),
+      'Bootstrap trust requires exact authenticated source cohort selectors',
+    );
+    trustExclusions =
+      provided.length === compilerTrust.length ? compilerTrust : withCompiler;
+  }
   return [
     '--pm-on-fail=ignore',
     `--config.minimum-release-age=${policy.minimumReleaseAge}`,
@@ -560,6 +618,15 @@ function createPnpmDlxArgs(createPackage, forwardedArgs) {
     ...policy.minimumReleaseAgeExclude.map(
       specifier => `--config.minimum-release-age-exclude=${specifier}`,
     ),
+    ...(compilerTrust.length
+      ? [
+          '--config.trust-policy=no-downgrade',
+          '--config.trust-policy-ignore-after=1440',
+          ...trustExclusions.map(
+            selector => `--config.trust-policy-exclude=${selector}`,
+          ),
+        ]
+      : []),
     'dlx',
     '--allow-build=esbuild',
     createPackage.exactSpecifier,
@@ -730,6 +797,7 @@ function assertGeneratedCohort(projectDir, release) {
 export {
   assertBootstrapReleaseAgePolicy,
   assertGeneratedCohort,
+  authenticatedCompilerTrustExclusions,
   compilerBootstrapSelectors,
   createPnpmDlxArgs,
   expectedReleaseCohort,

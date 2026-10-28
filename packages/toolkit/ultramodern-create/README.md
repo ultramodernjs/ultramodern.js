@@ -96,7 +96,7 @@ workspaces declare an engine baseline of Node `>=26` with pnpm `12+`.
 `packageManager`, `.mise.toml`, generated validation, and CI should all agree
 on those values; do not reintroduce Corepack or older pnpm aliases.
 
-The current React dependency cohort also pins `@effect/tsgo@0.59.0`,
+The current React dependency cohort also pins `@effect/tsgo@0.63.0`,
 `@tanstack/react-router@1.170.41`, `@tanstack/router-core@1.171.34`,
 `@tanstack/history@1.162.4`, and the Module Federation integration `2.9.2`
 cohort, `@module-federation/node@2.7.52`. Move these only through the
@@ -126,8 +126,8 @@ stays active during `rslib build --watch`. Run
 includes a boundary test that scans generator sources, templates, and generated
 workspace output for compiler API imports.
 
-Generated workspaces and apps pin `tsrs@0.20.0-ts7.1.0-beta` and
-`@effect/tsgo@0.59.0`. Root postinstall runs
+Generated workspaces and apps pin `tsrs@0.20.1-ts7.1.0-beta` and
+`@effect/tsgo@0.63.0`. Root postinstall runs
 `ultramodern-create ultramodern compiler-prepare` before skills install.
 The installed tsrs platform metadata selects the official
 `effect-tsgo tsrs --version` readiness check on supported hosts.
@@ -138,7 +138,7 @@ binaries without changing the package store.
 The shared compiler resolver selects the provider's tsrs for generated React and
 Solid checks and Modern/Rspack builds, or Effect-Go on unsupported tsrs hosts.
 The installed typecheck command sets
-`TSRS_CHECKER_ASSIGNMENT` to the caller's explicit value or `go` by default,
+`TSRS_CHECKER_ASSIGNMENT` to the caller's explicit value or `locality` by default,
 and does not add `--checkers` or `--builders` in build mode. Octane apps retain
 `octane-tsc` for their native TS7 checker.
 All renderer profiles retain exact stable `typescript@7.0.2` for metadata and

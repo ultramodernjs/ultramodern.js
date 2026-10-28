@@ -8,9 +8,9 @@ const source = readFileSync(
   new URL('../tsrs-dts/compiler.cjs', import.meta.url),
   'utf8',
 );
-const tsrsVersion = '0.20.0-ts7.1.0-beta';
+const tsrsVersion = '0.20.1-ts7.1.0-beta';
 const typescriptCommit = '3e9236361fa97a9e6c685f4833ac457ae2d8c50a';
-const effectVersion = '0.59.0';
+const effectVersion = '0.63.0';
 const tsrsPath = '/fixture/node_modules/tsrs/package.json';
 const effectPath = '/fixture/node_modules/@effect/tsgo/package.json';
 const nativeRoot = '/fixture/node_modules/@effect/tsgo-darwin-arm64';
@@ -110,11 +110,8 @@ test('root provider selects the read-only metadata-bound Effect tsrs artifact', 
   );
   assert.equal(provider.typescriptVersion, '7.1.0-beta');
   assert.equal(provider.typescriptCommit, typescriptCommit);
-  assert.equal(provider.getCompilerPolicy('win32', 'x64').backend, 'effect-go');
-  assert.equal(
-    provider.getCompilerPolicy('darwin', 'x64').backend,
-    'effect-go',
-  );
+  assert.equal(provider.getCompilerPolicy('win32', 'x64').backend, 'tsrs');
+  assert.equal(provider.getCompilerPolicy('darwin', 'x64').backend, 'tsrs');
   assert.equal(provider.getCompilerPolicy('linux', 'x64').backend, 'tsrs');
   assert.equal(provider.getCompilerPolicy('linux', 'arm64').backend, 'tsrs');
   assert.equal(
@@ -132,8 +129,6 @@ test('an undeclared tsrs host selects Effect-Go', () => {
 });
 
 for (const host of [
-  { platform: 'win32', arch: 'x64' },
-  { platform: 'darwin', arch: 'x64' },
   { platform: 'linux', arch: 'x64', musl: true },
   { platform: 'linux', arch: 'arm64', musl: true },
 ]) {
@@ -152,7 +147,7 @@ test('an explicit compiler remains selected on an unsupported replacement host',
   const provider = loadProvider(
     undefined,
     { EFFECT_TSGO_BIN: '/explicit/compiler' },
-    { platform: 'win32', arch: 'x64' },
+    { platform: 'linux', arch: 'x64', musl: true },
   );
   assert.equal(provider.getExePath(), '/explicit/compiler');
   assert.equal(provider.warnings.length, 0);

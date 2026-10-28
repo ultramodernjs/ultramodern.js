@@ -17,8 +17,8 @@ import {
 
 rs.mock('node:child_process', () => ({ execFileSync: rs.fn() }));
 
-const tsrsVersion = '0.20.0-ts7.1.0-beta';
-const effectVersion = '0.59.0';
+const tsrsVersion = '0.20.1-ts7.1.0-beta';
+const effectVersion = '0.63.0';
 const tsrsCommit = '3e9236361fa97a9e6c685f4833ac457ae2d8c50a';
 const nativeCommit = '2bd066d87f5bafd315be9f40889d0a60b9e58e0b';
 const nativeName = `@typescript/typescript-${process.platform}-${process.arch}`;
@@ -135,12 +135,7 @@ afterEach(() => {
   rs.restoreAllMocks();
 });
 
-test.each([
-  '@tsrs/win32-x64',
-  '@tsrs/darwin-x64',
-  '@tsrs/linux-x64-musl',
-  '@tsrs/linux-arm64-musl',
-])(
+test.each(['@tsrs/linux-x64-musl', '@tsrs/linux-arm64-musl'])(
   'selects real Effect-Go for declared but unsupported replacement %s',
   target => {
     current = fixture(target);
@@ -161,6 +156,8 @@ test.each([
 
 test.each([
   '@tsrs/darwin-arm64',
+  '@tsrs/darwin-x64',
+  '@tsrs/win32-x64',
   '@tsrs/linux-x64-gnu',
   '@tsrs/linux-arm64-gnu',
 ])('selects verified Effect tsrs for supported replacement %s', target => {
@@ -237,8 +234,8 @@ test('a new provider version requires a reviewed capability contract', () => {
 });
 
 test('unsupported automatic replacement hosts still validate explicit compilers', () => {
-  current = fixture('@tsrs/win32-x64');
-  rs.mocked(execFileSync).mockReturnValue('Version 7.0.2+effect-tsgo.0.59.0');
+  current = fixture('@tsrs/linux-x64-musl');
+  rs.mocked(execFileSync).mockReturnValue('Version 7.0.2+effect-tsgo.0.63.0');
   validateConfiguredEffectCompiler(current.effectGo, current.from);
   rs.mocked(execFileSync).mockReturnValue('Version 7.0.2');
   assert.throws(
@@ -248,7 +245,7 @@ test('unsupported automatic replacement hosts still validate explicit compilers'
 });
 
 test('TSRS_BINARY remains a validated candidate on an unsupported automatic replacement host', () => {
-  current = fixture('@tsrs/win32-x64');
+  current = fixture('@tsrs/linux-x64-musl');
   rs.stubEnv('TSRS_BINARY', current.effectTsrs);
   assert.equal(
     resolveInstalledEffectCompiler(current.from),
