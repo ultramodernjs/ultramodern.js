@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const os = require('node:os');
@@ -51,6 +52,26 @@ function writeReleaseAgePolicy(root, entries) {
     })}\n`,
   );
   return policyPath;
+}
+
+function writeCompilerTrustOwnership(root, ownership) {
+  const file = path.join(root, 'ultramodern.compiler-trust.json');
+  if (ownership === undefined) {
+    fs.rmSync(file, { force: true });
+  } else {
+    fs.writeFileSync(file, `${JSON.stringify(ownership)}\n`);
+  }
+}
+
+function assertPnpmAcceptsWorkspace(root) {
+  const result = spawnSync('pnpm', ['exec', 'node', '-p', '12345'], {
+    cwd: root,
+    stdio: 'pipe',
+    shell: process.platform === 'win32',
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(result.stdout.trim(), '12345');
 }
 
 function fixture() {
@@ -1364,8 +1385,8 @@ for (const needsCompilerTrust of [true, false]) {
       ].sort();
       // Native pnpm permits unsorted input; the upgraded policy is canonical.
       policy.trustPolicyExclude = [...managedExclusions, ...appExclusions];
-      policy.ultramodernManagedCompilerTrustExclusions = managedExclusions;
-      policy.unrelatedAppSetting = { preserve: true };
+      writeCompilerTrustOwnership(root, managedExclusions);
+      policy.preferWorkspacePackages = true;
       fs.writeFileSync(policyFile, stringify(policy));
       const producerTrust = needsCompilerTrust
         ? ['tsrs@0.20.1-ts7.1.0-beta']
@@ -1390,10 +1411,20 @@ for (const needsCompilerTrust of [true, false]) {
         [...appExclusions, ...producerTrust].sort(),
       );
       assert.deepEqual(
-        selected.ultramodernManagedCompilerTrustExclusions,
+        JSON.parse(
+          fs.readFileSync(
+            path.join(root, 'ultramodern.compiler-trust.json'),
+            'utf8',
+          ),
+        ),
         producerTrust,
       );
-      assert.deepEqual(selected.unrelatedAppSetting, { preserve: true });
+      assert.equal(selected.preferWorkspacePackages, true);
+      assert.equal(
+        selected.ultramodernManagedCompilerTrustExclusions,
+        undefined,
+      );
+      assertPnpmAcceptsWorkspace(root);
       assert.equal(selected.trustPolicy, 'no-downgrade');
       assert.equal(selected.trustPolicyIgnoreAfter, 1440);
       assert.equal(selected.minimumReleaseAge, 1440);
@@ -1411,39 +1442,56 @@ for (const needsCompilerTrust of [true, false]) {
       assert.equal(fs.readFileSync(policyFile, 'utf8'), beforeRepeat);
       // App-only policies need no prior framework ownership record.
       for (const ownership of [undefined, []]) {
+        writeCompilerTrustOwnership(root, ownership);
         fs.writeFileSync(
           policyFile,
           stringify({
             ...policy,
             trustPolicyExclude: appExclusions,
-            ultramodernManagedCompilerTrustExclusions: ownership,
+            ultramodernManagedCompilerTrustExclusions: [],
           }),
         );
         prepareTractorCohortInstallation(root, next, options);
         assert.deepEqual(parse(fs.readFileSync(policyFile, 'utf8')), selected);
       }
       for (const invalid of [
-        { ultramodernManagedCompilerTrustExclusions: undefined },
-        { ultramodernManagedCompilerTrustExclusions: [] },
-        {
-          ultramodernManagedCompilerTrustExclusions: [
-            '@acme/private-build-tool@1.2.3',
-          ],
-        },
-        { ultramodernManagedCompilerTrustExclusions: ['tsrs@9.9.9'] },
-        {
-          ultramodernManagedCompilerTrustExclusions: [oldCompiler, oldCompiler],
-        },
-        { ultramodernManagedCompilerTrustExclusions: ['tsrs@*'] },
-        { trustPolicyExclude: ['*'] },
-        { trustPolicyExclude: null },
+        { ownership: undefined },
+        { ownership: [] },
+        { ownership: ['@acme/private-build-tool@1.2.3'] },
+        { ownership: ['tsrs@9.9.9'] },
+        { ownership: [oldCompiler, oldCompiler] },
+        { ownership: ['tsrs@*'] },
+        { ownership: null },
+        { ownership: {} },
+        { ownership: managedExclusions, rawOwnership: '[' },
+        { ownership: managedExclusions, trustPolicyExclude: ['*'] },
+        { ownership: managedExclusions, trustPolicyExclude: null },
       ]) {
-        fs.writeFileSync(policyFile, stringify({ ...policy, ...invalid }));
+        writeCompilerTrustOwnership(root, invalid.ownership);
+        if (invalid.rawOwnership)
+          fs.writeFileSync(
+            path.join(root, 'ultramodern.compiler-trust.json'),
+            invalid.rawOwnership,
+          );
+        fs.writeFileSync(
+          policyFile,
+          stringify({
+            ...policy,
+            // The obsolete YAML key must never count as ownership evidence.
+            ultramodernManagedCompilerTrustExclusions: managedExclusions,
+            ...(Object.hasOwn(invalid, 'trustPolicyExclude')
+              ? { trustPolicyExclude: invalid.trustPolicyExclude }
+              : {}),
+          }),
+        );
         const before = [
           'pnpm-workspace.yaml',
           'package.json',
           'tsconfig.base.json',
           '.mise.toml',
+          ...(invalid.ownership === undefined
+            ? []
+            : ['ultramodern.compiler-trust.json']),
         ].map(file => [file, fs.readFileSync(path.join(root, file), 'utf8')]);
         assert.throws(
           () => prepareTractorCohortInstallation(root, next, options),
@@ -1451,6 +1499,11 @@ for (const needsCompilerTrust of [true, false]) {
         );
         for (const [file, text] of before)
           assert.equal(fs.readFileSync(path.join(root, file), 'utf8'), text);
+        if (invalid.ownership === undefined)
+          assert.equal(
+            fs.existsSync(path.join(root, 'ultramodern.compiler-trust.json')),
+            false,
+          );
       }
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
@@ -1590,9 +1643,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       '@types/react-dom': '^19.2.7',
     });
     // Only explicitly framework-owned approvals are replaced.
-    baselinePolicy.ultramodernManagedCompilerTrustExclusions = [
-      'tsrs@0.18.0-ts7.1.0-dev.20260929',
-    ];
+    writeCompilerTrustOwnership(root, ['tsrs@0.18.0-ts7.1.0-dev.20260929']);
     baselinePolicy.trustPolicyExclude = [
       'tsrs@0.18.0-ts7.1.0-dev.20260929',
       'unrelated-compiler@9.9.9',
@@ -1704,12 +1755,12 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
     ]);
     // A baseline without any trust exclusions must receive the same exact list.
     for (const trustPolicyExclude of [undefined, []]) {
+      writeCompilerTrustOwnership(root, undefined);
       fs.writeFileSync(
         path.join(root, 'pnpm-workspace.yaml'),
         stringifyYaml({
           ...parseYaml(policyText),
           trustPolicyExclude,
-          ultramodernManagedCompilerTrustExclusions: undefined,
         }),
       );
       prepareTractorCohortInstallation(root, next, producerOptions);

@@ -112,6 +112,7 @@ jobs:
         if: matrix.shard == '1/4'
         run: |
           node --test scripts/__tests__/windows-unit-selection.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/ci/windows-unit-selection.mjs --verify
 
       - name: Report unit test resources

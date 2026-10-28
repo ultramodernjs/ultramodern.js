@@ -304,15 +304,7 @@ async function generateUltramodernWorkspaceInPlace(
             `  ${JSON.stringify(selector)}: ${JSON.stringify(specifier)}`,
         )
         .join('\n')}\n\n`,
-      compilerTrustExceptionsYaml: [
-        'trustPolicyExclude',
-        'ultramodernManagedCompilerTrustExclusions',
-      ]
-        .map(
-          key =>
-            `${key}: ${JSON.stringify(ULTRAMODERN_WORKSPACE_POLICY.pnpm.trustPolicyExclude)}\n`,
-        )
-        .join(''),
+      compilerTrustExceptionsYaml: `trustPolicyExclude: ${JSON.stringify(ULTRAMODERN_WORKSPACE_POLICY.pnpm.trustPolicyExclude)}\n`,
       effectVersion: EFFECT_VERSION,
       i18nextVersion: I18NEXT_VERSION,
       workspacePackageLinkingYaml: Object.entries(workspacePackageLinkingPolicy)
@@ -340,6 +332,11 @@ async function generateUltramodernWorkspaceInPlace(
       [],
       initialShell,
     ),
+  );
+  writeJson(
+    options.targetDir,
+    'ultramodern.compiler-trust.json',
+    ULTRAMODERN_WORKSPACE_POLICY.pnpm.trustPolicyExclude,
   );
   // Zerops materialization is a delivery-unit capability. Fresh workspaces
   // start with the shell alone; add-vertical writes the manifest together

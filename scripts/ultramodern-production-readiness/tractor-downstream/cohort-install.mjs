@@ -178,8 +178,13 @@ export function prepareTractorCohortInstallation(
 
   const workspaceFile = path.join(workspace, 'pnpm-workspace.yaml');
   const policy = load(fs.readFileSync(workspaceFile, 'utf8'));
+  const trustOwnershipFile = path.join(
+    workspace,
+    'ultramodern.compiler-trust.json',
+  );
   const trustExclusions = prepareTractorTrustExclusions(
     policy,
+    trustOwnershipFile,
     producerTrustExclusions,
   );
   const catalog = policy?.catalogs?.ultramodern;
@@ -323,9 +328,13 @@ export function prepareTractorCohortInstallation(
   policy.trustPolicy = trustPolicy;
   policy.trustPolicyIgnoreAfter = trustPolicyIgnoreAfter;
   policy.trustPolicyExclude = trustExclusions;
-  policy.ultramodernManagedCompilerTrustExclusions = producerTrustExclusions;
+  delete policy.ultramodernManagedCompilerTrustExclusions;
   const toolchain = prepareTractorToolchain(workspace, release.tools);
   fs.writeFileSync(workspaceFile, dump(policy, { lineWidth: 0 }));
+  fs.writeFileSync(
+    trustOwnershipFile,
+    `${JSON.stringify(producerTrustExclusions, null, 2)}\n`,
+  );
   fs.writeFileSync(toolchain.miseFile, toolchain.mise);
   fs.writeFileSync(
     compiler.file,
@@ -349,7 +358,11 @@ export function prepareTractorCohortInstallation(
 // the authenticated producer. Unmarked tsrs approvals could belong to the app,
 // so require an explicit ownership decision rather than deleting or retaining
 // potentially stale compiler trust. All unrelated application entries survive.
-function prepareTractorTrustExclusions(policy, producerTrustExclusions) {
+function prepareTractorTrustExclusions(
+  policy,
+  trustOwnershipFile,
+  producerTrustExclusions,
+) {
   const existing = policy?.trustPolicyExclude;
   const exclusions = validateExactExclusions(
     existing === undefined
@@ -359,9 +372,18 @@ function prepareTractorTrustExclusions(policy, producerTrustExclusions) {
         : existing,
     'Tractor pnpm trustPolicyExclude',
   );
-  const ownership = policy?.ultramodernManagedCompilerTrustExclusions;
+  let ownership = [];
+  try {
+    ownership = JSON.parse(fs.readFileSync(trustOwnershipFile, 'utf8'));
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      throw new Error('Tractor compiler trust ownership must be valid JSON', {
+        cause: error,
+      });
+    }
+  }
   const managed = validateExactExclusions(
-    ownership === undefined ? [] : ownership,
+    ownership,
     'Tractor compiler trust ownership',
   );
   if (
@@ -379,7 +401,7 @@ function prepareTractorTrustExclusions(policy, producerTrustExclusions) {
   );
   if (appExclusions.some(selector => selector.startsWith('tsrs@'))) {
     throw new Error(
-      'Tractor compiler trust ownership is ambiguous: explicitly record framework-owned tsrs approvals in ultramodernManagedCompilerTrustExclusions before adopting a cohort',
+      'Tractor compiler trust ownership is ambiguous: explicitly record framework-owned tsrs approvals in ultramodern.compiler-trust.json before adopting a cohort',
     );
   }
   return [...appExclusions, ...producerTrustExclusions].sort();
