@@ -1,5 +1,7 @@
+const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { parse: parseYaml } = require('yaml');
 
 // Runs the real Tractor downstream acceptance producer against a strict release
 // manifest, faking only the process and browser boundaries it drives. Every
@@ -168,8 +170,11 @@ function writeTractorWorkspace(workspace) {
   );
   fs.writeFileSync(
     path.join(workspace, 'pnpm-workspace.yaml'),
-    "catalogs:\n  ultramodern:\n    '@modern-js/i18n-utils': npm:@bleedingdev/modern-js-i18n-utils@0.0.0-previous\n",
+    "catalogs:\n  ultramodern:\n    '@modern-js/i18n-utils': npm:@bleedingdev/modern-js-i18n-utils@0.0.0-previous\ntrustPolicyExclude:\n  - tsrs@0.18.0-ts7.1.0-dev.20260929\n",
   );
+  writeJson(path.join(workspace, 'ultramodern.compiler-trust.json'), [
+    'tsrs@0.18.0-ts7.1.0-dev.20260929',
+  ]);
   writeJson(path.join(workspace, 'topology/reference-topology.json'), {
     verticals: verticalIds.map(id => ({ api: true, id, kind: 'vertical' })),
   });
@@ -263,6 +268,14 @@ async function runTractorAcceptanceFixture({
       return release.tools.pnpm;
     }
     if (command === pnpmExecutable && args.includes('--no-frozen-lockfile')) {
+      // This producer needs no compiler trust exception. Remove the baseline's
+      // old approval before the very first upgrade install, not during sync.
+      assert.deepEqual(
+        parseYaml(
+          fs.readFileSync(path.join(workspace, 'pnpm-workspace.yaml'), 'utf8'),
+        ).trustPolicyExclude,
+        [],
+      );
       installReleaseCohort(workspace, release);
     }
     if (command === pnpmExecutable && args[0] === 'node:proof') {

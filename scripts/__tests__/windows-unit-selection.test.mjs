@@ -159,9 +159,10 @@ test('native nested project options and extension objects survive both test grou
     const extras = actual.exclude.slice(1);
     assert.deepEqual(
       extras,
-      group === 'ordinary'
+      (group === 'ordinary'
         ? baseline.slice(0, 2).map(file => file.testPath)
-        : [baseline[2].testPath],
+        : [baseline[2].testPath]
+      ).map(file => file.split(path.sep).join('/')),
     );
   }
 });

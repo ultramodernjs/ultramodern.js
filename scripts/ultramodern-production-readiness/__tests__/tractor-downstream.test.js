@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const os = require('node:os');
@@ -51,6 +52,26 @@ function writeReleaseAgePolicy(root, entries) {
     })}\n`,
   );
   return policyPath;
+}
+
+function writeCompilerTrustOwnership(root, ownership) {
+  const file = path.join(root, 'ultramodern.compiler-trust.json');
+  if (ownership === undefined) {
+    fs.rmSync(file, { force: true });
+  } else {
+    fs.writeFileSync(file, `${JSON.stringify(ownership)}\n`);
+  }
+}
+
+function assertPnpmAcceptsWorkspace(root) {
+  const result = spawnSync('pnpm', ['exec', 'node', '-p', '12345'], {
+    cwd: root,
+    stdio: 'pipe',
+    shell: process.platform === 'win32',
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(result.stdout.trim(), '12345');
 }
 
 function fixture() {
@@ -148,6 +169,62 @@ function writeAuthenticatedCohort(root) {
     ),
     `${JSON.stringify(projection)}\n`,
   );
+}
+
+async function writeCandidateCreatePackage(root, next, dependencies) {
+  const { inspectNpmTarball } = await import(
+    '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs'
+  );
+  const { createTemplateRequiredFiles } = await import(
+    '../../ultramodern-publish/lib/prepare-bleedingdev-packages/constants.mjs'
+  );
+  const packageDir = path.join(root, 'candidate/package');
+  fs.mkdirSync(packageDir, { recursive: true });
+  for (const relativePath of createTemplateRequiredFiles) {
+    const file = path.join(packageDir, relativePath);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, 'candidate template content');
+  }
+  fs.writeFileSync(
+    path.join(packageDir, 'release-cohort.json'),
+    JSON.stringify(next.cohortProjection.value),
+  );
+  fs.writeFileSync(
+    path.join(packageDir, 'package.json'),
+    JSON.stringify({
+      name: '@bleedingdev/modern-js-ultramodern-create',
+      version: next.release.version,
+      publishConfig: { access: 'public' },
+      dependencies,
+    }),
+  );
+  const artifactPath = path.join(root, 'candidate.tgz');
+  const priorCopyfile = process.env.COPYFILE_DISABLE;
+  process.env.COPYFILE_DISABLE = '1';
+  try {
+    runCommand('tar', [
+      '-czf',
+      artifactPath,
+      '-C',
+      path.dirname(packageDir),
+      'package',
+    ]);
+  } finally {
+    if (priorCopyfile === undefined) delete process.env.COPYFILE_DISABLE;
+    else process.env.COPYFILE_DISABLE = priorCopyfile;
+  }
+  const bytes = fs.readFileSync(artifactPath);
+  next.createPackage = {
+    ...inspectNpmTarball(bytes),
+    sourceName: '@modern-js/ultramodern-create',
+    targetName: '@bleedingdev/modern-js-ultramodern-create',
+    version: next.release.version,
+    artifactPath,
+    size: bytes.length,
+    sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+    shasum: crypto.createHash('sha1').update(bytes).digest('hex'),
+    integrity: `sha512-${crypto.createHash('sha512').update(bytes).digest('base64')}`,
+  };
 }
 
 const bootstrapVersion = '3.5.0-ultramodern.77';
@@ -488,7 +565,7 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
       );
       fs.writeFileSync(
         path.join(workspace, 'pnpm-workspace.yaml'),
-        `minimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\nminimumReleaseAgeIgnoreMissingTime: false\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\nminimumReleaseAgeExclude:\n${bootstrapExclude.map(selector => `  - ${JSON.stringify(selector)}`).join('\n')}\noverrides:\n  'braces@>=3.0.0 <3.0.4': npm:@bleedingdev/braces@3.0.4\n  'sharp@>=0.35.0 <0.35.5': 0.35.5\n`,
+        `minimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\nminimumReleaseAgeIgnoreMissingTime: false\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\ntrustPolicyExclude:\n  - tsrs@0.20.1-ts7.1.0-beta\nminimumReleaseAgeExclude:\n${bootstrapExclude.map(selector => `  - ${JSON.stringify(selector)}`).join('\n')}\noverrides:\n  'braces@>=3.0.0 <3.0.4': npm:@bleedingdev/braces@3.0.4\n  'sharp@>=0.35.0 <0.35.5': 0.35.5\n`,
       );
     },
   });
@@ -502,6 +579,7 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
     minimumReleaseAgeExclude: bootstrapExclude,
     trustPolicy: 'no-downgrade',
     trustPolicyIgnoreAfter: 1440,
+    trustPolicyExclude: ['tsrs@0.20.1-ts7.1.0-beta'],
   });
   assert.deepEqual(fs.readdirSync(root), []);
   const { stringify: stringifyYaml } = await import('yaml');
@@ -511,6 +589,14 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
     { minimumReleaseAgeIgnoreMissingTime: true },
     { trustPolicy: 'none' },
     { trustPolicyIgnoreAfter: 0 },
+    { trustPolicyExclude: ['*'] },
+    { trustPolicyExclude: ['tsrs@^0.20.1'] },
+    {
+      trustPolicyExclude: [
+        'tsrs@0.20.1-ts7.1.0-beta',
+        'tsrs@0.20.1-ts7.1.0-beta',
+      ],
+    },
     { minimumReleaseAgeExclude: ['@bleedingdev/*'] },
     { minimumReleaseAgeExclude: [] },
   ]) {
@@ -1266,6 +1352,165 @@ test('source-candidate rehearsal tears down its registry and refuses an escaped 
   assert.equal(driftedStarts, 0);
 });
 
+for (const needsCompilerTrust of [true, false]) {
+  test(`cohort upgrade preserves app trust while ${needsCompilerTrust ? 'replacing' : 'removing'} managed compiler approvals`, async () => {
+    const { prepareTractorCohortInstallation } = await cohortInstallPromise;
+    const { compilerBootstrapSelectors } = await import(
+      '../published-create-proof/package-cohort.mjs'
+    );
+    const { parse, stringify } = await import('yaml');
+    const root = fixture();
+    try {
+      writeAuthenticatedCohort(root);
+      const next = structuredClone(release);
+      next.publishOrder = Object.values(next.aliases);
+      await writeCandidateCreatePackage(root, next, {
+        '@effect/tsgo': '0.63.0',
+        ...(needsCompilerTrust ? { tsrs: '0.20.1-ts7.1.0-beta' } : {}),
+      });
+      const manifestFile = path.join(root, 'package.json');
+      const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+      manifest.devDependencies = { '@acme/private-build-tool': '1.2.3' };
+      fs.writeFileSync(manifestFile, JSON.stringify(manifest));
+      const policyFile = path.join(root, 'pnpm-workspace.yaml');
+      const policy = parse(fs.readFileSync(policyFile, 'utf8'));
+      const appExclusions = [
+        '@acme/private-build-tool@1.2.3',
+        'unrelated-compiler@9.9.9',
+      ];
+      const oldCompiler = 'tsrs@0.18.0-ts7.1.0-dev.20260929';
+      const managedExclusions = [
+        oldCompiler,
+        'tsrs@0.20.1-ts7.1.0-beta',
+      ].sort();
+      // Native pnpm permits unsorted input; the upgraded policy is canonical.
+      policy.trustPolicyExclude = [...managedExclusions, ...appExclusions];
+      writeCompilerTrustOwnership(root, managedExclusions);
+      policy.preferWorkspacePackages = true;
+      fs.writeFileSync(policyFile, stringify(policy));
+      const producerTrust = needsCompilerTrust
+        ? ['tsrs@0.20.1-ts7.1.0-beta']
+        : [];
+      const options = {
+        producerEffectDependencies,
+        producerReactDependencies,
+        minimumReleaseAgeExclude: [
+          ...Object.values(next.aliases).map(
+            name => `${name}@${next.release.version}`,
+          ),
+          ...compilerBootstrapSelectors(next.createPackage.packageJson),
+        ].sort(),
+        trustPolicy: 'no-downgrade',
+        trustPolicyIgnoreAfter: 1440,
+        trustPolicyExclude: producerTrust,
+      };
+      prepareTractorCohortInstallation(root, next, options);
+      const selected = parse(fs.readFileSync(policyFile, 'utf8'));
+      assert.deepEqual(
+        selected.trustPolicyExclude,
+        [...appExclusions, ...producerTrust].sort(),
+      );
+      assert.deepEqual(
+        JSON.parse(
+          fs.readFileSync(
+            path.join(root, 'ultramodern.compiler-trust.json'),
+            'utf8',
+          ),
+        ),
+        producerTrust,
+      );
+      assert.equal(selected.preferWorkspacePackages, true);
+      assert.equal(
+        selected.ultramodernManagedCompilerTrustExclusions,
+        undefined,
+      );
+      assertPnpmAcceptsWorkspace(root);
+      assert.equal(selected.trustPolicy, 'no-downgrade');
+      assert.equal(selected.trustPolicyIgnoreAfter, 1440);
+      assert.equal(selected.minimumReleaseAge, 1440);
+      assert.equal(selected.minimumReleaseAgeStrict, true);
+      assert.equal(selected.minimumReleaseAgeIgnoreMissingTime, false);
+      assert.equal(
+        JSON.parse(fs.readFileSync(manifestFile, 'utf8')).devDependencies[
+          '@acme/private-build-tool'
+        ],
+        '1.2.3',
+      );
+      // Ownership remains accurate on repeated adoption, including an empty list.
+      const beforeRepeat = fs.readFileSync(policyFile, 'utf8');
+      prepareTractorCohortInstallation(root, next, options);
+      assert.equal(fs.readFileSync(policyFile, 'utf8'), beforeRepeat);
+      // App-only policies need no prior framework ownership record.
+      for (const ownership of [undefined, []]) {
+        writeCompilerTrustOwnership(root, ownership);
+        fs.writeFileSync(
+          policyFile,
+          stringify({
+            ...policy,
+            trustPolicyExclude: appExclusions,
+            ultramodernManagedCompilerTrustExclusions: [],
+          }),
+        );
+        prepareTractorCohortInstallation(root, next, options);
+        assert.deepEqual(parse(fs.readFileSync(policyFile, 'utf8')), selected);
+      }
+      for (const invalid of [
+        { ownership: undefined },
+        { ownership: [] },
+        { ownership: ['@acme/private-build-tool@1.2.3'] },
+        { ownership: ['tsrs@9.9.9'] },
+        { ownership: [oldCompiler, oldCompiler] },
+        { ownership: ['tsrs@*'] },
+        { ownership: null },
+        { ownership: {} },
+        { ownership: managedExclusions, rawOwnership: '[' },
+        { ownership: managedExclusions, trustPolicyExclude: ['*'] },
+        { ownership: managedExclusions, trustPolicyExclude: null },
+      ]) {
+        writeCompilerTrustOwnership(root, invalid.ownership);
+        if (invalid.rawOwnership)
+          fs.writeFileSync(
+            path.join(root, 'ultramodern.compiler-trust.json'),
+            invalid.rawOwnership,
+          );
+        fs.writeFileSync(
+          policyFile,
+          stringify({
+            ...policy,
+            // The obsolete YAML key must never count as ownership evidence.
+            ultramodernManagedCompilerTrustExclusions: managedExclusions,
+            ...(Object.hasOwn(invalid, 'trustPolicyExclude')
+              ? { trustPolicyExclude: invalid.trustPolicyExclude }
+              : {}),
+          }),
+        );
+        const before = [
+          'pnpm-workspace.yaml',
+          'package.json',
+          'tsconfig.base.json',
+          '.mise.toml',
+          ...(invalid.ownership === undefined
+            ? []
+            : ['ultramodern.compiler-trust.json']),
+        ].map(file => [file, fs.readFileSync(path.join(root, file), 'utf8')]);
+        assert.throws(
+          () => prepareTractorCohortInstallation(root, next, options),
+          /trust|ownership/u,
+        );
+        for (const [file, text] of before)
+          assert.equal(fs.readFileSync(path.join(root, file), 'utf8'), text);
+        if (invalid.ownership === undefined)
+          assert.equal(
+            fs.existsSync(path.join(root, 'ultramodern.compiler-trust.json')),
+            false,
+          );
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
 test('cohort installation adopts exact bundle and toolchain without changing authored Tractor UI', async () => {
   const { prepareTractorCohortInstallation } = await import(
     '../tractor-downstream/cohort-install.mjs'
@@ -1297,63 +1542,13 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       (left, right) =>
         left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
     );
-    const { inspectNpmTarball } = await import(
-      '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs'
-    );
-    const { createTemplateRequiredFiles } = await import(
-      '../../ultramodern-publish/lib/prepare-bleedingdev-packages/constants.mjs'
-    );
-    const packageDir = path.join(root, 'candidate/package');
-    fs.mkdirSync(packageDir, { recursive: true });
-    for (const relativePath of createTemplateRequiredFiles) {
-      const file = path.join(packageDir, relativePath);
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, 'candidate template content');
-    }
-    fs.writeFileSync(
-      path.join(packageDir, 'release-cohort.json'),
-      JSON.stringify(next.cohortProjection.value),
-    );
-    fs.writeFileSync(
-      path.join(packageDir, 'package.json'),
-      JSON.stringify({
-        name: '@bleedingdev/modern-js-ultramodern-create',
-        version: next.release.version,
-        publishConfig: { access: 'public' },
-        dependencies: {
-          '@effect/tsgo': '0.63.0',
-          tsrs: '0.20.1-ts7.1.0-beta',
-          'unrelated-compiler': '9.9.9',
-        },
-      }),
-    );
-    const artifactPath = path.join(root, 'candidate.tgz');
-    const priorCopyfile = process.env.COPYFILE_DISABLE;
-    process.env.COPYFILE_DISABLE = '1';
-    try {
-      runCommand('tar', [
-        '-czf',
-        artifactPath,
-        '-C',
-        path.dirname(packageDir),
-        'package',
-      ]);
-    } finally {
-      if (priorCopyfile === undefined) delete process.env.COPYFILE_DISABLE;
-      else process.env.COPYFILE_DISABLE = priorCopyfile;
-    }
+    await writeCandidateCreatePackage(root, next, {
+      '@effect/tsgo': '0.63.0',
+      tsrs: '0.20.1-ts7.1.0-beta',
+      'unrelated-compiler': '9.9.9',
+    });
+    const artifactPath = next.createPackage.artifactPath;
     const bytes = fs.readFileSync(artifactPath);
-    next.createPackage = {
-      ...inspectNpmTarball(bytes),
-      sourceName: '@modern-js/ultramodern-create',
-      targetName: '@bleedingdev/modern-js-ultramodern-create',
-      version: next.release.version,
-      artifactPath,
-      size: bytes.length,
-      sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
-      shasum: crypto.createHash('sha1').update(bytes).digest('hex'),
-      integrity: `sha512-${crypto.createHash('sha512').update(bytes).digest('base64')}`,
-    };
     const uiFile = path.join(
       root,
       'apps/shell-super-app/locales/en/shell.json',
@@ -1447,6 +1642,12 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       '@types/react': '^19.2.18',
       '@types/react-dom': '^19.2.7',
     });
+    // Only explicitly framework-owned approvals are replaced.
+    writeCompilerTrustOwnership(root, ['tsrs@0.18.0-ts7.1.0-dev.20260929']);
+    baselinePolicy.trustPolicyExclude = [
+      'tsrs@0.18.0-ts7.1.0-dev.20260929',
+      'unrelated-compiler@9.9.9',
+    ];
     baselinePolicy.catalogs.renderer = { ...baselinePolicy.catalog };
     Object.assign(baselinePolicy.overrides, {
       'parent>effect': 'npm:@bleedingdev/effect@4.0.0-rc.117',
@@ -1476,6 +1677,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       ].sort(),
       trustPolicy: 'no-downgrade',
       trustPolicyIgnoreAfter: 1440,
+      trustPolicyExclude: ['tsrs@0.20.1-ts7.1.0-beta'],
     };
     const result = prepareTractorCohortInstallation(
       root,
@@ -1547,6 +1749,31 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
     );
     assert.equal(parseYaml(policyText).trustPolicy, 'no-downgrade');
     assert.equal(parseYaml(policyText).trustPolicyIgnoreAfter, 1440);
+    assert.deepEqual(parseYaml(policyText).trustPolicyExclude, [
+      ...producerOptions.trustPolicyExclude,
+      'unrelated-compiler@9.9.9',
+    ]);
+    // A baseline without any trust exclusions must receive the same exact list.
+    for (const trustPolicyExclude of [undefined, []]) {
+      writeCompilerTrustOwnership(root, undefined);
+      fs.writeFileSync(
+        path.join(root, 'pnpm-workspace.yaml'),
+        stringifyYaml({
+          ...parseYaml(policyText),
+          trustPolicyExclude,
+        }),
+      );
+      prepareTractorCohortInstallation(root, next, producerOptions);
+      assert.deepEqual(
+        parseYaml(
+          fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
+        ),
+        {
+          ...parseYaml(policyText),
+          trustPolicyExclude: producerOptions.trustPolicyExclude,
+        },
+      );
+    }
     assert.match(policyText, /sharp@>=0\.35\.0 <0\.35\.5.*0\.35\.5/u);
     assert.match(policyText, /zod: npm:@bleedingdev\/zod@4\.6\.5/u);
     assert.match(policyText, /ipx: npm:@bleedingdev\/ipx@3\.2\.2/u);
@@ -1739,6 +1966,42 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       assert.equal(
         fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
         selectedPolicy,
+      );
+      assert.equal(fs.readFileSync(uiFile, 'utf8'), beforeUi);
+    }
+    // Release-age approvals are not automatically trust approvals. Reject
+    // stale, foreign, platform-only and runtime selectors even when exact.
+    for (const trustPolicyExclude of [
+      undefined,
+      [],
+      ['*'],
+      ['tsrs@^0.20.1'],
+      ['tsrs@0.18.0-ts7.1.0-dev.20260929'],
+      ['unrelated-compiler@9.9.9'],
+      ['@tsrs/linux-x64-gnu@0.20.1-ts7.1.0-beta'],
+      ['@effect/tsgo@0.63.0'],
+      ['effect@4.0.7'],
+      ['tsrs@0.20.1-ts7.1.0-beta', 'tsrs@0.20.1-ts7.1.0-beta'],
+    ]) {
+      assert.throws(
+        () =>
+          prepareTractorCohortInstallation(root, next, {
+            ...producerOptions,
+            trustPolicyExclude,
+          }),
+        /trustPolicyExclude/u,
+      );
+      assert.equal(
+        fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
+        selectedPolicy,
+      );
+      assert.equal(
+        fs.readFileSync(compilerFile, 'utf8'),
+        JSON.stringify(compilerConfig),
+      );
+      assert.equal(
+        fs.readFileSync(path.join(root, '.mise.toml'), 'utf8'),
+        selectedMise,
       );
       assert.equal(fs.readFileSync(uiFile, 'utf8'), beforeUi);
     }

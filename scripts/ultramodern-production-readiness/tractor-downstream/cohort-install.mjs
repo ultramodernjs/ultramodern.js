@@ -9,6 +9,7 @@ import {
 import {
   compilerBootstrapSelectors,
   expectedReleaseCohort,
+  reviewedCompilerTrustExclusions,
 } from '../published-create-proof/package-cohort.mjs';
 import { validateExactExclusions } from '../published-create-proof/release-age-audit.mjs';
 import { collectPackageJsonFiles } from './contract.mjs';
@@ -80,6 +81,7 @@ export function prepareTractorCohortInstallation(
     minimumReleaseAgeExclude,
     trustPolicy,
     trustPolicyIgnoreAfter,
+    trustPolicyExclude,
     producerEffectDependencies,
     producerReactDependencies,
   } = {},
@@ -139,13 +141,14 @@ export function prepareTractorCohortInstallation(
     minimumReleaseAgeExclude,
     'Producer pnpm minimumReleaseAgeExclude',
   );
+  const compilerSelectors = compilerBootstrapSelectors(packed.packageJson);
   const expectedExclusions = [
     ...cohort.targetNames.map(name => `${name}@${version}`),
     ...Array.from(
       sidecars,
       ([name, sidecarVersion]) => `${name}@${sidecarVersion}`,
     ),
-    ...compilerBootstrapSelectors(packed.packageJson),
+    ...compilerSelectors,
   ].sort();
   if (!isDeepStrictEqual(producerExclusions, expectedExclusions)) {
     throw new Error(
@@ -157,10 +160,33 @@ export function prepareTractorCohortInstallation(
       'Producer pnpm trust policy must retain no-downgrade and its 24-hour window',
     );
   }
+  const producerTrustExclusions = validateExactExclusions(
+    trustPolicyExclude,
+    'Producer pnpm trustPolicyExclude',
+  );
+  if (
+    !isDeepStrictEqual(
+      producerTrustExclusions,
+      reviewedCompilerTrustExclusions(compilerSelectors),
+    )
+  ) {
+    throw new Error(
+      'Producer pnpm trustPolicyExclude must select exactly the reviewed packed producer compiler exceptions',
+    );
+  }
   const compiler = prepareTractorCompilerConfig(workspace);
 
   const workspaceFile = path.join(workspace, 'pnpm-workspace.yaml');
   const policy = load(fs.readFileSync(workspaceFile, 'utf8'));
+  const trustOwnershipFile = path.join(
+    workspace,
+    'ultramodern.compiler-trust.json',
+  );
+  const trustExclusions = prepareTractorTrustExclusions(
+    policy,
+    trustOwnershipFile,
+    producerTrustExclusions,
+  );
   const catalog = policy?.catalogs?.ultramodern;
   if (!catalog || typeof catalog !== 'object' || Array.isArray(catalog)) {
     throw new Error('Tractor requires a native catalogs.ultramodern entry');
@@ -301,8 +327,14 @@ export function prepareTractorCohortInstallation(
   policy.minimumReleaseAgeExclude = producerExclusions;
   policy.trustPolicy = trustPolicy;
   policy.trustPolicyIgnoreAfter = trustPolicyIgnoreAfter;
+  policy.trustPolicyExclude = trustExclusions;
+  delete policy.ultramodernManagedCompilerTrustExclusions;
   const toolchain = prepareTractorToolchain(workspace, release.tools);
   fs.writeFileSync(workspaceFile, dump(policy, { lineWidth: 0 }));
+  fs.writeFileSync(
+    trustOwnershipFile,
+    `${JSON.stringify(producerTrustExclusions, null, 2)}\n`,
+  );
   fs.writeFileSync(toolchain.miseFile, toolchain.mise);
   fs.writeFileSync(
     compiler.file,
@@ -319,6 +351,60 @@ export function prepareTractorCohortInstallation(
     fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
   }
   return { catalogCount: Object.keys(cohort.aliases).length, dependencyCount };
+}
+
+// The ownership record declares which existing compiler approvals this tool may
+// replace; it never authorizes new approvals. Those still come exclusively from
+// the authenticated producer. Unmarked tsrs approvals could belong to the app,
+// so require an explicit ownership decision rather than deleting or retaining
+// potentially stale compiler trust. All unrelated application entries survive.
+function prepareTractorTrustExclusions(
+  policy,
+  trustOwnershipFile,
+  producerTrustExclusions,
+) {
+  const existing = policy?.trustPolicyExclude;
+  const exclusions = validateExactExclusions(
+    existing === undefined
+      ? []
+      : Array.isArray(existing)
+        ? existing.toSorted()
+        : existing,
+    'Tractor pnpm trustPolicyExclude',
+  );
+  let ownership = [];
+  try {
+    ownership = JSON.parse(fs.readFileSync(trustOwnershipFile, 'utf8'));
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      throw new Error('Tractor compiler trust ownership must be valid JSON', {
+        cause: error,
+      });
+    }
+  }
+  const managed = validateExactExclusions(
+    ownership,
+    'Tractor compiler trust ownership',
+  );
+  if (
+    managed.some(
+      selector =>
+        !selector.startsWith('tsrs@') || !exclusions.includes(selector),
+    )
+  ) {
+    throw new Error(
+      'Tractor compiler trust ownership must name only existing exact tsrs approvals',
+    );
+  }
+  const appExclusions = exclusions.filter(
+    selector => !managed.includes(selector),
+  );
+  if (appExclusions.some(selector => selector.startsWith('tsrs@'))) {
+    throw new Error(
+      'Tractor compiler trust ownership is ambiguous: explicitly record framework-owned tsrs approvals in ultramodern.compiler-trust.json before adopting a cohort',
+    );
+  }
+  return [...appExclusions, ...producerTrustExclusions].sort();
 }
 
 // Inherit the producer's compiler policy instead of retaining a copied Effect

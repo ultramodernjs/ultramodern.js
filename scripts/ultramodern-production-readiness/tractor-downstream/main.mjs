@@ -247,6 +247,10 @@ function readTractorProducerOverrides({
         'Exact producer workspace minimumReleaseAgeExclude must include its installed producer',
       );
     }
+    const producerTrustExclusions = validateExactExclusions(
+      policy.trustPolicyExclude ?? [],
+      'Exact producer workspace trustPolicyExclude',
+    );
     const producerManifest = JSON.parse(
       fs.readFileSync(path.join(workspace, 'package.json'), 'utf8'),
     );
@@ -284,6 +288,7 @@ function readTractorProducerOverrides({
       minimumReleaseAgeExclude: producerExclusions,
       trustPolicy: policy.trustPolicy,
       trustPolicyIgnoreAfter: policy.trustPolicyIgnoreAfter,
+      trustPolicyExclude: producerTrustExclusions,
     };
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
