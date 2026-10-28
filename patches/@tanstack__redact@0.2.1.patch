@@ -1,0 +1,3188 @@
+diff --git a/src/core/devtools.ts b/src/core/devtools.ts
+--- a/src/core/devtools.ts
++++ b/src/core/devtools.ts
+@@ -1,4 +1,4 @@
+-import type { Fiber, ReactElement } from './index'
++import type { Fiber, FiberRoot, ReactElement } from './index'
+ 
+ // Development metadata lives outside elements and fibers, so the production
+ // object layouts stay unchanged. Owner metadata also supports captureOwnerStack
+@@ -11,6 +11,7 @@
+   stackBudget: 10000,
+   stackResetTime: 0,
+   hosts: /* @__PURE__ */ new WeakMap<Node, Fiber>(),
++  hydratedRoots: /* @__PURE__ */ new WeakSet<FiberRoot>(),
+   elements: /* @__PURE__ */ new WeakMap<object, { owner: Fiber | null; stack: Error | null; source: any }>(),
+   fibers: /* @__PURE__ */ new WeakMap<Fiber, { owner: Fiber | null; stack: Error | null; source: any }>(),
+ }
+diff --git a/src/core/functions.ts b/src/core/functions.ts
+--- a/src/core/functions.ts
++++ b/src/core/functions.ts
+@@ -7,3 +7,5 @@
+ export const isString = (value: any): value is string => typeof value === 'string'
+ 
+ export const isObject = (value: any): boolean => typeof value === 'object'
++
++export const isTextContent = (value: unknown): value is string | number | bigint => typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint'
+diff --git a/src/core/internal.ts b/src/core/internal.ts
+--- a/src/core/internal.ts
++++ b/src/core/internal.ts
+@@ -73,6 +73,7 @@
+     tr?: Set<Fiber> & {
+         s: Set<import('../react/action-scope').ActionScope>;
+         w?: PromiseLike<unknown>;
++        u?: (() => void) | undefined;
+     };
+     hr?: Node | undefined; // Hydration recovery container.
+     ri?: boolean; // React-compatible hydration IDs.
+diff --git a/src/core/types.ts b/src/core/types.ts
+--- a/src/core/types.ts
++++ b/src/core/types.ts
+@@ -19,6 +19,7 @@
+   | ReactElement
+   | string
+   | number
++  | bigint
+   | boolean
+   | null
+   | undefined
+diff --git a/src/dom/devtools.ts b/src/dom/devtools.ts
+--- a/src/dom/devtools.ts
++++ b/src/dom/devtools.ts
+@@ -410,7 +410,7 @@
+   const snapshot = project(root.r, null, 0, seen, deferred)
+   const pendingUpdaters = updaters.get(root) || new Set()
+   updaters.delete(root)
+-  adapter._debugRootType ||= root.h ? 'hydrateRoot()' : 'createRoot()'
++  adapter._debugRootType ||= devToolsMetadata.hydratedRoots.has(root) ? 'hydrateRoot()' : 'createRoot()'
+   notifyDevToolsCommit(root, (layout, passive) => {
+     const view = deferred ? materialize(snapshot, null) : snapshot
+     view.stateNode = adapter
+diff --git a/src/dom/dispatcher.ts b/src/dom/dispatcher.ts
+--- a/src/dom/dispatcher.ts
++++ b/src/dom/dispatcher.ts
+@@ -170,7 +170,7 @@
+             return hook.c;
+         },
+     };
+-    if (type === 1 && !subscription)
++    if (type !== 2 && !subscription)
+         effect.d = () => cleanupEffect(hook, fiber);
+     (hookEffects ||= []).push(hook, previous, effect, changed);
+ }
+@@ -205,7 +205,12 @@
+         const hook = nextHook(), fiber = getCurrentFiber();
+         const queue = hook.q ||= { p: 0, f: false, e: undefined };
+         hook.c ||= (fn: () => void) => {
+-            const scope = transitionScope(() => runAction(fn));
++            const scope = transitionScope(() => runAction(fn, fiber.r, scope => {
++                scope.n = undefined;
++                queue.p++;
++                scheduleUpdate(fiber);
++                fiber.bt = false;
++            }));
+             const finish = () => {
+                 if (scope.f && !scope.h) {
+                     queue.f = true;
+@@ -213,11 +218,6 @@
+                 }
+                 if (!scope.n)
+                     queue.p--;
+-                scheduleUpdate(fiber);
+-            };
+-            scope.n = () => {
+-                delete scope.n;
+-                queue.p++;
+                 scheduleUpdate(fiber);
+             };
+             if (!scope.p) {
+@@ -225,7 +225,7 @@
+                 return;
+             }
+             if (scope.p > (scope.v || 0))
+-                scope.n();
++                scope.n?.(scope);
+             scope.d.then(finish);
+         };
+         if (queue.f)
+@@ -318,10 +318,8 @@
+         const hook = nextHook();
+         const store: {
+             g: () => T;
+-            s: (() => T) | undefined;
+         } = hook.q ||= {};
+         store.g = getSnapshot;
+-        store.s = getServerSnapshot;
+         // During hydration, use the server snapshot (if provided) so the tree
+         // matches the SSR output. Components like TanStack Router's ClientOnly
+         // rely on this: they render `false` on server, `true` on client — and
+@@ -344,8 +342,6 @@
+                 scheduleUpdate(fiber);
+             };
+             const unsubscribe = subscribe(check);
+-            if (isHydrating && store.s)
+-                queueMicrotask(() => queueMicrotask(check));
+             check();
+             return () => {
+                 active = false;
+diff --git a/src/dom/document-metadata.ts b/src/dom/document-metadata.ts
+--- a/src/dom/document-metadata.ts
++++ b/src/dom/document-metadata.ts
+@@ -12,8 +12,11 @@
+ // React's document server renderer hoists metadata even when a component
+ // returns it inside a body wrapper or a Suspense boundary.
+ export function documentMetadataParent(fiber: Fiber): HTMLHeadElement | null {
+-    if (fiber.r?.c.nodeType !== 9 || fiber.v?.itemProp != null ||
+-        !['title', 'meta', 'base', 'link'].includes(fiber.type))
++    const container = fiber.r?.c;
++    const doc = container?.nodeType === 9 ? container as unknown as Document : container?.ownerDocument;
++    if (!doc?.head || fiber.v?.itemProp != null ||
++        !['title', 'meta', 'base', 'link'].includes(fiber.type) ||
++        fiber.type === 'link' && fiber.v?.rel === 'stylesheet')
+         return null;
+     for (let parent = fiber.p; parent; parent = parent.p) {
+         if (parent.t === FiberTag.Portal || parent.type === 'svg')
+@@ -21,7 +24,7 @@
+         if (parent.type === 'foreignObject')
+             break;
+     }
+-    return (fiber.r.c as unknown as Document).head;
++    return doc.head;
+ }
+ export function clearHostContainer(container: Node): void {
+     if (container.nodeType !== 9 && !DOCUMENT_SHELL_TAGS.test((container as Element).localName)) {
+diff --git a/src/dom/features/class/full.ts b/src/dom/features/class/full.ts
+--- a/src/dom/features/class/full.ts
++++ b/src/dom/features/class/full.ts
+@@ -1,6 +1,6 @@
+ import { devToolsMetadata } from '../../../core/devtools';
+ import { resolveClassProps } from '../../../core/class-props';
+-import { invokeCommit, stageCommit } from '../../reconcile';
++import { invokeCommit, stageCommit, recoveringBoundaries } from '../../reconcile';
+ import { installRenderer, reconcileRaw, childrenToArray, scheduleUpdate, scheduleLifecycle, isThenable, handleSuspended, handleErrorInRender, readContext, attachRef, syncRefIfChanged, isActivityHidden, layoutIsDisconnected, RenderErrorCapture, handleCommitError, } from '../../reconcile';
+ import { checkpointCommit, rewindCommit, queueBeforeMutation, queueMutation } from '../../commit';
+ import { FiberTag, type Fiber, type ReactNode } from '../../../core';
+@@ -98,38 +98,47 @@
+         }
+         instance.props = props;
+     }
+-    if (captured && Ctor.getDerivedStateFromError) {
+-        const update = Ctor.getDerivedStateFromError(captured.e);
+-        if (update != null)
+-            instance.state = { ...instance.state, ...update };
+-    }
+-    let rendered: ReactNode = captured && !Ctor.getDerivedStateFromError ? null : didRender ? instance.render() : fiber.b?.r;
+-    fiber.b = { ...(fiber.b ?? {}), r: rendered };
+-    const canCatch = Ctor.getDerivedStateFromError || instance.componentDidCatch;
+-    if (canCatch)
+-        fiber.b.b = Ctor;
+-    if (canCatch && fiber.r)
+-        fiber.r.eb = true;
+-    const checkpoint = canCatch ? checkpointCommit(fiber) : -1;
++    // Errors from a recovery tree belong to an enclosing boundary. A nested
++    // boundary introduced by that recovery remains eligible to catch them.
++    if (captured) recoveringBoundaries.add(fiber);
+     try {
+-        reconcileRaw(fiber, rendered);
+-    }
+-    catch (error) {
+-        if (!(error instanceof RenderErrorCapture) || error.b !== fiber)
+-            throw error;
+-        rewindCommit(checkpoint);
+-        captured = error;
+-        didRender = true;
+-        if (Ctor.getDerivedStateFromError) {
+-            const update = Ctor.getDerivedStateFromError(error.e);
++        if (captured && Ctor.getDerivedStateFromError) {
++            const update = Ctor.getDerivedStateFromError(captured.e);
+             if (update != null)
+                 instance.state = { ...instance.state, ...update };
+-            rendered = instance.render();
+-        }
+-        else
+-            rendered = null;
++        }
++        let rendered: ReactNode = captured && !Ctor.getDerivedStateFromError ? null : didRender ? instance.render() : fiber.b?.r;
+         fiber.b = { ...(fiber.b ?? {}), r: rendered };
+-        reconcileRaw(fiber, rendered);
++        const canCatch = Ctor.getDerivedStateFromError || instance.componentDidCatch;
++        if (canCatch)
++            fiber.b.b = Ctor;
++        if (canCatch && fiber.r)
++            fiber.r.eb = true;
++        const checkpoint = canCatch ? checkpointCommit(fiber) : -1;
++        try {
++            reconcileRaw(fiber, rendered);
++        }
++        catch (error) {
++            if (!(error instanceof RenderErrorCapture) || error.b !== fiber)
++                throw error;
++            rewindCommit(checkpoint);
++            captured = error;
++            recoveringBoundaries.add(fiber);
++            didRender = true;
++            if (Ctor.getDerivedStateFromError) {
++                const update = Ctor.getDerivedStateFromError(error.e);
++                if (update != null)
++                    instance.state = { ...instance.state, ...update };
++                rendered = instance.render();
++            }
++            else
++                rendered = null;
++            fiber.b = { ...(fiber.b ?? {}), r: rendered };
++            reconcileRaw(fiber, rendered);
++        }
++    }
++    finally {
++        recoveringBoundaries.delete(fiber);
+     }
+     fiber.m = props;
+     const state = instance.state;
+diff --git a/src/dom/features/class/stub.ts b/src/dom/features/class/stub.ts
+--- a/src/dom/features/class/stub.ts
++++ b/src/dom/features/class/stub.ts
+@@ -1,7 +1,7 @@
+ import { resolveClassProps } from '../../../core/class-props';
+ import { isFunction } from '../../../core/functions';
+ import { FiberTag, type Fiber, type ReactNode } from '../../../core';
+-import { installRenderer, reconcileRaw, childrenToArray, scheduleUpdate, isThenable, handleSuspended, handleErrorInRender, } from '../../reconcile';
++import { installRenderer, reconcileRaw, childrenToArray, scheduleUpdate, isThenable, handleSuspended, deferHydration, handleErrorInRender, } from '../../reconcile';
+ // Stub: Class feature disabled. Class components still render — they're
+ // detected by `type.prototype.isReactComponent` in the reconciler regardless —
+ // but ONLY the core contract is honored: constructor, `render()`, and
+@@ -42,6 +42,7 @@
+     }
+     catch (e: any) {
+         if (isThenable(e)) {
++            if (deferHydration(fiber, e)) return;
+             handleSuspended(fiber, e);
+             rendered = null;
+         }
+diff --git a/src/dom/features/hydration/full.ts b/src/dom/features/hydration/full.ts
+--- a/src/dom/features/hydration/full.ts
++++ b/src/dom/features/hydration/full.ts
+@@ -1,4 +1,4 @@
+-import { readOwnerStack, runWithOwnerStack } from '../../../core/devtools';
++import { devToolsMetadata, readOwnerStack, runWithOwnerStack } from '../../../core/devtools';
+ import { drainReplayQueue } from '../../event-replay';
+ import { attachRootFiber, createFiberRoot } from '../../root-internal';
+ import { createHostNode, setProp } from '../../dom';
+@@ -10,7 +10,7 @@
+ export { reactId, forkId, assignReactIds } from '../../react-ids';
+ import { FiberTag, type Fiber, type FiberRoot, type ReactNode, } from '../../../core';
+ import { hydratedFormStates } from '../../../react/form-state';
+-import { queueMutation, queueProp, queueText } from '../../commit';
++import { queueBeforeMutation, queueMutation, queueProp, queueText, onCommitRollback, onCommitFailure } from '../../commit';
+ import { syncTextareaValue } from '../../form-controls';
+ // Re-export from event-replay so all hydration concerns live behind one
+ // feature boundary — the plugin's stub swap strips drainReplayQueue too.
+@@ -20,7 +20,7 @@
+     let f = fiber;
+     while (f) {
+         if (f.t === FiberTag.Host && f.n) {
+-            if (!isSafeHostRecoveryElement(f))
++            if (DOCUMENT_SHELL_TAGS.test(f.type.toLowerCase()))
+                 return null;
+             const parentTag = f.p?.t as number;
+             if (!host || (parentTag > FiberTag.Text && parentTag < FiberTag.Suspense)) {
+@@ -62,34 +62,39 @@
+         }
+         return null;
+     }
+-    /**
+-     * Position-insensitive lookup for head/html adoption. Scans forward past
+-     * non-matching nodes without removing them, matching by tag AND the key
+-     * attributes that identify head elements uniquely (rel/href for links,
+-     * name/property for meta, src for script). Non-matching nodes stay in
+-     * place so the SSR'd stylesheet/script order is preserved.
+-     */
+-    head(tag: string, props: Record<string, any>): ChildNode | null {
+-        const target = tag.toLowerCase();
+-        const keyAttrs = HEAD_KEY_ATTRS[target];
+-        let scan = this.p.firstChild;
+-        while (scan) {
+-            if (scan.nodeType === 1 &&
+-                (scan as Element).tagName.toLowerCase() === target &&
+-                headAttrsMatch(scan as Element, props, keyAttrs)) {
+-                CLAIMED.add(scan);
+-                return scan;
+-            }
+-            scan = scan.nextSibling;
+-        }
+-        return null;
+-    }
+     has(): boolean {
+         const position = this.n;
+         const found = this.take() !== null;
+         this.n = position;
+         return found;
+     }
++}
++/**
++ * Position-insensitive lookup for head/html adoption. Scans forward past
++ * non-matching nodes without removing them, matching by tag AND the key
++ * attributes that identify head elements uniquely (rel/href for links,
++ * name/property for meta, src for script). Non-matching nodes stay in
++ * place so the SSR'd stylesheet/script order is preserved.
++ */
++function findMetadata(parent: Node | undefined, tag: string, props: Record<string, any>, fallback?: HydrationCursor): ChildNode | null {
++    const keys = HEAD_KEY_ATTRS[tag] ?? [];
++    for (const location of [parent, fallback]) {
++        if (!location) continue;
++        const cursor = location instanceof HydrationCursor ? location : null;
++        scan: for (let node = cursor ? cursor.n : (location as Node).firstChild; node && node !== cursor?.e; node = node.nextSibling) {
++            const el = node as Element;
++            if (el.localName !== tag || CLAIMED.has(el))
++                continue;
++            for (const key of keys) {
++                const value = props[key];
++                if (hydrationAttribute(el, attributeName(key)) !== (value == null ? null : String(value)))
++                    continue scan;
++            }
++            claimHydrationNode(el);
++            return el;
++        }
++    }
++    return null;
+ }
+ const PROD_HYDRATION_ERROR = 'Hydration mismatch.';
+ const BOUNDARY_MARKER = /^(\$[?!E~]?)(\d*)$/;
+@@ -113,7 +118,12 @@
+     render(children: ReactNode): void;
+     unmount(): void;
+ }
++// Complete hydration before layout effects can synchronously update a store.
++export function queueHydrationEnd(root: FiberRoot): void {
++    if (root.h) queueBeforeMutation(() => endHydration(root));
++}
+ export function beginHydration(root: FiberRoot): void {
++    if (process.env.NODE_ENV !== 'production') devToolsMetadata.hydratedRoots.add(root);
+     root.ic = 0;
+     root.h = true;
+     root.r.hc = new HydrationCursor(root.c);
+@@ -127,21 +137,11 @@
+ };
+ // DOM elements already claimed by some fiber during this hydration pass.
+ const CLAIMED = new WeakSet<Node>();
+-function headAttrsMatch(el: Element, props: Record<string, any>, keys: ReadonlyArray<string> | undefined): boolean {
+-    if (CLAIMED.has(el))
+-        return false;
+-    if (!keys)
+-        return true;
+-    for (const k of keys) {
+-        const propVal = props[k];
+-        const elVal = hydrationAttribute(el, attributeName(k));
+-        if (propVal == null ? elVal != null : String(propVal) !== elVal)
+-            return false;
+-    }
+-    return true;
+-}
+-function isSafeHostRecoveryElement(fiber: Fiber): boolean {
+-    return !DOCUMENT_SHELL_TAGS.test(fiber.type.toLowerCase());
++function claimHydrationNode(node: Node): void {
++    CLAIMED.add(node);
++    const release = () => { CLAIMED.delete(node); };
++    onCommitRollback(release);
++    onCommitFailure(release);
+ }
+ const hydrationAttribute = (el: Element, name: string): string | null => (name === 'nonce' && 'nonce' in el && el.hasAttribute(name)
+     ? (el as HTMLElement).nonce ?? ''
+@@ -257,30 +257,16 @@
+     if (!cursor)
+         return false;
+     const tag = (fiber.type as string).toLowerCase();
++    const props = fiber.v ?? {};
+     const documentHeadParent = documentMetadataParent(fiber) || (cursor.p.nodeType === 9 && DOCUMENT_HEAD_TAGS.test(tag)
+         ? (cursor.p as Document).head
+         : null);
+-    const parentEl = cursor.p as Element;
+-    const parentTag = parentEl.nodeType === 1 ? (parentEl as Element).tagName.toLowerCase() : '';
++    const parentTag = (cursor.p as Element).localName;
+     const isHeadish = parentTag === 'head' || parentTag === 'html' || !!documentHeadParent;
+-    let candidate: ChildNode | null;
+-    if (documentHeadParent) {
+-        // Adopt projected metadata from the same head used for client updates.
+-        candidate = new HydrationCursor(documentHeadParent).head(tag, fiber.v ?? {});
+-    }
+-    else if (cursor.p.nodeType === 9 && tag !== 'html') {
+-        candidate = new HydrationCursor((cursor.p as Document).body).head(tag, fiber.v ?? {});
+-    }
+-    else if (isHeadish) {
+-        // Head/html children are position-insensitive — server may emit them in
+-        // a different order than the React tree (React 19 head hoisting, etc.).
+-        // Scan forward without removing non-matching nodes; match on attribute
+-        // signature so we don't adopt the wrong <link> and clobber its props.
+-        candidate = cursor.head(tag, fiber.v ?? {});
+-    }
+-    else {
+-        candidate = cursor.take();
+-    }
++    const metadataParent = documentHeadParent || (isHeadish ? cursor.p
++        : cursor.p.nodeType === 9 && tag !== 'html' ? (cursor.p as Document).body : null);
++    // Prefer hoisted metadata, then claim its original host position.
++    const candidate = metadataParent ? findMetadata(metadataParent, tag, props, documentHeadParent ? cursor : undefined) : cursor.take();
+     if (!candidate) {
+         // Client expected a host here but the cursor is exhausted — server gave
+         // fewer children than the client tree. Report the structural gap (React
+@@ -292,14 +278,13 @@
+             onMismatch(fiber, null);
+         return false;
+     }
+-    if (candidate.nodeType !== 1 || (candidate as Element).tagName.toLowerCase() !== tag) {
++    if ((candidate as Element).localName?.toLowerCase() !== tag) {
+         // mismatch — log and re-render fresh from this point
+         onMismatch(fiber, candidate);
+         return false;
+     }
+     fiber.n = candidate;
+     // Apply props (attach events, sync IDL props). Don't re-set existing attrs.
+-    const props = fiber.v ?? {};
+     const isSvg = tag === 'svg' ||
+         ((candidate as Element).namespaceURI === 'http://www.w3.org/2000/svg' &&
+             tag !== 'foreignobject');
+@@ -312,7 +297,7 @@
+     if (isFunction(tag === 'form' ? props.action : props.formAction)) {
+         for (const child of (candidate as Element).children) {
+             if (child.tagName === 'INPUT' && child.getAttribute('type') === 'hidden' && child.getAttribute('name')?.startsWith('$ACTION_'))
+-                CLAIMED.add(child);
++                claimHydrationNode(child);
+         }
+     }
+     // Set up child cursor for this host's children
+@@ -323,22 +308,12 @@
+     }
+     return true;
+ }
+-function getRecoveryContainer(container: Element | Document, host: Fiber | null): Element | Document {
+-    if (host?.t === FiberTag.Host &&
+-        host.n &&
+-        findNearestSafeHostAboveComposite(host.p)) {
+-        return host.n as Element;
+-    }
+-    return container;
+-}
+ export function findHostParent(fiber: Fiber): Fiber {
+     let f: Fiber | null = fiber;
+     while (f) {
+         // A fiber explicitly holding a cursor acts as a boundary for hydration
+         // (e.g. Suspense with a scoped cursor during fallback/boundary hydration).
+-        if (f.hc)
+-            return f;
+-        if (f.t === FiberTag.Host || f.t === FiberTag.Root || f.t === FiberTag.Portal) {
++        if (f.hc || f.t === FiberTag.Host || f.t === FiberTag.Root || f.t === FiberTag.Portal) {
+             return f;
+         }
+         f = f.p;
+@@ -483,7 +458,9 @@
+         return false;
+     const container = root.c as Element | Document;
+     const children = root.r.v?.children ?? null;
+-    const recoveryContainer = getRecoveryContainer(container, error.f);
++    const host = error.f;
++    const recoveryContainer = host?.t === FiberTag.Host && host.n && findNearestSafeHostAboveComposite(host.p)
++        ? host.n as Element : container;
+     resetAfterHydrationFailure(root, container, recoveryContainer);
+     if (recoveryContainer !== container) {
+         releaseClaims(container);
+@@ -506,35 +483,11 @@
+     return true;
+ }
+ const formatHydrationValue = (value: string | null): string => (value == null ? 'nothing' : JSON.stringify(value));
+-export function deferHydration(fiber: Fiber, thenable: Promise<any>, restartInitial?: boolean): boolean {
+-    const currentRoot = getCurrentRoot();
+-    if (!currentRoot?.h)
+-        return false;
+-    // Until the initial tree commits, a suspended component's host range is
+-    // unknown. Stop the pass instead of sharing its cursor with later siblings.
+-    const hostParent = findHostParent(fiber);
+-    if (restartInitial && (currentRoot.r.m === null || currentRoot.ri) || hostParent.t === FiberTag.Root)
+-        throw thenable;
+-    const inheritedCursor = getHydrationCursor(hostParent);
+-    if (inheritedCursor)
+-        setHydrationCursor(fiber, inheritedCursor);
+-    ((fiber.b ??= {}) as any).p = true;
+-    let sus: Fiber | null = fiber.p;
+-    while (sus && sus.t !== FiberTag.Suspense)
+-        sus = sus.p;
+-    if (sus && sus.b) {
+-        ;
+-        (sus.b as any).a = true;
+-    }
+-    const clearAwait = () => {
+-        if (sus && sus.b) {
+-            ;
+-            (sus.b as any).a = false;
+-        }
+-        scheduleUpdate(fiber);
+-    };
+-    thenable.then(clearAwait, clearAwait);
+-    return true;
++export function deferHydration(_fiber: Fiber, thenable: Promise<any>): boolean {
++    // A suspended component does not own a known host range. Its hydration
++    // owner, either the root or a marked boundary, must pause and retry it.
++    if (getCurrentRoot()?.h) throw thenable;
++    return false;
+ }
+ export function hydrateRootImpl(container: Element | Document, initialChildren: ReactNode, options: HydrateRootOptions): HydratedRoot {
+     const root = createFiberRoot(container, options);
+@@ -596,6 +549,7 @@
+                 scheduleRootRender(root, () => renderRoot(root, children));
+         },
+         unmount() {
++            discardPendingWork(root);
+             active = false;
+             generation++;
+             const pending = root.r.m === null;
+diff --git a/src/dom/features/hydration/stub.ts b/src/dom/features/hydration/stub.ts
+--- a/src/dom/features/hydration/stub.ts
++++ b/src/dom/features/hydration/stub.ts
+@@ -36,6 +36,8 @@
+ }
+ 
+ export function endHydration(_root: FiberRoot): void {}
++
++export const queueHydrationEnd = undefined
+ 
+ export const tryConsumeBoundary = (_parent: Fiber): BoundaryInfo | null => (null)
+ 
+@@ -79,6 +81,6 @@
+ 
+ export function assignReactIds(_parent: Fiber, _children: object): void {}
+ 
+-export const deferHydration: (_f: Fiber, _thenable: Promise<any>, _restartInitial?: boolean) => boolean = () => false
++export const deferHydration: (_f: Fiber, _thenable: Promise<any>) => boolean = () => false
+ 
+ export function finishHydration(_f: Fiber, _isTextarea: boolean): void {}
+diff --git a/src/dom/features/lazy/full.ts b/src/dom/features/lazy/full.ts
+--- a/src/dom/features/lazy/full.ts
++++ b/src/dom/features/lazy/full.ts
+@@ -12,7 +12,7 @@
+     }
+     catch (thenable: any) {
+         if (isThenable(thenable)) {
+-            if (deferHydration(fiber, thenable, true))
++            if (deferHydration(fiber, thenable))
+                 return;
+             handleSuspended(fiber, thenable);
+             // reconcile would be called here if we were rendering children,
+diff --git a/src/dom/features/suspense/full.ts b/src/dom/features/suspense/full.ts
+--- a/src/dom/features/suspense/full.ts
++++ b/src/dom/features/suspense/full.ts
+@@ -1,7 +1,7 @@
+ import { readOwnerStack, runWithOwnerStack } from '../../../core/devtools';
+ import { a as transitionRender } from '../suspense-runtime';
+ import { cleanupEffect } from '../../dispatcher';
+-import { checkpointCommit, rewindCommit, queueMutation, onCommitFailure } from '../../commit';
++import { checkpointCommit, rewindCommit, queueMutation, onCommitFailure, onCommitRollback, commitSynchronously } from '../../commit';
+ import { REACT_SUSPENSE_TYPE, ReactSharedInternals, startTransition } from '../../../react';
+ import { FiberTag, createFiber, type Fiber } from '../../../core';
+ import { disconnectClass, inSuspensePrimary, setRetainedFlag, walkRetained } from '../../retained-effects';
+@@ -29,7 +29,7 @@
+     if (!(root && parent))
+         return;
+     // Both initial hydration and a streamed reveal adopt the same marked range.
+-    withCurrentRoot(root, () => {
++    commitSynchronously(() => withCurrentRoot(root, () => {
+         const previous = root.h;
+         try {
+             const kind = state.b.data.startsWith('$E') ? 3 : state.b.data.startsWith('$!') ? 2 : 0;
+@@ -42,7 +42,7 @@
+             root.h = previous;
+         }
+         runEffects(root);
+-    });
++    }));
+ }
+ // React's Suspense semantics: when a re-render of an already-committed
+ // boundary suspends, the previously-committed children are kept in the DOM
+@@ -62,7 +62,7 @@
+     e?: Comment;
+     r?: any;
+     w?: boolean;
+-    a?: boolean;
++    x?: () => void;
+     u?: boolean;
+     // Re-suspend preservation:
+     d?: Array<[
+@@ -83,6 +83,8 @@
+ }
+ function recoverBoundaryHydration(fiber: Fiber, children: any, parent: Node, startMark: Comment | null, endMark: Comment | null, retryBoundary?: boolean): void {
+     const clear = () => {
++        const dispose = fiber.b?.x;
++        if (dispose) queueMutation(dispose);
+         if (startMark && endMark)
+             clearBoundaryRange(startMark, endMark);
+         else
+@@ -97,7 +99,7 @@
+     root.h = false;
+     try {
+         if (retryBoundary) {
+-            fiber.b = {};
++            fiber.b = { b: startMark, e: endMark };
+             renderSuspense(fiber);
+         }
+         else
+@@ -125,6 +127,10 @@
+     finally {
+         ReactSharedInternals.T = previous;
+     }
++}
++function retryHydration(fiber: Fiber, thenable: Promise<any>): void {
++    const retry = () => { if (!fiber.u) scheduleRetry(fiber); };
++    thenable.then(retry, retry);
+ }
+ function hydrateSuspenseBoundary(fiber: Fiber, props: any, boundary: [
+     0 | 1 | 2 | 3,
+@@ -148,6 +154,7 @@
+     }
+     if (!pendingBoundary) {
+         // Real DOM is inline between startMark and endMark. Hydrate into it.
++        const checkpoint = checkpointCommit(fiber);
+         const parent = startMark.parentNode!;
+         try {
+             setHydrationCursor(fiber, new HydrationCursor(parent, startMark.nextSibling, endMark));
+@@ -155,18 +162,22 @@
+             advanceCursorPast(fiber.p!, endMark);
+         }
+         catch (e) {
+-            // A lazy module can pause the initial root pass. Keep its server range
+-            // intact while the hydration owner waits and retries the whole tree.
+-            if (!reveal && isThenable(e))
+-                throw e;
+-            if (!isHydrationBailout(e)) {
++            // A marked boundary owns a known server range. Roll back only its
++            // unfinished preparation so siblings can hydrate while it waits.
++            if (isThenable(e)) {
++                rewindCommit(checkpoint);
++                fiber.b.w = true;
++                retryHydration(fiber, e);
++                advanceCursorPast(fiber.p!, endMark);
++            }
++            else if (!isHydrationBailout(e)) {
+                 onCommitFailure(() => {
+                     clearBoundaryRange(startMark, endMark);
+                     unmountAllChildren(fiber);
+                 });
+                 throw e;
+             }
+-            recoverBoundaryHydration(fiber, props.children, parent, startMark, endMark);
++            else recoverBoundaryHydration(fiber, props.children, parent, startMark, endMark);
+         }
+         finally {
+             clearHydrationCursor(fiber);
+@@ -186,29 +197,16 @@
+         fiber.m = props;
+         return;
+     }
+-    // Pending: fallback DOM lives inside <div id="B:ID">. Hydrate the fallback
+-    // React subtree against that div's children.
+-    const bDiv = document.getElementById(`B:${id}`);
+-    try {
+-        if (bDiv) {
+-            setHydrationCursor(fiber, new HydrationCursor(bDiv));
+-            reconcileRaw(fiber, props.fallback);
+-        }
+-        else {
+-            // Couldn't find fallback container — render fresh (non-adopting)
+-            reconcileRaw(fiber, props.fallback);
+-        }
+-    }
+-    catch (e) {
+-        if (!isHydrationBailout(e) || !bDiv)
+-            throw e;
+-        recoverBoundaryHydration(fiber, props.fallback, bDiv, null, null);
+-    }
+-    finally {
+-        clearHydrationCursor(fiber);
+-    }
++    // Pending transport owns this range until reveal. Keep the opaque server
++    // range owned by this fiber so deletion also retires its template/fallback.
++    fiber.b.w = true;
+     advanceCursorPast(fiber.p!, endMark);
+-    (globalThis as any).$RH?.(id, () => rehydrateBoundary(fiber));
++    const boundaryId = (findRoot(fiber)?.i ?? '') + 'B:' + id.toString(16);
++    const dispose = (globalThis as any).$RH?.(boundaryId, () => {
++        if (!fiber.u && !fiber.pd) rehydrateBoundary(fiber);
++    });
++    fiber.b.x = dispose;
++    if (dispose) onCommitRollback(dispose);
+     // If the inline runtime isn't present, nothing external will mark us dy.
+     fiber.m = props;
+ }
+@@ -305,7 +303,7 @@
+         }
+     }
+     if (state.w && state.b && state.e) {
+-        if (state.b.data === '$?' || state.b.data === '$~') {
++        if (state.b.data.startsWith('$?') || state.b.data === '$~') {
+             if (!root?.h && props.children !== fiber.m?.children) {
+                 ;
+                 (state.b as any)._reactRetry = undefined;
+@@ -328,27 +326,11 @@
+                 throw error;
+             rewindCommit(checkpoint);
+             fiber.b = state;
+-            error.then(() => {
+-                if (!fiber.u)
+-                    scheduleRetry(fiber);
+-            }, () => {
+-                if (!fiber.u)
+-                    scheduleRetry(fiber);
+-            });
++            retryHydration(fiber, error);
+         }
+         finally {
+             root!.h = wasHydrating;
+         }
+-        return;
+-    }
+-    // A descendant Lazy deferred its hydration (see renderLazy's hydrating
+-    // branch). Its SSR-rendered content is still in the DOM and cursor-bound
+-    // via the Lazy fiber — we just haven't swapped it into a fiber subtree
+-    // yet. Until the Lazy's resume fires, skip our own tryChildren pass so
+-    // an unrelated re-render can't accidentally flip us into the suspended
+-    // path and mount a duplicate fallback on top of the SSR content.
+-    if (state.a) {
+-        fiber.m = props;
+         return;
+     }
+     // New primary children or context can unblock a boundary before its old
+diff --git a/src/dom/features/suspense-runtime/stub.ts b/src/dom/features/suspense-runtime/stub.ts
+--- a/src/dom/features/suspense-runtime/stub.ts
++++ b/src/dom/features/suspense-runtime/stub.ts
+@@ -1 +1 @@
+-export const a = undefined, p = undefined, q = undefined, r = undefined, t = undefined, v = undefined, c = undefined
++export const a = undefined, p = undefined, q = undefined, r = undefined, t = undefined, v = undefined, c = undefined, s = undefined
+diff --git a/src/dom/react-ids.ts b/src/dom/react-ids.ts
+--- a/src/dom/react-ids.ts
++++ b/src/dom/react-ids.ts
+@@ -1,8 +1,8 @@
+ import type { Fiber, FiberRoot } from '../core';
+ // React SSR encodes the original child slots, including empty slots, into IDs.
+-// Keep this opt-in so existing Redact SSR IDs remain compatible across upgrades.
++// Redact SSR uses the same tree slots so suspended render order cannot change IDs.
+ let clientId = 0;
+-const leadingBit = (tree: bigint): bigint => 1n << BigInt(tree.toString(2).length - 1);
++export const leadingBit = (tree: bigint): bigint => 1n << BigInt(tree.toString(2).length - 1);
+ export function forkId(base: bigint, count: number, index: number): bigint {
+     const bit = leadingBit(base);
+     return (bit << BigInt(32 - Math.clz32(count))) | (BigInt(index + 1) * bit) | (base ^ bit);
+diff --git a/src/dom/reconcile.ts b/src/dom/reconcile.ts
+--- a/src/dom/reconcile.ts
++++ b/src/dom/reconcile.ts
+@@ -1,3 +1,4 @@
++import { isTextContent } from '../core/functions';
+ import { devToolsMetadata, readOwnerStack, runWithOwnerStack } from '../core/devtools';
+ import { getRootContainer } from './root-internal';
+ export { getHostParent, findRoot, getAnchor, firstDomNode } from './tree';
+@@ -13,13 +14,13 @@
+ import { m as markTransitionUpdate, d as deferTransition, c as cancelTransitions, l as deferTransitionLayout, p as deferTransitionPassive } from './features/view-transition';
+ import { clearAttributes, clearHostContainer, documentMetadataParent, documentSingleton, DOCUMENT_HEAD_TAGS } from './document-metadata';
+ import { acquireResource } from './resources';
+-import { a as transitionRender, p as hasTransition, t as flushTransitions, c as cancelPendingTransitions } from './features/suspense-runtime';
++import { a as transitionRender, p as hasTransition, t as flushTransitions, c as cancelPendingTransitions, s as scheduleTransitionRoot } from './features/suspense-runtime';
+ import { commitFragmentRef, placeFragmentCommits, updateFragmentHost, refreshFragmentInstances } from './features/fragment-refs';
+ import { isObject } from '../core/functions';
+ import { FiberTag, createFiber, REACT_ELEMENT_TYPE, REACT_LEGACY_ELEMENT_TYPE, REACT_FRAGMENT_TYPE, type Fiber, type FiberRoot, type ReactElement, type ReactNode, type Effect, type Hook, } from '../core';
+ import { createHostNode, setProp } from './dom';
+ import { rememberRefreshRender, scheduleRefreshRoot, commitRefreshRoot, failRefreshRoot, failRefreshBoundary, resolveRefreshType, sameRefreshFamily, needsRefreshRemount } from './refresh';
+-import { forkId, assignReactIds, deferHydration, finishHydration, adoptHostDom, adoptTextDom, setHydrationCursor, getHydrationCursor, clearHydrationCursor, findHostParent as findHydrationHost, abortHydration, recoverHydration, isHydrationBailout, resumeHydration, } from './features/hydration';
++import { forkId, assignReactIds, deferHydration, queueHydrationEnd, finishHydration, adoptHostDom, adoptTextDom, setHydrationCursor, getHydrationCursor, clearHydrationCursor, findHostParent as findHydrationHost, abortHydration, recoverHydration, isHydrationBailout, resumeHydration, } from './features/hydration';
+ import { rememberRetainedEffect, setRetainedFlag, disconnectClass } from './retained-effects';
+ import { readThenable } from '../react/thenable';
+ import { bindForm } from './form-actions';
+@@ -78,6 +79,8 @@
+     }
+     if (fiber.t === FiberTag.Portal)
+         return;
++    if (fiber.t === FiberTag.Suspense && fiber.b?.b)
++        out.push(fiber.b.b);
+     let c = fiber.c;
+     while (c) {
+         collectHostDoms(c, out);
+@@ -85,6 +88,8 @@
+     }
+     if (fiber.t === FiberTag.Suspense && fiber.b?.f)
+         collectHostDoms(fiber.b.f, out);
++    if (fiber.t === FiberTag.Suspense && fiber.b?.e)
++        out.push(fiber.b.e);
+ }
+ export function stageCommit(fiber: Fiber, work: Effect | (() => void), ref = false): void {
+     let entries = stagedCommits.get(fiber);
+@@ -127,7 +132,7 @@
+         ids?.push(path);
+         return;
+     }
+-    if (isString(node) || typeof node === 'number') {
++    if (isTextContent(node)) {
+         if (node !== '') {
+             out.push('' + node);
+             ids?.push(path);
+@@ -333,14 +338,20 @@
+ // fallback branch. Features register here for element types that aren't
+ // marker-based (e.g. Portal, where element.type IS the symbol).
+ const TYPE_MATCHERS: TypeMatcher[] = [];
+-function renderUpdates(root: FiberRoot, pending: Fiber[]): void {
++function renderUpdates(root: FiberRoot, pending: Fiber[], update?: () => void): void {
+     pending.sort((a, b) => fiberDepth(a) - fiberDepth(b));
+     if (transitionRender)
+         for (const fiber of pending)
+             fiber.g = true;
++    update?.();
+     for (const fiber of pending) {
+         if (!fiber.g || fiber.u || fiber.pd)
+             continue;
++        // An ancestor earlier in this batch may have retained this subscriber.
++        if (fiber.su) {
++            scheduleUpdate(fiber);
++            continue;
++        }
+         if (!transitionRender) {
+             if (fiber.bt && hasTransition?.(fiber))
+                 continue;
+@@ -578,9 +589,6 @@
+     if (fiber.n && fiber.m !== null && !fiber.n.parentNode &&
+         domParent.firstChild?.nodeType === 3 && !domParent.firstChild.nextSibling) {
+         fiber.n = domParent.firstChild;
+-        queueText(fiber.n as Text, text);
+-        fiber.m = text;
+-        return;
+     }
+     // Identity-unchanged fast path: skip the native Text.data write entirely.
+     if (fiber.n && fiber.m === text)
+@@ -650,7 +658,7 @@
+     if (process.env.NODE_ENV !== 'production')
+         rememberRefreshRender(root, render);
+     markTransitionUpdate && markTransitionUpdate(root);
+-    root.u = render;
++    if (!scheduleTransitionRoot?.(root, render)) root.u = render;
+     pendingRoots.add(root);
+     if (isBatching)
+         return;
+@@ -756,9 +764,10 @@
+ export function installRenderer(tag: FiberTag, fn: RenderFn): void {
+     RENDERERS[tag] = fn;
+ }
++export const recoveringBoundaries = new Set<Fiber>();
+ function findErrorBoundary(fiber: Fiber): Fiber | null {
+     for (let parent = fiber.p; parent; parent = parent.p) {
+-        if (parent.u || parent.pd)
++        if (parent.u || parent.pd || recoveringBoundaries.has(parent))
+             continue;
+         const instance = parent.i;
+         if (instance?._f === parent && (parent.b?.b?.getDerivedStateFromError || instance.componentDidCatch))
+@@ -846,6 +855,8 @@
+                 if (batch.length) {
+                     const passive = () => {
+                         for (const [fiber, effect] of batch)
++                            if (!fiber.u && !isActivityHidden(fiber) && !activityIsDisconnected(fiber)) effect.d?.();
++                        for (const [fiber, effect] of batch)
+                             runEffect(fiber, effect);
+                     };
+                     if (process.env.NODE_ENV !== 'production') {
+@@ -898,6 +909,8 @@
+     finally {
+         currentRoot = null;
+     }
++    // Layout effects can synchronously update stores, after hydration has ended.
++    queueHydrationEnd?.(root);
+     runEffects(root);
+     if (process.env.NODE_ENV !== 'production')
+         commitRefreshRoot(root);
+@@ -1211,7 +1224,12 @@
+     fiber.u = true;
+     if (fiber.t === FiberTag.Suspense && fiber.b?.b) {
+         const state = fiber.b;
++        state.x?.();
+         state.b._reactRetry = undefined;
++        if (remove && !state.w) {
++            state.b.remove();
++            state.e?.remove();
++        }
+         if (remove && state.w) {
+             let node: Node | null = state.b;
+             while (node) {
+diff --git a/src/dom/resources.ts b/src/dom/resources.ts
+--- a/src/dom/resources.ts
++++ b/src/dom/resources.ts
+@@ -38,10 +38,10 @@
+     for (const name in next) {
+         setProp(node, name, name === 'href' || name === 'src' ? resourceURL(next[name]) : next[name], undefined, false);
+     }
+-    if (style && next.dangerouslySetInnerHTML == null && (isString(next.children) || typeof next.children === 'number' || typeof next.children === 'bigint'))
++    if (style && next.dangerouslySetInnerHTML == null && isTextContent(next.children))
+         node.textContent = '' + next.children;
+     resources.i.set(key, node);
+     insertResource(node, script ? undefined : props.precedence, root);
+     return node;
+ }
+-import { isString } from "../core/functions";
++import { isTextContent } from '../core/functions';
+diff --git a/src/dom/root-internal.ts b/src/dom/root-internal.ts
+--- a/src/dom/root-internal.ts
++++ b/src/dom/root-internal.ts
+@@ -16,8 +16,7 @@
+         i: options.identifierPrefix,
+         h: false,
+     } as FiberRoot;
+-    if (options.identifierStrategy === 'react')
+-        root.ri = true;
++    root.ri = true;
+     attachRootFiber(root, container);
+     return root;
+ }
+diff --git a/src/dom/root.ts b/src/dom/root.ts
+--- a/src/dom/root.ts
++++ b/src/dom/root.ts
+@@ -1,4 +1,4 @@
+-import { renderRoot, scheduleRootRender, flushSyncWork, batchedUpdates } from './reconcile'
++import { discardPendingWork, renderRoot, scheduleRootRender, flushSyncWork, batchedUpdates } from './reconcile'
+ 
+ import { createFiberRoot } from './root-internal'
+ 
+@@ -40,6 +40,7 @@
+       })
+     },
+     unmount() {
++      discardPendingWork(root)
+       flushSyncWork(() => {
+         renderRoot(root, null)
+       })
+diff --git a/src/dom/transitions.ts b/src/dom/transitions.ts
+--- a/src/dom/transitions.ts
++++ b/src/dom/transitions.ts
+@@ -35,9 +35,10 @@
+         complete(pending.s);
+         pending.s.clear();
+         pending.clear();
++        pending.u = undefined;
+     }
+ }
+-export function t(root: FiberRoot, render: (root: FiberRoot, fibers: Fiber[]) => void): void {
++export function t(root: FiberRoot, render: (root: FiberRoot, fibers: Fiber[], update?: () => void) => void): void {
+     const pending = root.tr;
+     if (!pending?.size)
+         return;
+@@ -45,7 +46,9 @@
+     const fibers = [...pending];
+     a = true;
+     try {
+-        render(root, fibers);
++        const update = pending.u;
++        render(root, fibers, update);
++        if (pending.u === update) pending.u = undefined;
+         for (const fiber of fibers) {
+             pending.delete(fiber);
+         }
+@@ -60,7 +63,7 @@
+             throw error;
+         rewindCommit(checkpoint);
+         for (const scope of pending.s)
+-            scope.n?.();
++            scope.n?.(scope);
+         if (pending.w !== error) {
+             pending.w = error;
+             const retry = () => transitionScope(() => {
+@@ -103,6 +106,16 @@
+     else
+         scheduleUpdate(fiber);
+ }
++export function s(root: FiberRoot, render: () => void): boolean {
++    if (!ReactSharedInternals.T) {
++        if (root.tr) root.tr.u = undefined;
++        return false;
++    }
++    const scope = ReactSharedInternals.B;
++    enqueue(root.r, scope?.o === root ? scope : undefined);
++    root.tr!.u = render;
++    return true;
++}
+ export function r(hook: Hook, reducer: (state: any, action: any) => any): boolean {
+     if (!hook.t)
+         return false;
+diff --git a/src/react/action-scope.ts b/src/react/action-scope.ts
+--- a/src/react/action-scope.ts
++++ b/src/react/action-scope.ts
+@@ -1,9 +1,11 @@
++import type { FiberRoot } from '../core'
+ import { ReactSharedInternals } from './shared-internals'
+ import { isThenable } from '../core/functions'
+ // Action lifetimes are separate from transition types used by ViewTransition.
+ export interface ActionScope {
++  o?: FiberRoot | null | undefined
+   v?: number
+-  n?: () => void
++  n?: ((scope: ActionScope) => void) | undefined
+   p: number
+   d: Promise<void>
+   r: () => void
+@@ -30,11 +32,11 @@
+   scope.l.clear()
+   scope.r()
+ }
+-export function runAction(callback: () => unknown): ActionScope {
++export function runAction(callback: () => unknown, owner?: FiberRoot | null, notify?: (scope: ActionScope) => void): ActionScope {
+   const previous = ReactSharedInternals.B
+   let resolve!: () => void
+   const done = new Promise<void>(yes => { resolve = yes })
+-  const scope: ActionScope = { p: 1, d: done, r: resolve, f: false, l: new Set() }
++  const scope: ActionScope = { p: 1, d: done, r: resolve, f: false, l: new Set(), o: owner ?? previous?.o, n: notify }
+   try {
+     const result = withinAction(scope, callback)
+     if (isThenable(result)) trackAction(scope, result as PromiseLike<unknown>)
+diff --git a/src/server/bootstrap-script.ts b/src/server/bootstrap-script.ts
+--- a/src/server/bootstrap-script.ts
++++ b/src/server/bootstrap-script.ts
+@@ -1,3 +1,4 @@
++import { boundaryId, segmentId, scriptId } from './stream-ids'
+ /**
+  * Inline client runtime injected into the streamed HTML. Two jobs:
+  *
+@@ -6,14 +7,12 @@
+  *     main bundle can replay them against un-hydrated subtrees ($RE_q buffer).
+  *
+  * Wire format:
+- *   Fallback:  <!--$?ID--><div id="B:ID">fallback</div><!--/$-->
+- *   Resolved:  emits <div hidden id="S:ID">real</div><script>$RC(ID)</script>
+- *              which splices real into place and rewrites the comment to <!--$ID-->.
+- *              The fallback div is visible (it's the user-visible loading
+- *              state); only the resolved-content staging div is `hidden`
+- *              before $RC moves its children inline.
++ *   Fallback:  <!--$?ID--><template id="PREFIXB:HEX"></template>fallback<!--/$-->
++ *   Resolved:  a context-specific hidden segment followed by $RC(boundaryID, segmentID).
++ *              Reveal removes the entire fallback range, moves the segment's
++ *              children inline, and rewrites the opening comment to <!--$ID-->.
+  *
+- * Client hydration calls $RH(ID, cb) to register a callback invoked once the
++ * Client hydration calls $RH(boundaryID, cb) to register a callback invoked once the
+  * boundary has been revealed (or immediately, if it was already revealed).
+  *
+  * Early-event buffering: before the main bundle is parsed, we attach capture
+@@ -24,32 +23,36 @@
+ 
+ export const BOUNDARY_REVEAL_RUNTIME =
+   `(function(){` +
++    // All independently prefixed streams in a document share one reveal registry.
++    `if(!window.$RH){` +
+     `var c={},r=new Map;` +
+     `function place(n,v){` +
+       `var a=document.head.querySelectorAll('link[rel="stylesheet"][data-precedence],style[data-precedence]'),t=a.length?a[a.length-1]:null,p=t;` +
+       `for(var k=0;k<a.length;k++){if(a[k].getAttribute("data-precedence")===v)p=a[k];else if(p!==t)break}` +
+       `document.head.insertBefore(n,p?p.nextSibling:document.head.firstChild);` +
+     `}` +
++    `function drop(s){var w=/^(TBODY|TR|COLGROUP|mtext)$/.test(s.nodeName)?s.closest("table,math"):s;w.remove()}` +
+     `function load(n,e){return new Promise(function(y,x){n.onload=function(){e.p=null;y()};n.onerror=function(){e.p=null;x()}})}` +
+     `window.$RH=function(i,f){` +
+-      `if(!document.getElementById("B:"+i))f();` +
+-      `else c[i]=f;` +
++      `if(!document.getElementById(i))f();` +
++      `else{c[i]=f;return function(){if(c[i]===f)delete c[i]}}` +
+     `};` +
+-    `window.$RC=function(i){` +
+-      `var s=document.getElementById("S:"+i),b=document.getElementById("B:"+i);` +
+-      `if(!s||!b)return;` +
++    `window.$RC=function(i,j){` +
++      `var s=document.getElementById(j),b=document.getElementById(i);` +
++      `if(!b){delete c[i];if(s)drop(s);return}if(!s)return;` +
+       `var a=document.querySelectorAll('body link[rel="stylesheet"][data-precedence],body style[data-precedence]');` +
+       `for(var j=0;j<a.length;j++){` +
+         `var n=a[j];if(n.getAttribute("media")==="not all")n.removeAttribute("media");place(n,n.getAttribute("data-precedence"));` +
+       `}` +
+       `var p=b.parentNode,m=b.previousSibling;` +
++      `var n=b.nextSibling,d=0;while(n){var t=n.nextSibling;if(n.nodeType===8){if(n.data==="/$"){if(d===0)break;d--}else if(/^\\$(?:[?!E~])?\\d*$/.test(n.data))d++}p.removeChild(n);n=t}` +
+       `while(s.firstChild)p.insertBefore(s.firstChild,b);` +
+-      `s.parentNode.removeChild(s);` +
++      `drop(s);` +
+       `p.removeChild(b);` +
+-      `if(m&&m.nodeType===8)m.data="$"+i;` +
++      `if(m&&m.nodeType===8)m.data=m.data.replace("$?","$");` +
+       `if(c[i]){var f=c[i];delete c[i];f()}` +
+     `};` +
+-    `window.$RL=function(i,d){` +
++    `window.$RR=function(i,s,d){` +
+       `var w=[];for(var j=0;j<d.length;j++){` +
+         `var a=d[j],e=r.get(a[0]);if(!e){` +
+           `var n=null,l=document.querySelectorAll('link[rel="stylesheet"]');for(var k=0;k<l.length;k++)if(l[k].getAttribute("href")===a[0]){n=l[k];break}` +
+@@ -61,13 +64,15 @@
+         `}` +
+         `var m=e.n.getAttribute("media");if(e.p&&(!m||matchMedia(m).matches))w.push(e.p);` +
+       `}` +
+-      `Promise.all(w).then(function(){$RC(i)},function(){$RB(i,1)});` +
++      `Promise.all(w).then(function(){$RC(i,s)},function(){$RB(i,1,s)});` +
+     `};` +
+-    `window.$RB=function(i,e){` +
+-      `var b=document.getElementById("B:"+i);if(!b)return;` +
+-      `var m=b.previousSibling;if(m&&m.nodeType===8)m.data=(e?"$E":"$!")+i;` +
++    `window.$RB=function(i,e,j){` +
++      `var s=j&&document.getElementById(j);if(s)drop(s);` +
++      `var b=document.getElementById(i);if(!b){delete c[i];return}` +
++      `var m=b.previousSibling;if(m&&m.nodeType===8)m.data=(e?"$E":"$!")+m.data.replace(/^\\$[?~!E]?/,"");` +
+       `b.removeAttribute("id");if(c[i]){var f=c[i];delete c[i];f()}` +
+     `};` +
++    `}` +
+     `var q=[];window.$RE_q=q;` +
+     `var evs=["click","submit","input","change","keydown"];` +
+     `function h(e){q.push([e.type,e.target,e.timeStamp])}` +
+@@ -80,7 +85,8 @@
+   return `<script${n}>${BOUNDARY_REVEAL_RUNTIME}</script>`
+ }
+ 
+-export function revealScript(id: number, nonce?: string, styles?: string[][]): string {
++export function revealScript(id: number, nonce?: string, styles?: string[][], identifierPrefix = ''): string {
+   const n = nonce ? ` nonce="${escapeAttr(nonce)}"` : ''
+-  return `<script${n}>${styles?.length ? `$RL(${id},${JSON.stringify(styles).replace(/</g, '\\u003c')})` : `$RC(${id})`}</script>`
++  const b = scriptId(boundaryId(id, identifierPrefix)), s = scriptId(segmentId(id, identifierPrefix))
++  return `<script${n}>${styles?.length ? `$RR(${b},${s},${JSON.stringify(styles).replace(/</g, '\\u003c')})` : `$RC(${b},${s})`}</script>`
+ }
+diff --git a/src/server/dispatcher.ts b/src/server/dispatcher.ts
+--- a/src/server/dispatcher.ts
++++ b/src/server/dispatcher.ts
+@@ -1,3 +1,4 @@
++import { leadingBit } from '../dom/react-ids'
+ import { isFunction } from '../core/functions'
+ import { readThenable } from '../react/thenable'
+ import { idleFormStatus } from '../react/form-state'
+@@ -7,7 +8,8 @@
+ import { createResourceHints, type ResourceScope } from './resource-hints'
+ 
+ export interface SSRFrame {
+-  idCounter: number
++  treeId: bigint
++  localId: number
+   identifierPrefix: string
+   contextStack: Array<{ context: any; prev: any }>
+   resources?: ReturnType<typeof createResourceHints>
+@@ -23,9 +25,9 @@
+   return true
+ }
+ 
+-export function beginSSR(identifierPrefix = ':R', nextFrame?: SSRFrame) {
++export function beginSSR(identifierPrefix = '', nextFrame?: SSRFrame) {
+   const previous = { frame, dispatcher: ReactSharedInternals.H }
+-  frame = nextFrame ?? { idCounter: 0, identifierPrefix, contextStack: [] }
++  frame = nextFrame ?? { treeId: 1n, localId: 0, identifierPrefix, contextStack: [] }
+   ReactSharedInternals.H = ssrDispatcher as any
+   return previous
+ }
+@@ -128,7 +130,9 @@
+   },
+   useId(): string {
+     if (!frame) return ':r0:'
+-    return `${frame.identifierPrefix}${(frame.idCounter++).toString(36)}`
++    const local = frame.localId++
++    const tree = frame.treeId
++    return '_' + frame.identifierPrefix + 'R_' + (tree ^ leadingBit(tree)).toString(32) + (local ? 'H' + local.toString(32) : '') + '_'
+   },
+   useTransition(): [boolean, (fn: () => void) => void] {
+     return [false, (fn) => fn()]
+diff --git a/src/server/insertion-context.ts b/src/server/insertion-context.ts
+new file mode 100644
+--- /dev/null
++++ b/src/server/insertion-context.ts
+@@ -0,0 +1,28 @@
++import { escapeAttr } from './escape'
++
++// The context belongs to the *parent* of a suspended subtree. It must survive
++// retries: looking at the first resolved child cannot recover HTML insertion mode.
++export type InsertionContext = 'html' | 'svg' | 'math' | 'mtext' | 'table' | 'tbody' | 'tr' | 'colgroup'
++
++export function childInsertionContext(tag: string, props: Record<string, any>, parent: InsertionContext): InsertionContext {
++  if (tag === 'svg') return 'svg'
++  if (tag === 'math') return 'math'
++  if ((parent === 'svg' && (tag === 'foreignObject' || tag === 'desc' || tag === 'title')) || (tag === 'annotation-xml' && /^(text\/html|application\/xhtml\+xml)$/i.test(props.encoding ?? ''))) return 'html'
++  // WHATWG tree-construction dispatcher: MathML text integration points use
++  // HTML rules except for mglyph/malignmark. Keep that mixed context on retries.
++  if (parent === 'math' && /^(mi|mo|mn|ms|mtext)$/.test(tag)) return 'mtext'
++  if (parent === 'mtext' && (tag === 'mglyph' || tag === 'malignmark')) return 'math'
++  if (parent === 'svg' || parent === 'math') return parent
++  if (tag === 'table' || tag === 'tr' || tag === 'colgroup') return tag
++  if (tag === 'tbody' || tag === 'thead' || tag === 'tfoot') return 'tbody'
++  return 'html'
++}
++
++export function segmentHtml(content: string, id: string, context: InsertionContext): string {
++  const mathText = context === 'mtext'
++  const nested = mathText || context === 'tbody' || context === 'tr' || context === 'colgroup'
++  const tag = context === 'html' ? 'div' : context
++  const hidden = nested ? '' : context === 'svg' || context === 'math' ? ' aria-hidden="true" style="display:none"' : ' hidden'
++  const wrapper = mathText ? '<math style="display:none">' : '<table hidden>'
++  return `${nested ? wrapper : ''}<${tag}${hidden} id="${escapeAttr(id)}">${content}</${tag}>${nested ? mathText ? '</math>' : '</table>' : ''}`
++}
+diff --git a/src/server/stream-ids.ts b/src/server/stream-ids.ts
+new file mode 100644
+--- /dev/null
++++ b/src/server/stream-ids.ts
+@@ -0,0 +1,5 @@
++// Match Fizz's transport identifiers. Hook IDs and boundary comment numbers are
++// separate namespaces; only the DOM transport IDs use this prefixed hex scheme.
++export const boundaryId = (id: number, prefix = ''): string => prefix + 'B:' + id.toString(16)
++export const segmentId = (id: number, prefix = ''): string => prefix + 'S:' + id.toString(16)
++export const scriptId = (id: string): string => JSON.stringify(id).replace(/</g, '\\u003c')
+diff --git a/src/server/stream.ts b/src/server/stream.ts
+--- a/src/server/stream.ts
++++ b/src/server/stream.ts
+@@ -1,3 +1,5 @@
++import { boundaryId, segmentId, scriptId } from './stream-ids'
++import { segmentHtml } from './insertion-context'
+ import { isFunction, isThenable } from '../core/functions'
+ import type { ReactNode } from '../core'
+ import {
+@@ -199,7 +201,7 @@
+     const defer = (error: unknown) => {
+       if (isBrowserError(error)) options.onBrowserBailout?.(error, { componentStack: (error as any).componentStack || b.componentStack })
+       else options.onError?.(error)
+-      emit(`<script${nonce ? ` nonce="${escapeAttr(nonce)}"` : ''}>$RB(${b.id}${isBrowserError(error) ? '' : ',1'})</script>`)
++      emit(`<script${nonce ? ` nonce="${escapeAttr(nonce)}"` : ''}>$RB(${scriptId(boundaryId(b.id, options.identifierPrefix))}${isBrowserError(error) ? '' : ',1'})</script>`)
+     }
+     if (state.aborted) { defer(state.reason); return }
+ 
+@@ -214,6 +216,8 @@
+     const restore = applyContextSnapshot(b.contextSnapshot)
+     try {
+       walk(b.children, {
++        insertionContext: b.insertionContext,
++        treeId: b.treeId,
+         emit: (s) => parts.push(s),
+         onSuspend: (n) => sub.push(n),
+         nextBoundaryId: () => state.nextId++,
+@@ -236,7 +240,7 @@
+       if (hints) emit(hints)
+     }
+ 
+-    emit(`<div hidden id="S:${b.id}">${parts.join('')}</div>${revealScript(b.id, nonce, styles)}`)
++    emit(segmentHtml(parts.join(''), segmentId(b.id, options.identifierPrefix), b.insertionContext) + revealScript(b.id, nonce, styles, options.identifierPrefix))
+ 
+     // Recurse: any nested suspensions inside the now-revealed content
+     for (const s of sub) streamBoundary(s, emit, options, state)
+diff --git a/src/server/walk.ts b/src/server/walk.ts
+--- a/src/server/walk.ts
++++ b/src/server/walk.ts
+@@ -1,3 +1,7 @@
++import { boundaryId } from './stream-ids'
++import { childInsertionContext, type InsertionContext } from './insertion-context'
++import { forkId } from '../dom/react-ids'
++import { isTextContent } from '../core/functions';
+ import { isFunction, isThenable } from '../core/functions'
+ import { resolveClassProps } from '../core/class-props'
+ import {
+@@ -22,6 +26,7 @@
+   REACT_VIEW_TRANSITION_TYPE,
+ } from '../react'
+ import {
++  escapeAttr,
+   attrToHtml,
+   escapeText,
+   escapeScript,
+@@ -48,6 +53,8 @@
+ 
+ export interface SuspendedBoundary {
+   id: number
++  treeId: bigint
++  insertionContext: InsertionContext
+   fallbackHTML: string
+   children: ReactNode
+   thenable: Promise<any>
+@@ -56,6 +63,8 @@
+ }
+ 
+ export interface WalkOptions {
++  insertionContext?: InsertionContext | undefined
++  treeId?: bigint | undefined
+   emit: (chunk: string) => void
+   onHead?: () => void
+   onSuspend?: ((boundary: SuspendedBoundary) => void) | undefined
+@@ -80,7 +89,7 @@
+ export function walk(node: ReactNode, opts: WalkOptions): void {
+   // Seed a text state if the caller didn't provide one so the separator logic
+   // is active for the whole tree.
+-  if (!opts.textState) opts = { ...opts, textState: { bits: 0 } }
++  if (!opts.textState) opts = { ...opts, textState: { bits: +(opts.insertionContext === 'svg') } }
+   walkNode(node, opts)
+ }
+ 
+@@ -104,7 +113,7 @@
+   // flat string/number child content. Matches DOM semantics (`option.value`
+   // defaults to `textContent` when no attribute is set).
+   if (children == null) return ''
+-  if (typeof children === 'string' || typeof children === 'number') return '' + children
++  if (isTextContent(children)) return '' + children
+   if (Array.isArray(children)) return children.map(optionChildText).join('')
+   return ''
+ }
+@@ -121,20 +130,17 @@
+ function walkNode(node: ReactNode, opts: WalkOptions): void {
+   if (node == null || node === false || node === true) return
+ 
+-  if (typeof node === 'string') {
+-    emitText(node, opts)
+-    return
+-  }
+-  if (typeof node === 'number') {
+-    emitText(String(node), opts)
++  if (isTextContent(node)) {
++    emitText('' + node, opts)
+     return
+   }
+   if (Array.isArray(node)) {
+-    for (const c of node) walkNode(c, opts)
++    const treeId = opts.treeId ?? 1n
++    for (let i = 0; i < node.length; i++) walkNode(node[i], { ...opts, treeId: forkId(treeId, node.length, i) })
+     return
+   }
+   if (isFunction((node as any)[Symbol.iterator])) {
+-    for (const item of node as Iterable<ReactNode>) walkNode(item, opts)
++    walkNode(Array.from(node as Iterable<ReactNode>), opts)
+     return
+   }
+ 
+@@ -373,7 +379,7 @@
+     const previousState = parentTextState!.bits
+     parentTextState!.bits = +(isSvg && tag !== 'foreignObject')
+     try {
+-      walkNode(props.children, opts)
++      walkNode(props.children, { ...opts, insertionContext: childInsertionContext(tag, props, opts.insertionContext ?? 'html') })
+     } finally {
+       parentTextState!.bits = previousState
+     }
+@@ -421,6 +427,10 @@
+   if (opts.onBrowserBailout) {
+     opts = { ...opts, componentStack: `\n    at ${(fn as any).displayName || fn.name || 'Anonymous'}${opts.componentStack || ''}` }
+   }
++  const frame = currentSSRFrame()
++  const previousTree = frame.treeId, previousLocal = frame.localId
++  frame.treeId = opts.treeId ?? 1n
++  frame.localId = 0
+   try {
+   if ((fn as any).prototype?.isReactComponent) {
+     props = resolveClassProps(fn, props)
+@@ -437,13 +447,17 @@
+     return
+   }
+   const rendered = (fn as any)(props, ref)
+-  walkNode(rendered, opts)
++  // A component which materialized IDs owns one extra tree slot for its children.
++  walkNode(rendered, frame.localId ? { ...opts, treeId: forkId(frame.treeId, 1, 0) } : opts)
+   } catch (error) {
+     if (opts.thrownInfo && !opts.thrownInfo.componentStack) opts.thrownInfo.componentStack = opts.componentStack
+     if (isBrowserError(error) && !(error as any).componentStack) {
+       Object.defineProperty(error, 'componentStack', { value: opts.componentStack })
+     }
+     throw error
++  } finally {
++    frame.treeId = previousTree
++    frame.localId = previousLocal
+   }
+ }
+ 
+@@ -487,11 +501,11 @@
+       nextBoundaryId: opts.nextBoundaryId,
+     })
+     if (!suspended) {
+-      opts.emit(`<!--${isBrowserError(thenable) ? '$!' : '$E'}${id}-->${fallbackParts.join('')}<!--/$-->`)
++      emitBoundary(opts, id, fallbackParts.join(''), isBrowserError(thenable) ? '$!' : '$E')
+     } else emitBoundary(opts, id, fallbackParts.join(''))
+     for (const boundary of nested) opts.onSuspend?.(boundary)
+     if (suspended) opts.onSuspend?.({
+-      id, fallbackHTML: fallbackParts.join(''), children: props.children, thenable, contextSnapshot,
++      id, treeId: opts.treeId ?? 1n, insertionContext: opts.insertionContext ?? 'html', fallbackHTML: fallbackParts.join(''), children: props.children, thenable, contextSnapshot,
+       componentStack: thrownInfo.componentStack || opts.componentStack || '',
+     })
+     return
+@@ -506,17 +520,18 @@
+   // range to adopt on resolve — it creates fresh DOM next to the SSR content,
+   // producing visible duplicates (e.g. double navbar logos). Markers let the
+   // client treat this as a resolved boundary and hydrate in-place.
+-  opts.emit(`<!--$${id}-->`)
+-  opts.emit(childParts.join(''))
+-  opts.emit(`<!--/$-->`)
++  emitBoundary(opts, id, childParts.join(''), '$')
+   for (const boundary of nested) opts.onSuspend?.(boundary)
+ }
+ 
+-function emitBoundary(opts: WalkOptions, id: number, fallbackHTML: string): void {
+-  // Visible div wrapper so the fallback UI shows; B: id lets $RC locate it on
+-  // reveal. The leading/trailing comments let hydration detect a pending
+-  // boundary and register a reveal callback.
+-  opts.emit(`<!--$?${id}--><div id="B:${id}">`)
+-  opts.emit(fallbackHTML)
+-  opts.emit(`</div><!--/$-->`)
+-}
++function emitBoundary(opts: WalkOptions, id: number, content: string, marker = '$?'): void {
++  // A pending template is allowed in table insertion modes and does not break
++  // out of SVG/MathML. The visible fallback is a sibling, not an HTML div wrapper.
++  // Bare rows/columns create implicit containers. Close them on both sides so
++  // neither preceding rows nor the fallback can move a marker inside one.
++  // These end tags are ignored when no such container is open.
++  const close = opts.insertionContext === 'table' ? '</tbody></colgroup>' : ''
++  opts.emit(`${close}<!--${marker}${id}-->${marker === '$?' ? `<template id="${escapeAttr(boundaryId(id, currentSSRFrame().identifierPrefix))}"></template>` : ''}`)
++  opts.emit(content)
++  opts.emit(`${close}<!--/$-->`)
++}
+diff --git a/dist/core/devtools.d.ts b/dist/core/devtools.d.ts
+--- a/dist/core/devtools.d.ts
++++ b/dist/core/devtools.d.ts
+@@ -1,4 +1,4 @@
+-import type { Fiber, ReactElement } from "./index.js";
++import type { Fiber, FiberRoot, ReactElement } from './index.js';
+ export declare const devToolsMetadata: {
+     enabled: boolean;
+     owner: Fiber | null;
+@@ -7,6 +7,7 @@
+     stackBudget: number;
+     stackResetTime: number;
+     hosts: WeakMap<Node, Fiber>;
++    hydratedRoots: WeakSet<FiberRoot>;
+     elements: WeakMap<object, {
+         owner: Fiber | null;
+         stack: Error | null;
+diff --git a/dist/core/devtools.js b/dist/core/devtools.js
+--- a/dist/core/devtools.js
++++ b/dist/core/devtools.js
+@@ -6,6 +6,7 @@
+   stackBudget: 1e4,
+   stackResetTime: 0,
+   hosts: /* @__PURE__ */ new WeakMap(),
++  hydratedRoots: /* @__PURE__ */ new WeakSet(),
+   elements: /* @__PURE__ */ new WeakMap(),
+   fibers: /* @__PURE__ */ new WeakMap()
+ };
+@@ -67,4 +68,3 @@
+   rememberDevToolsElement,
+   runWithOwnerStack
+ };
+-//# sourceMappingURL=devtools.js.map
+diff --git a/dist/core/functions.d.ts b/dist/core/functions.d.ts
+--- a/dist/core/functions.d.ts
++++ b/dist/core/functions.d.ts
+@@ -3,3 +3,4 @@
+ export declare const isThenable: (x: any) => x is Promise<any>;
+ export declare const isString: (value: any) => value is string;
+ export declare const isObject: (value: any) => boolean;
++export declare const isTextContent: (value: unknown) => value is string | number | bigint;
+diff --git a/dist/core/functions.js b/dist/core/functions.js
+--- a/dist/core/functions.js
++++ b/dist/core/functions.js
+@@ -3,11 +3,12 @@
+ const isThenable = (x) => x != null && isFunction(x.then);
+ const isString = (value) => typeof value === "string";
+ const isObject = (value) => typeof value === "object";
++const isTextContent = (value) => typeof value === "string" || typeof value === "number" || typeof value === "bigint";
+ export {
+   isFunction,
+   isObject,
+   isReservedProp,
+   isString,
++  isTextContent,
+   isThenable
+ };
+-//# sourceMappingURL=functions.js.map
+diff --git a/dist/core/internal.d.ts b/dist/core/internal.d.ts
+--- a/dist/core/internal.d.ts
++++ b/dist/core/internal.d.ts
+@@ -1,4 +1,4 @@
+-import type { ReactElement, ReactNode, Ref } from "./types.js";
++import type { ReactElement, ReactNode, Ref } from './types.js';
+ export declare const enum FiberTag {
+     Host = 0,
+     Text = 1,
+@@ -56,7 +56,7 @@
+     ad?: boolean;
+     ah?: boolean;
+     ef?: Map<Hook, Effect> | undefined;
+-    hc?: import("../dom/features/hydration/full.js").HydrationCursor | undefined;
++    hc?: import('../dom/features/hydration/full.js').HydrationCursor | undefined;
+     it?: bigint;
+     il?: number;
+     im?: boolean;
+@@ -71,8 +71,9 @@
+ }) => void;
+ export interface FiberRoot {
+     tr?: Set<Fiber> & {
+-        s: Set<import("../react/action-scope.js").ActionScope>;
++        s: Set<import('../react/action-scope.js').ActionScope>;
+         w?: PromiseLike<unknown>;
++        u?: (() => void) | undefined;
+     };
+     hr?: Node | undefined;
+     ri?: boolean;
+diff --git a/dist/core/internal.js b/dist/core/internal.js
+--- a/dist/core/internal.js
++++ b/dist/core/internal.js
+@@ -1,4 +1,5 @@
+-var FiberTag = /* @__PURE__ */ ((FiberTag2) => {
++var FiberTag;
++(function(FiberTag2) {
+   FiberTag2[FiberTag2["Host"] = 0] = "Host";
+   FiberTag2[FiberTag2["Text"] = 1] = "Text";
+   FiberTag2[FiberTag2["Function"] = 2] = "Function";
+@@ -14,8 +15,7 @@
+   FiberTag2[FiberTag2["Root"] = 12] = "Root";
+   FiberTag2[FiberTag2["Activity"] = 13] = "Activity";
+   FiberTag2[FiberTag2["Resource"] = 14] = "Resource";
+-  return FiberTag2;
+-})(FiberTag || {});
++})(FiberTag || (FiberTag = {}));
+ function createFiber(tag, type, key) {
+   return {
+     t: tag,
+@@ -41,4 +41,3 @@
+   FiberTag,
+   createFiber
+ };
+-//# sourceMappingURL=internal.js.map
+diff --git a/dist/core/types.d.ts b/dist/core/types.d.ts
+--- a/dist/core/types.d.ts
++++ b/dist/core/types.d.ts
+@@ -9,7 +9,7 @@
+     ref: any;
+     props: P;
+ }
+-type ReactNodeValue = ReactElement | string | number | boolean | null | undefined | Iterable<ReactNode>;
++type ReactNodeValue = ReactElement | string | number | bigint | boolean | null | undefined | Iterable<ReactNode>;
+ export type ReactNode = ReactNodeValue | Promise<ReactNodeValue>;
+ export type RefObject<T> = {
+     current: T | null;
+diff --git a/dist/core/types.js b/dist/core/types.js
+--- a/dist/core/types.js
++++ b/dist/core/types.js
+@@ -6,4 +6,3 @@
+   REACT_FRAGMENT_TYPE,
+   REACT_LEGACY_ELEMENT_TYPE
+ };
+-//# sourceMappingURL=types.js.map
+diff --git a/dist/dom/devtools.d.ts b/dist/dom/devtools.d.ts
+--- a/dist/dom/devtools.d.ts
++++ b/dist/dom/devtools.d.ts
+@@ -1,9 +1,9 @@
+-import { type Fiber, type FiberRoot } from "../core/index.js";
++import { type Fiber, type FiberRoot } from '../core/index.js';
+ interface DevToolsRuntime {
+-    shared: typeof import("../react/shared-internals.js").ReactSharedInternals;
+-    scheduleUpdate: typeof import("./reconcile.js").scheduleUpdate;
+-    flushSyncWork: typeof import("./reconcile.js").flushSyncWork;
+-    onCommitRollback: typeof import("./commit.js").onCommitRollback;
++    shared: typeof import('../react/shared-internals.js').ReactSharedInternals;
++    scheduleUpdate: typeof import('./reconcile.js').scheduleUpdate;
++    flushSyncWork: typeof import('./reconcile.js').flushSyncWork;
++    onCommitRollback: typeof import('./commit.js').onCommitRollback;
+ }
+ type Timing = {
+     start: number;
+diff --git a/dist/dom/devtools.js b/dist/dom/devtools.js
+--- a/dist/dom/devtools.js
++++ b/dist/dom/devtools.js
+@@ -481,7 +481,7 @@
+   const snapshot = project(root.r, null, 0, seen, deferred);
+   const pendingUpdaters = updaters.get(root) || /* @__PURE__ */ new Set();
+   updaters.delete(root);
+-  adapter._debugRootType ||= root.h ? "hydrateRoot()" : "createRoot()";
++  adapter._debugRootType ||= devToolsMetadata.hydratedRoots.has(root) ? "hydrateRoot()" : "createRoot()";
+   notifyDevToolsCommit(root, (layout, passive) => {
+     const view = deferred ? materialize(snapshot, null) : snapshot;
+     view.stateNode = adapter;
+@@ -633,4 +633,3 @@
+   renderWithDevTools,
+   wrapDevToolsRender
+ };
+-//# sourceMappingURL=devtools.js.map
+diff --git a/dist/dom/dispatcher.d.ts b/dist/dom/dispatcher.d.ts
+--- a/dist/dom/dispatcher.d.ts
++++ b/dist/dom/dispatcher.d.ts
+@@ -1,4 +1,4 @@
+-import type { Hook, Fiber, ReactNode } from "../core/index.js";
++import type { Hook, Fiber, ReactNode } from '../core/index.js';
+ export declare function cleanupEffect(hook: Hook, fiber: Fiber): void;
+ export declare const HOOK_BAILOUT: unique symbol;
+ export declare function renderWithHooks(fiber: Fiber, render: (props: any, ref?: any) => ReactNode, props: any, ref?: any, canBail?: boolean): ReactNode | typeof HOOK_BAILOUT;
+diff --git a/dist/dom/dispatcher.js b/dist/dom/dispatcher.js
+--- a/dist/dom/dispatcher.js
++++ b/dist/dom/dispatcher.js
+@@ -156,7 +156,7 @@
+       return hook.c;
+     }
+   };
+-  if (type === 1 && !subscription)
++  if (type !== 2 && !subscription)
+     effect.d = () => cleanupEffect(hook, fiber);
+   (hookEffects ||= []).push(hook, previous, effect, changed);
+ }
+@@ -184,7 +184,12 @@
+     const hook = nextHook(), fiber = getCurrentFiber();
+     const queue = hook.q ||= { p: 0, f: false, e: void 0 };
+     hook.c ||= (fn) => {
+-      const scope = transitionScope(() => runAction(fn));
++      const scope = transitionScope(() => runAction(fn, fiber.r, (scope2) => {
++        scope2.n = void 0;
++        queue.p++;
++        scheduleUpdate(fiber);
++        fiber.bt = false;
++      }));
+       const finish = () => {
+         if (scope.f && !scope.h) {
+           queue.f = true;
+@@ -194,17 +199,12 @@
+           queue.p--;
+         scheduleUpdate(fiber);
+       };
+-      scope.n = () => {
+-        delete scope.n;
+-        queue.p++;
+-        scheduleUpdate(fiber);
+-      };
+       if (!scope.p) {
+         finish();
+         return;
+       }
+       if (scope.p > (scope.v || 0))
+-        scope.n();
++        scope.n?.(scope);
+       scope.d.then(finish);
+     };
+     if (queue.f)
+@@ -293,7 +293,6 @@
+     const hook = nextHook();
+     const store = hook.q ||= {};
+     store.g = getSnapshot;
+-    store.s = getServerSnapshot;
+     const root = fiber.r ?? findRoot(fiber);
+     const isHydrating = Boolean(root?.h);
+     const value = isHydrating && getServerSnapshot ? getServerSnapshot() : getSnapshot();
+@@ -311,8 +310,6 @@
+         scheduleUpdate(fiber);
+       };
+       const unsubscribe = subscribe(check);
+-      if (isHydrating && store.s)
+-        queueMicrotask(() => queueMicrotask(check));
+       check();
+       return () => {
+         active = false;
+@@ -438,4 +435,3 @@
+   cleanupEffect,
+   renderWithHooks
+ };
+-//# sourceMappingURL=dispatcher.js.map
+diff --git a/dist/dom/document-metadata.d.ts b/dist/dom/document-metadata.d.ts
+--- a/dist/dom/document-metadata.d.ts
++++ b/dist/dom/document-metadata.d.ts
+@@ -1,4 +1,4 @@
+-import { type Fiber } from "../core/index.js";
++import { type Fiber } from '../core/index.js';
+ export declare function documentSingleton(fiber: Fiber): HTMLElement | null;
+ export declare const DOCUMENT_HEAD_TAGS: RegExp;
+ export declare const DOCUMENT_SHELL_TAGS: RegExp;
+diff --git a/dist/dom/document-metadata.js b/dist/dom/document-metadata.js
+--- a/dist/dom/document-metadata.js
++++ b/dist/dom/document-metadata.js
+@@ -9,7 +9,9 @@
+     node.removeAttribute(attribute.name);
+ }
+ function documentMetadataParent(fiber) {
+-  if (fiber.r?.c.nodeType !== 9 || fiber.v?.itemProp != null || !["title", "meta", "base", "link"].includes(fiber.type))
++  const container = fiber.r?.c;
++  const doc = container?.nodeType === 9 ? container : container?.ownerDocument;
++  if (!doc?.head || fiber.v?.itemProp != null || !["title", "meta", "base", "link"].includes(fiber.type) || fiber.type === "link" && fiber.v?.rel === "stylesheet")
+     return null;
+   for (let parent = fiber.p; parent; parent = parent.p) {
+     if (parent.t === 5 || parent.type === "svg")
+@@ -17,7 +19,7 @@
+     if (parent.type === "foreignObject")
+       break;
+   }
+-  return fiber.r.c.head;
++  return doc.head;
+ }
+ function clearHostContainer(container) {
+   if (container.nodeType !== 9 && !DOCUMENT_SHELL_TAGS.test(container.localName)) {
+@@ -40,4 +42,3 @@
+   documentMetadataParent,
+   documentSingleton
+ };
+-//# sourceMappingURL=document-metadata.js.map
+diff --git a/dist/dom/features/class/full.js b/dist/dom/features/class/full.js
+--- a/dist/dom/features/class/full.js
++++ b/dist/dom/features/class/full.js
+@@ -1,6 +1,6 @@
+ import { devToolsMetadata } from "../../../core/devtools.js";
+ import { resolveClassProps } from "../../../core/class-props.js";
+-import { invokeCommit, stageCommit } from "../../reconcile.js";
++import { invokeCommit, stageCommit, recoveringBoundaries } from "../../reconcile.js";
+ import { installRenderer, reconcileRaw, scheduleUpdate, scheduleLifecycle, readContext, attachRef, syncRefIfChanged, isActivityHidden, layoutIsDisconnected, RenderErrorCapture } from "../../reconcile.js";
+ import { checkpointCommit, rewindCommit, queueBeforeMutation, queueMutation } from "../../commit.js";
+ import { failRefreshBoundary } from "../../refresh.js";
+@@ -103,36 +103,43 @@
+     }
+     instance.props = props;
+   }
+-  if (captured && Ctor.getDerivedStateFromError) {
+-    const update = Ctor.getDerivedStateFromError(captured.e);
+-    if (update != null)
+-      instance.state = { ...instance.state, ...update };
+-  }
+-  let rendered = captured && !Ctor.getDerivedStateFromError ? null : didRender ? instance.render() : fiber.b?.r;
+-  fiber.b = { ...fiber.b ?? {}, r: rendered };
+-  const canCatch = Ctor.getDerivedStateFromError || instance.componentDidCatch;
+-  if (canCatch)
+-    fiber.b.b = Ctor;
+-  if (canCatch && fiber.r)
+-    fiber.r.eb = true;
+-  const checkpoint = canCatch ? checkpointCommit(fiber) : -1;
++  if (captured)
++    recoveringBoundaries.add(fiber);
+   try {
+-    reconcileRaw(fiber, rendered);
+-  } catch (error) {
+-    if (!(error instanceof RenderErrorCapture) || error.b !== fiber)
+-      throw error;
+-    rewindCommit(checkpoint);
+-    captured = error;
+-    didRender = true;
+-    if (Ctor.getDerivedStateFromError) {
+-      const update = Ctor.getDerivedStateFromError(error.e);
++    if (captured && Ctor.getDerivedStateFromError) {
++      const update = Ctor.getDerivedStateFromError(captured.e);
+       if (update != null)
+         instance.state = { ...instance.state, ...update };
+-      rendered = instance.render();
+-    } else
+-      rendered = null;
++    }
++    let rendered = captured && !Ctor.getDerivedStateFromError ? null : didRender ? instance.render() : fiber.b?.r;
+     fiber.b = { ...fiber.b ?? {}, r: rendered };
+-    reconcileRaw(fiber, rendered);
++    const canCatch = Ctor.getDerivedStateFromError || instance.componentDidCatch;
++    if (canCatch)
++      fiber.b.b = Ctor;
++    if (canCatch && fiber.r)
++      fiber.r.eb = true;
++    const checkpoint = canCatch ? checkpointCommit(fiber) : -1;
++    try {
++      reconcileRaw(fiber, rendered);
++    } catch (error) {
++      if (!(error instanceof RenderErrorCapture) || error.b !== fiber)
++        throw error;
++      rewindCommit(checkpoint);
++      captured = error;
++      recoveringBoundaries.add(fiber);
++      didRender = true;
++      if (Ctor.getDerivedStateFromError) {
++        const update = Ctor.getDerivedStateFromError(error.e);
++        if (update != null)
++          instance.state = { ...instance.state, ...update };
++        rendered = instance.render();
++      } else
++        rendered = null;
++      fiber.b = { ...fiber.b ?? {}, r: rendered };
++      reconcileRaw(fiber, rendered);
++    }
++  } finally {
++    recoveringBoundaries.delete(fiber);
+   }
+   fiber.m = props;
+   const state = instance.state;
+@@ -199,4 +206,3 @@
+ export {
+   findDOMNode
+ };
+-//# sourceMappingURL=full.js.map
+diff --git a/dist/dom/features/class/stub.js b/dist/dom/features/class/stub.js
+--- a/dist/dom/features/class/stub.js
++++ b/dist/dom/features/class/stub.js
+@@ -1,6 +1,6 @@
+ import { resolveClassProps } from "../../../core/class-props.js";
+ import { isFunction } from "../../../core/functions.js";
+-import { installRenderer, reconcileRaw, scheduleUpdate, isThenable, handleSuspended, handleErrorInRender } from "../../reconcile.js";
++import { installRenderer, reconcileRaw, scheduleUpdate, isThenable, handleSuspended, deferHydration, handleErrorInRender } from "../../reconcile.js";
+ function renderClassStub(fiber) {
+   const Ctor = fiber.type;
+   let instance = fiber.i;
+@@ -27,6 +27,8 @@
+     rendered = instance.render();
+   } catch (e) {
+     if (isThenable(e)) {
++      if (deferHydration(fiber, e))
++        return;
+       handleSuspended(fiber, e);
+       rendered = null;
+     } else {
+@@ -42,4 +44,3 @@
+ export {
+   findDOMNode
+ };
+-//# sourceMappingURL=stub.js.map
+diff --git a/dist/dom/features/hydration/full.d.ts b/dist/dom/features/hydration/full.d.ts
+--- a/dist/dom/features/hydration/full.d.ts
++++ b/dist/dom/features/hydration/full.d.ts
+@@ -1,6 +1,6 @@
+-import { drainReplayQueue } from "../../event-replay.js";
+-export { reactId, forkId, assignReactIds } from "../../react-ids.js";
+-import { type Fiber, type FiberRoot, type ReactNode } from "../../../core/index.js";
++import { drainReplayQueue } from '../../event-replay.js';
++export { reactId, forkId, assignReactIds } from '../../react-ids.js';
++import { type Fiber, type FiberRoot, type ReactNode } from '../../../core/index.js';
+ export { drainReplayQueue };
+ /**
+  * Hydration cursor: walks existing DOM children in document order so we can
+@@ -16,14 +16,6 @@
+     constructor(parent: Node, start?: ChildNode | null, endBefore?: ChildNode | null);
+     skipClaimedMarkers(): void;
+     take(): ChildNode | null;
+-    /**
+-     * Position-insensitive lookup for head/html adoption. Scans forward past
+-     * non-matching nodes without removing them, matching by tag AND the key
+-     * attributes that identify head elements uniquely (rel/href for links,
+-     * name/property for meta, src for script). Non-matching nodes stay in
+-     * place so the SSR'd stylesheet/script order is preserved.
+-     */
+-    head(tag: string, props: Record<string, any>): ChildNode | null;
+     has(): boolean;
+ }
+ export interface HydrationBailoutError extends Error {
+@@ -35,14 +27,15 @@
+     formState?: unknown[] | null;
+     identifierStrategy?: 'react';
+     identifierPrefix?: string;
+-    onRecoverableError?: import("../../../core/index.js").RecoverableErrorHandler;
+-    onCaughtError?: import("../../../core/index.js").RecoverableErrorHandler;
+-    onUncaughtError?: import("../../../core/index.js").RecoverableErrorHandler;
++    onRecoverableError?: import('../../../core/index.js').RecoverableErrorHandler;
++    onCaughtError?: import('../../../core/index.js').RecoverableErrorHandler;
++    onUncaughtError?: import('../../../core/index.js').RecoverableErrorHandler;
+ }
+ interface HydratedRoot {
+     render(children: ReactNode): void;
+     unmount(): void;
+ }
++export declare function queueHydrationEnd(root: FiberRoot): void;
+ export declare function beginHydration(root: FiberRoot): void;
+ /**
+  * Inspect the current cursor position for a streaming-suspense boundary
+@@ -71,5 +64,5 @@
+ export declare function tryConsumeBoundary(parent: Fiber): BoundaryInfo | null;
+ export declare function advanceCursorPast(parent: Fiber, node: Node): void;
+ export declare function recoverHydration(root: FiberRoot, error: unknown): boolean;
+-export declare function deferHydration(fiber: Fiber, thenable: Promise<any>, restartInitial?: boolean): boolean;
++export declare function deferHydration(_fiber: Fiber, thenable: Promise<any>): boolean;
+ export declare function hydrateRootImpl(container: Element | Document, initialChildren: ReactNode, options: HydrateRootOptions): HydratedRoot;
+diff --git a/dist/dom/features/hydration/full.js b/dist/dom/features/hydration/full.js
+--- a/dist/dom/features/hydration/full.js
++++ b/dist/dom/features/hydration/full.js
+@@ -1,22 +1,22 @@
+-import { readOwnerStack, runWithOwnerStack } from "../../../core/devtools.js";
++import { devToolsMetadata, readOwnerStack, runWithOwnerStack } from "../../../core/devtools.js";
+ import { drainReplayQueue } from "../../event-replay.js";
+ import { attachRootFiber, createFiberRoot } from "../../root-internal.js";
+ import { createHostNode, setProp } from "../../dom.js";
+ import { attributeName, attributeValue, STRING_BOOLEAN_ATTRS } from "../../../core/attributes.js";
+-import { getCurrentRoot, scheduleUpdate, discardPendingWork, discardPendingEffects, isThenable, findRoot, flushSyncWork, renderRoot, scheduleRootRender, recoverRootError, removeFiber } from "../../reconcile.js";
++import { getCurrentRoot, discardPendingWork, discardPendingEffects, isThenable, findRoot, flushSyncWork, renderRoot, scheduleRootRender, recoverRootError, removeFiber } from "../../reconcile.js";
+ import { isFunction, isReservedProp } from "../../../core/functions.js";
+ import { clearHostContainer, documentMetadataParent, DOCUMENT_HEAD_TAGS, DOCUMENT_SHELL_TAGS } from "../../document-metadata.js";
+ import { componentStack } from "../../error-info.js";
+ import { reactId, forkId, assignReactIds } from "../../react-ids.js";
+ import { hydratedFormStates } from "../../../react/form-state.js";
+-import { queueMutation, queueProp, queueText } from "../../commit.js";
++import { queueBeforeMutation, queueMutation, queueProp, queueText, onCommitRollback, onCommitFailure } from "../../commit.js";
+ import { syncTextareaValue } from "../../form-controls.js";
+ function findNearestSafeHostAboveComposite(fiber) {
+   let host = null;
+   let f = fiber;
+   while (f) {
+     if (f.t === 0 && f.n) {
+-      if (!isSafeHostRecoveryElement(f))
++      if (DOCUMENT_SHELL_TAGS.test(f.type.toLowerCase()))
+         return null;
+       const parentTag = f.p?.t;
+       if (!host || parentTag > 1 && parentTag < 11) {
+@@ -49,32 +49,33 @@
+     }
+     return null;
+   }
+-  /**
+-   * Position-insensitive lookup for head/html adoption. Scans forward past
+-   * non-matching nodes without removing them, matching by tag AND the key
+-   * attributes that identify head elements uniquely (rel/href for links,
+-   * name/property for meta, src for script). Non-matching nodes stay in
+-   * place so the SSR'd stylesheet/script order is preserved.
+-   */
+-  head(tag, props) {
+-    const target = tag.toLowerCase();
+-    const keyAttrs = HEAD_KEY_ATTRS[target];
+-    let scan = this.p.firstChild;
+-    while (scan) {
+-      if (scan.nodeType === 1 && scan.tagName.toLowerCase() === target && headAttrsMatch(scan, props, keyAttrs)) {
+-        CLAIMED.add(scan);
+-        return scan;
+-      }
+-      scan = scan.nextSibling;
+-    }
+-    return null;
+-  }
+   has() {
+     const position = this.n;
+     const found = this.take() !== null;
+     this.n = position;
+     return found;
+   }
++}
++function findMetadata(parent, tag, props, fallback) {
++  const keys = HEAD_KEY_ATTRS[tag] ?? [];
++  for (const location of [parent, fallback]) {
++    if (!location)
++      continue;
++    const cursor = location instanceof HydrationCursor ? location : null;
++    scan: for (let node = cursor ? cursor.n : location.firstChild; node && node !== cursor?.e; node = node.nextSibling) {
++      const el = node;
++      if (el.localName !== tag || CLAIMED.has(el))
++        continue;
++      for (const key of keys) {
++        const value = props[key];
++        if (hydrationAttribute(el, attributeName(key)) !== (value == null ? null : String(value)))
++          continue scan;
++      }
++      claimHydrationNode(el);
++      return el;
++    }
++  }
++  return null;
+ }
+ const PROD_HYDRATION_ERROR = "Hydration mismatch.";
+ const BOUNDARY_MARKER = /^(\$[?!E~]?)(\d*)$/;
+@@ -83,7 +84,13 @@
+   root.h = false;
+   root.r.hc = void 0;
+ }
++function queueHydrationEnd(root) {
++  if (root.h)
++    queueBeforeMutation(() => endHydration(root));
++}
+ function beginHydration(root) {
++  if (process.env.NODE_ENV !== "production")
++    devToolsMetadata.hydratedRoots.add(root);
+   root.ic = 0;
+   root.h = true;
+   root.r.hc = new HydrationCursor(root.c);
+@@ -95,21 +102,13 @@
+   style: ["id", "media", "nonce", "title"]
+ };
+ const CLAIMED = /* @__PURE__ */ new WeakSet();
+-function headAttrsMatch(el, props, keys) {
+-  if (CLAIMED.has(el))
+-    return false;
+-  if (!keys)
+-    return true;
+-  for (const k of keys) {
+-    const propVal = props[k];
+-    const elVal = hydrationAttribute(el, attributeName(k));
+-    if (propVal == null ? elVal != null : String(propVal) !== elVal)
+-      return false;
+-  }
+-  return true;
+-}
+-function isSafeHostRecoveryElement(fiber) {
+-  return !DOCUMENT_SHELL_TAGS.test(fiber.type.toLowerCase());
++function claimHydrationNode(node) {
++  CLAIMED.add(node);
++  const release = () => {
++    CLAIMED.delete(node);
++  };
++  onCommitRollback(release);
++  onCommitFailure(release);
+ }
+ const hydrationAttribute = (el, name) => name === "nonce" && "nonce" in el && el.hasAttribute(name) ? el.nonce ?? "" : el.getAttribute(name);
+ function failHydration(fiber, error = new Error(PROD_HYDRATION_ERROR), recoverInPlace) {
+@@ -204,31 +203,22 @@
+   if (!cursor)
+     return false;
+   const tag = fiber.type.toLowerCase();
++  const props = fiber.v ?? {};
+   const documentHeadParent = documentMetadataParent(fiber) || (cursor.p.nodeType === 9 && DOCUMENT_HEAD_TAGS.test(tag) ? cursor.p.head : null);
+-  const parentEl = cursor.p;
+-  const parentTag = parentEl.nodeType === 1 ? parentEl.tagName.toLowerCase() : "";
++  const parentTag = cursor.p.localName;
+   const isHeadish = parentTag === "head" || parentTag === "html" || !!documentHeadParent;
+-  let candidate;
+-  if (documentHeadParent) {
+-    candidate = new HydrationCursor(documentHeadParent).head(tag, fiber.v ?? {});
+-  } else if (cursor.p.nodeType === 9 && tag !== "html") {
+-    candidate = new HydrationCursor(cursor.p.body).head(tag, fiber.v ?? {});
+-  } else if (isHeadish) {
+-    candidate = cursor.head(tag, fiber.v ?? {});
+-  } else {
+-    candidate = cursor.take();
+-  }
++  const metadataParent = documentHeadParent || (isHeadish ? cursor.p : cursor.p.nodeType === 9 && tag !== "html" ? cursor.p.body : null);
++  const candidate = metadataParent ? findMetadata(metadataParent, tag, props, documentHeadParent ? cursor : void 0) : cursor.take();
+   if (!candidate) {
+     if (!isHeadish)
+       onMismatch(fiber, null);
+     return false;
+   }
+-  if (candidate.nodeType !== 1 || candidate.tagName.toLowerCase() !== tag) {
++  if (candidate.localName?.toLowerCase() !== tag) {
+     onMismatch(fiber, candidate);
+     return false;
+   }
+   fiber.n = candidate;
+-  const props = fiber.v ?? {};
+   const isSvg = tag === "svg" || candidate.namespaceURI === "http://www.w3.org/2000/svg" && tag !== "foreignobject";
+   if (tag === "input" || tag === "textarea")
+     queueHydrationFormState(candidate, props, tag);
+@@ -236,26 +226,18 @@
+   if (isFunction(tag === "form" ? props.action : props.formAction)) {
+     for (const child of candidate.children) {
+       if (child.tagName === "INPUT" && child.getAttribute("type") === "hidden" && child.getAttribute("name")?.startsWith("$ACTION_"))
+-        CLAIMED.add(child);
++        claimHydrationNode(child);
+     }
+   }
+   if (fiber.r.hr !== candidate) {
+     fiber.hc = new HydrationCursor(candidate);
+   }
+   return true;
+-}
+-function getRecoveryContainer(container, host) {
+-  if (host?.t === 0 && host.n && findNearestSafeHostAboveComposite(host.p)) {
+-    return host.n;
+-  }
+-  return container;
+ }
+ function findHostParent(fiber) {
+   let f = fiber;
+   while (f) {
+-    if (f.hc)
+-      return f;
+-    if (f.t === 0 || f.t === 12 || f.t === 5) {
++    if (f.hc || f.t === 0 || f.t === 12 || f.t === 5) {
+       return f;
+     }
+     f = f.p;
+@@ -390,7 +372,8 @@
+     return false;
+   const container = root.c;
+   const children = root.r.v?.children ?? null;
+-  const recoveryContainer = getRecoveryContainer(container, error.f);
++  const host = error.f;
++  const recoveryContainer = host?.t === 0 && host.n && findNearestSafeHostAboveComposite(host.p) ? host.n : container;
+   resetAfterHydrationFailure(root, container, recoveryContainer);
+   if (recoveryContainer !== container) {
+     releaseClaims(container);
+@@ -411,33 +394,10 @@
+   return true;
+ }
+ const formatHydrationValue = (value) => value == null ? "nothing" : JSON.stringify(value);
+-function deferHydration(fiber, thenable, restartInitial) {
+-  const currentRoot = getCurrentRoot();
+-  if (!currentRoot?.h)
+-    return false;
+-  const hostParent = findHostParent(fiber);
+-  if (restartInitial && (currentRoot.r.m === null || currentRoot.ri) || hostParent.t === 12)
++function deferHydration(_fiber, thenable) {
++  if (getCurrentRoot()?.h)
+     throw thenable;
+-  const inheritedCursor = getHydrationCursor(hostParent);
+-  if (inheritedCursor)
+-    setHydrationCursor(fiber, inheritedCursor);
+-  (fiber.b ??= {}).p = true;
+-  let sus = fiber.p;
+-  while (sus && sus.t !== 11)
+-    sus = sus.p;
+-  if (sus && sus.b) {
+-    ;
+-    sus.b.a = true;
+-  }
+-  const clearAwait = () => {
+-    if (sus && sus.b) {
+-      ;
+-      sus.b.a = false;
+-    }
+-    scheduleUpdate(fiber);
+-  };
+-  thenable.then(clearAwait, clearAwait);
+-  return true;
++  return false;
+ }
+ function hydrateRootImpl(container, initialChildren, options) {
+   const root = createFiberRoot(container, options);
+@@ -494,6 +454,7 @@
+         scheduleRootRender(root, () => renderRoot(root, children));
+     },
+     unmount() {
++      discardPendingWork(root);
+       active = false;
+       generation++;
+       const pending = root.r.m === null;
+@@ -523,10 +484,10 @@
+   getHydrationCursor,
+   hydrateRootImpl,
+   isHydrationBailout,
++  queueHydrationEnd,
+   reactId,
+   recoverHydration,
+   resumeHydration,
+   setHydrationCursor,
+   tryConsumeBoundary
+ };
+-//# sourceMappingURL=full.js.map
+diff --git a/dist/dom/features/hydration/stub.d.ts b/dist/dom/features/hydration/stub.d.ts
+--- a/dist/dom/features/hydration/stub.d.ts
++++ b/dist/dom/features/hydration/stub.d.ts
+@@ -1,4 +1,4 @@
+-import type { Fiber, FiberRoot } from "../../../core/index.js";
++import type { Fiber, FiberRoot } from '../../../core/index.js';
+ export declare class HydrationCursor {
+     n: ChildNode | null;
+     p: Node;
+@@ -8,14 +8,10 @@
+     head(): ChildNode | null;
+     has(): boolean;
+ }
+-export type BoundaryInfo = [
+-    0 | 1 | 2 | 3,
+-    number,
+-    Comment,
+-    Comment
+-];
++export type BoundaryInfo = [0 | 1 | 2 | 3, number, Comment, Comment];
+ export declare function beginHydration(_root: FiberRoot): never;
+ export declare function endHydration(_root: FiberRoot): void;
++export declare const queueHydrationEnd: any;
+ export declare const tryConsumeBoundary: (_parent: Fiber) => BoundaryInfo | null;
+ export declare function advanceCursorPast(_parent: Fiber, _node: Node): void;
+ export declare const getHydrationCursor: (_hostFiber: Fiber) => HydrationCursor | undefined;
+@@ -36,5 +32,5 @@
+ export declare const reactId: (_f: Fiber, root: FiberRoot) => string;
+ export declare const forkId: (base: bigint, _count: number, _index: number) => bigint;
+ export declare function assignReactIds(_parent: Fiber, _children: object): void;
+-export declare const deferHydration: (_f: Fiber, _thenable: Promise<any>, _restartInitial?: boolean) => boolean;
++export declare const deferHydration: (_f: Fiber, _thenable: Promise<any>) => boolean;
+ export declare function finishHydration(_f: Fiber, _isTextarea: boolean): void;
+diff --git a/dist/dom/features/hydration/stub.js b/dist/dom/features/hydration/stub.js
+--- a/dist/dom/features/hydration/stub.js
++++ b/dist/dom/features/hydration/stub.js
+@@ -21,6 +21,7 @@
+ }
+ function endHydration(_root) {
+ }
++const queueHydrationEnd = void 0;
+ const tryConsumeBoundary = (_parent) => null;
+ function advanceCursorPast(_parent, _node) {
+ }
+@@ -70,10 +71,10 @@
+   getHydrationCursor,
+   hydrateRootImpl,
+   isHydrationBailout,
++  queueHydrationEnd,
+   reactId,
+   recoverHydration,
+   resumeHydration,
+   setHydrationCursor,
+   tryConsumeBoundary
+ };
+-//# sourceMappingURL=stub.js.map
+diff --git a/dist/dom/features/lazy/full.js b/dist/dom/features/lazy/full.js
+--- a/dist/dom/features/lazy/full.js
++++ b/dist/dom/features/lazy/full.js
+@@ -10,7 +10,7 @@
+       resolved = resolveRefreshType(resolved);
+   } catch (thenable) {
+     if (isThenable(thenable)) {
+-      if (deferHydration(fiber, thenable, true))
++      if (deferHydration(fiber, thenable))
+         return;
+       handleSuspended(fiber, thenable);
+       return;
+@@ -21,4 +21,3 @@
+ }
+ registerTypeMatcher((_type, marker) => marker === REACT_LAZY_TYPE ? 10 : null);
+ installRenderer(10, renderLazy);
+-//# sourceMappingURL=full.js.map
+diff --git a/dist/dom/features/suspense/full.js b/dist/dom/features/suspense/full.js
+--- a/dist/dom/features/suspense/full.js
++++ b/dist/dom/features/suspense/full.js
+@@ -1,7 +1,7 @@
+ import { readOwnerStack, runWithOwnerStack } from "../../../core/devtools.js";
+ import { a as transitionRender } from "../suspense-runtime/index.js";
+ import { cleanupEffect } from "../../dispatcher.js";
+-import { checkpointCommit, rewindCommit, queueMutation, onCommitFailure } from "../../commit.js";
++import { checkpointCommit, rewindCommit, queueMutation, onCommitFailure, onCommitRollback, commitSynchronously } from "../../commit.js";
+ import { REACT_SUSPENSE_TYPE, ReactSharedInternals, startTransition } from "../../../react/index.js";
+ import { createFiber } from "../../../core/index.js";
+ import { disconnectClass, inSuspensePrimary, setRetainedFlag, walkRetained } from "../../retained-effects.js";
+@@ -28,7 +28,7 @@
+   const parent = state.b.parentNode;
+   if (!(root && parent))
+     return;
+-  withCurrentRoot(root, () => {
++  commitSynchronously(() => withCurrentRoot(root, () => {
+     const previous = root.h;
+     try {
+       const kind = state.b.data.startsWith("$E") ? 3 : state.b.data.startsWith("$!") ? 2 : 0;
+@@ -40,7 +40,7 @@
+       root.h = previous;
+     }
+     runEffects(root);
+-  });
++  }));
+ }
+ function reportServerFailure(fiber) {
+   const error = new Error(process.env.NODE_ENV !== "production" ? "Switched to client rendering because the server render did not complete." : "");
+@@ -55,6 +55,9 @@
+ }
+ function recoverBoundaryHydration(fiber, children, parent, startMark, endMark, retryBoundary) {
+   const clear = () => {
++    const dispose = fiber.b?.x;
++    if (dispose)
++      queueMutation(dispose);
+     if (startMark && endMark)
+       clearBoundaryRange(startMark, endMark);
+     else
+@@ -71,7 +74,7 @@
+   root.h = false;
+   try {
+     if (retryBoundary) {
+-      fiber.b = {};
++      fiber.b = { b: startMark, e: endMark };
+       renderSuspense(fiber);
+     } else
+       reconcileRaw(fiber, children);
+@@ -96,6 +99,13 @@
+     ReactSharedInternals.T = previous;
+   }
+ }
++function retryHydration(fiber, thenable) {
++  const retry = () => {
++    if (!fiber.u)
++      scheduleRetry(fiber);
++  };
++  thenable.then(retry, retry);
++}
+ function hydrateSuspenseBoundary(fiber, props, boundary, reveal) {
+   const [pendingBoundary, id, startMark, endMark] = boundary;
+   fiber.b = {
+@@ -111,22 +121,26 @@
+     return;
+   }
+   if (!pendingBoundary) {
++    const checkpoint = checkpointCommit(fiber);
+     const parent = startMark.parentNode;
+     try {
+       setHydrationCursor(fiber, new HydrationCursor(parent, startMark.nextSibling, endMark));
+       reconcileRaw(fiber, props.children);
+       advanceCursorPast(fiber.p, endMark);
+     } catch (e) {
+-      if (!reveal && isThenable(e))
+-        throw e;
+-      if (!isHydrationBailout(e)) {
++      if (isThenable(e)) {
++        rewindCommit(checkpoint);
++        fiber.b.w = true;
++        retryHydration(fiber, e);
++        advanceCursorPast(fiber.p, endMark);
++      } else if (!isHydrationBailout(e)) {
+         onCommitFailure(() => {
+           clearBoundaryRange(startMark, endMark);
+           unmountAllChildren(fiber);
+         });
+         throw e;
+-      }
+-      recoverBoundaryHydration(fiber, props.children, parent, startMark, endMark);
++      } else
++        recoverBoundaryHydration(fiber, props.children, parent, startMark, endMark);
+     } finally {
+       clearHydrationCursor(fiber);
+     }
+@@ -143,23 +157,16 @@
+     fiber.m = props;
+     return;
+   }
+-  const bDiv = document.getElementById(`B:${id}`);
+-  try {
+-    if (bDiv) {
+-      setHydrationCursor(fiber, new HydrationCursor(bDiv));
+-      reconcileRaw(fiber, props.fallback);
+-    } else {
+-      reconcileRaw(fiber, props.fallback);
+-    }
+-  } catch (e) {
+-    if (!isHydrationBailout(e) || !bDiv)
+-      throw e;
+-    recoverBoundaryHydration(fiber, props.fallback, bDiv, null, null);
+-  } finally {
+-    clearHydrationCursor(fiber);
+-  }
++  fiber.b.w = true;
+   advanceCursorPast(fiber.p, endMark);
+-  globalThis.$RH?.(id, () => rehydrateBoundary(fiber));
++  const boundaryId = (findRoot(fiber)?.i ?? "") + "B:" + id.toString(16);
++  const dispose = globalThis.$RH?.(boundaryId, () => {
++    if (!fiber.u && !fiber.pd)
++      rehydrateBoundary(fiber);
++  });
++  fiber.b.x = dispose;
++  if (dispose)
++    onCommitRollback(dispose);
+   fiber.m = props;
+ }
+ function reconnectLayout(fiber) {
+@@ -243,7 +250,7 @@
+     }
+   }
+   if (state.w && state.b && state.e) {
+-    if (state.b.data === "$?" || state.b.data === "$~") {
++    if (state.b.data.startsWith("$?") || state.b.data === "$~") {
+       if (!root?.h && props.children !== fiber.m?.children) {
+         ;
+         state.b._reactRetry = void 0;
+@@ -265,20 +272,10 @@
+         throw error;
+       rewindCommit(checkpoint2);
+       fiber.b = state;
+-      error.then(() => {
+-        if (!fiber.u)
+-          scheduleRetry(fiber);
+-      }, () => {
+-        if (!fiber.u)
+-          scheduleRetry(fiber);
+-      });
++      retryHydration(fiber, error);
+     } finally {
+       root.h = wasHydrating;
+     }
+-    return;
+-  }
+-  if (state.a) {
+-    fiber.m = props;
+     return;
+   }
+   if (state.p && !state.u && props.children === fiber.m?.children && !hasContextChanged(fiber, false)) {
+@@ -390,4 +387,3 @@
+ registerTypeMatcher((type) => type === REACT_SUSPENSE_TYPE ? 11 : null);
+ installRenderer(11, renderSuspense);
+ installCapability("h", realHandleSuspended);
+-//# sourceMappingURL=full.js.map
+diff --git a/dist/dom/features/suspense-runtime/stub.d.ts b/dist/dom/features/suspense-runtime/stub.d.ts
+--- a/dist/dom/features/suspense-runtime/stub.d.ts
++++ b/dist/dom/features/suspense-runtime/stub.d.ts
+@@ -1 +1 @@
+-export declare const a: any, p: any, q: any, r: any, t: any, v: any, c: any;
++export declare const a: any, p: any, q: any, r: any, t: any, v: any, c: any, s: any;
+diff --git a/dist/dom/features/suspense-runtime/stub.js b/dist/dom/features/suspense-runtime/stub.js
+--- a/dist/dom/features/suspense-runtime/stub.js
++++ b/dist/dom/features/suspense-runtime/stub.js
+@@ -1,11 +1,11 @@
+-const a = void 0, p = void 0, q = void 0, r = void 0, t = void 0, v = void 0, c = void 0;
++const a = void 0, p = void 0, q = void 0, r = void 0, t = void 0, v = void 0, c = void 0, s = void 0;
+ export {
+   a,
+   c,
+   p,
+   q,
+   r,
++  s,
+   t,
+   v
+ };
+-//# sourceMappingURL=stub.js.map
+diff --git a/dist/dom/react-ids.d.ts b/dist/dom/react-ids.d.ts
+--- a/dist/dom/react-ids.d.ts
++++ b/dist/dom/react-ids.d.ts
+@@ -1,4 +1,5 @@
+-import type { Fiber, FiberRoot } from "../core/index.js";
++import type { Fiber, FiberRoot } from '../core/index.js';
++export declare const leadingBit: (tree: bigint) => bigint;
+ export declare function forkId(base: bigint, count: number, index: number): bigint;
+ export declare function assignReactIds(parent: Fiber, children: object): void;
+ export declare function reactId(fiber: Fiber, root: FiberRoot): string;
+diff --git a/dist/dom/react-ids.js b/dist/dom/react-ids.js
+--- a/dist/dom/react-ids.js
++++ b/dist/dom/react-ids.js
+@@ -33,6 +33,6 @@
+   assignReactIds,
+   clientReactId,
+   forkId,
++  leadingBit,
+   reactId
+ };
+-//# sourceMappingURL=react-ids.js.map
+diff --git a/dist/dom/reconcile.d.ts b/dist/dom/reconcile.d.ts
+--- a/dist/dom/reconcile.d.ts
++++ b/dist/dom/reconcile.d.ts
+@@ -1,7 +1,7 @@
+-export { getHostParent, findRoot, getAnchor, firstDomNode } from "./tree.js";
+-export { isThenable } from "../core/functions.js";
+-export { deferHydration } from "./features/hydration/index.js";
+-import { FiberTag, type Fiber, type FiberRoot, type ReactElement, type ReactNode, type Effect, type Hook } from "../core/index.js";
++export { getHostParent, findRoot, getAnchor, firstDomNode } from './tree.js';
++export { isThenable } from '../core/functions.js';
++export { deferHydration } from './features/hydration/index.js';
++import { FiberTag, type Fiber, type FiberRoot, type ReactElement, type ReactNode, type Effect, type Hook } from '../core/index.js';
+ export declare function registerElementMarker(sym: symbol): void;
+ export declare function stageCommit(fiber: Fiber, work: Effect | (() => void), ref?: boolean): void;
+ export declare function childrenToArray(children: ReactNode): NormalizedChild[];
+@@ -59,6 +59,7 @@
+  */
+ export declare function reconcileChildren(parent: Fiber, nodes: Parameters<typeof reconcile>[1], _domParent: Node, _anchor: Node | null): void;
+ export declare function installRenderer(tag: FiberTag, fn: RenderFn): void;
++export declare const recoveringBoundaries: Set<Fiber>;
+ export declare function disposeCleanup(fiber: Fiber, cleanup: () => void): void;
+ export declare function installCapability<K extends keyof Capabilities>(name: K, fn: Capabilities[K]): void;
+ export declare function unmountFiber(fiber: Fiber, _domParent: Node, remove?: boolean): void;
+diff --git a/dist/dom/reconcile.js b/dist/dom/reconcile.js
+--- a/dist/dom/reconcile.js
++++ b/dist/dom/reconcile.js
+@@ -1,3 +1,4 @@
++import { isTextContent } from "../core/functions.js";
+ import { devToolsMetadata, readOwnerStack, runWithOwnerStack } from "../core/devtools.js";
+ import { getRootContainer } from "./root-internal.js";
+ import { getHostParent, findRoot, getAnchor, firstDomNode } from "./tree.js";
+@@ -13,13 +14,13 @@
+ import { m as markTransitionUpdate, d as deferTransition, c as cancelTransitions, l as deferTransitionLayout, p as deferTransitionPassive } from "./features/view-transition/index.js";
+ import { clearAttributes, clearHostContainer, documentMetadataParent, documentSingleton, DOCUMENT_HEAD_TAGS } from "./document-metadata.js";
+ import { acquireResource } from "./resources.js";
+-import { a as transitionRender, p as hasTransition, t as flushTransitions, c as cancelPendingTransitions } from "./features/suspense-runtime/index.js";
++import { a as transitionRender, p as hasTransition, t as flushTransitions, c as cancelPendingTransitions, s as scheduleTransitionRoot } from "./features/suspense-runtime/index.js";
+ import { commitFragmentRef, placeFragmentCommits, updateFragmentHost, refreshFragmentInstances } from "./features/fragment-refs/index.js";
+ import { isObject } from "../core/functions.js";
+ import { createFiber, REACT_ELEMENT_TYPE, REACT_LEGACY_ELEMENT_TYPE, REACT_FRAGMENT_TYPE } from "../core/index.js";
+ import { createHostNode, setProp } from "./dom.js";
+ import { rememberRefreshRender, scheduleRefreshRoot, commitRefreshRoot, failRefreshRoot, failRefreshBoundary, resolveRefreshType, sameRefreshFamily, needsRefreshRemount } from "./refresh.js";
+-import { forkId, assignReactIds, deferHydration as deferHydration2, finishHydration, adoptHostDom, adoptTextDom, findHostParent as findHydrationHost, abortHydration, recoverHydration, isHydrationBailout, resumeHydration } from "./features/hydration/index.js";
++import { forkId, assignReactIds, deferHydration as deferHydration2, queueHydrationEnd, finishHydration, adoptHostDom, adoptTextDom, findHostParent as findHydrationHost, abortHydration, recoverHydration, isHydrationBailout, resumeHydration } from "./features/hydration/index.js";
+ import { rememberRetainedEffect, setRetainedFlag, disconnectClass } from "./retained-effects.js";
+ import { readThenable } from "../react/thenable.js";
+ import { bindForm } from "./form-actions.js";
+@@ -62,6 +63,8 @@
+   }
+   if (fiber.t === 5)
+     return;
++  if (fiber.t === 11 && fiber.b?.b)
++    out.push(fiber.b.b);
+   let c = fiber.c;
+   while (c) {
+     collectHostDoms(c, out);
+@@ -69,6 +72,8 @@
+   }
+   if (fiber.t === 11 && fiber.b?.f)
+     collectHostDoms(fiber.b.f, out);
++  if (fiber.t === 11 && fiber.b?.e)
++    out.push(fiber.b.e);
+ }
+ function stageCommit(fiber, work, ref = false) {
+   let entries = stagedCommits.get(fiber);
+@@ -105,7 +110,7 @@
+     ids?.push(path);
+     return;
+   }
+-  if (isString(node) || typeof node === "number") {
++  if (isTextContent(node)) {
+     if (node !== "") {
+       out.push("" + node);
+       ids?.push(path);
+@@ -277,14 +282,19 @@
+   REACT_LEGACY_ELEMENT_TYPE
+ ]);
+ const TYPE_MATCHERS = [];
+-function renderUpdates(root, pending) {
++function renderUpdates(root, pending, update) {
+   pending.sort((a, b) => fiberDepth(a) - fiberDepth(b));
+   if (transitionRender)
+     for (const fiber of pending)
+       fiber.g = true;
++  update?.();
+   for (const fiber of pending) {
+     if (!fiber.g || fiber.u || fiber.pd)
+       continue;
++    if (fiber.su) {
++      scheduleUpdate(fiber);
++      continue;
++    }
+     if (!transitionRender) {
+       if (fiber.bt && hasTransition?.(fiber))
+         continue;
+@@ -489,9 +499,6 @@
+   const text = fiber.v;
+   if (fiber.n && fiber.m !== null && !fiber.n.parentNode && domParent.firstChild?.nodeType === 3 && !domParent.firstChild.nextSibling) {
+     fiber.n = domParent.firstChild;
+-    queueText(fiber.n, text);
+-    fiber.m = text;
+-    return;
+   }
+   if (fiber.n && fiber.m === text)
+     return;
+@@ -545,7 +552,8 @@
+   if (process.env.NODE_ENV !== "production")
+     rememberRefreshRender(root, render);
+   markTransitionUpdate && markTransitionUpdate(root);
+-  root.u = render;
++  if (!scheduleTransitionRoot?.(root, render))
++    root.u = render;
+   pendingRoots.add(root);
+   if (isBatching)
+     return;
+@@ -649,9 +657,10 @@
+ function installRenderer(tag, fn) {
+   RENDERERS[tag] = fn;
+ }
++const recoveringBoundaries = /* @__PURE__ */ new Set();
+ function findErrorBoundary(fiber) {
+   for (let parent = fiber.p; parent; parent = parent.p) {
+-    if (parent.u || parent.pd)
++    if (parent.u || parent.pd || recoveringBoundaries.has(parent))
+       continue;
+     const instance = parent.i;
+     if (instance?._f === parent && (parent.b?.b?.getDerivedStateFromError || instance.componentDidCatch))
+@@ -736,6 +745,9 @@
+         if (batch.length) {
+           const passive = () => {
+             for (const [fiber, effect] of batch)
++              if (!fiber.u && !isActivityHidden(fiber) && !activityIsDisconnected(fiber))
++                effect.d?.();
++            for (const [fiber, effect] of batch)
+               runEffect(fiber, effect);
+           };
+           if (process.env.NODE_ENV !== "production") {
+@@ -784,6 +796,7 @@
+   } finally {
+     currentRoot = null;
+   }
++  queueHydrationEnd?.(root);
+   runEffects(root);
+   if (process.env.NODE_ENV !== "production")
+     commitRefreshRoot(root);
+@@ -1049,7 +1062,12 @@
+   fiber.u = true;
+   if (fiber.t === 11 && fiber.b?.b) {
+     const state = fiber.b;
++    state.x?.();
+     state.b._reactRetry = void 0;
++    if (remove && !state.w) {
++      state.b.remove();
++      state.e?.remove();
++    }
+     if (remove && state.w) {
+       let node = state.b;
+       while (node) {
+@@ -1266,6 +1284,7 @@
+   reconcileChildren,
+   reconcileRaw,
+   recoverRootError,
++  recoveringBoundaries,
+   registerElementMarker,
+   registerTypeMatcher,
+   rememberActivityEffect,
+@@ -1284,4 +1303,3 @@
+   unmountFiber,
+   withCurrentRoot
+ };
+-//# sourceMappingURL=reconcile.js.map
+diff --git a/dist/dom/resources.js b/dist/dom/resources.js
+--- a/dist/dom/resources.js
++++ b/dist/dom/resources.js
+@@ -34,14 +34,13 @@
+   for (const name in next) {
+     setProp(node, name, name === "href" || name === "src" ? resourceURL(next[name]) : next[name], void 0, false);
+   }
+-  if (style && next.dangerouslySetInnerHTML == null && (isString(next.children) || typeof next.children === "number" || typeof next.children === "bigint"))
++  if (style && next.dangerouslySetInnerHTML == null && isTextContent(next.children))
+     node.textContent = "" + next.children;
+   resources.i.set(key, node);
+   insertResource(node, script ? void 0 : props.precedence, root);
+   return node;
+ }
+-import { isString } from "../core/functions.js";
++import { isTextContent } from "../core/functions.js";
+ export {
+   acquireResource
+ };
+-//# sourceMappingURL=resources.js.map
+diff --git a/dist/dom/root-internal.d.ts b/dist/dom/root-internal.d.ts
+--- a/dist/dom/root-internal.d.ts
++++ b/dist/dom/root-internal.d.ts
+@@ -1,4 +1,4 @@
+-import { type Fiber, type FiberRoot, type RecoverableErrorHandler } from "../core/index.js";
++import { type Fiber, type FiberRoot, type RecoverableErrorHandler } from '../core/index.js';
+ export interface RootOptionsInternal {
+     identifierStrategy?: 'react';
+     identifierPrefix?: string;
+diff --git a/dist/dom/root-internal.js b/dist/dom/root-internal.js
+--- a/dist/dom/root-internal.js
++++ b/dist/dom/root-internal.js
+@@ -9,8 +9,7 @@
+     i: options.identifierPrefix,
+     h: false
+   };
+-  if (options.identifierStrategy === "react")
+-    root.ri = true;
++  root.ri = true;
+   attachRootFiber(root, container);
+   return root;
+ }
+@@ -34,4 +33,3 @@
+   createFiberRoot,
+   getRootContainer
+ };
+-//# sourceMappingURL=root-internal.js.map
+diff --git a/dist/dom/root.d.ts b/dist/dom/root.d.ts
+--- a/dist/dom/root.d.ts
++++ b/dist/dom/root.d.ts
+@@ -1,5 +1,5 @@
+-import { flushSyncWork, batchedUpdates } from "./reconcile.js";
+-import type { ReactNode, RecoverableErrorHandler } from "../core/index.js";
++import { flushSyncWork, batchedUpdates } from './reconcile.js';
++import type { ReactNode, RecoverableErrorHandler } from '../core/index.js';
+ export interface RootOptions {
+     formState?: unknown[] | null;
+     identifierStrategy?: 'react';
+diff --git a/dist/dom/root.js b/dist/dom/root.js
+--- a/dist/dom/root.js
++++ b/dist/dom/root.js
+@@ -1,4 +1,4 @@
+-import { renderRoot, scheduleRootRender, flushSyncWork, batchedUpdates } from "./reconcile.js";
++import { discardPendingWork, renderRoot, scheduleRootRender, flushSyncWork, batchedUpdates } from "./reconcile.js";
+ import { createFiberRoot } from "./root-internal.js";
+ import { queueMutation } from "./commit.js";
+ import { clearHostContainer } from "./document-metadata.js";
+@@ -20,6 +20,7 @@
+       });
+     },
+     unmount() {
++      discardPendingWork(root);
+       flushSyncWork(() => {
+         renderRoot(root, null);
+       });
+@@ -35,4 +36,3 @@
+   flushSyncWork as flushSync,
+   hydrateRoot
+ };
+-//# sourceMappingURL=root.js.map
+diff --git a/dist/dom/transitions.d.ts b/dist/dom/transitions.d.ts
+--- a/dist/dom/transitions.d.ts
++++ b/dist/dom/transitions.d.ts
+@@ -1,8 +1,9 @@
+-import type { Fiber, FiberRoot, Hook } from "../core/index.js";
++import type { Fiber, FiberRoot, Hook } from '../core/index.js';
+ export declare let a: boolean;
+ export declare const p: (fiber: Fiber) => boolean;
+ export declare function q(hook: Hook, fiber: Fiber, action: any): boolean;
+ export declare function v(hook: Hook, fiber: Fiber, value: any): any;
+ export declare function c(root: FiberRoot): void;
+-export declare function t(root: FiberRoot, render: (root: FiberRoot, fibers: Fiber[]) => void): void;
++export declare function t(root: FiberRoot, render: (root: FiberRoot, fibers: Fiber[], update?: () => void) => void): void;
++export declare function s(root: FiberRoot, render: () => void): boolean;
+ export declare function r(hook: Hook, reducer: (state: any, action: any) => any): boolean;
+diff --git a/dist/dom/transitions.js b/dist/dom/transitions.js
+--- a/dist/dom/transitions.js
++++ b/dist/dom/transitions.js
+@@ -33,6 +33,7 @@
+     complete(pending.s);
+     pending.s.clear();
+     pending.clear();
++    pending.u = void 0;
+   }
+ }
+ function t(root, render) {
+@@ -43,7 +44,10 @@
+   const fibers = [...pending];
+   a = true;
+   try {
+-    render(root, fibers);
++    const update = pending.u;
++    render(root, fibers, update);
++    if (pending.u === update)
++      pending.u = void 0;
+     for (const fiber of fibers) {
+       pending.delete(fiber);
+     }
+@@ -57,7 +61,7 @@
+       throw error;
+     rewindCommit(checkpoint);
+     for (const scope of pending.s)
+-      scope.n?.();
++      scope.n?.(scope);
+     if (pending.w !== error) {
+       pending.w = error;
+       const retry = () => transitionScope(() => {
+@@ -98,6 +102,17 @@
+   } else
+     scheduleUpdate(fiber);
+ }
++function s(root, render) {
++  if (!ReactSharedInternals.T) {
++    if (root.tr)
++      root.tr.u = void 0;
++    return false;
++  }
++  const scope = ReactSharedInternals.B;
++  enqueue(root.r, scope?.o === root ? scope : void 0);
++  root.tr.u = render;
++  return true;
++}
+ function r(hook, reducer) {
+   if (!hook.t)
+     return false;
+@@ -126,7 +141,7 @@
+   p,
+   q,
+   r,
++  s,
+   t,
+   v
+ };
+-//# sourceMappingURL=transitions.js.map
+diff --git a/dist/react/action-scope.d.ts b/dist/react/action-scope.d.ts
+--- a/dist/react/action-scope.d.ts
++++ b/dist/react/action-scope.d.ts
+@@ -1,6 +1,8 @@
++import type { FiberRoot } from '../core/index.js';
+ export interface ActionScope {
++    o?: FiberRoot | null | undefined;
+     v?: number;
+-    n?: () => void;
++    n?: ((scope: ActionScope) => void) | undefined;
+     p: number;
+     d: Promise<void>;
+     r: () => void;
+@@ -11,5 +13,5 @@
+ }
+ export declare function trackAction(scope: ActionScope, promise: PromiseLike<unknown>, nested?: ActionScope): void;
+ export declare function finish(scope: ActionScope): void;
+-export declare function runAction(callback: () => unknown): ActionScope;
++export declare function runAction(callback: () => unknown, owner?: FiberRoot | null, notify?: (scope: ActionScope) => void): ActionScope;
+ export declare function withinAction<T>(scope: ActionScope | null | undefined, callback: () => T): T;
+diff --git a/dist/react/action-scope.js b/dist/react/action-scope.js
+--- a/dist/react/action-scope.js
++++ b/dist/react/action-scope.js
+@@ -22,13 +22,13 @@
+   scope.l.clear();
+   scope.r();
+ }
+-function runAction(callback) {
++function runAction(callback, owner, notify) {
+   const previous = ReactSharedInternals.B;
+   let resolve;
+   const done = new Promise((yes) => {
+     resolve = yes;
+   });
+-  const scope = { p: 1, d: done, r: resolve, f: false, l: /* @__PURE__ */ new Set() };
++  const scope = { p: 1, d: done, r: resolve, f: false, l: /* @__PURE__ */ new Set(), o: owner ?? previous?.o, n: notify };
+   try {
+     const result = withinAction(scope, callback);
+     if (isThenable(result))
+@@ -58,4 +58,3 @@
+   trackAction,
+   withinAction
+ };
+-//# sourceMappingURL=action-scope.js.map
+diff --git a/dist/server/bootstrap-script.d.ts b/dist/server/bootstrap-script.d.ts
+--- a/dist/server/bootstrap-script.d.ts
++++ b/dist/server/bootstrap-script.d.ts
+@@ -1,3 +1,3 @@
+ export declare const BOUNDARY_REVEAL_RUNTIME: string;
+ export declare function injectBootstrapScript(nonce?: string): string;
+-export declare function revealScript(id: number, nonce?: string, styles?: string[][]): string;
++export declare function revealScript(id: number, nonce?: string, styles?: string[][], identifierPrefix?: string): string;
+diff --git a/dist/server/bootstrap-script.js b/dist/server/bootstrap-script.js
+--- a/dist/server/bootstrap-script.js
++++ b/dist/server/bootstrap-script.js
+@@ -1,16 +1,17 @@
++import { boundaryId, segmentId, scriptId } from "./stream-ids.js";
+ import { escapeAttr } from "./escape.js";
+-const BOUNDARY_REVEAL_RUNTIME = `(function(){var c={},r=new Map;function place(n,v){var a=document.head.querySelectorAll('link[rel="stylesheet"][data-precedence],style[data-precedence]'),t=a.length?a[a.length-1]:null,p=t;for(var k=0;k<a.length;k++){if(a[k].getAttribute("data-precedence")===v)p=a[k];else if(p!==t)break}document.head.insertBefore(n,p?p.nextSibling:document.head.firstChild);}function load(n,e){return new Promise(function(y,x){n.onload=function(){e.p=null;y()};n.onerror=function(){e.p=null;x()}})}window.$RH=function(i,f){if(!document.getElementById("B:"+i))f();else c[i]=f;};window.$RC=function(i){var s=document.getElementById("S:"+i),b=document.getElementById("B:"+i);if(!s||!b)return;var a=document.querySelectorAll('body link[rel="stylesheet"][data-precedence],body style[data-precedence]');for(var j=0;j<a.length;j++){var n=a[j];if(n.getAttribute("media")==="not all")n.removeAttribute("media");place(n,n.getAttribute("data-precedence"));}var p=b.parentNode,m=b.previousSibling;while(s.firstChild)p.insertBefore(s.firstChild,b);s.parentNode.removeChild(s);p.removeChild(b);if(m&&m.nodeType===8)m.data="$"+i;if(c[i]){var f=c[i];delete c[i];f()}};window.$RL=function(i,d){var w=[];for(var j=0;j<d.length;j++){var a=d[j],e=r.get(a[0]);if(!e){var n=null,l=document.querySelectorAll('link[rel="stylesheet"]');for(var k=0;k<l.length;k++)if(l[k].getAttribute("href")===a[0]){n=l[k];break}e={n:n,p:null};r.set(a[0],e);if(!n){n=e.n=document.createElement("link");n.rel="stylesheet";n.href=a[0];n.setAttribute("data-precedence",a[1]);for(var k=2;k<a.length;k+=2)n.setAttribute(a[k],a[k+1]);e.p=load(n,e);place(n,a[1]);}}var m=e.n.getAttribute("media");if(e.p&&(!m||matchMedia(m).matches))w.push(e.p);}Promise.all(w).then(function(){$RC(i)},function(){$RB(i,1)});};window.$RB=function(i,e){var b=document.getElementById("B:"+i);if(!b)return;var m=b.previousSibling;if(m&&m.nodeType===8)m.data=(e?"$E":"$!")+i;b.removeAttribute("id");if(c[i]){var f=c[i];delete c[i];f()}};var q=[];window.$RE_q=q;var evs=["click","submit","input","change","keydown"];function h(e){q.push([e.type,e.target,e.timeStamp])}for(var j=0;j<evs.length;j++)document.addEventListener(evs[j],h,true);window.$RE_stop=function(){for(var j=0;j<evs.length;j++)document.removeEventListener(evs[j],h,true)};})();`;
++const BOUNDARY_REVEAL_RUNTIME = `(function(){if(!window.$RH){var c={},r=new Map;function place(n,v){var a=document.head.querySelectorAll('link[rel="stylesheet"][data-precedence],style[data-precedence]'),t=a.length?a[a.length-1]:null,p=t;for(var k=0;k<a.length;k++){if(a[k].getAttribute("data-precedence")===v)p=a[k];else if(p!==t)break}document.head.insertBefore(n,p?p.nextSibling:document.head.firstChild);}function drop(s){var w=/^(TBODY|TR|COLGROUP|mtext)$/.test(s.nodeName)?s.closest("table,math"):s;w.remove()}function load(n,e){return new Promise(function(y,x){n.onload=function(){e.p=null;y()};n.onerror=function(){e.p=null;x()}})}window.$RH=function(i,f){if(!document.getElementById(i))f();else{c[i]=f;return function(){if(c[i]===f)delete c[i]}}};window.$RC=function(i,j){var s=document.getElementById(j),b=document.getElementById(i);if(!b){delete c[i];if(s)drop(s);return}if(!s)return;var a=document.querySelectorAll('body link[rel="stylesheet"][data-precedence],body style[data-precedence]');for(var j=0;j<a.length;j++){var n=a[j];if(n.getAttribute("media")==="not all")n.removeAttribute("media");place(n,n.getAttribute("data-precedence"));}var p=b.parentNode,m=b.previousSibling;var n=b.nextSibling,d=0;while(n){var t=n.nextSibling;if(n.nodeType===8){if(n.data==="/$"){if(d===0)break;d--}else if(/^\\$(?:[?!E~])?\\d*$/.test(n.data))d++}p.removeChild(n);n=t}while(s.firstChild)p.insertBefore(s.firstChild,b);drop(s);p.removeChild(b);if(m&&m.nodeType===8)m.data=m.data.replace("$?","$");if(c[i]){var f=c[i];delete c[i];f()}};window.$RR=function(i,s,d){var w=[];for(var j=0;j<d.length;j++){var a=d[j],e=r.get(a[0]);if(!e){var n=null,l=document.querySelectorAll('link[rel="stylesheet"]');for(var k=0;k<l.length;k++)if(l[k].getAttribute("href")===a[0]){n=l[k];break}e={n:n,p:null};r.set(a[0],e);if(!n){n=e.n=document.createElement("link");n.rel="stylesheet";n.href=a[0];n.setAttribute("data-precedence",a[1]);for(var k=2;k<a.length;k+=2)n.setAttribute(a[k],a[k+1]);e.p=load(n,e);place(n,a[1]);}}var m=e.n.getAttribute("media");if(e.p&&(!m||matchMedia(m).matches))w.push(e.p);}Promise.all(w).then(function(){$RC(i,s)},function(){$RB(i,1,s)});};window.$RB=function(i,e,j){var s=j&&document.getElementById(j);if(s)drop(s);var b=document.getElementById(i);if(!b){delete c[i];return}var m=b.previousSibling;if(m&&m.nodeType===8)m.data=(e?"$E":"$!")+m.data.replace(/^\\$[?~!E]?/,"");b.removeAttribute("id");if(c[i]){var f=c[i];delete c[i];f()}};}var q=[];window.$RE_q=q;var evs=["click","submit","input","change","keydown"];function h(e){q.push([e.type,e.target,e.timeStamp])}for(var j=0;j<evs.length;j++)document.addEventListener(evs[j],h,true);window.$RE_stop=function(){for(var j=0;j<evs.length;j++)document.removeEventListener(evs[j],h,true)};})();`;
+ function injectBootstrapScript(nonce) {
+   const n = nonce ? ` nonce="${escapeAttr(nonce)}"` : "";
+   return `<script${n}>${BOUNDARY_REVEAL_RUNTIME}<\/script>`;
+ }
+-function revealScript(id, nonce, styles) {
++function revealScript(id, nonce, styles, identifierPrefix = "") {
+   const n = nonce ? ` nonce="${escapeAttr(nonce)}"` : "";
+-  return `<script${n}>${styles?.length ? `$RL(${id},${JSON.stringify(styles).replace(/</g, "\\u003c")})` : `$RC(${id})`}<\/script>`;
++  const b = scriptId(boundaryId(id, identifierPrefix)), s = scriptId(segmentId(id, identifierPrefix));
++  return `<script${n}>${styles?.length ? `$RR(${b},${s},${JSON.stringify(styles).replace(/</g, "\\u003c")})` : `$RC(${b},${s})`}<\/script>`;
+ }
+ export {
+   BOUNDARY_REVEAL_RUNTIME,
+   injectBootstrapScript,
+   revealScript
+ };
+-//# sourceMappingURL=bootstrap-script.js.map
+diff --git a/dist/server/dispatcher.d.ts b/dist/server/dispatcher.d.ts
+--- a/dist/server/dispatcher.d.ts
++++ b/dist/server/dispatcher.d.ts
+@@ -1,6 +1,7 @@
+-import { createResourceHints, type ResourceScope } from "./resource-hints.js";
++import { createResourceHints, type ResourceScope } from './resource-hints.js';
+ export interface SSRFrame {
+-    idCounter: number;
++    treeId: bigint;
++    localId: number;
+     identifierPrefix: string;
+     contextStack: Array<{
+         context: any;
+@@ -32,10 +33,7 @@
+ export declare function applyContextSnapshot(snapshot: ContextSnapshot): () => void;
+ export declare const ssrDispatcher: {
+     useCacheRefresh(): () => never;
+-    useState<S>(initial: S | (() => S)): [
+-        S,
+-        any
+-    ];
++    useState<S>(initial: S | (() => S)): [S, any];
+     useReducer<S, A>(_reducer: (s: S, a: A) => S, initialArg: any, init?: (a: any) => S): any[];
+     useEffect(): void;
+     useLayoutEffect(): void;
+@@ -49,19 +47,9 @@
+     useImperativeHandle(): void;
+     useDebugValue(): void;
+     useId(): string;
+-    useTransition(): [
+-        boolean,
+-        (fn: () => void) => void
+-    ];
+-    useActionState<S, P>(_action: (state: Awaited<S>, payload: P) => S | Promise<S>, initial: Awaited<S>): [
+-        Awaited<S>,
+-        (payload: P) => void,
+-        boolean
+-    ];
+-    useOptimistic<S, A>(state: S): [
+-        S,
+-        (action: A) => void
+-    ];
++    useTransition(): [boolean, (fn: () => void) => void];
++    useActionState<S, P>(_action: (state: Awaited<S>, payload: P) => S | Promise<S>, initial: Awaited<S>): [Awaited<S>, (payload: P) => void, boolean];
++    useOptimistic<S, A>(state: S): [S, (action: A) => void];
+     useFormStatus(): import("../react/form-state.js").FormStatus;
+     useDeferredValue<T>(v: T): T;
+     useSyncExternalStore<T>(_subscribe: (cb: () => void) => () => void, getSnapshot: () => T, getServerSnapshot?: () => T): T;
+diff --git a/dist/server/dispatcher.js b/dist/server/dispatcher.js
+--- a/dist/server/dispatcher.js
++++ b/dist/server/dispatcher.js
+@@ -1,3 +1,4 @@
++import { leadingBit } from "../dom/react-ids.js";
+ import { isFunction } from "../core/functions.js";
+ import { readThenable } from "../react/thenable.js";
+ import { idleFormStatus } from "../react/form-state.js";
+@@ -12,9 +13,9 @@
+   (frame.resources ||= createResourceHints(!!frame.shellFlushed, frame.styleNonce)).add(kind, href, options);
+   return true;
+ };
+-function beginSSR(identifierPrefix = ":R", nextFrame) {
++function beginSSR(identifierPrefix = "", nextFrame) {
+   const previous = { frame, dispatcher: ReactSharedInternals.H };
+-  frame = nextFrame ?? { idCounter: 0, identifierPrefix, contextStack: [] };
++  frame = nextFrame ?? { treeId: 1n, localId: 0, identifierPrefix, contextStack: [] };
+   ReactSharedInternals.H = ssrDispatcher;
+   return previous;
+ }
+@@ -105,7 +106,9 @@
+   useId() {
+     if (!frame)
+       return ":r0:";
+-    return `${frame.identifierPrefix}${(frame.idCounter++).toString(36)}`;
++    const local = frame.localId++;
++    const tree = frame.treeId;
++    return "_" + frame.identifierPrefix + "R_" + (tree ^ leadingBit(tree)).toString(32) + (local ? "H" + local.toString(32) : "") + "_";
+   },
+   useTransition() {
+     return [false, (fn) => fn()];
+@@ -152,4 +155,3 @@
+   snapshotContexts,
+   ssrDispatcher
+ };
+-//# sourceMappingURL=dispatcher.js.map
+diff --git a/dist/server/insertion-context.d.ts b/dist/server/insertion-context.d.ts
+new file mode 100644
+--- /dev/null
++++ b/dist/server/insertion-context.d.ts
+@@ -0,0 +1,3 @@
++export type InsertionContext = 'html' | 'svg' | 'math' | 'mtext' | 'table' | 'tbody' | 'tr' | 'colgroup';
++export declare function childInsertionContext(tag: string, props: Record<string, any>, parent: InsertionContext): InsertionContext;
++export declare function segmentHtml(content: string, id: string, context: InsertionContext): string;
+diff --git a/dist/server/insertion-context.js b/dist/server/insertion-context.js
+new file mode 100644
+--- /dev/null
++++ b/dist/server/insertion-context.js
+@@ -0,0 +1,32 @@
++import { escapeAttr } from "./escape.js";
++function childInsertionContext(tag, props, parent) {
++  if (tag === "svg")
++    return "svg";
++  if (tag === "math")
++    return "math";
++  if (parent === "svg" && (tag === "foreignObject" || tag === "desc" || tag === "title") || tag === "annotation-xml" && /^(text\/html|application\/xhtml\+xml)$/i.test(props.encoding ?? ""))
++    return "html";
++  if (parent === "math" && /^(mi|mo|mn|ms|mtext)$/.test(tag))
++    return "mtext";
++  if (parent === "mtext" && (tag === "mglyph" || tag === "malignmark"))
++    return "math";
++  if (parent === "svg" || parent === "math")
++    return parent;
++  if (tag === "table" || tag === "tr" || tag === "colgroup")
++    return tag;
++  if (tag === "tbody" || tag === "thead" || tag === "tfoot")
++    return "tbody";
++  return "html";
++}
++function segmentHtml(content, id, context) {
++  const mathText = context === "mtext";
++  const nested = mathText || context === "tbody" || context === "tr" || context === "colgroup";
++  const tag = context === "html" ? "div" : context;
++  const hidden = nested ? "" : context === "svg" || context === "math" ? ' aria-hidden="true" style="display:none"' : " hidden";
++  const wrapper = mathText ? '<math style="display:none">' : "<table hidden>";
++  return `${nested ? wrapper : ""}<${tag}${hidden} id="${escapeAttr(id)}">${content}</${tag}>${nested ? mathText ? "</math>" : "</table>" : ""}`;
++}
++export {
++  childInsertionContext,
++  segmentHtml
++};
+diff --git a/dist/server/stream-ids.d.ts b/dist/server/stream-ids.d.ts
+new file mode 100644
+--- /dev/null
++++ b/dist/server/stream-ids.d.ts
+@@ -0,0 +1,3 @@
++export declare const boundaryId: (id: number, prefix?: string) => string;
++export declare const segmentId: (id: number, prefix?: string) => string;
++export declare const scriptId: (id: string) => string;
+diff --git a/dist/server/stream-ids.js b/dist/server/stream-ids.js
+new file mode 100644
+--- /dev/null
++++ b/dist/server/stream-ids.js
+@@ -0,0 +1,8 @@
++const boundaryId = (id, prefix = "") => prefix + "B:" + id.toString(16);
++const segmentId = (id, prefix = "") => prefix + "S:" + id.toString(16);
++const scriptId = (id) => JSON.stringify(id).replace(/</g, "\\u003c");
++export {
++  boundaryId,
++  scriptId,
++  segmentId
++};
+diff --git a/dist/server/stream.d.ts b/dist/server/stream.d.ts
+--- a/dist/server/stream.d.ts
++++ b/dist/server/stream.d.ts
+@@ -1,6 +1,6 @@
+-import type { ReactNode } from "../core/index.js";
+-import { type SSRFrame } from "./dispatcher.js";
+-import { type BrowserBailoutCallback } from "./walk.js";
++import type { ReactNode } from '../core/index.js';
++import { type SSRFrame } from './dispatcher.js';
++import { type BrowserBailoutCallback } from './walk.js';
+ export interface StreamOptions {
+     identifierPrefix?: string;
+     nonce?: string | {
+diff --git a/dist/server/stream.js b/dist/server/stream.js
+--- a/dist/server/stream.js
++++ b/dist/server/stream.js
+@@ -1,3 +1,6 @@
++// ultramodern-redact-patch: v1
++import { boundaryId, segmentId, scriptId } from "./stream-ids.js";
++import { segmentHtml } from "./insertion-context.js";
+ import { isThenable } from "../core/functions.js";
+ import { beginSSR, endSSR, applyContextSnapshot, currentSSRFrame } from "./dispatcher.js";
+ import { walk } from "./walk.js";
+@@ -137,7 +140,7 @@
+         options.onBrowserBailout?.(error, { componentStack: error.componentStack || b.componentStack });
+       else
+         options.onError?.(error);
+-      emit(`<script${nonce ? ` nonce="${escapeAttr(nonce)}"` : ""}>$RB(${b.id}${isBrowserError(error) ? "" : ",1"})<\/script>`);
++      emit(`<script${nonce ? ` nonce="${escapeAttr(nonce)}"` : ""}>$RB(${scriptId(boundaryId(b.id, options.identifierPrefix))}${isBrowserError(error) ? "" : ",1"})<\/script>`);
+     };
+     if (state.aborted) {
+       defer(state.reason);
+@@ -152,6 +155,8 @@
+     const restore = applyContextSnapshot(b.contextSnapshot);
+     try {
+       walk(b.children, {
++        insertionContext: b.insertionContext,
++        treeId: b.treeId,
+         emit: (s) => parts.push(s),
+         onSuspend: (n) => sub.push(n),
+         nextBoundaryId: () => state.nextId++,
+@@ -175,7 +180,7 @@
+       if (hints)
+         emit(hints);
+     }
+-    emit(`<div hidden id="S:${b.id}">${parts.join("")}</div>${revealScript(b.id, nonce, styles)}`);
++    emit(segmentHtml(parts.join(""), segmentId(b.id, options.identifierPrefix), b.insertionContext) + revealScript(b.id, nonce, styles, options.identifierPrefix));
+     for (const s of sub)
+       streamBoundary(s, emit, options, state);
+   })();
+@@ -377,4 +382,3 @@
+   renderToReadableStream,
+   streamHtml
+ };
+-//# sourceMappingURL=stream.js.map
+diff --git a/dist/server/walk.d.ts b/dist/server/walk.d.ts
+--- a/dist/server/walk.d.ts
++++ b/dist/server/walk.d.ts
+@@ -1,12 +1,15 @@
+-import { type ReactNode } from "../core/index.js";
+-import { type ContextSnapshot } from "./dispatcher.js";
+-import type { ResourceScope } from "./resource-hints.js";
++import { type InsertionContext } from './insertion-context.js';
++import { type ReactNode } from '../core/index.js';
++import { type ContextSnapshot } from './dispatcher.js';
++import type { ResourceScope } from './resource-hints.js';
+ export interface ServerErrorInfo {
+     componentStack: string;
+ }
+ export type BrowserBailoutCallback = (error: Error, errorInfo: ServerErrorInfo) => void;
+ export interface SuspendedBoundary {
+     id: number;
++    treeId: bigint;
++    insertionContext: InsertionContext;
+     fallbackHTML: string;
+     children: ReactNode;
+     thenable: Promise<any>;
+@@ -14,6 +17,8 @@
+     componentStack: string;
+ }
+ export interface WalkOptions {
++    insertionContext?: InsertionContext | undefined;
++    treeId?: bigint | undefined;
+     emit: (chunk: string) => void;
+     onHead?: () => void;
+     onSuspend?: ((boundary: SuspendedBoundary) => void) | undefined;
+diff --git a/dist/server/walk.js b/dist/server/walk.js
+--- a/dist/server/walk.js
++++ b/dist/server/walk.js
+@@ -1,14 +1,18 @@
++import { boundaryId } from "./stream-ids.js";
++import { childInsertionContext } from "./insertion-context.js";
++import { forkId } from "../dom/react-ids.js";
++import { isTextContent } from "../core/functions.js";
+ import { isFunction, isThenable } from "../core/functions.js";
+ import { resolveClassProps } from "../core/class-props.js";
+ import { REACT_ELEMENT_TYPE, REACT_LEGACY_ELEMENT_TYPE, REACT_FRAGMENT_TYPE } from "../core/index.js";
+ import { REACT_SUSPENSE_TYPE, REACT_CONTEXT_TYPE, REACT_PROVIDER_TYPE, REACT_CONSUMER_TYPE, REACT_FORWARD_REF_TYPE, REACT_MEMO_TYPE, REACT_LAZY_TYPE, REACT_STRICT_MODE_TYPE, REACT_PROFILER_TYPE, REACT_PORTAL_TYPE, REACT_ACTIVITY_TYPE, REACT_VIEW_TRANSITION_TYPE } from "../react/index.js";
+-import { attrToHtml, escapeText, escapeScript, VOID_ELEMENTS, RAW_TEXT_ELEMENTS } from "./escape.js";
++import { escapeAttr, attrToHtml, escapeText, escapeScript, VOID_ELEMENTS, RAW_TEXT_ELEMENTS } from "./escape.js";
+ import { pushContext, popContext, snapshotContexts, recordHostResource, currentSSRFrame } from "./dispatcher.js";
+ import { isBrowserError } from "../core/browser.js";
+ import { resourceKind } from "../core/resource-hints.js";
+ function walk(node, opts) {
+   if (!opts.textState)
+-    opts = { ...opts, textState: { bits: 0 } };
++    opts = { ...opts, textState: { bits: +(opts.insertionContext === "svg") } };
+   walkNode(node, opts);
+ }
+ const selectValueStack = [];
+@@ -24,7 +28,7 @@
+ function optionChildText(children) {
+   if (children == null)
+     return "";
+-  if (typeof children === "string" || typeof children === "number")
++  if (isTextContent(children))
+     return "" + children;
+   if (Array.isArray(children))
+     return children.map(optionChildText).join("");
+@@ -41,22 +45,18 @@
+ function walkNode(node, opts) {
+   if (node == null || node === false || node === true)
+     return;
+-  if (typeof node === "string") {
+-    emitText(node, opts);
+-    return;
+-  }
+-  if (typeof node === "number") {
+-    emitText(String(node), opts);
++  if (isTextContent(node)) {
++    emitText("" + node, opts);
+     return;
+   }
+   if (Array.isArray(node)) {
+-    for (const c of node)
+-      walkNode(c, opts);
++    const treeId = opts.treeId ?? 1n;
++    for (let i = 0; i < node.length; i++)
++      walkNode(node[i], { ...opts, treeId: forkId(treeId, node.length, i) });
+     return;
+   }
+   if (isFunction(node[Symbol.iterator])) {
+-    for (const item of node)
+-      walkNode(item, opts);
++    walkNode(Array.from(node), opts);
+     return;
+   }
+   if (typeof node !== "object")
+@@ -230,7 +230,7 @@
+       const previousState = parentTextState.bits;
+       parentTextState.bits = +(isSvg && tag !== "foreignObject");
+       try {
+-        walkNode(props.children, opts);
++        walkNode(props.children, { ...opts, insertionContext: childInsertionContext(tag, props, opts.insertionContext ?? "html") });
+       } finally {
+         parentTextState.bits = previousState;
+       }
+@@ -268,6 +268,10 @@
+     opts = { ...opts, componentStack: `
+     at ${fn.displayName || fn.name || "Anonymous"}${opts.componentStack || ""}` };
+   }
++  const frame = currentSSRFrame();
++  const previousTree = frame.treeId, previousLocal = frame.localId;
++  frame.treeId = opts.treeId ?? 1n;
++  frame.localId = 0;
+   try {
+     if (fn.prototype?.isReactComponent) {
+       props = resolveClassProps(fn, props);
+@@ -285,7 +289,7 @@
+       return;
+     }
+     const rendered = fn(props, ref);
+-    walkNode(rendered, opts);
++    walkNode(rendered, frame.localId ? { ...opts, treeId: forkId(frame.treeId, 1, 0) } : opts);
+   } catch (error) {
+     if (opts.thrownInfo && !opts.thrownInfo.componentStack)
+       opts.thrownInfo.componentStack = opts.componentStack;
+@@ -293,6 +297,9 @@
+       Object.defineProperty(error, "componentStack", { value: opts.componentStack });
+     }
+     throw error;
++  } finally {
++    frame.treeId = previousTree;
++    frame.localId = previousLocal;
+   }
+ }
+ function walkSuspense(props, opts) {
+@@ -329,7 +336,7 @@
+       nextBoundaryId: opts.nextBoundaryId
+     });
+     if (!suspended) {
+-      opts.emit(`<!--${isBrowserError(thenable) ? "$!" : "$E"}${id}-->${fallbackParts.join("")}<!--/$-->`);
++      emitBoundary(opts, id, fallbackParts.join(""), isBrowserError(thenable) ? "$!" : "$E");
+     } else
+       emitBoundary(opts, id, fallbackParts.join(""));
+     for (const boundary of nested)
+@@ -337,6 +344,8 @@
+     if (suspended)
+       opts.onSuspend?.({
+         id,
++        treeId: opts.treeId ?? 1n,
++        insertionContext: opts.insertionContext ?? "html",
+         fallbackHTML: fallbackParts.join(""),
+         children: props.children,
+         thenable,
+@@ -347,18 +356,16 @@
+   }
+   if (resourceScope)
+     currentSSRFrame().resources?.mergeScope(resourceScope, opts.resourceScope);
+-  opts.emit(`<!--$${id}-->`);
+-  opts.emit(childParts.join(""));
+-  opts.emit(`<!--/$-->`);
++  emitBoundary(opts, id, childParts.join(""), "$");
+   for (const boundary of nested)
+     opts.onSuspend?.(boundary);
+ }
+-function emitBoundary(opts, id, fallbackHTML) {
+-  opts.emit(`<!--$?${id}--><div id="B:${id}">`);
+-  opts.emit(fallbackHTML);
+-  opts.emit(`</div><!--/$-->`);
++function emitBoundary(opts, id, content, marker = "$?") {
++  const close = opts.insertionContext === "table" ? "</tbody></colgroup>" : "";
++  opts.emit(`${close}<!--${marker}${id}-->${marker === "$?" ? `<template id="${escapeAttr(boundaryId(id, currentSSRFrame().identifierPrefix))}"></template>` : ""}`);
++  opts.emit(content);
++  opts.emit(`${close}<!--/$-->`);
+ }
+ export {
+   walk
+ };
+-//# sourceMappingURL=walk.js.map

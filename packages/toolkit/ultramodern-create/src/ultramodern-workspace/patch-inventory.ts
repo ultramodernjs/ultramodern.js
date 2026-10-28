@@ -1,13 +1,23 @@
 export default [
   {
+    packageName: '@tanstack/redact',
+    version: '0.2.1',
+    path: 'patches/@tanstack__redact@0.2.1.patch',
+    sha256: 'ef5f95b9e5f01cd8130b5e523e33fa6a2ebd05004509952092305fc1174e6f8c',
+    repository: false,
+    workspace: null,
+    reason:
+      'Keep shipped source and dist behavior equivalent for tree-position useId, prefixed hexadecimal transport IDs, document-wide reveal registrations without changing upstream early-event capture or replay, stylesheet reveals that discard rejected segments, table fallback ranges and SVG/MathML integration points, deleted pending boundary ownership with subscription disposal and late-segment cleanup, Element-root metadata adoption with attempt-scoped claims and range-scoped inline lookup, and error-fallback bubbling with Suspense marker placement. Includes already-merged upstream root-transition, retained-subscriber, hydration/store, browser-text, and inline-metadata corrections from 89f2bfc, 2a14852, and 47f206e. Independent TanStack/redact SSR PRs remain pending. The tanstack-redact sidecar recipe reconstructs from this reviewed 0.2.1 source/dist correction and v1 stream marker; no repository package depends on Redact yet, so it is not projected into repository patchedDependencies. Generated workspaces remain patch-free and consumers require the mature signed tanstack-redact sidecar.',
+  },
+  {
     packageName: '@tanstack/router-core',
     version: '1.171.34',
     path: 'patches/@tanstack__router-core@1.171.34.patch',
     sha256: '0e526bc0a1fd038c459fbf45b2b62da81f7f2516176b585f41fed7098ac4abbb',
-    repository: true,
+    repository: false,
     workspace: null,
     reason:
-      'Let native localized masks inherit the canonical resolved search without rerunning middleware or validation, including public types and emitted CJS/ESM source maps. Applies only to the accepted Octane router-core 1.171.34 closure during local qualification. Generated workspaces remain patch-free; retire when their mature accepted router sidecar or upstream release supplies the same runtime and declaration contract.',
+      'Let native localized masks inherit the canonical resolved search without rerunning middleware or validation, including public types and emitted CJS/ESM source maps. Retained for exact 1.171.34 artifact qualification only; the repository now resolves Octane router-core through its corrected 1.171.38 tarball, so this selector must not be projected into repository patchedDependencies. Generated workspaces remain patch-free; retire when their mature accepted router sidecar or upstream release supplies the same runtime and declaration contract.',
   },
   {
     packageName: '@tanstack/router-core',
