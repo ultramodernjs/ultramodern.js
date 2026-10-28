@@ -500,13 +500,25 @@ export function createNativeConsumer(
       ]);
       artifacts.push(artifact);
     }
-    execFileSync('pnpm', ['install', '--no-frozen-lockfile'], {
-      cwd: appDir,
-      env: { ...process.env, NODE_PATH: '', CI: 'true' },
-      encoding: 'utf8',
-      timeout: 300_000,
-      stdio: 'pipe',
-    });
+    const installStarted = Date.now();
+    try {
+      execFileSync('pnpm', ['install', '--no-frozen-lockfile'], {
+        cwd: appDir,
+        env: { ...process.env, NODE_PATH: '', CI: 'true' },
+        encoding: 'utf8',
+        timeout: 300_000,
+        stdio: 'pipe',
+      });
+    } catch (error) {
+      throw new Error(
+        [
+          `Native ${target} consumer install failed after ${Date.now() - installStarted}ms in ${appDir}: ${error.message}`,
+          `stdout:\n${error.stdout ?? ''}`,
+          `stderr:\n${error.stderr ?? ''}`,
+        ].join('\n'),
+        { cause: error },
+      );
+    }
     assertInstalledConsumer(appDir, target, dependencies);
     console.log(
       `[native-compatibility] ${target}: ${target === 'upstream' ? upstreamCommit : 'built fork artifacts'}`,
