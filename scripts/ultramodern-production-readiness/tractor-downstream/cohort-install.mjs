@@ -9,6 +9,7 @@ import {
 import {
   compilerBootstrapSelectors,
   expectedReleaseCohort,
+  reviewedCompilerTrustExclusions,
 } from '../published-create-proof/package-cohort.mjs';
 import { validateExactExclusions } from '../published-create-proof/release-age-audit.mjs';
 import { collectPackageJsonFiles } from './contract.mjs';
@@ -80,6 +81,7 @@ export function prepareTractorCohortInstallation(
     minimumReleaseAgeExclude,
     trustPolicy,
     trustPolicyIgnoreAfter,
+    trustPolicyExclude,
     producerEffectDependencies,
     producerReactDependencies,
   } = {},
@@ -139,13 +141,14 @@ export function prepareTractorCohortInstallation(
     minimumReleaseAgeExclude,
     'Producer pnpm minimumReleaseAgeExclude',
   );
+  const compilerSelectors = compilerBootstrapSelectors(packed.packageJson);
   const expectedExclusions = [
     ...cohort.targetNames.map(name => `${name}@${version}`),
     ...Array.from(
       sidecars,
       ([name, sidecarVersion]) => `${name}@${sidecarVersion}`,
     ),
-    ...compilerBootstrapSelectors(packed.packageJson),
+    ...compilerSelectors,
   ].sort();
   if (!isDeepStrictEqual(producerExclusions, expectedExclusions)) {
     throw new Error(
@@ -155,6 +158,20 @@ export function prepareTractorCohortInstallation(
   if (trustPolicy !== 'no-downgrade' || trustPolicyIgnoreAfter !== 1440) {
     throw new Error(
       'Producer pnpm trust policy must retain no-downgrade and its 24-hour window',
+    );
+  }
+  const producerTrustExclusions = validateExactExclusions(
+    trustPolicyExclude,
+    'Producer pnpm trustPolicyExclude',
+  );
+  if (
+    !isDeepStrictEqual(
+      producerTrustExclusions,
+      reviewedCompilerTrustExclusions(compilerSelectors),
+    )
+  ) {
+    throw new Error(
+      'Producer pnpm trustPolicyExclude must select exactly the reviewed packed producer compiler exceptions',
     );
   }
   const compiler = prepareTractorCompilerConfig(workspace);
@@ -301,6 +318,8 @@ export function prepareTractorCohortInstallation(
   policy.minimumReleaseAgeExclude = producerExclusions;
   policy.trustPolicy = trustPolicy;
   policy.trustPolicyIgnoreAfter = trustPolicyIgnoreAfter;
+  // Replace old approvals even when the new producer needs none.
+  policy.trustPolicyExclude = producerTrustExclusions;
   const toolchain = prepareTractorToolchain(workspace, release.tools);
   fs.writeFileSync(workspaceFile, dump(policy, { lineWidth: 0 }));
   fs.writeFileSync(toolchain.miseFile, toolchain.mise);

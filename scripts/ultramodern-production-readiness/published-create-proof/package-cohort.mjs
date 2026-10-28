@@ -569,21 +569,25 @@ function assertBootstrapReleaseAgePolicy(createPackage) {
   return policy;
 }
 
-function authenticatedCompilerTrustExclusions(release) {
-  if (!release?.createPackage) return [];
-  const policy = resolveCreatePackage(release).bootstrapReleaseAgePolicy;
-  return policy.minimumReleaseAgeExclude.includes('tsrs@0.20.1-ts7.1.0-beta')
+// An age approval alone is not a trust approval. Only this reviewed release
+// needs the bootstrap-approver workaround, and only when the producer pins it.
+function reviewedCompilerTrustExclusions(bootstrapSelectors) {
+  return bootstrapSelectors.includes('tsrs@0.20.1-ts7.1.0-beta')
     ? ['tsrs@0.20.1-ts7.1.0-beta']
     : [];
 }
 
+function authenticatedCompilerTrustExclusions(release) {
+  if (!release?.createPackage) return [];
+  const policy = resolveCreatePackage(release).bootstrapReleaseAgePolicy;
+  return reviewedCompilerTrustExclusions(policy.minimumReleaseAgeExclude);
+}
+
 function createPnpmDlxArgs(createPackage, forwardedArgs, environment = {}) {
   const policy = assertBootstrapReleaseAgePolicy(createPackage);
-  const compilerTrust = policy.minimumReleaseAgeExclude.includes(
-    'tsrs@0.20.1-ts7.1.0-beta',
-  )
-    ? ['tsrs@0.20.1-ts7.1.0-beta']
-    : [];
+  const compilerTrust = reviewedCompilerTrustExclusions(
+    policy.minimumReleaseAgeExclude,
+  );
   let trustExclusions = compilerTrust;
   if (
     compilerTrust.length &&
@@ -804,4 +808,5 @@ export {
   packageJsonFiles,
   resolveCreatePackage,
   retiredMetadataPaths,
+  reviewedCompilerTrustExclusions,
 };

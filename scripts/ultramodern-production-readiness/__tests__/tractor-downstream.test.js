@@ -488,7 +488,7 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
       );
       fs.writeFileSync(
         path.join(workspace, 'pnpm-workspace.yaml'),
-        `minimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\nminimumReleaseAgeIgnoreMissingTime: false\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\nminimumReleaseAgeExclude:\n${bootstrapExclude.map(selector => `  - ${JSON.stringify(selector)}`).join('\n')}\noverrides:\n  'braces@>=3.0.0 <3.0.4': npm:@bleedingdev/braces@3.0.4\n  'sharp@>=0.35.0 <0.35.5': 0.35.5\n`,
+        `minimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\nminimumReleaseAgeIgnoreMissingTime: false\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\ntrustPolicyExclude:\n  - tsrs@0.20.1-ts7.1.0-beta\nminimumReleaseAgeExclude:\n${bootstrapExclude.map(selector => `  - ${JSON.stringify(selector)}`).join('\n')}\noverrides:\n  'braces@>=3.0.0 <3.0.4': npm:@bleedingdev/braces@3.0.4\n  'sharp@>=0.35.0 <0.35.5': 0.35.5\n`,
       );
     },
   });
@@ -502,6 +502,7 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
     minimumReleaseAgeExclude: bootstrapExclude,
     trustPolicy: 'no-downgrade',
     trustPolicyIgnoreAfter: 1440,
+    trustPolicyExclude: ['tsrs@0.20.1-ts7.1.0-beta'],
   });
   assert.deepEqual(fs.readdirSync(root), []);
   const { stringify: stringifyYaml } = await import('yaml');
@@ -511,6 +512,14 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
     { minimumReleaseAgeIgnoreMissingTime: true },
     { trustPolicy: 'none' },
     { trustPolicyIgnoreAfter: 0 },
+    { trustPolicyExclude: ['*'] },
+    { trustPolicyExclude: ['tsrs@^0.20.1'] },
+    {
+      trustPolicyExclude: [
+        'tsrs@0.20.1-ts7.1.0-beta',
+        'tsrs@0.20.1-ts7.1.0-beta',
+      ],
+    },
     { minimumReleaseAgeExclude: ['@bleedingdev/*'] },
     { minimumReleaseAgeExclude: [] },
   ]) {
@@ -1447,6 +1456,11 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       '@types/react': '^19.2.18',
       '@types/react-dom': '^19.2.7',
     });
+    // Upgrading must replace old approvals, not merge them with the new cohort.
+    baselinePolicy.trustPolicyExclude = [
+      'tsrs@0.18.0-ts7.1.0-dev.20260929',
+      'unrelated-compiler@9.9.9',
+    ];
     baselinePolicy.catalogs.renderer = { ...baselinePolicy.catalog };
     Object.assign(baselinePolicy.overrides, {
       'parent>effect': 'npm:@bleedingdev/effect@4.0.0-rc.117',
@@ -1476,6 +1490,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       ].sort(),
       trustPolicy: 'no-downgrade',
       trustPolicyIgnoreAfter: 1440,
+      trustPolicyExclude: ['tsrs@0.20.1-ts7.1.0-beta'],
     };
     const result = prepareTractorCohortInstallation(
       root,
@@ -1547,6 +1562,24 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
     );
     assert.equal(parseYaml(policyText).trustPolicy, 'no-downgrade');
     assert.equal(parseYaml(policyText).trustPolicyIgnoreAfter, 1440);
+    assert.deepEqual(
+      parseYaml(policyText).trustPolicyExclude,
+      producerOptions.trustPolicyExclude,
+    );
+    // A baseline without any trust exclusions must receive the same exact list.
+    for (const trustPolicyExclude of [undefined, []]) {
+      fs.writeFileSync(
+        path.join(root, 'pnpm-workspace.yaml'),
+        stringifyYaml({ ...parseYaml(policyText), trustPolicyExclude }),
+      );
+      prepareTractorCohortInstallation(root, next, producerOptions);
+      assert.deepEqual(
+        parseYaml(
+          fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
+        ),
+        parseYaml(policyText),
+      );
+    }
     assert.match(policyText, /sharp@>=0\.35\.0 <0\.35\.5.*0\.35\.5/u);
     assert.match(policyText, /zod: npm:@bleedingdev\/zod@4\.6\.5/u);
     assert.match(policyText, /ipx: npm:@bleedingdev\/ipx@3\.2\.2/u);
@@ -1739,6 +1772,42 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       assert.equal(
         fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
         selectedPolicy,
+      );
+      assert.equal(fs.readFileSync(uiFile, 'utf8'), beforeUi);
+    }
+    // Release-age approvals are not automatically trust approvals. Reject
+    // stale, foreign, platform-only and runtime selectors even when exact.
+    for (const trustPolicyExclude of [
+      undefined,
+      [],
+      ['*'],
+      ['tsrs@^0.20.1'],
+      ['tsrs@0.18.0-ts7.1.0-dev.20260929'],
+      ['unrelated-compiler@9.9.9'],
+      ['@tsrs/linux-x64-gnu@0.20.1-ts7.1.0-beta'],
+      ['@effect/tsgo@0.63.0'],
+      ['effect@4.0.7'],
+      ['tsrs@0.20.1-ts7.1.0-beta', 'tsrs@0.20.1-ts7.1.0-beta'],
+    ]) {
+      assert.throws(
+        () =>
+          prepareTractorCohortInstallation(root, next, {
+            ...producerOptions,
+            trustPolicyExclude,
+          }),
+        /trustPolicyExclude/u,
+      );
+      assert.equal(
+        fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
+        selectedPolicy,
+      );
+      assert.equal(
+        fs.readFileSync(compilerFile, 'utf8'),
+        JSON.stringify(compilerConfig),
+      );
+      assert.equal(
+        fs.readFileSync(path.join(root, '.mise.toml'), 'utf8'),
+        selectedMise,
       );
       assert.equal(fs.readFileSync(uiFile, 'utf8'), beforeUi);
     }
