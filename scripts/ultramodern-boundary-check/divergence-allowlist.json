@@ -5,8 +5,8 @@
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
   "totalFiles": 1129,
-  "totalHunks": 3776,
-  "totalChangedLines": 86467,
+  "totalHunks": 3778,
+  "totalChangedLines": 86647,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/package.json",
@@ -756,7 +756,7 @@
     {
       "file": "packages/document/docs/en/guides/get-started/ultramodern.mdx",
       "hunks": 1,
-      "changedLines": 483
+      "changedLines": 523
     },
     {
       "file": "packages/document/docs/en/guides/get-started/upgrade.mdx",
@@ -1081,7 +1081,7 @@
     {
       "file": "packages/document/docs/zh/guides/get-started/ultramodern.mdx",
       "hunks": 1,
-      "changedLines": 442
+      "changedLines": 476
     },
     {
       "file": "packages/document/docs/zh/guides/get-started/upgrade.mdx",
@@ -1851,12 +1851,12 @@
     {
       "file": "packages/runtime/plugin-runtime/src/core/server/stream/createReadableStream.ts",
       "hunks": 21,
-      "changedLines": 519
+      "changedLines": 528
     },
     {
       "file": "packages/runtime/plugin-runtime/src/core/server/stream/createReadableStream.worker.ts",
       "hunks": 23,
-      "changedLines": 394
+      "changedLines": 397
     },
     {
       "file": "packages/runtime/plugin-runtime/src/core/server/stream/deferredScript.ts",
@@ -1925,8 +1925,8 @@
     },
     {
       "file": "packages/runtime/plugin-runtime/src/document/cli/index.ts",
-      "hunks": 18,
-      "changedLines": 65
+      "hunks": 20,
+      "changedLines": 93
     },
     {
       "file": "packages/runtime/plugin-runtime/src/document/Head.tsx",
@@ -2341,7 +2341,7 @@
     {
       "file": "packages/runtime/plugin-runtime/tests/ssr/serverRender/rendererHooks.test.tsx",
       "hunks": 1,
-      "changedLines": 362
+      "changedLines": 392
     },
     {
       "file": "packages/runtime/plugin-runtime/tests/ssr/serverRender/renderToStream/buildTemplate.after.test.ts",
@@ -2371,7 +2371,7 @@
     {
       "file": "packages/runtime/plugin-runtime/tests/ssr/serverRender/workerLifecycle.test.tsx",
       "hunks": 1,
-      "changedLines": 158
+      "changedLines": 189
     },
     {
       "file": "packages/runtime/plugin-runtime/tests/ssr/utils.test.ts",
@@ -4096,7 +4096,7 @@
     {
       "file": "packages/toolkit/plugin/src/types/runtime/hooks.ts",
       "hunks": 16,
-      "changedLines": 187
+      "changedLines": 192
     },
     {
       "file": "packages/toolkit/plugin/src/types/runtime/index.ts",
