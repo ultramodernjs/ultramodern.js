@@ -43,6 +43,8 @@ const { getPlatformPackageName } = tsrsRequire(
 const tsrsSupported =
   [
     '@tsrs/darwin-arm64',
+    '@tsrs/darwin-x64',
+    '@tsrs/win32-x64',
     '@tsrs/linux-x64-gnu',
     '@tsrs/linux-arm64-gnu',
   ].includes(getPlatformPackageName()) &&
@@ -608,12 +610,40 @@ for (const mutation of [
   );
 }
 
-for (const target of [
-  '@tsrs/win32-x64',
-  '@tsrs/darwin-x64',
-  '@tsrs/linux-x64-musl',
-  '@tsrs/linux-arm64-musl',
-]) {
+for (const target of ['@tsrs/win32-x64', '@tsrs/darwin-x64']) {
+  test(`selects the bundled Effect tsrs artifact for supported target ${target}`, async () => {
+    const directory = mkdtempSync(
+      join(tmpdir(), 'app-tools-effect-tsrs-host-'),
+    );
+    try {
+      writeEffectTsgoPackage(directory);
+      const compiler = writeTsrsPackage(directory);
+      // Report either target independently of the test host, while executing
+      // the host's real replacement binary to validate its Effect stamp.
+      writeFileSync(
+        join(directory, 'node_modules/tsrs/lib/platform.js'),
+        `export const getPlatformPackageName = () => ${JSON.stringify(target)};`,
+      );
+      // An available Effect-Go artifact must not override supported tsrs.
+      writeCompiler(effectCompilerPath(directory), 0o700);
+      await withEnvironment('EFFECT_TSGO_BIN', undefined, () =>
+        withEnvironment('TSRS_BINARY', undefined, () => {
+          assert.equal(
+            resolveEffectTsgoCompiler({
+              from: join(directory, 'modern.config.ts'),
+            }),
+            realpathSync(compiler),
+          );
+          assert.equal(existsSync(join(directory, 'cli-started')), false);
+        }),
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const target of ['@tsrs/linux-x64-musl', '@tsrs/linux-arm64-musl']) {
   test(`selects Effect-Go when Effect does not package declared tsrs target ${target}`, async () => {
     const directory = mkdtempSync(join(tmpdir(), 'app-tools-effect-go-host-'));
     try {
@@ -1058,6 +1088,8 @@ test('selects the actual declared generator Effect artifact from an empty stagin
     const supported =
       [
         '@tsrs/darwin-arm64',
+        '@tsrs/darwin-x64',
+        '@tsrs/win32-x64',
         '@tsrs/linux-x64-gnu',
         '@tsrs/linux-arm64-gnu',
       ].includes(getNativeName()) &&

@@ -118,6 +118,8 @@ async function verifyAppCohort(selection: 'automatic' | 'effect-go') {
       tsrsManifest.optionalDependencies[nativeName] === tsrsManifest.version &&
       [
         '@tsrs/darwin-arm64',
+        '@tsrs/darwin-x64',
+        '@tsrs/win32-x64',
         '@tsrs/linux-x64-gnu',
         '@tsrs/linux-arm64-gnu',
       ].includes(nativeName);
