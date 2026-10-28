@@ -1,5 +1,27 @@
 [
   {
+    "id": "tanstack-redact",
+    "upstream": {
+      "name": "@tanstack/redact",
+      "version": "0.2.1",
+      "tarball": "https://registry.npmjs.org/@tanstack/redact/-/redact-0.2.1.tgz",
+      "integrity": "sha512-jooaCUtr3AEHyOfcJv4CQhdevWtCCAhovA6qkJwD6Ik2ZWMFsAX4EhmSju3Of0St4LrHUF8UDi+MT4Zru18fJA=="
+    },
+    "fork": {
+      "name": "@bleedingdev/tanstack-redact",
+      "version": "0.2.1"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": {
+      "inventory": "@tanstack/redact@0.2.1"
+    },
+    "manifestChanges": {},
+    "provenance": {
+      "grandfatheredVersions": []
+    }
+  },
+  {
     "id": "mf-bridge-react",
     "upstream": {
       "name": "@module-federation/bridge-react",

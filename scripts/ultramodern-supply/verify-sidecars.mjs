@@ -29,10 +29,10 @@ const forkSpecifier = /^npm:(@bleedingdev\/[\w.-]+)@(.+)$/u;
 /**
  * Framework runtime edges that still name an upstream package with a recipe,
  * because the fork version they must declare is not on npm yet. The monorepo
- * cannot install an unpublished alias, so such an edge ships the upstream
- * package at the recipe's exact upstream version until the release that
- * publishes the fork has matured past the 24h release-age gate; the next change
- * declares the fork alias and deletes the entry.
+ * cannot install an unpublished alias, so local qualification resolves the
+ * recipe's exact upstream version. Redact's entry is qualification-only: a
+ * published default runtime must declare the patched fork alias after its
+ * publication has matured past the 24h release-age gate.
  *
  * `@bleedingdev/mf-runtime@2.9.2` reaches runtime-core's
  * resetFederationRuntime (module-federation/core#5152). Backend federation in
@@ -42,6 +42,13 @@ const forkSpecifier = /^npm:(@bleedingdev\/[\w.-]+)@(.+)$/u;
  * first signed publication yet and resolve the patched upstream in the monorepo.
  */
 export const unpublishedForkEdges = [
+  // Local qualification only: Redact's reviewed repository patch is installed.
+  // Publication rejects this edge until the mature sidecar alias is in source.
+  {
+    importer: 'packages/solutions/ultramodern-app-tools',
+    published: '@bleedingdev/modern-js-ultramodern-app-tools',
+    dependency: '@tanstack/redact',
+  },
   // The SDK fork has not had its first signed release plus 24h admission.
   {
     importer: 'packages/runtime/federation-runtime',
@@ -114,7 +121,7 @@ export const isUnpublishedForkEdge = (
  */
 export function assertRecipeConsumers(
   recipeList,
-  { generatorPins, publishedManifests },
+  { generatorPins, publishedManifests, qualificationOnly = false },
 ) {
   const byFork = new Map(
     recipeList.map(item => [`${item.fork.name}@${item.fork.version}`, item]),
@@ -147,6 +154,15 @@ export function assertRecipeConsumers(
         const recipe = recipeByUpstream.get(name);
         const expected =
           recipe && `npm:${recipe.fork.name}@${recipe.fork.version}`;
+        // The repository patch qualifies local Redact builds, not published
+        // framework consumers. Generated workspaces do not receive that patch.
+        if (recipe && name === '@tanstack/redact' && !qualificationOnly) {
+          assert.equal(
+            specifier,
+            expected,
+            `${manifest.name} ${block}.${name} is ${specifier}; cohort publication is blocked: bootstrap @bleedingdev/tanstack-redact, publish the reviewed patched sidecar, wait at least 24h for maturity, then switch the source alias to ${expected}. The repository patch is for local qualification only.`,
+          );
+        }
         const unpublished =
           recipe &&
           isUnpublishedForkEdge(manifest.name, name, specifier, recipe);
@@ -171,7 +187,10 @@ export function assertRecipeConsumers(
 }
 
 /** Check the repository recipes against the generator's runtime pins and the published cohort manifests. */
-export function assertRepositoryRecipeConsumers(publishedManifests) {
+export function assertRepositoryRecipeConsumers(
+  publishedManifests,
+  { qualificationOnly = false } = {},
+) {
   assertModuleFederationRelease(recipes);
   const qualifiedSdkPins = Object.fromEntries(
     Object.entries(sidecarProfile('mf-sdk').dependencies).map(
@@ -194,6 +213,28 @@ export function assertRepositoryRecipeConsumers(publishedManifests) {
       qualifiedSdkPins,
     ],
     publishedManifests,
+    qualificationOnly,
+  });
+}
+
+/** Only a non-publish candidate that reconstructs sidecars may qualify source
+ * before its unpublished Redact edge is replaced in the staged manifest.
+ */
+export function isCiSidecarQualification(options = {}) {
+  return (
+    options.tag === 'ci' &&
+    options.includeSidecars === true &&
+    !options.publish &&
+    !options.publishExisting
+  );
+}
+
+/** Source admission only. Staged and packed manifests must pass the strict
+ * repository gate: CI consumers need the corrected dependency closure too.
+ */
+export function assertCohortRecipeConsumers(publishedManifests, options = {}) {
+  assertRepositoryRecipeConsumers(publishedManifests, {
+    qualificationOnly: isCiSidecarQualification(options),
   });
 }
 

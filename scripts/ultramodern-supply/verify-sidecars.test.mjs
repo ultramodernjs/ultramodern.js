@@ -135,6 +135,53 @@ test('unpublished recipe roots require the exact consumer, dependency and upstre
   }
 });
 
+test('Redact repository qualification cannot authorize an unpatched published dependency', () => {
+  const recipe = {
+    id: 'tanstack-redact',
+    upstream: { name: '@tanstack/redact', version: '0.2.1' },
+    fork: { name: '@bleedingdev/tanstack-redact', version: '0.2.1' },
+    manifestChanges: {},
+  };
+  for (const block of [
+    'dependencies',
+    'optionalDependencies',
+    'peerDependencies',
+  ]) {
+    const manifest = {
+      name: '@bleedingdev/modern-js-ultramodern-app-tools',
+      [block]: { '@tanstack/redact': '0.2.1' },
+    };
+    const consumers = { generatorPins: [], publishedManifests: [manifest] };
+    assertRecipeConsumers([recipe], { ...consumers, qualificationOnly: true });
+    assert.throws(
+      () => assertRecipeConsumers([recipe], consumers),
+      /bootstrap @bleedingdev\/tanstack-redact, publish.*24h.*switch the source alias/u,
+    );
+    for (const bad of [
+      '^0.2.1',
+      '0.2.2',
+      'npm:@bleedingdev/tanstack-redact@0.2.2',
+    ]) {
+      manifest[block]['@tanstack/redact'] = bad;
+      assert.throws(
+        () => assertRecipeConsumers([recipe], consumers),
+        /cohort publication is blocked/u,
+      );
+      assert.throws(
+        () =>
+          assertRecipeConsumers([recipe], {
+            ...consumers,
+            qualificationOnly: true,
+          }),
+        /declare npm:/u,
+      );
+    }
+    manifest[block]['@tanstack/redact'] =
+      'npm:@bleedingdev/tanstack-redact@0.2.1';
+    assertRecipeConsumers([recipe], consumers);
+  }
+});
+
 test('recipes reached only through a reachable recipe alias edge are consumed', () => {
   const child = {
     id: 'child',
@@ -364,12 +411,57 @@ test('a patch already present upstream reports the recipe and its ancestors as r
   }
 });
 
+test('Redact reconstruction carries the reviewed marker without inventing unsigned release history', async () => {
+  const directory = fs.mkdtempSync(
+    path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'sidecar-redact-'),
+  );
+  try {
+    const recipe = JSON.parse(
+      fs.readFileSync(new URL('./sidecars.json', import.meta.url), 'utf8'),
+    ).find(item => item.id === 'tanstack-redact');
+    assert.deepEqual(recipe.provenance, { grandfatheredVersions: [] });
+    const packageDir = path.join(directory, 'reconstructed');
+    await verifySidecar(recipe.id, { materializeTo: packageDir });
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'),
+    );
+    assert.equal(manifest.name, '@bleedingdev/tanstack-redact');
+    assert.equal(manifest.version, '0.2.1');
+    assert.equal(manifest.license, 'MIT');
+    assert.equal(
+      fs
+        .readFileSync(path.join(packageDir, 'dist/server/stream.js'), 'utf8')
+        .split('\n')[0],
+      '// ultramodern-redact-patch: v1',
+    );
+    for (const [tree, extension] of [
+      ['src', 'ts'],
+      ['dist', 'js'],
+    ]) {
+      const read = module =>
+        fs.readFileSync(
+          path.join(packageDir, tree, `${module}.${extension}`),
+          'utf8',
+        );
+      assert.match(read('dom/document-metadata'), /container\?\.ownerDocument/);
+      assert.match(
+        read('dom/reconcile'),
+        /if \(fiber\.su\) \{\s+scheduleUpdate\(fiber\);\s+continue;/,
+      );
+      assert.match(read('dom/features/hydration/full'), /queueHydrationEnd/);
+      assert.match(read('dom/features/suspense/full'), /commitSynchronously/);
+    }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('explicit offline provenance fails closed on missing or tampered tarballs', async () => {
   const directory = fs.mkdtempSync(
     path.join(os.tmpdir(), 'sidecar-integrity-'),
   );
   try {
-    for (const id of ['mf-cli', 'mf-sdk']) {
+    for (const id of ['mf-cli', 'mf-sdk', 'tanstack-redact']) {
       await assert.rejects(
         verifySidecar(id, { artifactsDir: directory }),
         /ENOENT/,

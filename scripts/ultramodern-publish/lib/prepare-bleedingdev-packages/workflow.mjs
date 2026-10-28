@@ -10,6 +10,7 @@ import {
   isTrustedPublishRepositoryContext,
 } from './constants.mjs';
 import {
+  bindCiRedactSidecar,
   collectSidecarPackages,
   stageSidecarPackages,
   validateAliasConsistency,
@@ -26,7 +27,10 @@ import {
   validateStagedTypeFiles,
 } from './types.mjs';
 import { validatePublishManifest } from './manifest.mjs';
-import { assertRepositoryRecipeConsumers } from '../../../ultramodern-supply/verify-sidecars.mjs';
+import {
+  assertCohortRecipeConsumers,
+  assertRepositoryRecipeConsumers,
+} from '../../../ultramodern-supply/verify-sidecars.mjs';
 import {
   createReleaseArtifacts,
   resolveSourceIdentity,
@@ -74,11 +78,20 @@ async function prepareBleedingdevPackages(options) {
   }
 
   const sourceCommit = assertCleanCommittedSource(repoRoot);
+  const { allPackages, aliases, packages, sourceNames } =
+    collectModernPackages(options);
+  enforceSingleVersionPolicy(options, packages, allPackages);
+  // Fail before reconstruction, packing, or any registry write. Checking source
+  // also covers --publish-existing and preparation without --include-sidecars.
+  assertCohortRecipeConsumers(
+    packages.map(({ packageJson }) => ({
+      ...packageJson,
+      name: targetPackageName(packageJson.name, options),
+    })),
+    options,
+  );
 
   if (options.publishExisting) {
-    const { allPackages, aliases, packages, sourceNames } =
-      collectModernPackages(options);
-    enforceSingleVersionPolicy(options, packages, allPackages);
     assertCleanCommittedSource(repoRoot, { expectedCommit: sourceCommit });
     const checkoutSource = { ...resolveSourceIdentity(), commit: sourceCommit };
     const releaseArtifacts = verifyReleaseArtifacts(options.out, {
@@ -87,6 +100,11 @@ async function prepareBleedingdevPackages(options) {
       tag: options.tag,
       version: options.version,
     });
+    // Recovery must validate the immutable tarball manifests as well: a fixed
+    // checkout cannot authorize an older candidate with the upstream edge.
+    assertRepositoryRecipeConsumers(
+      releaseArtifacts.packages.map(item => item.packageJson),
+    );
     if (
       releaseArtifacts.manifest.source.repository !== checkoutSource.repository
     ) {
@@ -99,9 +117,6 @@ async function prepareBleedingdevPackages(options) {
     return;
   }
 
-  const { allPackages, packages, sourceNames, aliases } =
-    collectModernPackages(options);
-  enforceSingleVersionPolicy(options, packages, allPackages);
   const packDir = path.join(options.out, 'source-tarballs');
   const stageDir = path.join(options.out, 'packages');
   // Read the sidecar roots before the output directory is recreated so an
@@ -137,6 +152,7 @@ async function prepareBleedingdevPackages(options) {
     const packageJsonPath = path.join(packageDir, 'package.json');
     const packageJson = readJsonFile(packageJsonPath);
     rewritePackageJson(packageJson, sourceName, options, sourceNames);
+    bindCiRedactSidecar(packageJson, options, stagedSidecars);
     if (targetName === sidecarAliasConsumerTargetName)
       sidecarAliasConsumerCount += 1;
     normalizeDeclaredTypePaths(packageDir, packageJson);
@@ -190,6 +206,9 @@ async function prepareBleedingdevPackages(options) {
     tag: options.tag,
     version: options.version,
   });
+  assertRepositoryRecipeConsumers(
+    releaseArtifacts.packages.map(item => item.packageJson),
+  );
 
   console.log(
     `Prepared ${releaseArtifacts.manifest.packages.length} immutable package artifact(s) under ${path.relative(repoRoot, options.out)}`,
