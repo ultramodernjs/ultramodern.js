@@ -98,6 +98,7 @@ export const REACT_CLI_PLUGIN_NAMES = [
   '@modern-js/plugin-document',
   '@modern-js/ultramodern-router-integration',
   '@modern-js/ultramodern-ssr-integration',
+  '@modern-js/ultramodern-redact-integration',
   '@modern-js/ultramodern-i18n-integration',
   '@modern-js/i18n-integration',
   '@modern-js/plugin-i18n',

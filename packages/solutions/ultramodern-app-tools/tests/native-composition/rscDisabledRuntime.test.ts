@@ -45,11 +45,13 @@ it.each([
     expect(
       result.builderPlugins
         ?.map(plugin => (plugin && 'name' in plugin ? plugin.name : undefined))
-        .slice(guarded ? -2 : -1),
+        .slice(guarded ? -3 : -2),
     ).toEqual([
       // Makes the composed runtime packages resolvable from the app itself.
       'ultramodern:runtime-package-resolution',
-      ...(guarded ? ['builder:rsc-disabled-runtime'] : []),
+      ...(guarded
+        ? ['ultramodern:react:redact', 'builder:rsc-disabled-runtime']
+        : ['ultramodern:react:runtime-cache']),
     ]);
     expect(result.builderPlugins).toContain(consumer);
     expect(result.html).toMatchObject(input.html!);

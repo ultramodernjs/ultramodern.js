@@ -9,6 +9,7 @@ import {
 import type { Renderer } from '@modern-js/renderer-core';
 import { CONFIG_FILE_EXTENSIONS } from '@modern-js/utils';
 import { withEntryMetadataRead } from './config-read-context';
+import { validateRedactConfig } from './redact-config';
 import { resolveRendererAdapter } from './renderer-registration';
 import { resolveEntrypointRouterBindings } from './renderer-router-resolution';
 import {
@@ -51,6 +52,7 @@ function selectConfig(
   if (!config || typeof config !== 'object' || Array.isArray(config)) {
     throw new Error('UltraModern configuration must be an object');
   }
+  validateRedactConfig(config.redact);
   const renderer = resolveRendererAdapter(config.renderer).name;
   const plugins = config.plugins ?? [];
   assertNoAdditionalBasePlugins(plugins);
@@ -87,6 +89,7 @@ export async function resolveUltramodernConfig(
 ): Promise<UltramodernAppUserConfig> {
   const resolved =
     typeof config === 'function' ? await config(context) : config;
+  validateRedactConfig(resolved.redact);
   const renderer = resolveRendererAdapter(resolved.renderer).name;
   return resolved.renderer === undefined ? { ...resolved, renderer } : resolved;
 }

@@ -55,6 +55,8 @@ const rendererRegistrations: Readonly<
       '@modern-js/plugin-tanstack',
       '@modern-js/plugin-i18n',
       '@tanstack/react-router',
+      '@tanstack/redact',
+      'rsbuild-redact-plugin',
     ],
     ownedExtensions: [],
   },

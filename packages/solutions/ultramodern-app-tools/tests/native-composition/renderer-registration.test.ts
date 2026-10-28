@@ -37,6 +37,7 @@ import {
   registeredRenderers,
   resolveNativeRendererAdapter,
   resolveRendererAdapter,
+  specifierRenderer,
 } from '../../src/native-composition/renderer-registration';
 import { resolveEntrypointRouterBindings } from '../../src/native-composition/renderer-router-resolution';
 import {
@@ -77,6 +78,23 @@ const renderer: RegisteredRenderer = 'solid';
 const infrastructurePluginName = nativeInfrastructurePluginName(renderer);
 
 describe('static renderer owner admission', () => {
+  it.each([
+    '@tanstack/redact',
+    '@tanstack/redact/server',
+    '@tanstack/redact/jsx-runtime',
+    'rsbuild-redact-plugin',
+    'rsbuild-redact-plugin/subpath',
+  ])('classifies %s as React-owned without loading an adapter', specifier => {
+    expect(specifierRenderer(specifier)).toBe('react');
+  });
+
+  it.each(['@tanstack/redaction', 'rsbuild-redact-plugin-other'])(
+    'does not claim the unrelated package %s',
+    specifier => {
+      expect(specifierRenderer(specifier)).toBeUndefined();
+    },
+  );
+
   it('records the fourth router adapter owner and rejects a manufactured plugin name', async () => {
     const adapter = resolveNativeRendererAdapter(renderer);
     const entrypoints: Entrypoint[] = [

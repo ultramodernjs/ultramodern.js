@@ -13,7 +13,11 @@ import {
 } from '@modern-js/federation-runtime/renderer-contract';
 import type { Renderer } from '@modern-js/renderer-core';
 import type { Rspack } from '@rsbuild/core';
-import { resolveReactFederationCompatibility } from '../renderers/react/module-federation';
+import {
+  resolveReactFederationCompatibility,
+  withReactRuntimeShared,
+} from '../renderers/react/module-federation';
+import type { ReactRuntimeConfig } from './redact-config';
 import {
   projectInstalledFederationProfile,
   readRendererFrameworkPackage,
@@ -64,9 +68,11 @@ export function resolveRendererFederationRuntimePlugin(
 /** Resolve the consuming renderer tuple from the selected installed owners. */
 export function resolveRendererFederationCompatibility(
   renderer: Renderer,
+  config: ReactRuntimeConfig = {},
 ): RendererFederationCompatibility {
   const adapter = resolveRendererAdapter(renderer);
-  if (adapter.kind !== 'native') return resolveReactFederationCompatibility();
+  if (adapter.kind !== 'native')
+    return resolveReactFederationCompatibility(config);
   const owners = adapter.runtime;
   const metadata = resolveRendererProfileMetadata(renderer);
   const bootstrap = metadata.frameworkPackages.find(
@@ -120,7 +126,10 @@ export function createRendererModuleFederationIntegration(
         if (!nativeKeys.length) return;
         const compatibility = readRendererFederationCompatibility(
           options.resolveCompatibility?.() ??
-            resolveRendererFederationCompatibility(renderer),
+            resolveRendererFederationCompatibility(
+              renderer,
+              api.getNormalizedConfig(),
+            ),
         );
         const runtimePlugin = (
           options.resolveRuntimePlugin ?? resolveRendererFederationRuntimePlugin
@@ -138,6 +147,11 @@ export function createRendererModuleFederationIntegration(
             // Native MF shares its browser options with workerSSR. Register on
             // this compiler's snapshot without changing the next compiler's input.
             const config = { ...original };
+            if (renderer === 'react')
+              config.shared = withReactRuntimeShared(
+                config.shared,
+                compatibility,
+              );
             if (config.manifest === false)
               throw rendererFederationError(
                 'renderer components require native manifest publication.',

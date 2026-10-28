@@ -10,8 +10,10 @@
   },
   "devDependencies": {
     "@modern-js/ultramodern-app-tools": "workspace:*",
+    "@rsbuild/core": "2.2.13",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0"
+    "@types/react-dom": "^19.3.0",
+    "miniflare": "5.20261012.0-beta"
   }
 }

@@ -20,6 +20,7 @@ import {
 } from '@rsbuild/core';
 import { afterEach, describe, expect, it, rstest } from '@rstest/core';
 import { createRendererModuleFederationIntegration } from '../../src/native-composition/module-federation-renderer-plugin';
+import { resolveReactFederationCompatibility } from '../../src/renderers/react/module-federation';
 
 type ChainModifier = Parameters<
   CLIPluginAPI<AppTools>['modifyBundlerChain']
@@ -117,9 +118,9 @@ function completedIdentities(): RendererBuildIdentities {
   };
 }
 
-async function integration() {
+async function integration(selectedCompatibility = compatibility) {
   const result = createRendererModuleFederationIntegration('react', {
-    resolveCompatibility: () => compatibility,
+    resolveCompatibility: () => selectedCompatibility,
     resolveRuntimePlugin: () => runtimePlugin,
   });
   let modifier: ChainModifier | undefined;
@@ -132,7 +133,10 @@ async function integration() {
   return { ...result, modifier };
 }
 
-async function nativeModifiers(secondary: boolean) {
+async function nativeModifiers(
+  secondary: boolean,
+  shared: Record<string, unknown> = {},
+) {
   const manager = createPluginManager<CLIPluginAPI<AppTools>>();
   manager.addPlugins([
     native.moduleFederationPlugin({
@@ -141,7 +145,7 @@ async function nativeModifiers(secondary: boolean) {
         filename: 'remoteEntry.js',
         exposes: {},
         remotes: {},
-        shared: {},
+        shared,
         runtimePlugins: ['/consumer/runtime.js'],
         dts: false,
         dev: false,
@@ -246,6 +250,58 @@ function publishing(...names: string[]): Rspack.Compilation {
 }
 
 describe('renderer authority at the actual native MF publication boundary', () => {
+  it.each(['web', 'node'] as const)(
+    'publishes canonical Redact singletons and runtime identity in final %s MF options',
+    async target => {
+      const runtime = resolveReactFederationCompatibility();
+      const selected = await integration(runtime);
+      const result = await actualChain(target, [
+        ...(await nativeModifiers(false)),
+        selected.modifier,
+      ]);
+      const config = nativeOptions(result.chain, target);
+      expect(config.runtimePlugins?.[0]).toEqual([runtimePlugin, runtime]);
+      expect(config.shared).toMatchObject({
+        react: {
+          shareKey: '@tanstack/redact',
+          version: '0.2.1',
+          requiredVersion: '0.2.1',
+          strictVersion: true,
+          singleton: true,
+        },
+        'react-dom/client': {
+          shareKey: '@tanstack/redact/dom-client',
+          version: '0.2.1',
+          requiredVersion: '0.2.1',
+          strictVersion: true,
+          singleton: true,
+        },
+        'react/jsx-runtime': {
+          shareKey: '@tanstack/redact/jsx-runtime',
+          version: '0.2.1',
+          singleton: true,
+        },
+        '@tanstack/redact': {
+          shareKey: '@tanstack/redact',
+          version: '0.2.1',
+          singleton: true,
+        },
+      });
+    },
+  );
+
+  it('rejects an incompatible runtime share key during real builder initialization', async () => {
+    const selected = await integration(resolveReactFederationCompatibility());
+    await expect(
+      actualChain('web', [
+        ...(await nativeModifiers(false, {
+          react: { shareKey: 'foreign-react' },
+        })),
+        selected.modifier,
+      ]),
+    ).rejects.toThrow('React and Redact containers cannot mix');
+  });
+
   it.each([
     { target: 'web' as const, secondary: false },
     { target: 'web' as const, secondary: true },
@@ -275,7 +331,26 @@ describe('renderer authority at the actual native MF publication boundary', () =
         compatibility,
       ]);
       expect(config.runtimePlugins).toContain('/consumer/runtime.js');
-      expect(config.shared).toEqual({});
+      expect(config.shared).toEqual(
+        Object.fromEntries(
+          [
+            'react',
+            'react-dom',
+            'react-dom/client',
+            'react/jsx-runtime',
+            'react/jsx-dev-runtime',
+          ].map(request => [
+            request,
+            {
+              version: compatibility.runtime.version,
+              requiredVersion: compatibility.runtime.version,
+              strictVersion: true,
+              singleton: true,
+              treeShaking: false,
+            },
+          ]),
+        ),
+      );
       const compiler = publicationCompiler(result);
       const compilation = publishing();
       const stats: NativeStats = { metaData: { name: 'native-remote' } };

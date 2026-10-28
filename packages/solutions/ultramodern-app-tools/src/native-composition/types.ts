@@ -23,6 +23,11 @@ export type UltramodernAppUserConfig = Omit<
 > & {
   /** Select the native application renderer before plugins are registered. */
   renderer?: RegisteredRenderer;
+  /** Use the framework-owned Redact React 19 runtime on server and client by
+   * default. Set false for real React. RSC apps always use real React because
+   * Flight requires unsupported React internals. View transitions default off.
+   */
+  redact?: boolean | { viewTransitions?: boolean };
   output?: Omit<NonNullable<NativeAppUserConfig['output']>, 'precompress'> & {
     precompress?: boolean | PrecompressConfig;
   };
