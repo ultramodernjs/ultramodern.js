@@ -20,6 +20,11 @@ import {
   verifyWorkerLifecycle,
 } from './index.mjs';
 import {
+  assertCompiledReactRuntime,
+  effectiveRuntimePackage,
+  workerRuntimeConfig,
+} from './runtime-contract.mjs';
+import {
   assertBinding,
   atomicJson,
   launch,
@@ -179,7 +184,9 @@ async function executeWorker(input) {
     resultPath,
     binding,
     artifacts: supplied,
+    reactRuntime,
   } = input;
+  const runtimeConfig = workerRuntimeConfig(reactRuntime);
   const artifacts = readCohort(supplied.manifestPath);
   assertBinding(
     {
@@ -271,7 +278,7 @@ async function executeWorker(input) {
     configurationPath,
     [
       `const { defineConfig } = require(${JSON.stringify(sdk.entry)});`,
-      `module.exports = defineConfig({ renderer: 'react', server: { ssr: true }, source: { tsconfigPath: ${JSON.stringify(tsconfigPath)} } });`,
+      `module.exports = defineConfig({ ...${JSON.stringify(runtimeConfig)}, server: { ssr: true }, source: { tsconfigPath: ${JSON.stringify(tsconfigPath)} } });`,
       '',
     ].join('\n'),
     { flag: 'wx' },
@@ -542,6 +549,8 @@ async function executeWorker(input) {
       receiptHeader: authored.receiptHeader,
     },
     rendering: {
+      runtime: reactRuntime,
+      configuration: runtimeConfig,
       fetch: 'react-dom/server.edge.renderToReadableStream',
       request: `${runtime.requestName}/ssr/server.createRequestHandler+renderStreaming`,
     },
@@ -661,6 +670,7 @@ async function executeWorker(input) {
           compiledInputs.set(evidence.path, {
             ...evidence,
             package: record.manifest.name,
+            effectivePackage: effectiveRuntimePackage(record.manifest.name),
             version: record.manifest.version,
           });
           if (
@@ -685,9 +695,9 @@ async function executeWorker(input) {
       ),
       'Native build did not observe the public React runtime',
     );
-    assert(
-      [...compiledInputs.values()].some(item => item.package === 'react-dom'),
-      'Native build did not observe the installed React DOM renderer',
+    const compiledRuntime = assertCompiledReactRuntime(
+      compiledInputs.values(),
+      reactRuntime,
     );
     for (const entry of ['c2Fetch', 'c2Request']) {
       assert(
@@ -945,6 +955,7 @@ async function executeWorker(input) {
         entry: sourceEvidence(workerdEntry),
         binary: sourceEvidence(fs.realpathSync(workerdBinary)),
       },
+      compiledRuntime,
       nativeCompiler: {
         ...(rsbuildForkDeclared
           ? { packedOwner: rsbuildOwner }
@@ -1002,7 +1013,7 @@ async function executeWorker(input) {
 }
 
 /** Owns a fresh leaf and child group; never alters the six acceptance apps. */
-export async function runWorkerDispatchProbe(options) {
+async function runWorkerDispatchRuntimeProbe(options) {
   const {
     workDir,
     receiptPath,
@@ -1014,6 +1025,7 @@ export async function runWorkerDispatchProbe(options) {
     generatorPackageRoot,
     generatorConsumerRoot,
     kind = 'generated',
+    reactRuntime,
     owner,
     ownerPid,
     signal,
@@ -1089,6 +1101,7 @@ export async function runWorkerDispatchProbe(options) {
       generatorPackageRoot: fs.realpathSync(generatorPackageRoot),
       generatorConsumerRoot: fs.realpathSync(generatorConsumerRoot),
       kind,
+      reactRuntime,
       leaf,
       resultPath,
       binding,
@@ -1124,6 +1137,7 @@ export async function runWorkerDispatchProbe(options) {
     signal?.throwIfAborted();
     const native = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
     assert.equal(native.status, 'passed');
+    assert.equal(native.compiledRuntime.runtime, reactRuntime);
     assertBinding(native, binding);
     assert.equal(native.executions.length, 2);
     assert.deepEqual(
@@ -1226,6 +1240,56 @@ export async function runWorkerDispatchProbe(options) {
   }
   atomicJson(receiptPath, receipt);
   if (failure) throw failure;
+  return receipt;
+}
+
+/** Both variants execute the complete dispatch and lifecycle contract. */
+export async function runWorkerDispatchProbe(options) {
+  assert(
+    path.isAbsolute(options.workDir) &&
+      fs.lstatSync(options.workDir).isDirectory() &&
+      !fs.lstatSync(options.workDir).isSymbolicLink(),
+  );
+  assert(within(options.workDir, options.receiptPath));
+  assert(
+    !fs.existsSync(options.receiptPath),
+    'Previous worker evidence is immutable',
+  );
+  const runtimeReceipts = {
+    redact: `${options.receiptPath}.redact-default.json`,
+    react: `${options.receiptPath}.react-compatibility.json`,
+  };
+  let receipt = {
+    schema: 'c2-worker-dispatch-proof',
+    schemaVersion: 1,
+    status: 'running',
+    ...options.binding,
+    runtimeReceipts,
+    executions: [],
+  };
+  atomicJson(options.receiptPath, receipt);
+  try {
+    const defaultProof = await runWorkerDispatchRuntimeProbe({
+      ...options,
+      receiptPath: runtimeReceipts.redact,
+      reactRuntime: 'redact',
+    });
+    // Never publish a passing aggregate while compatibility is still pending.
+    receipt = { ...defaultProof, runtimeReceipts, status: 'running' };
+    atomicJson(options.receiptPath, receipt);
+    receipt.realReactCompatibility = await runWorkerDispatchRuntimeProbe({
+      ...options,
+      receiptPath: runtimeReceipts.react,
+      reactRuntime: 'react',
+    });
+    receipt.status = 'passed';
+  } catch (error) {
+    receipt.status = 'failed';
+    receipt.error = { name: error.name, message: error.message };
+    atomicJson(options.receiptPath, receipt);
+    throw error;
+  }
+  atomicJson(options.receiptPath, receipt);
   return receipt;
 }
 

@@ -141,6 +141,34 @@ for (const renderer of renderers) {
       assert.match(config, new RegExp(`renderer:\\s*['"]${renderer}['"]`, 'u'));
       assert.equal(config.match(/\bdefineConfig\s*\(/gu)?.length, 1);
       assert.doesNotMatch(config, /\bultramodernAppTools\b/u);
+      // Upgrading the framework activates its default runtime without app edits.
+      assert.doesNotMatch(config, /redact|rsbuild-redact-plugin/u);
+      for (const [relativePath, source] of Object.entries(files)) {
+        if (relativePath.endsWith('package.json')) {
+          const generatedManifest = JSON.parse(source);
+          for (const group of [
+            'dependencies',
+            'devDependencies',
+            'optionalDependencies',
+            'peerDependencies',
+          ]) {
+            for (const name of ['@tanstack/redact', 'rsbuild-redact-plugin']) {
+              assert.equal(
+                generatedManifest[group]?.[name],
+                undefined,
+                `${relativePath}: ${group}.${name}`,
+              );
+            }
+          }
+        }
+        if (/modern\.config[^/]*\.[cm]?[jt]s$/u.test(relativePath)) {
+          assert.doesNotMatch(
+            source,
+            /redact|rsbuild-redact-plugin/u,
+            relativePath,
+          );
+        }
+      }
 
       for (const [name, version] of Object.entries(profile.dependencies)) {
         assert.equal(

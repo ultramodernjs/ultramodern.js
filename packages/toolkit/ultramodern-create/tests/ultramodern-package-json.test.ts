@@ -244,6 +244,8 @@ test('generated React roots provide canonical framework peers and their pinned r
       'utf8',
     ),
   );
+  assert.equal(tools.dependencies['@tanstack/redact'], '0.2.1');
+  assert.equal(tools.dependencies['rsbuild-redact-plugin'], '0.1.0');
   assert.equal(tools.peerDependencies.typescript, '7.0.2');
   assert.notEqual(tools.peerDependenciesMeta?.typescript?.optional, true);
   for (const name of ['react', 'react-dom']) {
@@ -271,6 +273,25 @@ test('generated React roots provide canonical framework peers and their pinned r
     );
     const appDependencies = packageRecord(app.dependencies);
     const appDevDependencies = packageRecord(app.devDependencies);
+    for (const manifest of [root, app]) {
+      for (const group of [
+        'dependencies',
+        'devDependencies',
+        'optionalDependencies',
+        'peerDependencies',
+      ]) {
+        const declarations = manifest[group]
+          ? packageRecord(manifest[group])
+          : {};
+        for (const name of ['@tanstack/redact', 'rsbuild-redact-plugin']) {
+          assert.equal(
+            declarations[name],
+            undefined,
+            `${group}.${name} belongs to the framework`,
+          );
+        }
+      }
+    }
     assert.ok(dependencies['@modern-js/plugin-bff-build-extensions']);
     assert.equal(dependencies['@modern-js/app-tools'], expected);
     assert.equal(dependencies['@modern-js/runtime'], expected);
