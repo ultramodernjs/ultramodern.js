@@ -56,7 +56,7 @@ const result = spawnSync(command, args, {
   env: {
     ...process.env,
     EFFECT_TSGO_BIN: compiler,
-    TSRS_CHECKER_ASSIGNMENT: process.env.TSRS_CHECKER_ASSIGNMENT || 'go',
+    TSRS_CHECKER_ASSIGNMENT: process.env.TSRS_CHECKER_ASSIGNMENT || 'locality',
     ULTRAMODERN_DTS_COMPILER_MODULE: join(
       dirname(fileURLToPath(import.meta.url)),
       'tsrs-dts/version.cjs',

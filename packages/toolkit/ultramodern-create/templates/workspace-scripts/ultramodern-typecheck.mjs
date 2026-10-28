@@ -99,7 +99,7 @@ const result = spawnSync(tsgoBin, tsgoArgs, {
   stdio: 'inherit',
   env: {
     ...process.env,
-    TSRS_CHECKER_ASSIGNMENT: process.env.TSRS_CHECKER_ASSIGNMENT || 'go',
+    TSRS_CHECKER_ASSIGNMENT: process.env.TSRS_CHECKER_ASSIGNMENT || 'locality',
   },
 });
 

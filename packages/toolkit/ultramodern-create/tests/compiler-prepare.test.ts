@@ -16,8 +16,8 @@ test.each([
   { platformPackage: '@tsrs/linux-arm64-gnu', tsrs: true, status: 0 },
   { platformPackage: '@tsrs/linux-x64-musl', tsrs: false, status: 0 },
   { platformPackage: '@tsrs/linux-arm64-musl', tsrs: false, status: 0 },
-  { platformPackage: '@tsrs/win32-x64', tsrs: false, status: 0 },
-  { platformPackage: '@tsrs/darwin-x64', tsrs: false, status: 0 },
+  { platformPackage: '@tsrs/win32-x64', tsrs: true, status: 0 },
+  { platformPackage: '@tsrs/darwin-x64', tsrs: true, status: 0 },
   { platformPackage: '@tsrs/win32-arm64', tsrs: false, status: 0 },
   { platformPackage: '@tsrs/linux-arm-gnu', tsrs: false, status: 0 },
   { platformPackage: '@tsrs/darwin-arm64', tsrs: true, status: 37 },
@@ -32,7 +32,7 @@ test.each([
         platformPackage,
         compilerStatus: status,
       });
-      assert.equal(fixture.manifest.version, '0.20.0-ts7.1.0-beta');
+      assert.equal(fixture.manifest.version, '0.20.1-ts7.1.0-beta');
       assert.equal(
         Object.hasOwn(fixture.manifest.optionalDependencies, platformPackage),
         !['@tsrs/win32-arm64', '@tsrs/linux-arm-gnu'].includes(platformPackage),

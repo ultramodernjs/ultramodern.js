@@ -7,11 +7,13 @@ import { fileURLToPath, type URL } from 'node:url';
 const EFFECT_TSGO_PACKAGE = '@effect/tsgo';
 const EFFECT_TSGO_BIN = 'effect-tsgo';
 const NATIVE_TYPESCRIPT_PACKAGES = ['typescript', '@typescript/native'];
-// @effect/tsgo@0.59.0 exports no tsrs capability API. Keep this exact contract
+// @effect/tsgo@0.63.0 exports no tsrs capability API. Keep this exact contract
 // aligned with its CLI's tsrsReplacementTargets / resolveTsrs, not tsrs's list.
-const EFFECT_TSRS_PROVIDER_VERSION = '0.59.0';
+const EFFECT_TSRS_PROVIDER_VERSION = '0.63.0';
 const EFFECT_TSRS_TARGETS = new Set([
   '@tsrs/darwin-arm64',
+  '@tsrs/darwin-x64',
+  '@tsrs/win32-x64',
   '@tsrs/linux-x64-gnu',
   '@tsrs/linux-arm64-gnu',
 ]);

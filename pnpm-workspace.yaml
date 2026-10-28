@@ -150,14 +150,22 @@ allowedDeprecatedVersions:
   trim: 0.0.1
 
 minimumReleaseAgeExclude:
-  - 'tsrs@0.20.0-ts7.1.0-beta'
-  - '@tsrs/darwin-arm64@0.20.0-ts7.1.0-beta'
-  - '@tsrs/darwin-x64@0.20.0-ts7.1.0-beta'
-  - '@tsrs/linux-arm64-gnu@0.20.0-ts7.1.0-beta'
-  - '@tsrs/linux-arm64-musl@0.20.0-ts7.1.0-beta'
-  - '@tsrs/linux-x64-gnu@0.20.0-ts7.1.0-beta'
-  - '@tsrs/linux-x64-musl@0.20.0-ts7.1.0-beta'
-  - '@tsrs/win32-x64@0.20.0-ts7.1.0-beta'
+  - '@effect/tsgo@0.63.0'
+  - '@effect/tsgo-darwin-arm64@0.63.0'
+  - '@effect/tsgo-darwin-x64@0.63.0'
+  - '@effect/tsgo-linux-arm@0.63.0'
+  - '@effect/tsgo-linux-arm64@0.63.0'
+  - '@effect/tsgo-linux-x64@0.63.0'
+  - '@effect/tsgo-win32-arm64@0.63.0'
+  - '@effect/tsgo-win32-x64@0.63.0'
+  - 'tsrs@0.20.1-ts7.1.0-beta'
+  - '@tsrs/darwin-arm64@0.20.1-ts7.1.0-beta'
+  - '@tsrs/darwin-x64@0.20.1-ts7.1.0-beta'
+  - '@tsrs/linux-arm64-gnu@0.20.1-ts7.1.0-beta'
+  - '@tsrs/linux-arm64-musl@0.20.1-ts7.1.0-beta'
+  - '@tsrs/linux-x64-gnu@0.20.1-ts7.1.0-beta'
+  - '@tsrs/linux-x64-musl@0.20.1-ts7.1.0-beta'
+  - '@tsrs/win32-x64@0.20.1-ts7.1.0-beta'
   - '@biomejs/biome@2.5.15'
   - '@biomejs/cli-darwin-arm64@2.5.15'
   - '@biomejs/cli-darwin-x64@2.5.15'
@@ -239,3 +247,7 @@ minimumReleaseAgeExclude:
   - i18next@26.4.6
   - js-yaml@5.5.0
   - react-i18next@17.0.18
+
+# Reviewed exact compiler release; keep no-downgrade for every other release.
+trustPolicyExclude:
+  - 'tsrs@0.20.1-ts7.1.0-beta'

@@ -23,17 +23,19 @@ if (
 if (effect.name !== '@effect/tsgo' || typeof effect.version !== 'string') {
   throw new Error(`Invalid Effect compiler metadata: ${effectManifestPath}`);
 }
-// @effect/tsgo@0.59.0 exports no tsrs capability API. These are its CLI's
+// @effect/tsgo@0.63.0 exports no tsrs capability API. These are its CLI's
 // tsrsReplacementTargets / resolveTsrs targets, not all upstream tsrs targets.
 const effectTsrsTargets = new Set([
   '@tsrs/darwin-arm64',
+  '@tsrs/darwin-x64',
+  '@tsrs/win32-x64',
   '@tsrs/linux-x64-gnu',
   '@tsrs/linux-arm64-gnu',
 ]);
 const reportedUnsupportedTargets = new Set();
 
 function getCompilerPolicy(platform = process.platform, arch = process.arch) {
-  if (effect.version !== '0.59.0') {
+  if (effect.version !== '0.63.0') {
     throw new Error(
       `Unreviewed Effect tsrs capability contract: ${effect.version}`,
     );

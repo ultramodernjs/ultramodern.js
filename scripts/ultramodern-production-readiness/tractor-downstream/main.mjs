@@ -104,12 +104,13 @@ function createTractorPnpmDlxArgs(
   createPackage,
   minimumReleaseAgeExclude,
   forwardedArgs,
+  environment,
 ) {
   const exactExclusions = validateExactExclusions(
     minimumReleaseAgeExclude,
     'Tractor bootstrap minimumReleaseAgeExclude',
   );
-  const baseArgs = createPnpmDlxArgs(createPackage, forwardedArgs);
+  const baseArgs = createPnpmDlxArgs(createPackage, forwardedArgs, environment);
   const dlxIndex = baseArgs.indexOf('dlx');
   if (dlxIndex < 0) {
     throw new Error('Authenticated create command is missing pnpm dlx');
@@ -204,12 +205,12 @@ function readTractorProducerOverrides({
   try {
     runImpl(
       packageManager.pnpmExecutable,
-      createTractorPnpmDlxArgs(createPackage, minimumReleaseAgeExclude, [
-        workspace,
-        '--lang',
-        'en',
-        '--no-agents-md',
-      ]),
+      createTractorPnpmDlxArgs(
+        createPackage,
+        minimumReleaseAgeExclude,
+        [workspace, '--lang', 'en', '--no-agents-md'],
+        packageManager.env,
+      ),
       { cwd: root, env: packageManager.env },
     );
     const policy = load(
@@ -851,10 +852,12 @@ function installTractorRelease({
   for (const command of ['sync-delivery-unit', 'validate']) {
     runImpl(
       packageManager.pnpmExecutable,
-      createTractorPnpmDlxArgs(createPackage, minimumReleaseAgeExclude, [
-        'ultramodern',
-        command,
-      ]),
+      createTractorPnpmDlxArgs(
+        createPackage,
+        minimumReleaseAgeExclude,
+        ['ultramodern', command],
+        options.env,
+      ),
       options,
     );
   }

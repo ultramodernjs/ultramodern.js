@@ -112,7 +112,7 @@ async function verifyAppCohort(selection: 'automatic' | 'effect-go') {
       : undefined;
     // Check the provider's replacement support as well as upstream tsrs support.
     // Keep the expected artifact independent from the resolver under test.
-    expect(effect.version).toBe('0.59.0');
+    expect(effect.version).toBe('0.63.0');
     const supported =
       tsrsManifest &&
       tsrsManifest.optionalDependencies[nativeName] === tsrsManifest.version &&

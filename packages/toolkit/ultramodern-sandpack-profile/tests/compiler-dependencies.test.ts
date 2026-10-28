@@ -18,8 +18,8 @@ const smokeManifest = JSON.parse(
 );
 
 for (const [name, version] of Object.entries({
-  '@effect/tsgo': '0.59.0',
-  tsrs: '0.20.0-ts7.1.0-beta',
+  '@effect/tsgo': '0.63.0',
+  tsrs: '0.20.1-ts7.1.0-beta',
 })) {
   test(`the exported app and smoke fixture pin ${name} to ${version}`, () => {
     assert.equal(rootManifest.devDependencies[name], version);
