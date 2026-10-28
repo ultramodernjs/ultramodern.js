@@ -179,6 +179,11 @@ export interface StreamSSRExtender extends SSRRenderLifecycle {
     stream: ReadableStream<Uint8Array>,
   ) => ReadableStream<Uint8Array>;
 
+  /** Runs after document assembly; cancellation must propagate to the input. */
+  processResponseStream?: (
+    stream: ReadableStream<Uint8Array>,
+  ) => ReadableStream<Uint8Array>;
+
   /** Body transforms run after all render transforms, preserving order in each phase. */
   streamPhase?: 'render' | 'body';
 }

@@ -127,7 +127,13 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
         return stream;
       };
       const onStartupAbort = () => fail(request.signal.reason);
-      const deliver = (source: ReadableStream<Uint8Array>) => {
+      const deliver = (
+        source: ReadableStream<Uint8Array>,
+        fallback = false,
+      ) => {
+        if (!fallback)
+          for (const extender of extenders)
+            source = extender.processResponseStream?.(source) ?? source;
         const stream = observeSSRStream(source, {
           lifecycle,
           signal: request.signal,
@@ -317,7 +323,10 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
         });
         if (failed) return;
         options.onShellError?.(error);
-        deliver(getReadableStreamFromString(`${shellBefore}${shellAfter}`));
+        deliver(
+          getReadableStreamFromString(`${shellBefore}${shellAfter}`),
+          true,
+        );
       };
 
       request.signal.addEventListener('abort', onStartupAbort, { once: true });

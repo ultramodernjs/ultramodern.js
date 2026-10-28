@@ -2,6 +2,7 @@ import type { ProjectConfig } from '@rstest/core';
 import { withTestPreset } from '@scripts/rstest-config';
 
 const commonConfig: ProjectConfig = {
+  root: __dirname,
   setupFiles: ['@scripts/rstest-config/setup.ts'],
   globals: true,
   tools: {
@@ -18,8 +19,10 @@ const commonConfig: ProjectConfig = {
 };
 
 export default {
+  root: __dirname,
   projects: [
     withTestPreset({
+      ...commonConfig,
       name: 'plugin-tanstack-node',
       testEnvironment: 'node',
       include: [
@@ -37,18 +40,18 @@ export default {
         'tests/router/tanstackTypes.test.ts',
         'tests/router/routeTree.test.ts',
       ],
-      extends: commonConfig,
     }),
     withTestPreset({
+      ...commonConfig,
       name: 'plugin-tanstack-server-preparation',
       testEnvironment: 'node',
       include: ['tests/router/serverPlugin.test.ts'],
-      extends: commonConfig,
       output: {
         bundleDependencies: ['react-server-dom-rspack/server.node'],
       },
     }),
     withTestPreset({
+      ...commonConfig,
       name: 'plugin-tanstack-client',
       testEnvironment: 'happy-dom',
       include: [
@@ -57,7 +60,6 @@ export default {
         'tests/router/prefetchLink.test.tsx',
         'tests/router/prefetchLinkPreload.test.tsx',
       ],
-      extends: commonConfig,
     }),
   ],
 };
