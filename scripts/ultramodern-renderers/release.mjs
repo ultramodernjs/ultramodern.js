@@ -37,11 +37,10 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { assertAcceptanceReceipt } from '../ultramodern-production-readiness/published-create-proof/acceptance-receipt.mjs';
-import { releaseAgeExemptions } from '../ultramodern-production-readiness/published-create-proof/release-age-audit.mjs';
 import { runWorkerDispatchProbe } from '../ultramodern-production-readiness/renderer-worker-lifecycle-proof/probe.mjs';
 import { readReleaseManifest } from '../ultramodern-publish/lib/source-create-proof/release-manifest.mjs';
 import { startEphemeralRegistry } from '../ultramodern-publish/lib/source-create-proof/runtime-proof/registry.mjs';
-import { defaultReleaseAgePolicyPath } from '../ultramodern-publish/run-release-acceptance.mjs';
+import { createRendererAcceptanceEnv } from './acceptance-env.mjs';
 import { resolveBrowserDependencyRoot } from './browser-dependencies.mjs';
 import {
   assertRendererFeatureRow,
@@ -511,18 +510,15 @@ async function main() {
             publishedRegistryUrl: opts['registry-url'],
           },
         );
-        // Strict release-age policy; only our own cohort is exempt.
-        Object.assign(env, registry.env, {
-          npm_config_store_dir: storeDir,
-          pnpm_config_minimum_release_age: '1440',
-          pnpm_config_minimum_release_age_strict: 'true',
-          pnpm_config_minimum_release_age_ignore_missing_time: 'false',
-          pnpm_config_minimum_release_age_exclude: JSON.stringify(
-            releaseAgeExemptions(release, {
-              policyPath: defaultReleaseAgePolicyPath,
-            }),
-          ),
-        });
+        Object.assign(
+          env,
+          createRendererAcceptanceEnv(env, {
+            mode: opts['acceptance-mode'],
+            release,
+            registryEnv: registry.env,
+            storeDir,
+          }),
+        );
         createRoot = path.join(workDir, 'create');
         fs.mkdirSync(createRoot);
         const { targetName, version } = release.createPackage;
