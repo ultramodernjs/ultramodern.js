@@ -87,6 +87,40 @@ hydration 和框架管理的文件路由。使用 Node 26.7.0 或更新版本。
 列出当前预览配置及固定依赖版本。下文的 federation、i18n 和 Cloudflare 示例
 适用于 React 配置。
 
+### 默认 React 运行时：TanStack Redact
+
+React 应用默认在客户端与服务端（Node SSR 和 Cloudflare workerd SSR）使用
+TanStack Redact。它提供轻量的 React 19 兼容运行时，保留常规的 `react` /
+`react-dom` 导入、JSX 和类型。升级框架即可启用，无需修改应用：
+`@modern-js/ultramodern-app-tools` 自带精确依赖 `@tanstack/redact@0.2.1`
+和 `rsbuild-redact-plugin@0.1.0`，并从框架自身的安装位置解析运行时。
+不要在应用中安装这两个包或注册 Redact 插件。保留生成的 React 和 React DOM
+版本锁定，它们为显式退出和 RSC 应用提供真正的 React 运行时。
+RSC 应用的服务端与客户端都继续使用 React。
+
+顶层 `redact` 选项可省略：省略时使用默认运行时，设为 `false` 时使用真正的
+React，传入 `{ viewTransitions: true }` 时启用 Redact 实验性的原生
+View Transitions（默认关闭）：
+
+```ts title="modern.config.ts"
+import { defineConfig } from '@modern-js/ultramodern-app-tools';
+
+export default defineConfig({
+  redact: false, // 或：{ viewTransitions: true }
+  server: { ssr: { mode: 'stream' } },
+});
+```
+
+UltraModern 要求使用带补丁的 Redact 0.2.1。补丁修复了流式 Suspense 与 hydration
+之间的 `useId` 不一致、指定 `identifierPrefix` 后客户端后续挂载产生重复 ID、
+表格/SVG/MathML 上下文中的流式边界，以及带前缀的十六进制边界/片段 ID 与延迟
+脚本的揭示顺序。不带补丁的运行时会导致构建失败，不会静默发布。
+常规的第三方依赖 24 小时发布年龄限制仍然生效，这两个包都没有豁免。
+
+Redact 仍处于实验阶段，并不保证兼容所有 React 库。依赖 React 内部实现的库可能
+需要设置 `redact: false`。它的流实现不复现 React 的 `progressiveChunkSize`
+调优或 Writable/Web Stream 背压语义；不要依赖相同的分块大小、缓冲或调度行为。
+
 本地化 Cloudflare SSR workspace 在服务端将 `/` 重定向到协商的语言路径。
 `Accept-Language: cs-CZ` 返回 `302`、`Location: /cs`、
 `Cache-Control: private, no-store`，以及覆盖语言检测 Header 的 `Vary`。

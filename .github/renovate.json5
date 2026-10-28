@@ -116,6 +116,15 @@
       "groupName": "modern",
       "groupSlug": "modern",
     },
+    {
+      "description": "Update the patched Redact runtime and its Rsbuild integration together after SSR, hydration and opt-out qualification.",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["@tanstack/redact", "rsbuild-redact-plugin"],
+      "minimumReleaseAge": "1 day",
+      "groupName": "redact (patched runtime lattice)",
+      "dependencyDashboardApproval": true,
+      "labels": ["dependencies", "pin-lattice"],
+    },
     // v2 is a maintenance branch: it exists so teams that cannot move to the
     // current major yet still get bugfixes. Those users chose v2 for stability,
     // so a routine dependency bump is risk without benefit for them -- the same
