@@ -360,3 +360,33 @@ test('legacy stream extenders are initialized with the root element before React
     forceStream2String: false,
   });
 });
+
+test('response transforms observe the assembled Node document before terminal completion', async () => {
+  const hooks = installHooks();
+  const terminal = rs.fn();
+  let response = '';
+  hooks.extendStreamSSR.tap(() => ({
+    onTerminal: terminal,
+    processResponseStream(source) {
+      const decoder = new TextDecoder();
+      return source.pipeThrough(
+        new TransformStream({
+          transform(chunk, controller) {
+            expect(terminal).not.toHaveBeenCalled();
+            response += decoder.decode(chunk, { stream: true });
+            controller.enqueue(chunk);
+          },
+        }),
+      );
+    },
+  }));
+  const stream = await renderStreaming(
+    new Request('http://localhost/'),
+    <main>response</main>,
+    createOptions(),
+  );
+  expect(await new Response(stream).text()).toBe(response);
+  expect(response).toContain('<html><head>');
+  expect(response).toContain('<body><main>response</main></body></html>');
+  expect(terminal).toHaveBeenCalledExactlyOnceWith({ status: 'complete' });
+});

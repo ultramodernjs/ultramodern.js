@@ -226,6 +226,9 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
           },
         );
       }
+      for (const extender of extenders)
+        pendingSource =
+          extender.processResponseStream?.(pendingSource) ?? pendingSource;
       return observeSSRStream(pendingSource, {
         lifecycle,
         async onError(error) {

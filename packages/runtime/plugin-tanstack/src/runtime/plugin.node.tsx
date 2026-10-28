@@ -1,4 +1,5 @@
 // @effect-diagnostics asyncFunction:off newPromise:off strictBooleanExpressions:off unnecessaryArrowBlock:off
+import type { StreamSSRInfo } from '@modern-js/plugin/runtime';
 import {
   getGlobalEnableRsc,
   InternalRuntimeContext,
@@ -56,9 +57,12 @@ import {
   attachServerSsrUtils,
   collectRouterErrors,
   createGetSsrHref,
-  routerManagedTagsToHtml,
 } from './ssrManagedTags';
 import { preloadMatchedRouteComponents } from './ssrPreload';
+import {
+  createTanstackSsrStreamExtender,
+  takeRouterHydrationScripts,
+} from './ssrStream';
 import type {
   ModernTanstackRouterContext,
   TanstackRouterWithServerSsr,
@@ -263,14 +267,10 @@ export const tanstackRouterPlugin = (
             }
           }
 
-          const initialScriptTags =
-            serverRouter.serverSsr?.takeInitialHydrationScriptTags();
-          const hydrationScripts = initialScriptTags
-            ? routerManagedTagsToHtml([
-                ...initialScriptTags.before,
-                initialScriptTags.boundary,
-              ])
-            : [];
+          const hydrationScripts = takeRouterHydrationScripts(
+            serverRouter,
+            context.ssrContext?.mode === 'stream',
+          );
           const matchedRouteIds = getModernRouteIdsFromMatches(serverRouter);
           const routerServerSnapshot: InternalRouterServerSnapshot = {
             framework: 'tanstack',
@@ -309,6 +309,15 @@ export const tanstackRouterPlugin = (
           }
         }
       });
+
+      api.extendStreamSSR((info: StreamSSRInfo<TInternalRuntimeContext>) =>
+        createTanstackSsrStreamExtender(
+          getRouterRuntimeState(info.runtimeContext)?.instance as
+            | AnyRouter
+            | undefined,
+          info.request,
+        ),
+      );
 
       api.wrapRoot(App => {
         const getRouteApp = () => {

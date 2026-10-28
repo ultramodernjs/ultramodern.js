@@ -25,6 +25,7 @@ import { tanstackRouterPlugin } from '../../src/runtime/plugin.node';
 import type { TanstackRouterPluginAPI } from '../../src/runtime/pluginShared';
 import * as ssrUtils from '../../src/runtime/ssrManagedTags';
 import * as ssrPreload from '../../src/runtime/ssrPreload';
+import { createTanstackSsrStreamExtender } from '../../src/runtime/ssrStream';
 import type { RouterConfig } from '../../src/runtime/types';
 
 // Preparation uses plain loader data. Keep the native adapters and response
@@ -689,4 +690,85 @@ describe('TanStack provider with the native request handler', () => {
       expect(removeAbortListener).toHaveBeenCalledTimes(1);
     },
   );
+});
+
+describe('native TanStack response serialization', () => {
+  async function prepare() {
+    let release!: (value: string) => void;
+    const late = new Promise<string>(resolve => {
+      release = resolve;
+    });
+    const beforeRender = collectBeforeRender(() => [
+      {
+        id: 'root',
+        path: '/',
+        loader: () => ({ late }),
+        Component: () => null,
+      },
+    ]);
+    const { context } = createServerContext('/');
+    context.ssrContext!.mode = 'stream';
+    await beforeRender(context, value => value);
+    const router = getRouterRuntimeState(context)?.instance as AnyRouter;
+    const request = context.ssrContext!.request.raw as Request;
+    return { context, router, request, release };
+  }
+
+  test('streams native promise settlements after the body boundary and complete renderer scripts', async () => {
+    const { context, router, request, release } = await prepare();
+    const extension = createTanstackSsrStreamExtender(router, request);
+    const head = getRouterServerSnapshot(context)!.hydrationScripts!.join('');
+    const shell = extension.completedBody!('<main>pending</main>', {
+      phase: 'shell',
+    });
+    expect(head).not.toContain('$tsr-stream-boundary');
+    expect(shell).toContain('$tsr-stream-boundary');
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const encoder = new TextEncoder();
+    const source = new ReadableStream<Uint8Array>({
+      start(value) {
+        controller = value;
+      },
+    });
+    const output = extension.processResponseStream!(source);
+    const result = new Response(output).text();
+    controller.enqueue(
+      encoder.encode(
+        `<html><head>${head}</head><body>${shell}<script>window.renderer = `,
+      ),
+    );
+    release('native-settlement-ready');
+    await new Promise(resolve => setTimeout(resolve, 10));
+    controller.enqueue(encoder.encode('true;</script></body></html>'));
+    controller.close();
+    const html = await result;
+    expect(html).toContain('native-settlement-ready');
+    expect(html).toContain('$_TSR.e()');
+    expect(html).toContain('<script>window.renderer = true;</script>');
+    expect(html.indexOf('native-settlement-ready')).toBeGreaterThan(
+      html.indexOf('$tsr-stream-boundary'),
+    );
+    expect(html.endsWith('</body></html>')).toBe(true);
+  });
+
+  test('cancels the document producer and native serialization owner together', async () => {
+    const { router, request } = await prepare();
+    const cleanup = rstest.spyOn(router.serverSsr!, 'cleanup');
+    const cancel = rstest.fn();
+    const extension = createTanstackSsrStreamExtender(router, request);
+    const shell = extension.completedBody!('<main>pending</main>', {
+      phase: 'shell',
+    });
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`<body>${shell}`));
+      },
+      cancel,
+    });
+    const reader = extension.processResponseStream!(source).getReader();
+    await reader.read();
+    await reader.cancel('client left');
+    expect(cancel).toHaveBeenCalledWith('client left');
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
 });

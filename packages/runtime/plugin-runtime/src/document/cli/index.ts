@@ -265,13 +265,31 @@ const configureChildCompiler = (
   }
 };
 
-const applyExternalsPlugin = (child: Compiler, compiler: Compiler) => {
+export const applyExternalsPlugin = (child: Compiler, compiler: Compiler) => {
+  // Explicit aliases must win over the Document compiler's default React
+  // externals, just as they do in the parent application compiler.
+  const aliases = compiler.options.resolve.alias ?? {};
+  const names = Array.isArray(aliases)
+    ? aliases.map(
+        alias =>
+          `${alias.name}${alias.onlyModule && !alias.name.endsWith('$') ? '$' : ''}`,
+      )
+    : Object.keys(aliases);
+  const mappings = Object.fromEntries(
+    Object.entries(EXTERNAL_MAPPINGS).filter(
+      ([request]) =>
+        !names.some(name =>
+          name.endsWith('$')
+            ? name === `${request}$`
+            : request === name || request.startsWith(`${name}/`),
+        ),
+    ),
+  );
   const ExternalsPlugin = compiler.rspack?.ExternalsPlugin;
   if (ExternalsPlugin) {
-    new ExternalsPlugin('commonjs', [
-      createExternalHandler(),
-      EXTERNAL_MAPPINGS,
-    ]).apply(child);
+    new ExternalsPlugin('commonjs', [createExternalHandler(), mappings]).apply(
+      child,
+    );
   }
 };
 

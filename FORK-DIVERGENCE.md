@@ -33,6 +33,31 @@ every PR.
 
 ---
 
+### 2026-10-28 completed SSR response stream extension
+
+Owner: `bleedingdev`. Disposition: `inline-patch`. The Node and worker
+renderers now expose `processResponseStream` after document assembly and
+before response observation. The existing stream hooks only see renderer
+body bytes, before the document head and body boundary exist. The fork-owned
+TanStack plugin uses the new generic hook to merge native serialization
+records, while cancellation still reaches the document producer and request
+cleanup. The TanStack transport and its body-boundary placement stay in the
+fork-owned plugin, not in the upstream renderers.
+
+### 2026-10-28 custom Document respects runtime aliases
+
+Owner: `bleedingdev`. Disposition: `inline-patch`. The custom Document child
+compiler installs unconditional React externals after inheriting the parent
+resolver, so its renderer silently stays on real React even when the parent
+explicitly aliases React to another runtime. Its existing external mappings now
+exclude requests handled by explicit parent aliases (object or array form).
+This is a generic alias-correctness fix, not a second Redact integration; all
+runtime selection remains in the fork-owned application-tools plugin. Rspack's
+child-compiler request-replacement hooks were tested but do not override these
+native external mappings, so the owning lines need this narrow inline patch.
+A real child-compilation regression uses the existing external-plugin function
+and verifies bundled Redact resources with no React externals.
+
 ### 2026-10-27 server compiler source-map output policy
 
 Owner: `bleedingdev`. Disposition: `inline-patch`. The Rslib server compiler
@@ -1271,7 +1296,7 @@ five previously invalid advisory rows remain non-authorizing historical prose.
     {"path":"packages/runtime/plugin-runtime/src/cli/code.ts","owner":"bleedingdev","reason":"Observe the eager SSR handler promise before a renderer consumes it, preventing startup failures from terminating Node while preserving the original rejection for request-time reporting.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-runtime/src/cli/registry.ts","owner":"bleedingdev","reason":"Type-only empty module anchors generated runtime registry alias declarations; no runtime registry implementation lives here.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-runtime/src/core/server/utils.ts","owner":"bleedingdev","reason":"Keep native attribute-name validation and double-quoted value escaping in the native formatter used by native renderer template seams. Remove the reverse import of fork HTML helpers while preserving escaped ampersand, quote and angle-bracket output.","dispositions":["inline-patch"]},
-    {"path":"packages/runtime/plugin-runtime/src/document/cli/index.ts","owner":"bleedingdev","reason":"Keep document template loading compatible with native ESM and expose native script-placeholder processing. Register the Document child compiler only for environments with HTML paths (and only their HTML entries): in the server compiler it rewrote the same temp entry file concurrently with the web compiler, so a truncated read failed the build with 'Document child compiler produced empty output'. Each compiler also writes its own temp entry, so two HTML environments cannot race either.","dispositions":["inline-patch"]},
+    {"path":"packages/runtime/plugin-runtime/src/document/cli/index.ts","owner":"bleedingdev","reason":"Keep document template loading compatible with native ESM and expose native script-placeholder processing. Register the Document child compiler only for environments with HTML paths (and only their HTML entries): in the server compiler it rewrote the same temp entry file concurrently with the web compiler, so a truncated read failed the build with 'Document child compiler produced empty output'. Each compiler also writes its own temp entry, so two HTML environments cannot race either. Explicit parent runtime aliases now suppress the matching default React externals; otherwise a custom Document silently bypasses the selected Redact runtime. Native child-compilation tests verify aliased resources and no React externals.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-runtime/tests/document/cli.test.tsx","owner":"bleedingdev","reason":"Regression test: the Document child compiler plugin is not registered for an environment without HTML paths and is registered only for the entries that emit HTML; each compiler gets its own temp entry path.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-runtime/src/router/runtime/utils.tsx","owner":"bleedingdev","reason":"Preserve native React Router 404/status/error behavior and production error redaction.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-runtime/tests/cli/ssr-bootstrap-rejection.test.ts","owner":"bleedingdev","reason":"Regression companion for observable early server-entry failures without process termination.","dispositions":["inline-patch"]},
@@ -2656,7 +2681,7 @@ five previously invalid advisory rows remain non-authorizing historical prose.
 | `packages/runtime/plugin-runtime/src/cli/code.ts` | bleedingdev | Observe the eager SSR handler promise before a renderer consumes it, preventing startup failures from terminating Node while preserving the original rejection for request-time reporting. | `inline-patch` |
 | `packages/runtime/plugin-runtime/src/cli/registry.ts` | bleedingdev | Type-only empty module anchors generated runtime registry alias declarations; no runtime registry implementation lives here. | `inline-patch` |
 | `packages/runtime/plugin-runtime/src/core/server/utils.ts` | bleedingdev | Keep native attribute-name validation and double-quoted value escaping in the native formatter used by native renderer template seams. Remove the reverse import of fork HTML helpers while preserving escaped ampersand, quote and angle-bracket output. | `inline-patch` |
-| `packages/runtime/plugin-runtime/src/document/cli/index.ts` | bleedingdev | Keep document template loading compatible with native ESM and expose native script-placeholder processing. Register the Document child compiler only for environments with HTML paths (and only their HTML entries): in the server compiler it rewrote the same temp entry file concurrently with the web compiler, so a truncated read failed the build with 'Document child compiler produced empty output'. Each compiler also writes its own temp entry, so two HTML environments cannot race either. | `inline-patch` |
+| `packages/runtime/plugin-runtime/src/document/cli/index.ts` | bleedingdev | Keep document template loading compatible with native ESM and expose native script-placeholder processing. Register the Document child compiler only for environments with HTML paths (and only their HTML entries): in the server compiler it rewrote the same temp entry file concurrently with the web compiler, so a truncated read failed the build with 'Document child compiler produced empty output'. Each compiler also writes its own temp entry, so two HTML environments cannot race either. Explicit parent runtime aliases now suppress the matching default React externals; otherwise a custom Document silently bypasses the selected Redact runtime. Native child-compilation tests verify aliased resources and no React externals. | `inline-patch` |
 | `packages/runtime/plugin-runtime/tests/document/cli.test.tsx` | bleedingdev | Regression test: the Document child compiler plugin is not registered for an environment without HTML paths and is registered only for the entries that emit HTML; each compiler gets its own temp entry path. | `inline-patch` |
 | `packages/runtime/plugin-runtime/src/router/runtime/utils.tsx` | bleedingdev | Preserve native React Router 404/status/error behavior and production error redaction. | `inline-patch` |
 | `packages/runtime/plugin-runtime/tests/cli/ssr-bootstrap-rejection.test.ts` | bleedingdev | Regression companion for observable early server-entry failures without process termination. | `inline-patch` |

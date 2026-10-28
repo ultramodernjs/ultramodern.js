@@ -156,3 +156,34 @@ test('request abort settles the real worker body as one cancellation', async () 
   });
   expect(opts.onError).not.toHaveBeenCalled();
 });
+
+test('response transforms observe the assembled worker document before terminal completion', async () => {
+  const hooks = install();
+  const terminal = rs.fn();
+  let response = '';
+  hooks.extendStreamSSR.tap(() => ({
+    onTerminal: terminal,
+    processResponseStream(source) {
+      const decoder = new TextDecoder();
+      return source.pipeThrough(
+        new TransformStream({
+          transform(chunk, controller) {
+            expect(terminal).not.toHaveBeenCalled();
+            response += decoder.decode(chunk, { stream: true });
+            controller.enqueue(chunk);
+          },
+        }),
+      );
+    },
+  }));
+  const stream = await render(
+    <>
+      <main>response</main>
+      {JSX_SHELL_STREAM_END_MARK}
+    </>,
+  );
+  expect(await new Response(stream).text()).toBe(response);
+  expect(response).toContain('<html><head>');
+  expect(response).toContain('<body><main>response</main></body></html>');
+  expect(terminal).toHaveBeenCalledExactlyOnceWith({ status: 'complete' });
+});
