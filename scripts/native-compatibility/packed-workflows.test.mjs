@@ -203,3 +203,39 @@ test('required feature proofs select real GitHub-hosted Linux without changing o
     }
   }
 });
+
+test('renderer evidence is required after execution, not when upstream failure skipped the feature step', () => {
+  const job = readWorkflow('ultramodern-release-acceptance').jobs[
+    'accept-release'
+  ];
+  const execution = job.steps.find(
+    step => step.name === 'Run exact-bundle installed renderer features',
+  );
+  const evidence = job.steps.find(
+    step => step.name === 'Preserve renderer feature runtime evidence',
+  );
+  assert.equal(execution.id, 'renderer-features');
+  assert.equal(evidence.with['if-no-files-found'], 'error');
+  assert.equal(evidence.with['include-hidden-files'], true);
+  assert.equal(
+    evidence.if,
+    "always() && inputs.required_renderer_features && steps.renderer-features.outcome != 'skipped'",
+  );
+  // GitHub treats hyphenated step ids as property names, not subtraction.
+  const condition = evidence.if.replaceAll(
+    'steps.renderer-features',
+    'steps["renderer-features"]',
+  );
+  for (const outcome of ['success', 'failure', 'cancelled', 'skipped']) {
+    for (const required of [true, false]) {
+      assert.equal(
+        runInNewContext(condition, {
+          always: () => true,
+          inputs: { required_renderer_features: required },
+          steps: { 'renderer-features': { outcome } },
+        }),
+        required && outcome !== 'skipped',
+      );
+    }
+  }
+});

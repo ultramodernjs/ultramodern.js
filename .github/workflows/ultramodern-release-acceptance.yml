@@ -186,6 +186,7 @@ jobs:
         run: mise exec -- node scripts/ultramodern-renderers/provision-browser.mjs
 
       - name: Run exact-bundle installed renderer features
+        id: renderer-features
         if: inputs.required_renderer_features
         env:
           RENDERER_AGENT_BROWSER_EXECUTABLE: ${{ steps.renderer-browser-cli.outputs.executable_path }}
@@ -211,7 +212,7 @@ jobs:
             --run-identity "$PRODUCER_RUN_IDENTITY"
 
       - name: Preserve renderer feature runtime evidence
-        if: always() && inputs.required_renderer_features
+        if: always() && inputs.required_renderer_features && steps.renderer-features.outcome != 'skipped'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: renderer-feature-source-runtime-${{ inputs.producer_artifact_identity }}
