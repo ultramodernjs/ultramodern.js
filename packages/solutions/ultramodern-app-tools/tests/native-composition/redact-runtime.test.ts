@@ -54,6 +54,8 @@ import {
 const require = createRequire(import.meta.url);
 const frameworkRequire = createRequire(require.resolve('../../package.json'));
 const ignorePatch = () => {};
+// The aliased sidecar keeps its physical directory; JSON doubles `\` on Windows.
+const redactSidecarModule = /@bleedingdev[\\/]+tanstack-redact[\\/]+dist[\\/]/;
 
 async function cliConfig(input: ReactRuntimeConfig) {
   const manager = createPluginManager<CLIPluginAPI<AppTools>>();
@@ -418,7 +420,7 @@ describe('default React runtime composition', () => {
         assertPatch: () =>
           assertRedactPatch((() => 'missing') as typeof readFileSync),
       }),
-    ).rejects.toThrow('reviewed pnpm SSR patch');
+    ).rejects.toThrow('reviewed SSR patch');
   });
 
   it.each([
@@ -608,7 +610,7 @@ describe('real Rspack module graph', () => {
         });
         expect(details.errors).toEqual([]);
         const serialized = JSON.stringify(details.modules);
-        expect(serialized).toContain('@tanstack');
+        expect(serialized).toMatch(redactSidecarModule);
         expect(serialized).not.toContain('external "react');
         expect(serialized).not.toContain('/react/cjs/');
         expect(serialized).not.toContain('/react-dom/cjs/');
@@ -679,7 +681,7 @@ describe('real Rspack module graph', () => {
         ),
       );
       expect(stats.toJson({ all: false, errors: true }).errors).toEqual([]);
-      expect(resources.join('\n')).toContain('@tanstack');
+      expect(resources.join('\n')).toMatch(redactSidecarModule);
       expect(
         resources.some(
           resource => resource.startsWith('external') && /react/.test(resource),

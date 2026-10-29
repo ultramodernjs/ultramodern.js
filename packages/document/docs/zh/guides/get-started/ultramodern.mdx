@@ -92,7 +92,7 @@ hydration 和框架管理的文件路由。使用 Node 26.7.0 或更新版本。
 React 应用默认在客户端与服务端（Node SSR 和 Cloudflare workerd SSR）使用
 TanStack Redact。它提供轻量的 React 19 兼容运行时，保留常规的 `react` /
 `react-dom` 导入、JSX 和类型。升级框架即可启用，无需修改应用：
-`@modern-js/ultramodern-app-tools` 自带精确依赖 `@tanstack/redact@0.2.1`
+`@modern-js/ultramodern-app-tools` 自带精确依赖 `@tanstack/redact`（已审查的 `@bleedingdev/tanstack-redact@0.2.1`）
 和 `rsbuild-redact-plugin@0.1.0`，并从框架自身的安装位置解析运行时。
 不要在应用中安装这两个包或注册 Redact 插件。保留生成的 React 和 React DOM
 版本锁定，它们为显式退出和 RSC 应用提供真正的 React 运行时。

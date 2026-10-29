@@ -244,7 +244,10 @@ test('generated React roots provide canonical framework peers and their pinned r
       'utf8',
     ),
   );
-  assert.equal(tools.dependencies['@tanstack/redact'], '0.2.1');
+  assert.equal(
+    tools.dependencies['@tanstack/redact'],
+    'npm:@bleedingdev/tanstack-redact@0.2.1',
+  );
   assert.equal(tools.dependencies['rsbuild-redact-plugin'], '0.1.0');
   assert.equal(tools.peerDependencies.typescript, '7.0.2');
   assert.notEqual(tools.peerDependenciesMeta?.typescript?.optional, true);
