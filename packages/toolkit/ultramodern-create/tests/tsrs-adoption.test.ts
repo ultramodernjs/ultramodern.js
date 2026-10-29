@@ -239,6 +239,82 @@ const typecheckScript = path.resolve(
   '../templates/workspace-scripts/ultramodern-typecheck.mjs',
 );
 
+const autoBuildCheckers = String(
+  Math.min(8, Math.max(4, os.availableParallelism() - 2)),
+);
+
+type TypecheckRun = {
+  args: string[];
+  status?: number;
+  env?: Record<string, string | undefined>;
+  packageJson?: JsonValue;
+};
+
+// Runs the installed typecheck against a compiler stub that records what it
+// received. The ambient TSRS_* and ULTRAMODERN_TYPECHECK_* settings are
+// cleared so only each case's own settings apply.
+function runInstalledTypecheck({
+  args,
+  status = 0,
+  env = {},
+  packageJson,
+}: TypecheckRun) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'um-tsrs-args-'));
+  try {
+    const compiler = path.join(root, 'compiler.cjs');
+    const log = path.join(root, 'compiler.json');
+    if (packageJson !== undefined) {
+      fs.writeFileSync(
+        path.join(root, 'package.json'),
+        JSON.stringify(packageJson),
+      );
+    }
+    writeExecutable(
+      compiler,
+      `if (process.argv[2] === '--version') {
+  console.log('Version 7.0.2+effect-tsgo.0.63.0');
+  process.exit(0);
+}
+require('node:fs').writeFileSync(${JSON.stringify(log)}, JSON.stringify({
+  args: process.argv.slice(2),
+  assignment: process.env.TSRS_CHECKER_ASSIGNMENT,
+  fast: process.env.TSRS_FAST,
+  inherited: process.env.ULTRAMODERN_TEST_TOOLCHAIN,
+  cwd: process.cwd()
+}));
+if (${status} === 143) process.kill(process.pid, 'SIGTERM');
+else process.exit(${status});
+`,
+    );
+    const result = spawnSync(process.execPath, [typecheckScript, ...args], {
+      cwd: root,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        EFFECT_TSGO_BIN: compiler,
+        ULTRAMODERN_WORKSPACE_ROOT: root,
+        ULTRAMODERN_TEST_TOOLCHAIN: 'preserved',
+        TSRS_CHECKER_ASSIGNMENT: undefined,
+        TSRS_FAST: undefined,
+        ULTRAMODERN_TYPECHECK_CHECKERS: undefined,
+        ULTRAMODERN_TYPECHECK_BUILDERS: undefined,
+        ...env,
+      },
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(fs.existsSync(path.join(root, 'node_modules')), false);
+    return {
+      result,
+      root: fs.realpathSync(root),
+      received: fs.existsSync(log)
+        ? JSON.parse(fs.readFileSync(log, 'utf8'))
+        : undefined,
+    };
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 test.skipIf(process.platform === 'win32').each([
   {
     args: ['--build', 'tsconfig.json'],
@@ -248,9 +324,12 @@ test.skipIf(process.platform === 'win32').each([
       '--pretty',
       'false',
       '--stopBuildOnErrors',
+      '--checkers',
+      autoBuildCheckers,
     ],
     status: 0,
     assignment: undefined,
+    receivedAssignment: undefined,
   },
   {
     args: ['--project', 'apps/shell/tsconfig.json', '--skipLibCheck'],
@@ -264,6 +343,7 @@ test.skipIf(process.platform === 'win32').each([
     ],
     status: 1,
     assignment: 'locality',
+    receivedAssignment: 'locality',
   },
   {
     args: ['--emit', '--project', 'packages/shared/tsconfig.json'],
@@ -275,6 +355,7 @@ test.skipIf(process.platform === 'win32').each([
     ],
     status: 2,
     assignment: 'go',
+    receivedAssignment: 'go',
   },
   {
     args: ['--build', 'tsconfig.json'],
@@ -284,55 +365,163 @@ test.skipIf(process.platform === 'win32').each([
       '--pretty',
       'false',
       '--stopBuildOnErrors',
+      '--checkers',
+      autoBuildCheckers,
     ],
     status: 143,
     assignment: 'go',
+    receivedAssignment: 'go',
   },
 ])(
-  'installed typecheck forwards $args without build-mode custom flags',
-  ({ args, expected, status, assignment }) => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'um-tsrs-args-'));
-    try {
-      const compiler = path.join(root, 'compiler.cjs');
-      const log = path.join(root, 'compiler.json');
-      writeExecutable(
-        compiler,
-        `if (process.argv[2] === '--version') {
-  console.log('Version 7.0.2+effect-tsgo.0.63.0');
-  process.exit(0);
-}
-require('node:fs').writeFileSync(${JSON.stringify(log)}, JSON.stringify({
-  args: process.argv.slice(2),
-  assignment: process.env.TSRS_CHECKER_ASSIGNMENT,
-  inherited: process.env.ULTRAMODERN_TEST_TOOLCHAIN,
-  cwd: process.cwd()
-}));
-if (${status} === 143) process.kill(process.pid, 'SIGTERM');
-else process.exit(${status});
-`,
-      );
-      const result = spawnSync(process.execPath, [typecheckScript, ...args], {
-        cwd: root,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          EFFECT_TSGO_BIN: compiler,
-          ULTRAMODERN_WORKSPACE_ROOT: root,
-          ULTRAMODERN_TEST_TOOLCHAIN: 'preserved',
-          TSRS_CHECKER_ASSIGNMENT: assignment,
+  'installed typecheck forwards $args with the measured fast defaults',
+  ({ args, expected, status, assignment, receivedAssignment }) => {
+    const { result, root, received } = runInstalledTypecheck({
+      args,
+      status,
+      env: { TSRS_CHECKER_ASSIGNMENT: assignment },
+    });
+    assert.equal(result.status, status, result.stderr);
+    assert.deepEqual(received, {
+      args: expected,
+      ...(receivedAssignment ? { assignment: receivedAssignment } : {}),
+      fast: '1',
+      inherited: 'preserved',
+      cwd: root,
+    });
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'project package.json settings replace the typecheck defaults',
+  () => {
+    const { result, received } = runInstalledTypecheck({
+      args: ['--build', 'tsconfig.json'],
+      packageJson: {
+        name: 'workspace',
+        ultramodern: {
+          typecheck: { fast: false, checkers: 6, builders: 2 },
         },
-      });
-      assert.equal(result.error, undefined);
-      assert.equal(result.status, status, result.stderr);
-      assert.deepEqual(JSON.parse(fs.readFileSync(log, 'utf8')), {
-        args: expected,
-        assignment: assignment || 'locality',
-        inherited: 'preserved',
-        cwd: fs.realpathSync(root),
-      });
-      assert.equal(fs.existsSync(path.join(root, 'node_modules')), false);
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(received.args.slice(5), [
+      '--checkers',
+      '6',
+      '--builders',
+      '2',
+    ]);
+    assert.equal(received.fast, '0');
+    // Without the fast preset, the previous locality default still applies.
+    assert.equal(received.assignment, 'locality');
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'project mode passes configured checkers but leaves "auto" to the fast preset',
+  () => {
+    const auto = runInstalledTypecheck({
+      args: ['--project', 'tsconfig.json'],
+      packageJson: { ultramodern: { typecheck: { checkers: 'auto' } } },
+    });
+    assert.equal(auto.result.status, 0, auto.result.stderr);
+    assert.equal(auto.received.args.includes('--checkers'), false);
+
+    const fixed = runInstalledTypecheck({
+      args: ['--project', 'tsconfig.json'],
+      packageJson: { ultramodern: { typecheck: { checkers: 5, builders: 3 } } },
+    });
+    assert.equal(fixed.result.status, 0, fixed.result.stderr);
+    assert.deepEqual(fixed.received.args.slice(-2), ['--checkers', '5']);
+    assert.equal(fixed.received.args.includes('--builders'), false);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'environment variables override package.json and flags override both',
+  () => {
+    const packageJson = {
+      ultramodern: { typecheck: { fast: true, checkers: 6, builders: 2 } },
+    };
+    const fromEnv = runInstalledTypecheck({
+      args: ['--build', 'tsconfig.json'],
+      packageJson,
+      env: {
+        TSRS_FAST: '0',
+        ULTRAMODERN_TYPECHECK_CHECKERS: '3',
+        ULTRAMODERN_TYPECHECK_BUILDERS: '1',
+      },
+    });
+    assert.equal(fromEnv.result.status, 0, fromEnv.result.stderr);
+    assert.deepEqual(fromEnv.received.args.slice(5), [
+      '--checkers',
+      '3',
+      '--builders',
+      '1',
+    ]);
+    assert.equal(fromEnv.received.fast, '0');
+
+    const fromFlags = runInstalledTypecheck({
+      args: ['--build', 'tsconfig.json', '--checkers', '12', '--builders=4'],
+      packageJson,
+      env: { ULTRAMODERN_TYPECHECK_CHECKERS: '3' },
+    });
+    assert.equal(fromFlags.result.status, 0, fromFlags.result.stderr);
+    assert.deepEqual(fromFlags.received.args.slice(5), [
+      '--checkers',
+      '12',
+      '--builders=4',
+    ]);
+
+    const singleThreaded = runInstalledTypecheck({
+      args: ['--build', 'tsconfig.json', '--singleThreaded'],
+    });
+    assert.equal(singleThreaded.result.status, 0);
+    assert.equal(singleThreaded.received.args.includes('--checkers'), false);
+  },
+);
+
+test.skipIf(process.platform === 'win32').each([
+  {
+    packageJson: { ultramodern: { typecheck: { checkers: 0 } } },
+    message:
+      /"ultramodern\.typecheck"\.checkers must be a positive integer or "auto", received 0/u,
+  },
+  {
+    packageJson: { ultramodern: { typecheck: { builders: 'auto' } } },
+    message:
+      /"ultramodern\.typecheck"\.builders must be a positive integer, received "auto"/u,
+  },
+  {
+    packageJson: { ultramodern: { typecheck: { fast: 'yes' } } },
+    message: /"ultramodern\.typecheck"\.fast must be true or false/u,
+  },
+  {
+    packageJson: { ultramodern: { typecheck: { checker: 8 } } },
+    message: /unknown settings: checker\. Use fast, checkers, builders/u,
+  },
+  {
+    packageJson: { ultramodern: { typecheck: [] } },
+    message: /"ultramodern\.typecheck" must be an object/u,
+  },
+  {
+    env: { ULTRAMODERN_TYPECHECK_CHECKERS: 'many' },
+    message:
+      /ULTRAMODERN_TYPECHECK_CHECKERS must be a positive integer or "auto", received "many"/u,
+  },
+  {
+    env: { TSRS_FAST: 'on' },
+    message: /TSRS_FAST must be true or false \(or 1 or 0\), received "on"/u,
+  },
+])(
+  'invalid typecheck settings fail before the compiler runs: $message',
+  ({ packageJson, env, message }) => {
+    const { result, received } = runInstalledTypecheck({
+      args: ['--build', 'tsconfig.json'],
+      packageJson,
+      env,
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, message);
+    assert.equal(received, undefined);
   },
 );

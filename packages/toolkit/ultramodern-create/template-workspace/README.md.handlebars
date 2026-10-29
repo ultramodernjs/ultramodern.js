@@ -103,8 +103,11 @@ separate matrix jobs so failures are isolated and parallelizable.
 
 `pnpm typecheck` runs the installed `ultramodern-create ultramodern typecheck`
 command over `tsconfig.json` project references. It uses the shared compiler
-resolver and defaults `TSRS_CHECKER_ASSIGNMENT` to `locality`, preserving an explicit
-caller setting, without custom `--checkers` or `--builders` flags in build mode.
+resolver with the tsrs fast preset and, in build mode, `--checkers` set to the
+core count minus 2, from 4 to 8. Change these defaults in this root
+`package.json` under `"ultramodern": { "typecheck": { "fast", "checkers", "builders" } }`,
+or for one run with `TSRS_FAST`, `ULTRAMODERN_TYPECHECK_CHECKERS` and
+`ULTRAMODERN_TYPECHECK_BUILDERS`. Flags passed to the command win over both.
 The workspace pins `tsrs@0.20.1-ts7.1.0-beta` and `@effect/tsgo@0.63.0`.
 Postinstall runs `ultramodern-create ultramodern compiler-prepare` before skill
 setup. This uses installed tsrs platform metadata to run the official
