@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -474,4 +481,34 @@ test('peer ranges prove liveness but are not judged', () => {
       [],
     );
   }
+});
+
+test('a tarball dependent is found under its cut virtual-store name', t => {
+  const root = mkdtempSync(
+    path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'overrides-store-'),
+  );
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const url =
+    'https://example.com/releases/download/fork-1/fork-core-1.2.3.tgz';
+  const install = (dir, version) => {
+    const packageDir = path.join(
+      root,
+      'node_modules/.pnpm',
+      dir,
+      'node_modules/@scope/core',
+    );
+    mkdirSync(packageDir, { recursive: true });
+    writeFileSync(
+      path.join(packageDir, 'package.json'),
+      JSON.stringify({ name: '@scope/core', version }),
+    );
+  };
+  install('@scope+core@https+++example.com+releases+download+fo_0a1b', '1.2.3');
+  install('@scope+core@2.0.0_peer@1.0.0', '2.0.0');
+  const read = readInstalledManifest(root);
+  assert.equal(read('@scope/core', url)?.version, '1.2.3');
+  assert.equal(read('@scope/core', '2.0.0')?.version, '2.0.0');
+  // Two cut names sharing the prefix are ambiguous and stay unresolved.
+  install('@scope+core@https+++example.com+releases+download+fo_9f8e', '1.2.4');
+  assert.equal(readInstalledManifest(root)('@scope/core', url), undefined);
 });

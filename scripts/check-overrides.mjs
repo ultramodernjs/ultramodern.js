@@ -425,16 +425,25 @@ export function findForcedMajors(lockfileText, readManifest) {
   return violations;
 }
 
-// Reads registry packages from pnpm's virtual store, whose directory names
-// are `<name with / as +>@<version>` plus an optional `_<peers>` suffix.
+// Reads packages from pnpm's virtual store, whose directory names are
+// `<name>@<version>` with path characters as `+` plus an optional
+// `_<peers>` suffix. pnpm cuts long names, such as tarball URLs, and ends them
+// with `_<hash>`; such a cut prefix must name exactly one store entry.
 export function readInstalledManifest(root = repoRoot) {
   const store = path.join(root, 'node_modules', '.pnpm');
   const entries = readdirSync(store);
   return (name, version) => {
-    const prefix = `${name.replace('/', '+')}@${version}`;
-    const entry = entries.find(
+    const prefix = `${name}@${version}`.replace(/[\\/:*?"<>|#]/gu, '+');
+    let entry = entries.find(
       dir => dir === prefix || dir.startsWith(`${prefix}_`),
     );
+    if (!entry && version.includes('://')) {
+      const cut = entries.filter(dir => {
+        const head = dir.slice(0, dir.lastIndexOf('_'));
+        return head.length > name.length + 1 && prefix.startsWith(head);
+      });
+      if (cut.length === 1) [entry] = cut;
+    }
     if (!entry) return undefined;
     try {
       return JSON.parse(

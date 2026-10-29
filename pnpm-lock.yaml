@@ -186,6 +186,7 @@ overrides:
   undici@>=8.0.0 <8.12.2: 8.12.2
   body-parser@>=2.0.0 <2.4.0: 2.4.0
   yaml@>=1.0.0 <1.10.3: 1.10.3
+  seroval@>=1.0.0 <1.6.8: 1.6.9
   yaml@>=2.0.0 <2.9.1: 2.9.1
   qs@>=6.0.0 <6.16.0: 6.16.0
   smol-toml@>=1.0.0 <1.9.0: 1.9.0
@@ -19365,17 +19366,13 @@ packages:
     resolution: {integrity: sha512-4Nk35ttD3DTDJW4hgw5StsVAPeU6qnDFnULAouw6tQ7oLTV/ICXrWpsXo2EE52eSP2joUMazbVf52mFEcADqRw==}
     engines: {node: '>=10'}
     peerDependencies:
-      seroval: ^1.0
+      seroval: 1.6.9
 
   seroval-plugins@1.6.9:
     resolution: {integrity: sha512-kiDK/Tb8IWZ61WEU8pA2PDmAuw37gKph9Y77OZlD56mg0Y2g0Bg7gZ1HeHhs5d40w+nRoUq/wj08V26ilbez9g==}
     engines: {node: '>=10'}
     peerDependencies:
-      seroval: ^1.0
-
-  seroval@1.6.7:
-    resolution: {integrity: sha512-AeDcLh0yO2SFm9W71essgnSzLV9DI8ZH0x0knXn2DMnUZj728mpLbxjlbB6IqKCmqh8JA3cEqRyGoNkt584JcQ==}
-    engines: {node: '>=10'}
+      seroval: 1.6.9
 
   seroval@1.6.9:
     resolution: {integrity: sha512-UeEzHwAK+yl0YLbsvROV1t5yMYEwZZ0CfKYxDvUgS2fO9Vxdf8djqVIB+OuVpuawRNPqw68LE1Du/GMsW2ZPqA==}
@@ -25413,8 +25410,8 @@ snapshots:
 
   '@solidjs/web@2.0.0-rc.15(solid-js@2.0.0-rc.15)':
     dependencies:
-      seroval: 1.6.7
-      seroval-plugins: 1.6.7(seroval@1.6.7)
+      seroval: 1.6.9
+      seroval-plugins: 1.6.7(seroval@1.6.9)
       solid-js: 2.0.0-rc.15
 
   '@speed-highlight/core@1.2.24': {}
@@ -33227,15 +33224,13 @@ snapshots:
 
   serialize-javascript@7.1.2: {}
 
-  seroval-plugins@1.6.7(seroval@1.6.7):
+  seroval-plugins@1.6.7(seroval@1.6.9):
     dependencies:
-      seroval: 1.6.7
+      seroval: 1.6.9
 
   seroval-plugins@1.6.9(seroval@1.6.9):
     dependencies:
       seroval: 1.6.9
-
-  seroval@1.6.7: {}
 
   seroval@1.6.9: {}
 
@@ -33446,8 +33441,8 @@ snapshots:
     dependencies:
       '@solidjs/signals': 2.0.0-rc.15
       csstype: 3.2.3
-      seroval: 1.6.7
-      seroval-plugins: 1.6.7(seroval@1.6.7)
+      seroval: 1.6.9
+      seroval-plugins: 1.6.7(seroval@1.6.9)
 
   source-map-js@1.2.2: {}
 
