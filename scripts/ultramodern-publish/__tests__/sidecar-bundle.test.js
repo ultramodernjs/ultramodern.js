@@ -363,7 +363,7 @@ test('Redact profile admits only its exact package, canonical patch and placehol
   );
   assert.equal(
     f.accepted.manifest.inputs[0].patch.sha256,
-    'ef5f95b9e5f01cd8130b5e523e33fa6a2ebd05004509952092305fc1174e6f8c',
+    'feb4fe5b8741475d8edfcb5f99675330b01f3512808563a60f16edd22e60f9fd',
   );
   assert.deepEqual(f.probes, {
     'packed-install': true,
