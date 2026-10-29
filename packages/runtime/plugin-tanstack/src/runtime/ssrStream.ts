@@ -10,7 +10,7 @@ export function takeRouterHydrationScripts(
   streaming: boolean,
 ) {
   const tags = router.serverSsr?.takeInitialHydrationScriptTags();
-  if (!tags) return [];
+  if (tags === undefined) return [];
   if (!streaming)
     return routerManagedTagsToHtml([...tags.before, tags.boundary]);
   streamBoundaries.set(router, routerManagedTagsToHtml(tags.boundary).join(''));
@@ -21,8 +21,14 @@ export function createTanstackSsrStreamExtender(
   router: AnyRouter | undefined,
   request: Request,
 ): StreamSSRExtender {
-  const boundary = router && streamBoundaries.get(router);
-  if (!router?.serverSsr || !boundary) return {};
+  const boundary =
+    router === undefined ? undefined : streamBoundaries.get(router);
+  if (
+    router?.serverSsr === undefined ||
+    boundary === undefined ||
+    boundary === ''
+  )
+    return {};
   let boundaryWritten = false;
   return {
     completedBody(html) {
