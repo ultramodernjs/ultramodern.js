@@ -668,6 +668,81 @@ test('verifyRegistryTarball waits for a listed tarball that npm has not served y
   }
 });
 
+test('publishPackage outlasts a slow Rekor that answers 409 for its own retried entry', async () => {
+  const { publishPackage } = await import(
+    '../prepare-bleedingdev-packages.mjs'
+  );
+  const fixture = await createArtifactFixture();
+  const artifact = fixture.releaseArtifacts.packages[0];
+  const bytes = fs.readFileSync(artifact.artifactPath);
+  const tlogConflict = () =>
+    Object.assign(
+      new Error(
+        'error creating tlog entry - (409) an equivalent entry already exists in the transparency log',
+      ),
+      { code: 'TLOG_CREATE_ENTRY_ERROR' },
+    );
+  try {
+    let calls = 0;
+    const waits = [];
+    const published = await publishPackage(
+      artifact,
+      { dryRun: false, tag: 'latest' },
+      {
+        artifactReader: () => bytes,
+        publishAcceptedPackage: async () => {
+          calls += 1;
+          if (calls < 6) throw tlogConflict();
+        },
+        wait: async delay => waits.push(delay),
+      },
+    );
+    assert.equal(published, artifact.targetName);
+    assert.equal(calls, 6);
+    assert.deepEqual(waits, [15_000, 30_000, 45_000, 60_000, 75_000]);
+
+    calls = 0;
+    await assert.rejects(
+      () =>
+        publishPackage(
+          artifact,
+          { dryRun: false, tag: 'latest' },
+          {
+            artifactReader: () => bytes,
+            publishAcceptedPackage: async () => {
+              calls += 1;
+              throw tlogConflict();
+            },
+            wait: async () => {},
+          },
+        ),
+      /equivalent entry already exists/,
+    );
+    assert.equal(calls, 6);
+
+    calls = 0;
+    await assert.rejects(
+      () =>
+        publishPackage(
+          artifact,
+          { dryRun: false, tag: 'latest' },
+          {
+            artifactReader: () => bytes,
+            publishAcceptedPackage: async () => {
+              calls += 1;
+              throw new Error('E403 forbidden');
+            },
+            wait: async () => {},
+          },
+        ),
+      /E403 forbidden/,
+    );
+    assert.equal(calls, 1);
+  } finally {
+    removeDir(fixture.root);
+  }
+});
+
 test('verifyRegistryProvenance validates npm DSSE SLSA subject bytes and trusted source', async () => {
   const { createRegistryProvenanceExpectation, verifyRegistryProvenance } =
     await import('../prepare-bleedingdev-packages.mjs');
