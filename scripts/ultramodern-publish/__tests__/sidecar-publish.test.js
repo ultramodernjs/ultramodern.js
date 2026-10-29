@@ -386,60 +386,29 @@ test('every repository recipe has a cohort or independently qualified SDK consum
       name: targetPackageName(packageJson.name, options),
     }),
   );
-  assertRepositoryRecipeConsumers(published, { qualificationOnly: true });
+  assertRepositoryRecipeConsumers(published);
   // Staging ships source edges unchanged, so an upstream name that has a
   // recipe must already be the exact fork alias in source.
   assert.throws(
     () =>
-      assertRepositoryRecipeConsumers(
-        [
-          ...published,
-          {
-            name: '@bleedingdev/modern-js-server',
-            dependencies: { '@module-federation/enhanced': '2.9.2' },
-          },
-        ],
-        { qualificationOnly: true },
-      ),
+      assertRepositoryRecipeConsumers([
+        ...published,
+        {
+          name: '@bleedingdev/modern-js-server',
+          dependencies: { '@module-federation/enhanced': '2.9.2' },
+        },
+      ]),
     /@bleedingdev\/modern-js-server dependencies\.@module-federation\/enhanced is 2\.9\.2; declare npm:@bleedingdev\/mf-enhanced@2\.9\.3 in source/,
   );
 });
 
-test('PR candidate staging qualifies locally but release staging and all publication paths fail closed', async () => {
+test('every staging and publication path requires the signed Redact sidecar alias', async () => {
   const { collectModernPackages, targetPackageName } = await import(
     '../lib/prepare-bleedingdev-packages/rewrite.mjs'
   );
-  const { assertCohortRecipeConsumers } = await import(
+  const { assertRepositoryRecipeConsumers } = await import(
     '../../ultramodern-supply/verify-sidecars.mjs'
   );
-  const { parseArgs } = await import(
-    '../lib/prepare-bleedingdev-packages/options.mjs'
-  );
-  const yaml = require('../../../packages/toolkit/utils/compiled/js-yaml/index.js');
-  const readWorkflow = name =>
-    yaml.load(
-      fs.readFileSync(
-        path.join(__dirname, '../../../.github/workflows', `${name}.yml`),
-        'utf8',
-      ),
-    );
-  const pr = readWorkflow('native-compatibility');
-  const release = readWorkflow('publish-bleedingdev');
-  const prepareStep = job =>
-    job.steps.find(step =>
-      step.run?.includes('ultramodern:prepare-bleedingdev-publish'),
-    );
-  assert.match(prepareStep(pr.jobs['pack-candidate']).run, /--tag ci[\s\\]/u);
-  assert.match(
-    prepareStep(release.jobs['prepare-release']).run,
-    /--tag "\$PUBLISH_TAG"/u,
-  );
-  for (const job of [
-    pr.jobs['pack-candidate'],
-    release.jobs['prepare-release'],
-  ]) {
-    assert.match(prepareStep(job).run, /--include-sidecars/u);
-  }
   const options = { scope: 'bleedingdev', prefix: 'modern-js-' };
   const published = collectModernPackages(options).packages.map(
     ({ packageJson }) => ({
@@ -447,9 +416,15 @@ test('PR candidate staging qualifies locally but release staging and all publica
       name: targetPackageName(packageJson.name, options),
     }),
   );
-  // Keep the regression useful after the real source edge eventually switches.
+  const appTools = published.find(
+    item => item.name === '@bleedingdev/modern-js-ultramodern-app-tools',
+  );
+  assert.equal(
+    appTools.dependencies['@tanstack/redact'],
+    'npm:@bleedingdev/tanstack-redact@0.2.1',
+  );
   const upstream = published.map(manifest =>
-    manifest.name === '@bleedingdev/modern-js-ultramodern-app-tools'
+    manifest === appTools
       ? {
           ...manifest,
           dependencies: {
@@ -459,58 +434,16 @@ test('PR candidate staging qualifies locally but release staging and all publica
         }
       : manifest,
   );
-  const candidate = parseArgs([
-    '--version',
-    '3.8.2-ultramodern.123',
-    '--tag',
-    'ci',
-    '--include-sidecars',
-  ]);
-  assertCohortRecipeConsumers(upstream, candidate);
-  for (const args of [
-    [],
-    ['--tag', 'latest', '--include-sidecars'],
-    ['--tag', 'ci'],
-    ['--tag', 'next'],
-    ['--tag', 'ci', '--publish'],
-    ['--tag', 'ci', '--publish-existing'],
-    ['--tag', 'ci', '--publish-existing', '--dry-run'],
-    ['--tag', 'latest', '--publish-existing'],
-  ]) {
-    assert.throws(
-      () =>
-        assertCohortRecipeConsumers(
-          upstream,
-          parseArgs(['--version', '3.8.2-ultramodern.123', ...args]),
-        ),
-      /bootstrap @bleedingdev\/tanstack-redact, publish.*switch the source alias/u,
-    );
-  }
-  const aliased = upstream.map(manifest =>
-    manifest.name === '@bleedingdev/modern-js-ultramodern-app-tools'
-      ? {
-          ...manifest,
-          dependencies: {
-            ...manifest.dependencies,
-            '@tanstack/redact': 'npm:@bleedingdev/tanstack-redact@0.2.1',
-          },
-        }
-      : manifest,
+  assert.throws(
+    () => assertRepositoryRecipeConsumers(upstream),
+    /dependencies\.@tanstack\/redact is 0\.2\.1; declare npm:@bleedingdev\/tanstack-redact@0\.2\.1 in source/u,
   );
-  assertCohortRecipeConsumers(aliased, {
-    tag: 'latest',
-    includeSidecars: true,
-  });
-  assertCohortRecipeConsumers(aliased, {
-    tag: 'latest',
-    publishExisting: true,
-  });
   const source = fs.readFileSync(
     path.join(__dirname, '../lib/prepare-bleedingdev-packages/workflow.mjs'),
     'utf8',
   );
   const gate = source.indexOf(
-    'assertCohortRecipeConsumers(',
+    'assertRepositoryRecipeConsumers(',
     source.indexOf('async function prepareBleedingdevPackages'),
   );
   assert(gate > 0 && gate < source.indexOf('if (options.publishExisting) {'));
@@ -527,79 +460,20 @@ test('PR candidate staging qualifies locally but release staging and all publica
   );
 });
 
-test('CI stages the reconstructed Redact closure while releases cannot inherit the candidate rewrite', async () => {
-  const {
-    bindCiRedactSidecar,
-    collectSidecarPackages,
-    packStagedSidecar,
-    stageSidecarPackages,
-  } = await import('../lib/prepare-bleedingdev-packages/sidecars.mjs');
+test('the staged Redact sidecar packs the reviewed stream marker', async () => {
+  const { collectSidecarPackages, packStagedSidecar, stageSidecarPackages } =
+    await import('../lib/prepare-bleedingdev-packages/sidecars.mjs');
   const { inspectNpmTarball } = await import(
     '../lib/prepare-bleedingdev-packages/release-artifacts.mjs'
   );
-  const { collectModernPackages, rewritePackageJson } = await import(
-    '../lib/prepare-bleedingdev-packages/rewrite.mjs'
-  );
-  const { assertRepositoryRecipeConsumers } = await import(
-    '../../ultramodern-supply/verify-sidecars.mjs'
-  );
   const directory = makeTempDir();
   try {
-    const options = {
-      tag: 'ci',
-      includeSidecars: true,
-      scope: 'bleedingdev',
-      prefix: 'modern-js-',
-      version: '3.8.3-ultramodern.123',
-      dependencyVersion: '3.8.3-ultramodern.123',
-    };
-    const { packages, sourceNames } = collectModernPackages(options);
-    const manifests = packages.map(({ packageJson }) => {
-      const manifest = structuredClone(packageJson);
-      rewritePackageJson(manifest, packageJson.name, options, sourceNames);
-      return manifest;
-    });
-    const appTools = manifests.find(
-      item => item.name === '@bleedingdev/modern-js-ultramodern-app-tools',
-    );
-    appTools.dependencies['@tanstack/redact'] = '0.2.1';
-    assert.throws(
-      () => assertRepositoryRecipeConsumers(manifests),
-      /cohort publication is blocked/u,
-    );
-    assert.throws(
-      () => bindCiRedactSidecar(appTools, options, []),
-      /requires reconstructed/u,
-    );
     const staged = await stageSidecarPackages(
       collectSidecarPackages().filter(
         item => item.name === '@bleedingdev/tanstack-redact',
       ),
       directory,
     );
-    for (const disallowed of [
-      { tag: 'latest' },
-      { includeSidecars: false },
-      { publish: true },
-      { publishExisting: true },
-    ]) {
-      const manifest = structuredClone(appTools);
-      bindCiRedactSidecar(manifest, { ...options, ...disallowed }, staged);
-      assert.equal(manifest.dependencies['@tanstack/redact'], '0.2.1');
-    }
-    const wrongVersion = structuredClone(appTools);
-    wrongVersion.dependencies['@tanstack/redact'] = '0.2.2';
-    assert.throws(
-      () => bindCiRedactSidecar(wrongVersion, options, staged),
-      /does not match recipe/u,
-    );
-    for (const manifest of manifests)
-      bindCiRedactSidecar(manifest, options, staged);
-    assert.equal(
-      appTools.dependencies['@tanstack/redact'],
-      'npm:@bleedingdev/tanstack-redact@0.2.1',
-    );
-    assertRepositoryRecipeConsumers(manifests);
     const packed = packStagedSidecar(
       staged[0],
       path.join(directory, 'tarballs'),

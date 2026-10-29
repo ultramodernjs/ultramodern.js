@@ -135,7 +135,7 @@ test('unpublished recipe roots require the exact consumer, dependency and upstre
   }
 });
 
-test('Redact repository qualification cannot authorize an unpatched published dependency', () => {
+test('a published Redact dependency must be the exact signed sidecar alias', () => {
   const recipe = {
     id: 'tanstack-redact',
     upstream: { name: '@tanstack/redact', version: '0.2.1' },
@@ -149,15 +149,11 @@ test('Redact repository qualification cannot authorize an unpatched published de
   ]) {
     const manifest = {
       name: '@bleedingdev/modern-js-ultramodern-app-tools',
-      [block]: { '@tanstack/redact': '0.2.1' },
+      [block]: {},
     };
     const consumers = { generatorPins: [], publishedManifests: [manifest] };
-    assertRecipeConsumers([recipe], { ...consumers, qualificationOnly: true });
-    assert.throws(
-      () => assertRecipeConsumers([recipe], consumers),
-      /bootstrap @bleedingdev\/tanstack-redact, publish.*switch the source alias/u,
-    );
     for (const bad of [
+      '0.2.1',
       '^0.2.1',
       '0.2.2',
       'npm:@bleedingdev/tanstack-redact@0.2.2',
@@ -165,15 +161,7 @@ test('Redact repository qualification cannot authorize an unpatched published de
       manifest[block]['@tanstack/redact'] = bad;
       assert.throws(
         () => assertRecipeConsumers([recipe], consumers),
-        /cohort publication is blocked/u,
-      );
-      assert.throws(
-        () =>
-          assertRecipeConsumers([recipe], {
-            ...consumers,
-            qualificationOnly: true,
-          }),
-        /declare npm:/u,
+        /declare npm:@bleedingdev\/tanstack-redact@0\.2\.1 in source/u,
       );
     }
     manifest[block]['@tanstack/redact'] =
