@@ -10,7 +10,6 @@ import {
   isTrustedPublishRepositoryContext,
 } from './constants.mjs';
 import {
-  bindCiRedactSidecar,
   collectSidecarPackages,
   stageSidecarPackages,
   validateAliasConsistency,
@@ -28,7 +27,6 @@ import {
 } from './types.mjs';
 import { validatePublishManifest } from './manifest.mjs';
 import {
-  assertCohortRecipeConsumers,
   assertRepositoryRecipeConsumers,
 } from '../../../ultramodern-supply/verify-sidecars.mjs';
 import {
@@ -83,12 +81,11 @@ async function prepareBleedingdevPackages(options) {
   enforceSingleVersionPolicy(options, packages, allPackages);
   // Fail before reconstruction, packing, or any registry write. Checking source
   // also covers --publish-existing and preparation without --include-sidecars.
-  assertCohortRecipeConsumers(
+  assertRepositoryRecipeConsumers(
     packages.map(({ packageJson }) => ({
       ...packageJson,
       name: targetPackageName(packageJson.name, options),
     })),
-    options,
   );
 
   if (options.publishExisting) {
@@ -152,7 +149,6 @@ async function prepareBleedingdevPackages(options) {
     const packageJsonPath = path.join(packageDir, 'package.json');
     const packageJson = readJsonFile(packageJsonPath);
     rewritePackageJson(packageJson, sourceName, options, sourceNames);
-    bindCiRedactSidecar(packageJson, options, stagedSidecars);
     if (targetName === sidecarAliasConsumerTargetName)
       sidecarAliasConsumerCount += 1;
     normalizeDeclaredTypePaths(packageDir, packageJson);

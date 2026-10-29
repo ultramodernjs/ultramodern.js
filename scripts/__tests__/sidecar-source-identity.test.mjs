@@ -164,7 +164,7 @@ test('no framework runtime edge resolves an upstream package that has a recipe',
   );
 });
 
-test('only local qualification accepts the exact unpublished app-tools Redact edge', () => {
+test('app-tools resolves Redact only through the exact signed sidecar alias', () => {
   const recipe = recipes.find(item => item.id === 'tanstack-redact');
   const consumers = dependency => ({
     generatorPins: [],
@@ -175,11 +175,9 @@ test('only local qualification accepts the exact unpublished app-tools Redact ed
       },
     ],
   });
-  const upstream = consumers(recipe.upstream.version);
-  assertRecipeConsumers([recipe], { ...upstream, qualificationOnly: true });
   assert.throws(
-    () => assertRecipeConsumers([recipe], upstream),
-    /cohort publication is blocked/u,
+    () => assertRecipeConsumers([recipe], consumers(recipe.upstream.version)),
+    /declare npm:@bleedingdev\/tanstack-redact@0\.2\.1 in source/u,
   );
   assertRecipeConsumers(
     [recipe],
@@ -191,27 +189,26 @@ importers:
   ${importer}:
     dependencies:
       '@tanstack/redact':
-        specifier: 0.2.1
+        specifier: npm:@bleedingdev/tanstack-redact@0.2.1
         version: '${version}'
 `;
   const importer = 'packages/solutions/ultramodern-app-tools';
   for (const version of [
-    '0.2.1',
-    '0.2.1(patch_hash=reviewed)',
     '@bleedingdev/tanstack-redact@0.2.1',
     '@bleedingdev/tanstack-redact@0.2.1(peer@1.0.0)',
   ]) {
     assert.deepEqual(upstreamRecipeEdges(lock(importer, version)), []);
   }
-  for (const version of ['0.2.2', '@bleedingdev/tanstack-redact@0.2.2']) {
+  for (const version of [
+    '0.2.1',
+    '0.2.1(patch_hash=reviewed)',
+    '0.2.2',
+    '@bleedingdev/tanstack-redact@0.2.2',
+  ]) {
     assert.deepEqual(upstreamRecipeEdges(lock(importer, version)), [
       `${importer} dependencies.@tanstack/redact -> ${version}`,
     ]);
   }
-  const unlisted = 'packages/solutions/app-tools';
-  assert.deepEqual(upstreamRecipeEdges(lock(unlisted, '0.2.1')), [
-    `${unlisted} dependencies.@tanstack/redact -> 0.2.1`,
-  ]);
 });
 
 test('a framework package resolving an upstream MF package or another sidecar version fails', () => {

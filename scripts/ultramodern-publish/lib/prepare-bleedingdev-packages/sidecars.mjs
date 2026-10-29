@@ -14,8 +14,7 @@
 //     npm/yarn-classic consumer;
 //   * their dependency keys are retained - recipe-only packages are rebuilt
 //     from authenticated upstream tarballs, canonical patches and exact aliases;
-//   * releases declare sidecar aliases in source; a non-publish CI candidate
-//     alone can bind unpublished Redact to its reconstructed sidecar.
+//   * releases declare sidecar aliases in source.
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -34,10 +33,7 @@ import {
   canonicalJson,
   inspectNpmTarball,
 } from './release-artifacts.mjs';
-import {
-  isCiSidecarQualification,
-  verifySidecar,
-} from '../../../ultramodern-supply/verify-sidecars.mjs';
+import { verifySidecar } from '../../../ultramodern-supply/verify-sidecars.mjs';
 
 const { readJsonFile } = fsKit;
 const recipes = JSON.parse(
@@ -430,45 +426,6 @@ async function stageSidecarPackages(sidecars, outDir) {
     staged.push(await stageSidecarPackage(sidecar, stageDir));
   }
   return staged;
-}
-
-/** Bind CI's default runtime to bytes reconstructed by stageSidecarPackages.
- * The exact fork alias is served by the same candidate-only registry as the
- * other sidecars. Never use a file: edge, override, or publish exemption.
- */
-export function bindCiRedactSidecar(packageJson, options, stagedSidecars) {
-  if (
-    !isCiSidecarQualification(options) ||
-    packageJson.name !== '@bleedingdev/modern-js-ultramodern-app-tools'
-  ) return;
-  const recipe = recipes.find(item => item.id === 'tanstack-redact');
-  const alias = `npm:${recipe.fork.name}@${recipe.fork.version}`;
-  for (const block of [
-    'dependencies',
-    'optionalDependencies',
-    'peerDependencies',
-  ]) {
-    const specifier = packageJson[block]?.[recipe.upstream.name];
-    if (specifier === undefined) continue;
-    if (![recipe.upstream.version, alias].includes(specifier)) {
-      throw new Error(
-        `CI Redact dependency does not match recipe ${recipe.id}: ${specifier}`,
-      );
-    }
-    const staged = stagedSidecars.find(item => item.name === recipe.fork.name);
-    if (
-      !staged || staged.version !== recipe.fork.version ||
-      staged.packageJson.name !== recipe.fork.name ||
-      staged.packageJson.version !== recipe.fork.version ||
-      !staged.recipeOnly ||
-      !fs.existsSync(path.join(staged.stagedDir, 'package.json'))
-    ) {
-      throw new Error(
-        `CI Redact requires reconstructed ${recipe.fork.name}@${recipe.fork.version}`,
-      );
-    }
-    packageJson[block][recipe.upstream.name] = alias;
-  }
 }
 
 function sidecarArtifactDigests(bytes) {
