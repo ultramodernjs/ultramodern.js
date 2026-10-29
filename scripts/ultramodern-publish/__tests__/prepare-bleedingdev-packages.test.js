@@ -573,6 +573,7 @@ test('verifyRegistryTarball rejects missing, unpinned, and byte-mismatched regis
           artifact,
           registryDistFor(artifact),
           async () => ({ ok: false, status: 404 }),
+          async () => {},
         ),
       /returned HTTP 404/,
     );
@@ -594,11 +595,74 @@ test('verifyRegistryTarball rejects missing, unpinned, and byte-mismatched regis
     );
     await assert.rejects(
       () =>
-        verifyRegistryTarball(artifact, registryDistFor(artifact), async () =>
-          tarballResponse(tampered),
+        verifyRegistryTarball(
+          artifact,
+          registryDistFor(artifact),
+          async () => tarballResponse(tampered),
+          async () => {
+            throw new Error('a byte mismatch must not be retried');
+          },
         ),
       /Registry tarball byte mismatch.*sha256.*shasum.*integrity/,
     );
+  } finally {
+    removeDir(fixture.root);
+  }
+});
+
+test('verifyRegistryTarball waits for a listed tarball that npm has not served yet', async () => {
+  const { verifyRegistryTarball } = await import(
+    '../prepare-bleedingdev-packages.mjs'
+  );
+  const fixture = await createArtifactFixture();
+  const artifact = fixture.releaseArtifacts.packages[0];
+  const bytes = fs.readFileSync(artifact.artifactPath);
+  try {
+    const statuses = [404, 503, 429];
+    const waits = [];
+    const verified = await verifyRegistryTarball(
+      artifact,
+      registryDistFor(artifact),
+      async () => {
+        const status = statuses.shift();
+        return status ? { ok: false, status } : tarballResponse(bytes);
+      },
+      async delay => waits.push(delay),
+    );
+    assert.equal(verified.integrity, artifact.integrity);
+    assert.deepEqual(waits, [15_000, 15_000, 15_000]);
+
+    let requests = 0;
+    await assert.rejects(
+      () =>
+        verifyRegistryTarball(
+          artifact,
+          registryDistFor(artifact),
+          async () => {
+            requests += 1;
+            return { ok: false, status: 404 };
+          },
+          async () => {},
+        ),
+      /returned HTTP 404/,
+    );
+    assert.equal(requests, 8);
+
+    requests = 0;
+    await assert.rejects(
+      () =>
+        verifyRegistryTarball(
+          artifact,
+          registryDistFor(artifact),
+          async () => {
+            requests += 1;
+            return { ok: false, status: 403 };
+          },
+          async () => {},
+        ),
+      /returned HTTP 403/,
+    );
+    assert.equal(requests, 1);
   } finally {
     removeDir(fixture.root);
   }

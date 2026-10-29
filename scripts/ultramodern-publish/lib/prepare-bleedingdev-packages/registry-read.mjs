@@ -363,7 +363,38 @@ function pinnedRegistryTarballUrl(item, value) {
   return url.href;
 }
 
-async function verifyRegistryTarball(item, dist, fetchImpl = globalThis.fetch) {
+const registryTarballAttempts = 8;
+const registryTarballRetryDelayMs = 15_000;
+const registryTarballStatusPattern = /registry tarball \S+ returned HTTP (\d{3})$/u;
+
+// npm can list a freshly published version before its tarball is served. A
+// missing, throttled or failing tarball response is retried for about two
+// minutes; a byte mismatch never is.
+async function verifyRegistryTarball(
+  item,
+  dist,
+  fetchImpl = globalThis.fetch,
+  wait = sleep,
+) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await verifyRegistryTarballOnce(item, dist, fetchImpl);
+    } catch (error) {
+      const status = Number(
+        registryTarballStatusPattern.exec(
+          error instanceof Error ? error.message : '',
+        )?.[1],
+      );
+      const transient =
+        status === 404 || status === 429 || status >= 500 ||
+        (error instanceof Error && / registry tarball request failed: /u.test(error.message));
+      if (attempt >= registryTarballAttempts || !transient) throw error;
+      await wait(registryTarballRetryDelayMs);
+    }
+  }
+}
+
+async function verifyRegistryTarballOnce(item, dist, fetchImpl) {
   const packageLabel = `${item.targetName}@${item.version}`;
   const tarballUrl = pinnedRegistryTarballUrl(item, dist?.tarball);
   if (typeof fetchImpl !== 'function') {
