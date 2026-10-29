@@ -77,6 +77,18 @@ function temporaryRoot(prefix: string): string {
   return root;
 }
 
+// writeFileSync truncates before it writes, and a busy watcher can report both
+// steps: one edit then compiles twice, first from the empty file. Renaming the
+// complete bytes into place makes each edit a single change.
+function replaceSource(file: string, contents: string): void {
+  const staged = path.join(
+    temporaryRoot('native-dev-edit-'),
+    path.basename(file),
+  );
+  fs.writeFileSync(staged, contents);
+  fs.renameSync(staged, file);
+}
+
 interface DevApp {
   readonly root: string;
   readonly identity: RendererIdentity;
@@ -276,7 +288,7 @@ async function nativeApp(renderer: 'solid' | 'octane', module: boolean) {
       session,
       profile: metadata.profile,
       authority,
-      edit: marker => fs.writeFileSync(app, view(marker)),
+      edit: marker => replaceSource(app, view(marker)),
     },
     {
       plugins: [
@@ -662,7 +674,7 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
       profile,
       authority,
       edit: marker =>
-        fs.writeFileSync(
+        replaceSource(
           state,
           `export const marker = ${JSON.stringify(marker)};\n`,
         ),
@@ -736,11 +748,11 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
       return browserHotManifests;
     },
     removeFederatedImport() {
-      fs.writeFileSync(widget, 'export const marker = "second-remote";\n');
+      replaceSource(widget, 'export const marker = "second-remote";\n');
       app.edit('second');
     },
     editRemoteLazy(marker: string) {
-      fs.writeFileSync(
+      replaceSource(
         path.join(root, 'remote-lazy.js'),
         `export default ${JSON.stringify(marker)};\n`,
       );
