@@ -448,6 +448,8 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
   let afterAggregateCompile: (() => void) | undefined;
   let duringNextCompile: (() => void) | undefined;
   const compilerArtifacts = createReplacementCompilerArtifacts();
+  // Each client graph directory is named by its compilation hash, in order.
+  const clientHashes: string[] = [];
   const authority = new NativeDevelopment({
     renderer: 'replacement',
     profile,
@@ -604,6 +606,7 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
                   const during = duringNextCompile;
                   duringNextCompile = undefined;
                   during?.();
+                  if (current.hash) clientHashes.push(current.hash);
                   const manifest = {
                     abi: 'replacement-compiler/v1',
                     owner: 'replacement-compiler',
@@ -777,6 +780,8 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
       await clientCompiler.hooks.watchRun.promise(clientCompiler);
     },
     compilerArtifacts,
+    /** Client compilation hashes in completion order. */
+    clientCompilationHashes: () => [...clientHashes],
     poison(value: boolean) {
       poison = value;
     },
@@ -1218,12 +1223,29 @@ describe('native development', () => {
       nextPublicPath = nextManifest.metaData.publicPath;
       expect(nextPublicPath).not.toBe(initialPublicPath);
       expect(await widget.hotUpdate()).not.toBeNull();
+      // A watcher may report one edit more than once (seen on Windows), so a
+      // client-only recompile can follow it. Apply every finished update; the
+      // runtime then holds at least the edit's graph.
+      for (let applied = 1; await widget.hotUpdate(); applied++)
+        expect(applied).toBeLessThan(5);
+      // A hot update is named by the hash it leaves, so the runtime's graph is
+      // the client compile after the last applied update's source hash.
+      const appliedFrom = scripts
+        .map(script => /\.([0-9a-f]+)\.hot-update\.js$/u.exec(script.url)?.[1])
+        .filter(hash => hash !== undefined)
+        .at(-1);
+      const hashes = app.clientCompilationHashes();
+      const runtimeHash = hashes[hashes.indexOf(appliedFrom!) + 1];
+      expect(runtimeHash).toBeDefined();
+      const runtimePublicPath = new URL(`../${runtimeHash}/`, initialPublicPath)
+        .href;
+      expect(runtimePublicPath).not.toBe(initialPublicPath);
       const beforeLazy = scripts.length;
       expect((await widget.lazy()).default).toBe('REMOTE_LAZY_AFTER_HOT_APPLY');
       const lazyScripts = scripts.slice(beforeLazy);
       expect(lazyScripts.length).toBeGreaterThan(0);
       expect(
-        lazyScripts.every(script => script.url.startsWith(nextPublicPath)),
+        lazyScripts.every(script => script.url.startsWith(runtimePublicPath)),
       ).toBe(true);
       expect(
         lazyScripts.some(script =>
@@ -1237,6 +1259,7 @@ describe('native development', () => {
           initialPublicPath,
           nextPublicPath,
           loadedScripts: scripts.map(script => script.url),
+          clientHashes: app.clientCompilationHashes(),
           scriptFailures,
         })}`,
         { cause: error },
