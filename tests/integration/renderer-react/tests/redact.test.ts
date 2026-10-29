@@ -204,7 +204,8 @@ for (const runtime of ['node', 'workerd'] as const) {
       ).toBe(true);
       for (const compilation of compilations) {
         const modules = JSON.stringify(compilation.modules);
-        const redactModule = /@tanstack[\\/]redact[\\/]dist/;
+        // The installed sidecar keeps its physical name behind the alias.
+        const redactModule = /@bleedingdev[\\/]tanstack-redact[\\/]dist/;
         const reactDomModule =
           /node_modules[\\/](?:\.pnpm[\\/]react-dom@[^\\/]+[\\/]node_modules[\\/])?react-dom[\\/]/;
         const reactDomExternal =
