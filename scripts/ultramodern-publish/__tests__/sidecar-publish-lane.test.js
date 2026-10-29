@@ -841,6 +841,7 @@ test('bundle-free sidecar registry checks read only their closed profile', async
   ];
   for (const [profile, expected] of [
     ['mf-sdk', ['@bleedingdev/mf-sdk']],
+    ['tanstack-redact', ['@bleedingdev/tanstack-redact']],
     ['parser', parserNames],
   ]) {
     const options = parseArgs([

@@ -15,6 +15,7 @@ import { repoRoot } from './lib/prepare-bleedingdev-packages/constants.mjs';
 import { assertAcceptedPublishToolchain } from './lib/prepare-bleedingdev-packages/npm-buffer-publisher.mjs';
 import { inspectNpmTarball } from './lib/prepare-bleedingdev-packages/release-artifacts.mjs';
 import { packedMfSdkProbeMain } from './packed-mf-sdk-probe.mjs';
+import { packedRedactProbeMain } from './packed-redact-probe.mjs';
 import {
   resolveSidecarOutput,
   sidecarProfile,
@@ -26,6 +27,10 @@ import { assertSidecarProfileDependencies } from './sidecar-profiles.mjs';
 const { parseCliArgs } = cliKit;
 const { createProcessEnv, killChild } = processKit;
 const forkAlias = /^npm:(@bleedingdev\/[a-z0-9.-]+)@([^@]+)$/u;
+const profileProbeMains = {
+  'mf-sdk': packedMfSdkProbeMain,
+  'tanstack-redact': packedRedactProbeMain,
+};
 const dependencyBlocks = [
   'dependencies',
   'optionalDependencies',
@@ -691,7 +696,7 @@ export async function qualifyPackedSidecars(
     const probePath = path.join(workspace, 'probe.mjs');
     fs.writeFileSync(
       probePath,
-      `await (${(profile === 'mf-sdk' ? packedMfSdkProbeMain : packedApiProbeMain).toString()})();\n`,
+      `await (${(profileProbeMains[profile] ?? packedApiProbeMain).toString()})();\n`,
     );
     await run(
       process.execPath,

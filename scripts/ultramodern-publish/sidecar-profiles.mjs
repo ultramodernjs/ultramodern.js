@@ -32,11 +32,23 @@ export const sidecarProfiles = Object.freeze({
     ]),
     publishBefore: '@bleedingdev/modern-js-federation-runtime',
   }),
+  'tanstack-redact': Object.freeze({
+    recipeIds: Object.freeze(['tanstack-redact']),
+    dependencies: Object.freeze({ '@bleedingdev/tanstack-redact': '0.2.1' }),
+    probeKeys: Object.freeze([
+      'packed-install',
+      'redact-patch-marker',
+      'redact-server-render',
+    ]),
+    publishBefore: '@bleedingdev/modern-js-ultramodern-app-tools',
+  }),
 });
 
 export function sidecarProfile(name) {
   if (typeof name !== 'string' || !Object.hasOwn(sidecarProfiles, name))
-    throw new Error('Unknown sidecar profile; expected parser or mf-sdk');
+    throw new Error(
+      'Unknown sidecar profile; expected parser, mf-sdk or tanstack-redact',
+    );
   return sidecarProfiles[name];
 }
 
