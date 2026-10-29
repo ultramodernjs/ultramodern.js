@@ -251,7 +251,7 @@ function publishing(...names: string[]): Rspack.Compilation {
 
 describe('renderer authority at the actual native MF publication boundary', () => {
   it.each(['web', 'node'] as const)(
-    'publishes canonical Redact singletons and runtime identity in final %s MF options',
+    'publishes Redact under the standard React share keys in final %s MF options',
     async target => {
       const runtime = resolveReactFederationCompatibility();
       const selected = await integration(runtime);
@@ -261,32 +261,40 @@ describe('renderer authority at the actual native MF publication boundary', () =
       ]);
       const config = nativeOptions(result.chain, target);
       expect(config.runtimePlugins?.[0]).toEqual([runtimePlugin, runtime]);
+      const frameworkRequire = createRequire(
+        path.resolve(__dirname, '../../package.json'),
+      );
+      const redact = (request: string) => ({
+        import: frameworkRequire.resolve(request),
+        version: '0.2.1',
+        requiredVersion: '0.2.1',
+        strictVersion: true,
+        singleton: true,
+      });
       expect(config.shared).toMatchObject({
-        react: {
-          shareKey: '@tanstack/redact',
-          version: '0.2.1',
-          requiredVersion: '0.2.1',
-          strictVersion: true,
-          singleton: true,
+        react: { ...redact('@tanstack/redact'), shareKey: 'react' },
+        'react-dom': {
+          ...redact('@tanstack/redact/dom'),
+          shareKey: 'react-dom',
         },
         'react-dom/client': {
-          shareKey: '@tanstack/redact/dom-client',
-          version: '0.2.1',
-          requiredVersion: '0.2.1',
-          strictVersion: true,
-          singleton: true,
+          ...redact('@tanstack/redact/dom-client'),
+          shareKey: 'react-dom/client',
         },
         'react/jsx-runtime': {
-          shareKey: '@tanstack/redact/jsx-runtime',
-          version: '0.2.1',
-          singleton: true,
+          ...redact('@tanstack/redact/jsx-runtime'),
+          shareKey: 'react/jsx-runtime',
         },
-        '@tanstack/redact': {
-          shareKey: '@tanstack/redact',
-          version: '0.2.1',
-          singleton: true,
-        },
+        'use-sync-external-store/shim': { shareKey: 'react' },
+        // Direct Redact imports consume the same singletons as React spellings.
+        '@tanstack/redact': { shareKey: 'react' },
+        '@tanstack/redact/dom-client': { shareKey: 'react-dom/client' },
+        '@tanstack/redact/server': { shareKey: 'react-dom/server' },
       });
+      const shareKeys = Object.values(
+        config.shared as Record<string, { shareKey: string }>,
+      ).map(({ shareKey }) => shareKey);
+      expect(shareKeys.filter(key => key.startsWith('@tanstack/'))).toEqual([]);
     },
   );
 

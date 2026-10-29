@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'path';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import { collectBrowserErrors } from '../../../utils/browserErrors';
@@ -870,6 +871,50 @@ describe('routes-tanstack-mf', () => {
         (expose: { name?: string }) => expose.name,
       ),
     ).toEqual(expect.arrayContaining(['App', 'Panel']));
+
+    // Hosts govern React by its own package names. Redact must publish under
+    // those keys, once each, as a strict singleton carrying Redact's version.
+    // Neither package exports package.json; the Redact entry is dist/react/index.js.
+    const frameworkRequire = createRequire(
+      createRequire(path.join(hostDir, 'package.json')).resolve(
+        '@modern-js/ultramodern-app-tools',
+      ),
+    );
+    const { version: redactVersion } = JSON.parse(
+      await fs.readFile(
+        path.resolve(
+          path.dirname(frameworkRequire.resolve('@tanstack/redact')),
+          '../../package.json',
+        ),
+        'utf8',
+      ),
+    ) as { version: string };
+    type SharedEntry = {
+      name: string;
+      singleton?: boolean;
+      requiredVersion?: string;
+    };
+    const runtimeShares = (manifest: { shared: SharedEntry[] }) =>
+      manifest.shared.filter(({ name }) =>
+        /^(?:react|react-dom|@tanstack\/redact)(?:\/|$)/.test(name),
+      );
+    for (const [manifest, required] of [
+      [hostManifest.json, ['react', 'react-dom', 'react-dom/client']],
+      [remoteManifest.json, ['react']],
+      [remoteTwoManifest.json, ['react']],
+    ] as const) {
+      const shares = runtimeShares(manifest);
+      expect(shares.map(({ name }) => name)).toEqual(
+        expect.arrayContaining([...required]),
+      );
+      expect(new Set(shares.map(({ name }) => name)).size).toBe(shares.length);
+      for (const share of shares)
+        expect(share).toMatchObject({
+          name: expect.not.stringMatching(/^@tanstack\//),
+          singleton: true,
+          requiredVersion: redactVersion,
+        });
+    }
   });
 
   test('supports remote component fetcher with host loader/action', async () => {

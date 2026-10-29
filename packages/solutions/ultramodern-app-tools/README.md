@@ -59,9 +59,11 @@ post-hydration IDs, namespace-sensitive segments and deferred reveal ordering.
 Federated hosts and remotes must choose the same runtime. Their existing
 renderer manifest contract publishes the effective runtime and hydration
 identity (Redact `0.2.1`, or actual React for opt-out/RSC), and rejects mismatches
-before remote initialization. Shared React, JSX and Redact requests use canonical
-singleton keys with honest runtime versions and strict version matching, not
-React 19 version numbers attached to Redact factories. The React authoring
+before remote initialization. Redact publishes under React's own share keys
+(`react`, `react-dom`, JSX runtimes), once each, so hosts that govern those
+singletons keep working. Each key carries Redact's real version with strict
+matching, not a React 19 version, and direct Redact imports consume the same
+singletons. The React authoring
 profile continues to describe React's API/compiler, not the runtime override.
 
 ## Native application imports
