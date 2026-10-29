@@ -7,7 +7,7 @@ const path = require('node:path');
 const test = require('node:test');
 const load = () => import('../qualify-sidecar-bundle.mjs');
 
-async function fixture(t, { sdk = false } = {}) {
+async function fixture(t, { sdk = false, redact = false } = {}) {
   const root = fs.realpathSync(
     fs.mkdtempSync(
       path.join(
@@ -25,14 +25,16 @@ async function fixture(t, { sdk = false } = {}) {
   );
   const definitions = sdk
     ? [{ name: '@bleedingdev/mf-sdk', version: '2.9.2' }]
-    : [
-        { name: '@bleedingdev/braces', version: '3.0.4' },
-        {
-          name: '@bleedingdev/micromatch',
-          version: '4.0.8',
-          dependencies: { braces: 'npm:@bleedingdev/braces@3.0.4' },
-        },
-      ];
+    : redact
+      ? [{ name: '@bleedingdev/tanstack-redact', version: '0.2.1' }]
+      : [
+          { name: '@bleedingdev/braces', version: '3.0.4' },
+          {
+            name: '@bleedingdev/micromatch',
+            version: '4.0.8',
+            dependencies: { braces: 'npm:@bleedingdev/braces@3.0.4' },
+          },
+        ];
   const staged = definitions.map(definition => {
     const id = definition.name.split('/')[1];
     const stagedDir = path.join(root, id);
@@ -84,7 +86,8 @@ async function fixture(t, { sdk = false } = {}) {
     };
     for (const item of sidecars.packages)
       copyPackage(item, `node_modules/${item.name}`);
-    if (!sdk) copyPackage(sidecars.packages[0], 'node_modules/braces');
+    if (!sdk && !redact)
+      copyPackage(sidecars.packages[0], 'node_modules/braces');
     fs.writeFileSync(
       path.join(workspace, 'package-lock.json'),
       JSON.stringify(lock),
@@ -437,6 +440,63 @@ test('SDK profile installs only its closed dependency and runs native VM probes'
           sidecars: {
             ...f.sidecars,
             packages: [{ name: '@bleedingdev/mf-sdk', version: '2.9.3' }],
+          },
+        },
+        { scratchRoot: f.root },
+      ),
+    /closed profile/,
+  );
+});
+
+test('Redact profile installs only its closed dependency and runs the Redact probe', async t => {
+  const f = await fixture(t, { redact: true });
+  const { qualifyPackedSidecars } = await load();
+  let probed = false;
+  const probes = await qualifyPackedSidecars(
+    { manifest: { profile: 'tanstack-redact' }, sidecars: f.sidecars },
+    {
+      scratchRoot: f.root,
+      startRegistry: async () => ({
+        registryUrl: f.registryUrl,
+        servedTarballs: f.served,
+        stop: async () => {},
+      }),
+      run: async (command, args, options) => {
+        if (args[0] === 'install') {
+          const manifest = JSON.parse(
+            fs.readFileSync(path.join(options.cwd, 'package.json')),
+          );
+          assert.deepEqual(manifest.dependencies, {
+            '@bleedingdev/tanstack-redact': '0.2.1',
+          });
+          f.install(options.cwd);
+        }
+        if (command === process.execPath) {
+          assert.equal(args.length, 1);
+          assert.match(
+            fs.readFileSync(args[0], 'utf8'),
+            /packedRedactProbeMain/,
+          );
+          probed = true;
+        }
+        return '';
+      },
+    },
+  );
+  assert.equal(probed, true);
+  assert.deepEqual(probes, {
+    'packed-install': true,
+    'redact-patch-marker': true,
+    'redact-server-render': true,
+  });
+  await assert.rejects(
+    () =>
+      qualifyPackedSidecars(
+        {
+          manifest: { profile: 'tanstack-redact' },
+          sidecars: {
+            ...f.sidecars,
+            packages: [{ name: '@tanstack/redact', version: '0.2.1' }],
           },
         },
         { scratchRoot: f.root },

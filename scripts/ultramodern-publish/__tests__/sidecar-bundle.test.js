@@ -350,6 +350,68 @@ test('SDK profile admits only its exact package, canonical patch and installed A
   }
 });
 
+test('Redact profile admits only its exact package, canonical patch and placeholder receipts', async t => {
+  const f = await fixture(t, 'tanstack-redact');
+  assert.equal(f.accepted.manifest.profile, 'tanstack-redact');
+  assert.deepEqual(
+    f.accepted.sidecars.packages.map(item => [item.name, item.version]),
+    [['@bleedingdev/tanstack-redact', '0.2.1']],
+  );
+  assert.equal(
+    f.accepted.sidecars.manifest.publishBefore,
+    '@bleedingdev/modern-js-ultramodern-app-tools',
+  );
+  assert.equal(
+    f.accepted.manifest.inputs[0].patch.sha256,
+    'ef5f95b9e5f01cd8130b5e523e33fa6a2ebd05004509952092305fc1174e6f8c',
+  );
+  assert.deepEqual(f.probes, {
+    'packed-install': true,
+    'redact-patch-marker': true,
+    'redact-server-render': true,
+  });
+  assert.throws(
+    () =>
+      f.verifySidecarBundle(f.output, {
+        ...f.options,
+        env: { ...f.options.env, BLEEDINGDEV_SIDECAR_PROFILE: 'mf-sdk' },
+      }),
+    /workflow selection/,
+  );
+  const { sidecarProvenancePolicy } = await import(
+    '../lib/prepare-bleedingdev-packages/sidecars.mjs'
+  );
+  assert.deepEqual(sidecarProvenancePolicy('@bleedingdev/tanstack-redact'), {
+    grandfatheredVersions: [
+      {
+        version: '0.0.0-stage',
+        publishedAt: '2026-10-28T23:44:23.507Z',
+        integrity:
+          'sha512-O2lJVu5WmLaAjC9njVTrbXkbywYKN1ScFVD4RGIV7iJra13PxmjgUv6i86OjuarGJIC4K0fS8AGBBIQDKBN9CA==',
+      },
+      {
+        version: '0.0.0-bootstrap',
+        publishedAt: '2026-10-28T23:44:58.304Z',
+        integrity:
+          'sha512-vXq2yWHar3WlXXvKF6ij7O2G+GZCsWmmxlsnBbeB8V/oWOUX+76T0cMgkGpQPgVm2wxZ4293s0Fq3PnAaYdptA==',
+      },
+    ],
+  });
+  const { assertSidecarProfileDependencies } = await import(
+    '../sidecar-profiles.mjs'
+  );
+  for (const packages of [
+    [],
+    [{ name: '@tanstack/redact', version: '0.2.1' }],
+    [{ name: '@bleedingdev/tanstack-redact', version: '0.2.2' }],
+  ]) {
+    assert.throws(
+      () => assertSidecarProfileDependencies('tanstack-redact', packages),
+      /closed profile/,
+    );
+  }
+});
+
 test('SDK placeholder exemptions pin both receipts and do not authorize unsigned releases', async () => {
   const { sidecarProvenancePolicy } = await import(
     '../lib/prepare-bleedingdev-packages/sidecars.mjs'

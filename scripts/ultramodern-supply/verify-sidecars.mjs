@@ -192,25 +192,28 @@ export function assertRepositoryRecipeConsumers(
   { qualificationOnly = false } = {},
 ) {
   assertModuleFederationRelease(recipes);
-  const qualifiedSdkPins = Object.fromEntries(
-    Object.entries(sidecarProfile('mf-sdk').dependencies).map(
-      ([name, version]) => [name, `npm:${name}@${version}`],
+  const qualifiedProfilePins = ['mf-sdk', 'tanstack-redact'].map(profile =>
+    Object.fromEntries(
+      Object.entries(sidecarProfile(profile).dependencies).map(
+        ([name, version]) => [name, `npm:${name}@${version}`],
+      ),
     ),
   );
   assertRecipeGraph(recipes, {
     generatorPins: [
       ...Object.values(ULTRAMODERN_PACKAGE_PINS),
-      qualifiedSdkPins,
+      ...qualifiedProfilePins,
     ],
   });
   assertRecipeConsumers(recipes, {
-    // The standalone SDK qualifier is a direct installed public API consumer.
-    // Its immutable profile also drives the exact installer dependencies.
+    // The standalone SDK and Redact qualifiers are direct installed public API
+    // consumers. Their immutable profiles also drive the exact installer
+    // dependencies.
     generatorPins: [
       ...Object.entries(ULTRAMODERN_PACKAGE_PINS)
         .filter(([block]) => !block.endsWith('DevDependencies'))
         .map(([, pins]) => pins),
-      qualifiedSdkPins,
+      ...qualifiedProfilePins,
     ],
     publishedManifests,
     qualificationOnly,
