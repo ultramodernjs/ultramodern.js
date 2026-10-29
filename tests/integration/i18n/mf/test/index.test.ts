@@ -557,7 +557,10 @@ describe('mf-i18n-tests', () => {
         );
         expect(status).toBe(200);
         expect(html).toContain('data-mf-app-loading="app-remote-unavailable"');
-        expect(html).toContain('<template');
+        // A boundary that fails before the first read is inlined client-rendered
+        // (React `<!--$!-->`, Redact `<!--$E1-->`); a later failure streams a
+        // `<template>` instruction that switches the pending boundary.
+        expect(html).toMatch(/<!--\$[!E]\d*-->|<template/);
         expect(html).toContain('"renderLevel":0');
       },
     );
