@@ -1246,6 +1246,146 @@ describe('native development', () => {
     }
   }, 300_000);
 
+  it('retains a superseded graph whose hot update a runtime already applied', async () => {
+    const app = await replacementApp(false, true, true);
+    await until(app, 'first:replacement-compiler');
+    const manifestUrl = new URL(
+      '/replacement-assets/mf-manifest.json',
+      app.address,
+    );
+    const initialManifest = await (await fetch(manifestUrl)).json();
+    const initialPublicPath = initialManifest.metaData.publicPath;
+    const entryUrl = new URL('remoteEntry.js', initialPublicPath);
+    const entryBytes = await (await fetch(entryUrl)).text();
+    const scripts: { url: string; source: string }[] = [];
+    const scriptFailures: { url: string; error: string }[] = [];
+    let nextPublicPath = '<not published>';
+    const pending = new Set<ReturnType<typeof setTimeout>>();
+    interface ScriptElement {
+      src: string;
+      parentNode?: { removeChild(element: ScriptElement): void };
+      onload?: (event: { type: string; target: ScriptElement }) => void;
+      onerror?: (event: {
+        type: string;
+        target: ScriptElement;
+        error: unknown;
+      }) => void;
+      setAttribute(name: string, value: string): void;
+      getAttribute(name: string): string | undefined;
+    }
+    const elements: ScriptElement[] = [];
+    const context = vm.createContext({
+      console,
+      URL,
+      fetch,
+      setTimeout: (callback: () => void, delay: number) => {
+        const timer = setTimeout(() => {
+          pending.delete(timer);
+          callback();
+        }, delay);
+        pending.add(timer);
+        return timer;
+      },
+      clearTimeout: (timer: ReturnType<typeof setTimeout>) => {
+        pending.delete(timer);
+        clearTimeout(timer);
+      },
+    });
+    // Only browser script transport is supplied here. Container loading and
+    // check/apply are the unmodified emitted Rspack runtime over real HTTP.
+    context.self = context;
+    context.document = {
+      getElementsByTagName: (tag: string) => (tag === 'script' ? elements : []),
+      createElement: () => {
+        const attributes = new Map<string, string>();
+        return {
+          src: '',
+          setAttribute: (name: string, value: string) =>
+            attributes.set(name, value),
+          getAttribute: (name: string) => attributes.get(name),
+        };
+      },
+      head: {
+        appendChild: (element: ScriptElement) => {
+          elements.push(element);
+          element.parentNode = context.document.head;
+          void fetch(element.src)
+            .then(async response => {
+              if (!response.ok)
+                throw new Error(
+                  `Script ${element.src}: HTTP ${response.status}`,
+                );
+              const source = await response.text();
+              scripts.push({ url: element.src, source });
+              vm.runInContext(source, context, { filename: element.src });
+              element.onload?.({ type: 'load', target: element });
+            })
+            .catch(error => {
+              // Rspack's loader discards event.error. Preserve the actual
+              // HTTP/VM failure instead of reporting only ChunkLoadError.
+              scriptFailures.push({
+                url: element.src,
+                error: inspect(error),
+              });
+              element.onerror?.({ type: 'error', target: element, error });
+            });
+        },
+        removeChild: (element: ScriptElement) => {
+          const index = elements.indexOf(element);
+          if (index >= 0) elements.splice(index, 1);
+          element.parentNode = undefined;
+        },
+      },
+    };
+    try {
+      vm.runInContext(entryBytes, context, { filename: entryUrl.href });
+      // Native split/shared startup may publish a promise for the container.
+      // Await it before public init/get and before test-owned transport closes.
+      const container = await context.test_remote;
+      await container.init({});
+      const widget = (await container.get('./Widget'))();
+      expect(widget.marker).toBe('first-remotePUBLIC_SHARED_CHUNK');
+      expect(
+        scripts.some(script => script.source.includes('REMOTE_LAZY_CHUNK')),
+      ).toBe(false);
+      // Compile A finishes, but a later edit supersedes it before it is
+      // published. Its hot update still chains from the initial graph.
+      app.beforeNextAggregateCompile(async () => {
+        await app.startInvalidatedClientRun();
+        app.editRemoteLazy('REMOTE_LAZY_PUBLISHED');
+      });
+      app.editRemoteLazy('REMOTE_LAZY_SUPERSEDED');
+      for (;;) {
+        const manifest = await (await fetch(manifestUrl)).json();
+        nextPublicPath = manifest.metaData.publicPath;
+        if (nextPublicPath !== initialPublicPath) break;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      expect(await widget.hotUpdate()).not.toBeNull();
+      const beforeLazy = scripts.length;
+      expect((await widget.lazy()).default).toBe('REMOTE_LAZY_SUPERSEDED');
+      const lazyScripts = scripts.slice(beforeLazy);
+      expect(lazyScripts.length).toBeGreaterThan(0);
+      // The applied delta addresses A's graph, never the published one.
+      expect(
+        lazyScripts.some(script => script.url.startsWith(nextPublicPath)),
+      ).toBe(false);
+      expect(scriptFailures).toEqual([]);
+    } catch (error) {
+      throw new Error(
+        `Native federation hot apply failed: ${JSON.stringify({
+          initialPublicPath,
+          nextPublicPath,
+          loadedScripts: scripts.map(script => script.url),
+          scriptFailures,
+        })}`,
+        { cause: error },
+      );
+    } finally {
+      for (const timer of pending) clearTimeout(timer);
+    }
+  }, 300_000);
+
   it('discards an old aggregate done callback after a sibling starts another compile', async () => {
     const app = await replacementApp(false, true);
     await until(app, 'first:replacement-compiler');
