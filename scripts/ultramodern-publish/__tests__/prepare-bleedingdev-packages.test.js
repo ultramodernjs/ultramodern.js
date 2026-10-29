@@ -743,6 +743,45 @@ test('publishPackage outlasts a slow Rekor that answers 409 for its own retried 
   }
 });
 
+test('publishPackageBuffer gives provenance signing the registry timeout, not the 5s Sigstore default', async () => {
+  const { publishPackageBuffer } = await import(
+    '../prepare-bleedingdev-packages.mjs'
+  );
+  const fixture = await createArtifactFixture();
+  const artifact = fixture.releaseArtifacts.packages[0];
+  const bytes = fs.readFileSync(artifact.artifactPath);
+  try {
+    const calls = [];
+    const runtime = {
+      npmVersion: '11.20.0',
+      libnpmpublishVersion: '11.1.0',
+      publish: async (manifest, data, options) =>
+        calls.push({ manifest, data, options }),
+    };
+    await publishPackageBuffer(
+      artifact,
+      bytes,
+      {
+        acceptedTools: {
+          node: process.version,
+          npm: runtime.npmVersion,
+          pnpm: '10.0.0',
+        },
+        authToken: 'token',
+        provenance: true,
+        registryUrl: 'https://registry.npmjs.org/',
+        tag: 'latest',
+      },
+      { runtime },
+    );
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].options.provenance, true);
+    assert.equal(calls[0].options.timeout, 300_000);
+  } finally {
+    removeDir(fixture.root);
+  }
+});
+
 test('verifyRegistryProvenance validates npm DSSE SLSA subject bytes and trusted source', async () => {
   const { createRegistryProvenanceExpectation, verifyRegistryProvenance } =
     await import('../prepare-bleedingdev-packages.mjs');

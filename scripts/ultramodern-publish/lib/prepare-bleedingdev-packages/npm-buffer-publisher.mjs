@@ -385,6 +385,12 @@ async function publishAcceptedPackage(
   );
 }
 
+// libnpmpublish hands its options to sigstore.attest, whose Rekor and Fulcio
+// requests otherwise time out after 5s. A Rekor that logs the entry but answers
+// later makes the client retry its own entry into a fatal 409. Give signing the
+// registry's own 5 minute default instead.
+const npmPublishTimeoutMs = 5 * 60 * 1000;
+
 async function publishPackageBuffer(
   item,
   acceptedBytes,
@@ -406,6 +412,7 @@ async function publishPackageBuffer(
     npmVersion: runtime.npmVersion,
     provenance,
     registry: registry.href,
+    timeout: npmPublishTimeoutMs,
     [authKey]: authToken,
   });
   return {
