@@ -2,6 +2,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -438,8 +439,10 @@ describe('default React runtime composition', () => {
 
 describe('federation runtime identity', () => {
   it('shares the effective Redact runtime when installed through the fork npm alias', () => {
-    const root = mkdtempSync(
-      path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'redact-alias-'),
+    const root = realpathSync(
+      mkdtempSync(
+        path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'redact-alias-'),
+      ),
     );
     try {
       const owner = path.join(root, 'node_modules/@tanstack/redact');
