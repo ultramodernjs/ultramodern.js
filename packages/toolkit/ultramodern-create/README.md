@@ -148,10 +148,23 @@ fatal. These official proxy commands run the provider's Effect-enabled
 binaries without changing the package store.
 The shared compiler resolver selects the provider's tsrs for generated React and
 Solid checks and Modern/Rspack builds, or Effect-Go on unsupported tsrs hosts.
-The installed typecheck command sets
-`TSRS_CHECKER_ASSIGNMENT` to the caller's explicit value or `locality` by default,
-and does not add `--checkers` or `--builders` in build mode. Octane apps retain
-`octane-tsc` for their native TS7 checker.
+The installed typecheck command turns on the tsrs fast preset (`TSRS_FAST=1`)
+and, in build mode, runs `--checkers` set to the core count minus 2, from 4 to 8.
+On a 27-project workspace this cut check time by about 20% at about the same
+peak memory, with identical diagnostics. Set `checkers: 4` to keep the fast
+preset's memory saving (about 20%) instead. A project changes these defaults in its
+root `package.json`:
+
+```json
+{ "ultramodern": { "typecheck": { "fast": true, "checkers": "auto", "builders": 4 } } }
+```
+
+`checkers` takes `"auto"` or a positive integer; `builders` is unset by default,
+which keeps tsrs's own count. `TSRS_FAST`, `ULTRAMODERN_TYPECHECK_CHECKERS` and
+`ULTRAMODERN_TYPECHECK_BUILDERS` override the file, and `--checkers`,
+`--builders` or `--singleThreaded` passed to the command override both. An
+explicit `TSRS_CHECKER_ASSIGNMENT` is kept; with `fast: false` it defaults to
+`locality`. Octane apps retain `octane-tsc` for their native TS7 checker.
 All renderer profiles retain exact stable `typescript@7.0.2` for metadata and
 tool dependencies. This is separate from tsrs's embedded TypeScript
 `7.1.0-beta`. Only these exact compiler releases and their declared native
