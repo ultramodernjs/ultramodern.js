@@ -483,7 +483,7 @@ test('PR candidate staging qualifies locally but release staging and all publica
           upstream,
           parseArgs(['--version', '3.8.2-ultramodern.123', ...args]),
         ),
-      /bootstrap @bleedingdev\/tanstack-redact, publish.*24h.*switch the source alias/u,
+      /bootstrap @bleedingdev\/tanstack-redact, publish.*switch the source alias/u,
     );
   }
   const aliased = upstream.map(manifest =>

@@ -155,7 +155,7 @@ test('Redact repository qualification cannot authorize an unpatched published de
     assertRecipeConsumers([recipe], { ...consumers, qualificationOnly: true });
     assert.throws(
       () => assertRecipeConsumers([recipe], consumers),
-      /bootstrap @bleedingdev\/tanstack-redact, publish.*24h.*switch the source alias/u,
+      /bootstrap @bleedingdev\/tanstack-redact, publish.*switch the source alias/u,
     );
     for (const bad of [
       '^0.2.1',

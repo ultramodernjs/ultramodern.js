@@ -160,7 +160,7 @@ export function assertRecipeConsumers(
           assert.equal(
             specifier,
             expected,
-            `${manifest.name} ${block}.${name} is ${specifier}; cohort publication is blocked: bootstrap @bleedingdev/tanstack-redact, publish the reviewed patched sidecar, wait at least 24h for maturity, then switch the source alias to ${expected}. The repository patch is for local qualification only.`,
+            `${manifest.name} ${block}.${name} is ${specifier}; cohort publication is blocked: bootstrap @bleedingdev/tanstack-redact, publish the reviewed patched sidecar, then switch the source alias to ${expected} and exempt that exact version from the repository release-age gate. The repository patch is for local qualification only.`,
           );
         }
         const unpublished =
