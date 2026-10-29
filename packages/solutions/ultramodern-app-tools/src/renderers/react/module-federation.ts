@@ -60,9 +60,12 @@ export function resolveReactFederationCompatibility(
   });
 }
 
-/** Publish honest runtime versions, not React 19 versions attached to Redact
- * factories. The manifest contract rejects mixed runtimes before remote init.
- * Canonical Redact and React spellings consume the same singleton share key.
+/** Redact keeps React's share keys, so hosts that govern `react`, `react-dom`
+ * and JSX singletons see one entry each. Each key carries Redact's own version
+ * with strict matching: a real React container (or another Redact version)
+ * fails the version check, and the manifest contract rejects mixed runtimes
+ * before remote init. Direct `@tanstack/redact*` imports consume the same
+ * singleton as their first React spelling.
  */
 export function withReactRuntimeShared(
   shared: unknown,
@@ -76,6 +79,9 @@ export function withReactRuntimeShared(
   }
   const redacted = compatibility.runtime.name === '@tanstack/redact';
   const aliases = redacted ? resolveRedactAliases(require) : {};
+  const reactSpelling = new Map<string, string>();
+  for (const [request, target] of Object.entries(REDACT_ALIASES))
+    if (!reactSpelling.has(target)) reactSpelling.set(target, request);
   const requests = redacted
     ? Object.keys(aliases).map(key => key.slice(0, -1))
     : [
@@ -87,7 +93,9 @@ export function withReactRuntimeShared(
       ];
   for (const request of requests) {
     const shareKey = redacted
-      ? (REDACT_ALIASES[request as keyof typeof REDACT_ALIASES] ?? request)
+      ? (reactSpelling.get(
+          REDACT_ALIASES[request as keyof typeof REDACT_ALIASES] ?? request,
+        ) ?? request)
       : request;
     const version =
       !redacted && request.startsWith('react-dom')

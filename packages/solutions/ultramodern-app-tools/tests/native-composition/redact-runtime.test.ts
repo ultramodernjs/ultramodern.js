@@ -483,11 +483,17 @@ describe('federation runtime identity', () => {
       const aliases = resolveRedactAliases(aliasedRequire);
       const shared = withReactRuntimeShared({}, compatibility, aliasedRequire);
       expect(Object.keys(shared)).toHaveLength(Object.keys(aliases).length);
+      const reactSpelling = (request: string) => {
+        const target =
+          REDACT_ALIASES[request as keyof typeof REDACT_ALIASES] ?? request;
+        return Object.entries(REDACT_ALIASES).find(
+          ([, to]) => to === target,
+        )![0];
+      };
       for (const request of Object.keys(aliases).map(key => key.slice(0, -1))) {
         expect(shared[request]).toMatchObject({
           import: path.join(owner, 'index.js'),
-          shareKey:
-            REDACT_ALIASES[request as keyof typeof REDACT_ALIASES] ?? request,
+          shareKey: reactSpelling(request),
           version: '0.2.1',
           requiredVersion: '0.2.1',
           singleton: true,
@@ -525,7 +531,7 @@ describe('federation runtime identity', () => {
     ).not.toThrow();
   });
 
-  it('uses canonical singleton share keys and the real Redact version, preserving other shares', () => {
+  it('uses React share keys and the real Redact version, preserving other shares', () => {
     const shared = withReactRuntimeShared(
       {
         unrelated: { singleton: false },
@@ -544,9 +550,20 @@ describe('federation runtime identity', () => {
         import: aliases[`${request}$`],
       });
     }
-    expect(shared.react).toMatchObject({ shareKey: '@tanstack/redact' });
+    // React-governed hosts keep their share keys; Redact spellings join them.
+    expect(shared.react).toMatchObject({ shareKey: 'react' });
+    expect(shared['@tanstack/redact']).toMatchObject({ shareKey: 'react' });
+    expect(shared['use-sync-external-store/shim']).toMatchObject({
+      shareKey: 'react',
+    });
     expect(shared['react-dom/client']).toMatchObject({
-      shareKey: '@tanstack/redact/dom-client',
+      shareKey: 'react-dom/client',
+    });
+    expect(shared['@tanstack/redact/dom-client']).toMatchObject({
+      shareKey: 'react-dom/client',
+    });
+    expect(shared['react-dom/server.edge']).toMatchObject({
+      shareKey: 'react-dom/server',
     });
     expect(() =>
       withReactRuntimeShared(
