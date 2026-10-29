@@ -493,6 +493,10 @@ test('runner CLI has no bypass flag and builds a hermetic package-manager env', 
     undefined,
   );
   assert.equal(packageManager.env.pnpm_config_trust_policy_exclude, undefined);
+  // Tractor's own pmOnFail decides, so the adopted lockfile keeps the
+  // packageManagerDependencies its frozen CI install requires.
+  assert.ok(Object.hasOwn(packageManager.env, 'pnpm_config_pm_on_fail'));
+  assert.equal(packageManager.env.pnpm_config_pm_on_fail, undefined);
 });
 
 test('Tractor children use the acceptance Node despite an older mise Node on PATH', async t => {

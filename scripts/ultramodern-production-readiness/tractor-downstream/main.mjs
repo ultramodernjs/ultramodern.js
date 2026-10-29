@@ -178,6 +178,11 @@ function createTractorPackageManagerContext({
     release,
     registryEnv,
   });
+  // Tractor's committed pnpm-workspace.yaml owns pmOnFail. Its packageManager is
+  // pinned to this exact pnpm, so that policy cannot trip; overriding it would
+  // leave packageManagerDependencies out of the adopted lockfile, which
+  // Tractor's own frozen CI install then rejects.
+  env.pnpm_config_pm_on_fail = undefined;
   // An executable pnpm directory can itself contain a different node binary.
   // Keep the accepted interpreter first, including in that case.
   env.PATH = [
