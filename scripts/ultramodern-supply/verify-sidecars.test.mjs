@@ -411,7 +411,7 @@ test('a patch already present upstream reports the recipe and its ancestors as r
   }
 });
 
-test('Redact reconstruction carries the reviewed marker without inventing unsigned release history', async () => {
+test('Redact reconstruction carries the reviewed marker and grandfathers only the bootstrap placeholders', async () => {
   const directory = fs.mkdtempSync(
     path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'sidecar-redact-'),
   );
@@ -419,7 +419,12 @@ test('Redact reconstruction carries the reviewed marker without inventing unsign
     const recipe = JSON.parse(
       fs.readFileSync(new URL('./sidecars.json', import.meta.url), 'utf8'),
     ).find(item => item.id === 'tanstack-redact');
-    assert.deepEqual(recipe.provenance, { grandfatheredVersions: [] });
+    // Only the authenticated bootstrap receipts; 0.2.1 must come from a
+    // signed publication.
+    assert.deepEqual(
+      recipe.provenance.grandfatheredVersions.map(({ version }) => version),
+      ['0.0.0-stage', '0.0.0-bootstrap'],
+    );
     const packageDir = path.join(directory, 'reconstructed');
     await verifySidecar(recipe.id, { materializeTo: packageDir });
     const manifest = JSON.parse(

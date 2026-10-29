@@ -18,7 +18,18 @@
     },
     "manifestChanges": {},
     "provenance": {
-      "grandfatheredVersions": []
+      "grandfatheredVersions": [
+        {
+          "version": "0.0.0-stage",
+          "publishedAt": "2026-10-28T23:44:23.507Z",
+          "integrity": "sha512-O2lJVu5WmLaAjC9njVTrbXkbywYKN1ScFVD4RGIV7iJra13PxmjgUv6i86OjuarGJIC4K0fS8AGBBIQDKBN9CA=="
+        },
+        {
+          "version": "0.0.0-bootstrap",
+          "publishedAt": "2026-10-28T23:44:58.304Z",
+          "integrity": "sha512-vXq2yWHar3WlXXvKF6ij7O2G+GZCsWmmxlsnBbeB8V/oWOUX+76T0cMgkGpQPgVm2wxZ4293s0Fq3PnAaYdptA=="
+        }
+      ]
     }
   },
   {
