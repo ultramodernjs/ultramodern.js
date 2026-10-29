@@ -15,7 +15,7 @@ import {
   type RendererIdentity,
 } from '@modern-js/renderer-core/identity';
 import { validateNativeClientAssetManifest } from '@modern-js/renderer-core/server';
-import { mime } from '@modern-js/utils';
+import { logger, mime } from '@modern-js/utils';
 import type { RsbuildPlugin, Rspack } from '@rsbuild/core';
 import {
   createRendererBuildManifest,
@@ -154,6 +154,11 @@ function emittedBytes(result: Rspack.Stats, name: string): Promise<Buffer> {
   });
 }
 
+interface FinishedFederationGraph {
+  readonly assets: ReadonlyMap<string, NativeDevelopmentAsset>;
+  readonly graph: NativeFederationDevGraph | undefined;
+}
+
 /**
  * Publishes each successful client+server dev compile: the server entry is
  * imported fresh (cache-busting query) and `.ultramodern-dev/renderer-build.json`
@@ -188,6 +193,9 @@ export class NativeDevelopment {
     string,
     NativeDevelopmentAsset
   > = new Map();
+  /** Container graphs of compiles finished since the last publication pass,
+   * read before Rspack can drop their compilation. */
+  private finishedFederationGraphs: FinishedFederationGraph[] = [];
   private readonly mutableClientAssets = new Set(['renderer-assets.json']);
   private readonly adapter: NativeRendererAdapter;
   private readonly compilerArtifacts: NativeCompilerArtifacts;
@@ -445,11 +453,18 @@ export class NativeDevelopment {
             candidate.hooks.failed.tap('UltraModernNativeDevelopment', error =>
               this.fail(error),
             );
+            // A compile's hot update is emitted even when Rsbuild never hands
+            // it to an aggregate callback, so record every finished graph.
+            candidate.hooks.done.tapPromise(runHook, async result => {
+              if (result.hasErrors()) return;
+              const finished = await this.captureFederationGraph(result);
+              if (finished) this.finishedFederationGraphs.push(finished);
+            });
           }
         });
         api.onDevCompileDone(({ stats }) => {
           const epoch = this.epoch;
-          const publishNext = async () => {
+          const publishCurrent = async () => {
             if (this.closed || epoch !== this.epoch) return;
             const results = 'stats' in stats ? stats.stats : [stats];
             if (
@@ -475,6 +490,9 @@ export class NativeDevelopment {
               if (this.closed || epoch !== this.epoch) return;
               this.retainedFederationAssets =
                 publication.retainedFederationAssets;
+              // Before waiting graph requests resume, and after this graph
+              // was kept with its publication revision.
+              this.retainFinishedGraphs();
               this.federationAssets = new Map([
                 ...publication.federationAssets,
                 ...this.retainedFederationAssets,
@@ -493,6 +511,13 @@ export class NativeDevelopment {
               );
             }
           };
+          const publishNext = async () => {
+            try {
+              await publishCurrent();
+            } finally {
+              this.retainFinishedGraphs();
+            }
+          };
           // A sibling compiler can finish while an earlier aggregate hook is
           // still publishing. Recheck freshness when its queued turn starts.
           this.publication = this.publication.then(publishNext, publishNext);
@@ -501,6 +526,60 @@ export class NativeDevelopment {
         api.onCloseDevServer(() => this.close());
       },
     };
+  }
+
+  private async captureFederationGraph(
+    result: Rspack.Stats,
+  ): Promise<FinishedFederationGraph | undefined> {
+    try {
+      const entryNames = Object.keys(
+        this.options.getSessionIdentities().identities,
+      );
+      const assets = await collectNativeFederationDevAssets(
+        result,
+        entryNames,
+        name => emittedBytes(result, name),
+      );
+      if (assets.size === 0) return;
+      return { assets, graph: nativeFederationDevGraph(result) };
+    } catch {
+      // Its publication, if it is still current, reports the same failure.
+      return;
+    }
+  }
+
+  /** A runtime may already have applied a finished compile's hot update,
+   * which addresses that compile's graph directory. Keep every such graph,
+   * including superseded ones that are never published. */
+  private retainFinishedGraphs(): void {
+    const pending = this.finishedFederationGraphs;
+    this.finishedFederationGraphs = [];
+    for (const finished of pending) {
+      if (this.closed) return;
+      const revision = nativeFederationDevRevision(finished.assets);
+      const graphManifest = finished.graph?.immutableManifest;
+      try {
+        this.retainedFederationAssets = retainNativeFederationDevAssets(
+          this.retainedFederationAssets,
+          new Map(
+            [...finished.assets].map(([url, asset]) => [
+              url,
+              { ...asset, revision, graphManifest },
+            ]),
+          ),
+        );
+      } catch (error) {
+        logger.warn(
+          'Native development could not retain a finished federation graph.',
+          error,
+        );
+        continue;
+      }
+      this.federationAssets = new Map([
+        ...this.federationAssets,
+        ...this.retainedFederationAssets,
+      ]);
+    }
   }
 
   private notify(): void {
