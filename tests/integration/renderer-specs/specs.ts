@@ -428,7 +428,10 @@ export function defineRendererSpecs(options: RendererSpecOptions) {
         (input as HTMLInputElement).value = '';
       });
       // The 422 validation outcome reaches the page; each fixture shows its
-      // status through the renderer's own action API.
+      // status through the renderer's own action API. A fixture can keep its
+      // submit button disabled while the first action revalidates, and a
+      // click on a disabled button submits nothing.
+      await page.waitForSelector(`${id('native-submit')}:not([disabled])`);
       await page.click(id('native-submit'));
       await page.waitForFunction(
         selector =>
