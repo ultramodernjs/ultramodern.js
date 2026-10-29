@@ -993,12 +993,13 @@ async function publishPackage(artifact, options, overrides = {}) {
         throw error;
       }
 
+      const delay = npmPublishRetryDelayMs * attempt;
       console.warn(
         `npm publish for ${artifact.targetName}@${artifact.version} failed with a transient registry/provenance error; retrying attempt ${
           attempt + 1
-        }/${maxAttempts} in ${npmPublishRetryDelayMs}ms.`,
+        }/${maxAttempts} in ${delay}ms.`,
       );
-      await wait(npmPublishRetryDelayMs);
+      await wait(delay);
       continue;
     }
 

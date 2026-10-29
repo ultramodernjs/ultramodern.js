@@ -3,7 +3,9 @@ import fsKit from '../../../lib/fs-kit.js';
 
 const { repoRoot } = fsKit;
 
-const npmPublishAttempts = 3;
+// Rekor can stay slow for minutes; its client then retries an entry it
+// already logged and fails with 409 before npm sees the publish.
+const npmPublishAttempts = 6;
 
 const npmPublishRetryDelayMs = 15_000;
 
