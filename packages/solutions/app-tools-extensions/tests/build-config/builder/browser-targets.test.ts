@@ -63,7 +63,7 @@ describe('browser target defaults', () => {
       ),
       'utf8',
     );
-    expect(config.trim().split('\n')).toEqual(browserTargets);
+    expect(config.trim().split(/\r?\n/)).toEqual(browserTargets);
   });
 
   it('preserves explicit overrides and Browserslist configuration', async () => {
