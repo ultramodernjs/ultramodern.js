@@ -11,7 +11,6 @@ import {
   validateAliasConsistency,
   writeSidecarStagingManifest,
 } from '../../scripts/ultramodern-publish/lib/prepare-bleedingdev-packages/sidecars.mjs';
-import { candidateForkVersion } from '../../scripts/ultramodern-supply/verify-sidecars.mjs';
 import { packProjects, runPackingCommand } from './packagePacking.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -31,9 +30,7 @@ export function runPnpmAsync(args, options) {
   return runPackingCommand('pnpm', args, options, spawn);
 }
 
-/** Every edge onto a `@bleedingdev/*` package: an `npm:` alias or a direct name.
- * A listed previousFork alias keeps its spec but installs the recipe's packed fork.
- */
+/** Every edge onto a `@bleedingdev/*` package: an `npm:` alias or a direct name. */
 export function bleedingdevEdges(packageJson) {
   const edges = [];
   for (const block of [
@@ -45,12 +42,7 @@ export function bleedingdevEdges(packageJson) {
       if (typeof spec !== 'string') continue;
       const alias = /^npm:(@bleedingdev\/[^@]+)@(.+)$/u.exec(spec);
       if (alias) {
-        edges.push({
-          name,
-          spec,
-          target: alias[1],
-          version: candidateForkVersion(alias[1], alias[2]),
-        });
+        edges.push({ name, spec, target: alias[1], version: alias[2] });
       } else if (name.startsWith('@bleedingdev/')) {
         edges.push({ name, spec, target: name, version: spec });
       }

@@ -453,7 +453,7 @@ describe('federation runtime identity', () => {
         path.join(owner, 'package.json'),
         JSON.stringify({
           name: '@bleedingdev/tanstack-redact',
-          version: '0.2.1',
+          version: '0.2.2',
           exports: { '.': './index.js', './*': './index.js' },
         }),
       );
@@ -465,7 +465,7 @@ describe('federation runtime identity', () => {
       );
       expect(compatibility.runtime).toEqual({
         name: '@tanstack/redact',
-        version: '0.2.1',
+        version: '0.2.2',
       });
       expect(compatibility.profile.hydration).toEqual(compatibility.runtime);
       expect(() =>
@@ -494,8 +494,8 @@ describe('federation runtime identity', () => {
         expect(shared[request]).toMatchObject({
           import: path.join(owner, 'index.js'),
           shareKey: reactSpelling(request),
-          version: '0.2.1',
-          requiredVersion: '0.2.1',
+          version: '0.2.2',
+          requiredVersion: '0.2.2',
           singleton: true,
           strictVersion: true,
         });
@@ -515,7 +515,7 @@ describe('federation runtime identity', () => {
     const rsc = resolveReactFederationCompatibility({ server: { rsc: true } });
     expect(redact.runtime).toEqual({
       name: '@tanstack/redact',
-      version: '0.2.1',
+      version: '0.2.2',
     });
     expect(redact.profile.hydration).toEqual(redact.runtime);
     expect(react.runtime.name).toBe('react');
@@ -543,8 +543,8 @@ describe('federation runtime identity', () => {
     const aliases = resolveRedactAliases();
     for (const request of Object.keys(aliases).map(key => key.slice(0, -1))) {
       expect(shared[request]).toMatchObject({
-        version: '0.2.1',
-        requiredVersion: '0.2.1',
+        version: '0.2.2',
+        requiredVersion: '0.2.2',
         strictVersion: true,
         singleton: true,
         import: aliases[`${request}$`],

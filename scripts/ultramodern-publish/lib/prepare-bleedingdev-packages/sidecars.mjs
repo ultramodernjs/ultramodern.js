@@ -14,8 +14,7 @@
 //     npm/yarn-classic consumer;
 //   * their dependency keys are retained - recipe-only packages are rebuilt
 //     from authenticated upstream tarballs, canonical patches and exact aliases;
-//   * releases declare sidecar aliases in source; a non-publish CI candidate
-//     alone binds a previousFork edge to its recipe's reconstructed sidecar.
+//   * releases declare sidecar aliases in source.
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -34,10 +33,7 @@ import {
   canonicalJson,
   inspectNpmTarball,
 } from './release-artifacts.mjs';
-import {
-  unpublishedForkEdges,
-  verifySidecar,
-} from '../../../ultramodern-supply/verify-sidecars.mjs';
+import { verifySidecar } from '../../../ultramodern-supply/verify-sidecars.mjs';
 
 const { readJsonFile } = fsKit;
 const recipes = JSON.parse(
@@ -421,52 +417,6 @@ async function stageSidecarPackage(
   };
 }
 
-/** Only a non-publish candidate that reconstructs sidecars may qualify source
- * before its previousFork edge declares the recipe's new fork version.
- */
-function isCiSidecarQualification(options = {}) {
-  return (
-    options.tag === 'ci' &&
-    options.includeSidecars === true &&
-    !options.publish &&
-    !options.publishExisting
-  );
-}
-
-/** Bind a CI candidate's previousFork aliases to the bytes reconstructed by
- * stageSidecarPackages, so consumer suites qualify the fork that will ship.
- * The candidate-only registry serves it like the other sidecars. Releases are
- * never rewritten: alias consistency blocks them until source declares the
- * new fork version.
- */
-function bindCiPreviousForkSidecars(packageJson, options, stagedSidecars) {
-  if (!isCiSidecarQualification(options)) return;
-  for (const edge of unpublishedForkEdges) {
-    if (!edge.previousFork || packageJson.name !== edge.published) continue;
-    const recipe = recipes.find(item => item.upstream.name === edge.dependency);
-    const previous = `npm:${recipe.fork.name}@${edge.previousFork}`;
-    for (const block of [
-      'dependencies',
-      'optionalDependencies',
-      'peerDependencies',
-    ]) {
-      if (packageJson[block]?.[edge.dependency] !== previous) continue;
-      const staged = stagedSidecars.find(item => item.name === recipe.fork.name);
-      if (
-        !staged?.recipeOnly ||
-        staged.version !== recipe.fork.version ||
-        staged.packageJson.version !== recipe.fork.version
-      ) {
-        throw new Error(
-          `CI ${edge.dependency} requires reconstructed ${recipe.fork.name}@${recipe.fork.version}`,
-        );
-      }
-      packageJson[block][edge.dependency] =
-        `npm:${recipe.fork.name}@${recipe.fork.version}`;
-    }
-  }
-}
-
 /** Stage every sidecar under `<outDir>/sidecars`; shared by release staging and the test harness. */
 async function stageSidecarPackages(sidecars, outDir) {
   const stageDir = path.join(outDir, sidecarStagingDirectory);
@@ -695,7 +645,6 @@ function writeSidecarStagingManifest(
 }
 
 export {
-  bindCiPreviousForkSidecars,
   sidecarProvenancePolicy,
   SIDECAR_PACKAGE_ROOTS,
   collectSidecarPackages,

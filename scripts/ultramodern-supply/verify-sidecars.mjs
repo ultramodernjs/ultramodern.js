@@ -40,19 +40,8 @@ const forkSpecifier = /^npm:(@bleedingdev\/[\w.-]+)@(.+)$/u;
  *
  * These framework edges declare reviewed sidecars that have not had their
  * first signed publication yet and resolve the patched upstream in the monorepo.
- * An edge with `previousFork` instead keeps that exact, already signed fork
- * release until the recipe's new fork version is published; it never accepts
- * the upstream package.
  */
 export const unpublishedForkEdges = [
-  // Redact 0.2.2 adds the synthetic-event fields to the reviewed 0.2.1 patch.
-  // app-tools keeps the signed 0.2.1 sidecar until 0.2.2 is published.
-  {
-    importer: 'packages/solutions/ultramodern-app-tools',
-    published: '@bleedingdev/modern-js-ultramodern-app-tools',
-    dependency: '@tanstack/redact',
-    previousFork: '0.2.1',
-  },
   // The SDK fork has not had its first signed release plus 24h admission.
   {
     importer: 'packages/runtime/federation-runtime',
@@ -98,9 +87,8 @@ export const unpublishedForkEdges = [
 ];
 
 /**
- * Whether `consumer`'s `dependency` edge may still be the upstream `specifier`,
- * or the edge's exact `previousFork` alias when it lists one. A lockfile
- * version may carry its peer suffix, e.g. `2.2.11(core-js@3.50.0)`.
+ * Whether `consumer`'s `dependency` edge may still be the upstream `specifier`.
+ * A lockfile version may carry its peer suffix, e.g. `2.2.11(core-js@3.50.0)`.
  */
 export const isUnpublishedForkEdge = (
   consumer,
@@ -108,39 +96,13 @@ export const isUnpublishedForkEdge = (
   specifier,
   recipe,
 ) =>
+  (specifier === recipe.upstream.version ||
+    String(specifier).startsWith(`${recipe.upstream.version}(`)) &&
   unpublishedForkEdges.some(
     edge =>
       edge.dependency === dependency &&
-      (edge.importer === consumer || edge.published === consumer) &&
-      (edge.previousFork
-        ? [
-            `npm:${recipe.fork.name}@${edge.previousFork}`,
-            `${recipe.fork.name}@${edge.previousFork}`,
-          ]
-        : [recipe.upstream.version]
-      ).some(
-        version =>
-          specifier === version || String(specifier).startsWith(`${version}(`),
-      ),
+      (edge.importer === consumer || edge.published === consumer),
   );
-
-/**
- * The version a test or CI candidate installs for `fork@version`: a listed
- * previousFork alias receives its recipe's reconstructed fork, so suites
- * qualify the bytes that ship once source declares them. Every other version
- * is returned unchanged.
- */
-export function candidateForkVersion(fork, version) {
-  const recipe = recipes.find(item => item.fork.name === fork);
-  return recipe &&
-    unpublishedForkEdges.some(
-      edge =>
-        edge.previousFork === version &&
-        edge.dependency === recipe.upstream.name,
-    )
-    ? recipe.fork.version
-    : version;
-}
 
 /**
  * Every recipe must be reachable from a generator runtime pin or an alias the
