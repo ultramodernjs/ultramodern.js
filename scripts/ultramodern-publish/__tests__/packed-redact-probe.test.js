@@ -42,7 +42,7 @@ function packageFixture(
     path.join(directory, 'package.json'),
     JSON.stringify({
       name: '@bleedingdev/tanstack-redact',
-      version: '0.2.1',
+      version: '0.2.2',
       type: 'module',
       exports: {
         '.': './index.js',

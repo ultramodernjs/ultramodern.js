@@ -170,6 +170,61 @@ test('a published Redact dependency must be the exact signed sidecar alias', () 
   }
 });
 
+test('a previous-fork edge accepts only that exact signed fork, never upstream', () => {
+  const recipe = {
+    id: 'tanstack-redact',
+    upstream: { name: '@tanstack/redact', version: '0.2.1' },
+    fork: { name: '@bleedingdev/tanstack-redact', version: '0.2.2' },
+    manifestChanges: {},
+  };
+  for (const consumer of [
+    'packages/solutions/ultramodern-app-tools',
+    '@bleedingdev/modern-js-ultramodern-app-tools',
+  ]) {
+    for (const specifier of [
+      'npm:@bleedingdev/tanstack-redact@0.2.1',
+      '@bleedingdev/tanstack-redact@0.2.1',
+      '@bleedingdev/tanstack-redact@0.2.1(peer@1.0.0)',
+    ])
+      assert.equal(
+        isUnpublishedForkEdge(consumer, '@tanstack/redact', specifier, recipe),
+        true,
+      );
+    for (const specifier of [
+      '0.2.1',
+      '0.2.1(patch_hash=reviewed)',
+      'npm:@bleedingdev/tanstack-redact@0.2.0',
+      'npm:@bleedingdev/tanstack-redact@^0.2.1',
+      '@bleedingdev/tanstack-redact@0.2.10',
+    ])
+      assert.equal(
+        isUnpublishedForkEdge(consumer, '@tanstack/redact', specifier, recipe),
+        false,
+      );
+  }
+  assert.equal(
+    isUnpublishedForkEdge(
+      'packages/solutions/app-tools',
+      '@tanstack/redact',
+      'npm:@bleedingdev/tanstack-redact@0.2.1',
+      recipe,
+    ),
+    false,
+  );
+  const manifest = {
+    name: '@bleedingdev/modern-js-ultramodern-app-tools',
+    dependencies: { '@tanstack/redact': '0.2.1' },
+  };
+  const consumers = { generatorPins: [], publishedManifests: [manifest] };
+  assert.throws(
+    () => assertRecipeConsumers([recipe], consumers),
+    /declare npm:@bleedingdev\/tanstack-redact@0\.2\.2 in source/u,
+  );
+  manifest.dependencies['@tanstack/redact'] =
+    'npm:@bleedingdev/tanstack-redact@0.2.1';
+  assertRecipeConsumers([recipe], consumers);
+});
+
 test('recipes reached only through a reachable recipe alias edge are consumed', () => {
   const child = {
     id: 'child',
@@ -407,8 +462,8 @@ test('Redact reconstruction carries the reviewed marker and grandfathers only th
     const recipe = JSON.parse(
       fs.readFileSync(new URL('./sidecars.json', import.meta.url), 'utf8'),
     ).find(item => item.id === 'tanstack-redact');
-    // Only the authenticated bootstrap receipts; 0.2.1 must come from a
-    // signed publication.
+    // Only the authenticated bootstrap receipts; every real version must come
+    // from a signed publication.
     assert.deepEqual(
       recipe.provenance.grandfatheredVersions.map(({ version }) => version),
       ['0.0.0-stage', '0.0.0-bootstrap'],
@@ -419,7 +474,7 @@ test('Redact reconstruction carries the reviewed marker and grandfathers only th
       fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'),
     );
     assert.equal(manifest.name, '@bleedingdev/tanstack-redact');
-    assert.equal(manifest.version, '0.2.1');
+    assert.equal(manifest.version, '0.2.2');
     assert.equal(manifest.license, 'MIT');
     assert.equal(
       fs

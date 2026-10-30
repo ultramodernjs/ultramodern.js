@@ -10,7 +10,7 @@ export async function packedRedactProbeMain() {
     fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
   );
   assert.equal(manifest.name, name);
-  assert.equal(manifest.version, '0.2.1');
+  assert.equal(manifest.version, '0.2.2');
   assert.equal(
     fs.existsSync(path.join(process.cwd(), 'node_modules/@tanstack/redact')),
     false,

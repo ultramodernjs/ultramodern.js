@@ -10,6 +10,7 @@ import {
   isTrustedPublishRepositoryContext,
 } from './constants.mjs';
 import {
+  bindCiPreviousForkSidecars,
   collectSidecarPackages,
   stageSidecarPackages,
   validateAliasConsistency,
@@ -149,6 +150,7 @@ async function prepareBleedingdevPackages(options) {
     const packageJsonPath = path.join(packageDir, 'package.json');
     const packageJson = readJsonFile(packageJsonPath);
     rewritePackageJson(packageJson, sourceName, options, sourceNames);
+    bindCiPreviousForkSidecars(packageJson, options, stagedSidecars);
     if (targetName === sidecarAliasConsumerTargetName)
       sidecarAliasConsumerCount += 1;
     normalizeDeclaredTypePaths(packageDir, packageJson);

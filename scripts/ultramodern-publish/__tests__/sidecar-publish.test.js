@@ -436,7 +436,7 @@ test('every staging and publication path requires the signed Redact sidecar alia
   );
   assert.throws(
     () => assertRepositoryRecipeConsumers(upstream),
-    /dependencies\.@tanstack\/redact is 0\.2\.1; declare npm:@bleedingdev\/tanstack-redact@0\.2\.1 in source/u,
+    /dependencies\.@tanstack\/redact is 0\.2\.1; declare npm:@bleedingdev\/tanstack-redact@0\.2\.2 in source/u,
   );
   const source = fs.readFileSync(
     path.join(__dirname, '../lib/prepare-bleedingdev-packages/workflow.mjs'),
@@ -457,6 +457,96 @@ test('every staging and publication path requires the signed Redact sidecar alia
     ).length,
     2,
     'both fresh and recovery paths must gate the verified tarball manifests, not just current source',
+  );
+});
+
+test('only a CI candidate binds the previous Redact fork to the reconstructed sidecar', async () => {
+  const { bindCiPreviousForkSidecars, validateAliasConsistency } = await import(
+    '../lib/prepare-bleedingdev-packages/sidecars.mjs'
+  );
+  const { parseArgs } = await import(
+    '../lib/prepare-bleedingdev-packages/options.mjs'
+  );
+  const appToolsSource = JSON.parse(
+    fs.readFileSync(
+      path.join(
+        __dirname,
+        '../../../packages/solutions/ultramodern-app-tools/package.json',
+      ),
+      'utf8',
+    ),
+  );
+  const previous = 'npm:@bleedingdev/tanstack-redact@0.2.1';
+  assert.equal(appToolsSource.dependencies['@tanstack/redact'], previous);
+  const staged = [
+    {
+      name: '@bleedingdev/tanstack-redact',
+      version: '0.2.2',
+      recipeOnly: true,
+      packageJson: { name: '@bleedingdev/tanstack-redact', version: '0.2.2' },
+    },
+  ];
+  const appTools = () => ({
+    name: '@bleedingdev/modern-js-ultramodern-app-tools',
+    dependencies: { '@tanstack/redact': previous },
+  });
+  const options = args =>
+    parseArgs(['--version', '3.9.3-ultramodern.123', ...args]);
+
+  const candidate = appTools();
+  bindCiPreviousForkSidecars(
+    candidate,
+    options(['--tag', 'ci', '--include-sidecars']),
+    staged,
+  );
+  assert.equal(
+    candidate.dependencies['@tanstack/redact'],
+    'npm:@bleedingdev/tanstack-redact@0.2.2',
+  );
+  validateAliasConsistency([candidate], staged);
+
+  for (const args of [
+    ['--tag', 'latest', '--include-sidecars'],
+    ['--tag', 'next', '--include-sidecars'],
+    ['--tag', 'ci'],
+    ['--tag', 'ci', '--publish'],
+    ['--tag', 'ci', '--publish-existing'],
+  ]) {
+    const release = appTools();
+    bindCiPreviousForkSidecars(release, options(args), staged);
+    assert.equal(release.dependencies['@tanstack/redact'], previous);
+    assert.throws(
+      () => validateAliasConsistency([release], staged),
+      /pins npm:@bleedingdev\/tanstack-redact@0\.2\.1 but sidecar @bleedingdev\/tanstack-redact stages version 0\.2\.2/u,
+    );
+  }
+
+  for (const sidecars of [
+    [],
+    [{ ...staged[0], recipeOnly: false }],
+    [{ ...staged[0], version: '0.2.1' }],
+  ]) {
+    assert.throws(
+      () =>
+        bindCiPreviousForkSidecars(
+          appTools(),
+          options(['--tag', 'ci', '--include-sidecars']),
+          sidecars,
+        ),
+      /CI @tanstack\/redact requires reconstructed @bleedingdev\/tanstack-redact@0\.2\.2/u,
+    );
+  }
+
+  const workflow = fs.readFileSync(
+    path.join(__dirname, '../lib/prepare-bleedingdev-packages/workflow.mjs'),
+    'utf8',
+  );
+  const bind = workflow.indexOf(
+    'bindCiPreviousForkSidecars(packageJson, options, stagedSidecars);',
+  );
+  assert(bind > workflow.indexOf('rewritePackageJson(packageJson'));
+  assert(
+    bind < workflow.indexOf('writeJsonFile(packageJsonPath, packageJson)'),
   );
 });
 
@@ -482,7 +572,7 @@ test('the staged Redact sidecar packs the reviewed stream marker', async () => {
       fs.readFileSync(path.join(directory, packed.artifact.tarballPath)),
     );
     assert.equal(inspection.packageJson.name, '@bleedingdev/tanstack-redact');
-    assert.equal(inspection.packageJson.version, '0.2.1');
+    assert.equal(inspection.packageJson.version, '0.2.2');
     assert.equal(
       inspection.fileContents
         .get('dist/server/stream.js')

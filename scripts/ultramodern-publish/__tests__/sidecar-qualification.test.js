@@ -26,7 +26,7 @@ async function fixture(t, { sdk = false, redact = false } = {}) {
   const definitions = sdk
     ? [{ name: '@bleedingdev/mf-sdk', version: '2.9.2' }]
     : redact
-      ? [{ name: '@bleedingdev/tanstack-redact', version: '0.2.1' }]
+      ? [{ name: '@bleedingdev/tanstack-redact', version: '0.2.2' }]
       : [
           { name: '@bleedingdev/braces', version: '3.0.4' },
           {
@@ -467,7 +467,7 @@ test('Redact profile installs only its closed dependency and runs the Redact pro
             fs.readFileSync(path.join(options.cwd, 'package.json')),
           );
           assert.deepEqual(manifest.dependencies, {
-            '@bleedingdev/tanstack-redact': '0.2.1',
+            '@bleedingdev/tanstack-redact': '0.2.2',
           });
           f.install(options.cwd);
         }

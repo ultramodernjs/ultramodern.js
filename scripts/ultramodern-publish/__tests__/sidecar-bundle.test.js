@@ -355,7 +355,7 @@ test('Redact profile admits only its exact package, canonical patch and placehol
   assert.equal(f.accepted.manifest.profile, 'tanstack-redact');
   assert.deepEqual(
     f.accepted.sidecars.packages.map(item => [item.name, item.version]),
-    [['@bleedingdev/tanstack-redact', '0.2.1']],
+    [['@bleedingdev/tanstack-redact', '0.2.2']],
   );
   assert.equal(
     f.accepted.sidecars.manifest.publishBefore,
@@ -363,7 +363,7 @@ test('Redact profile admits only its exact package, canonical patch and placehol
   );
   assert.equal(
     f.accepted.manifest.inputs[0].patch.sha256,
-    'feb4fe5b8741475d8edfcb5f99675330b01f3512808563a60f16edd22e60f9fd',
+    'b33e04434a8dd45c292a68b9c5d0bfe560f34bcf5517cfdeee39f10746ebd5bc',
   );
   assert.deepEqual(f.probes, {
     'packed-install': true,
@@ -403,7 +403,7 @@ test('Redact profile admits only its exact package, canonical patch and placehol
   for (const packages of [
     [],
     [{ name: '@tanstack/redact', version: '0.2.1' }],
-    [{ name: '@bleedingdev/tanstack-redact', version: '0.2.2' }],
+    [{ name: '@bleedingdev/tanstack-redact', version: '0.2.1' }],
   ]) {
     assert.throws(
       () => assertSidecarProfileDependencies('tanstack-redact', packages),

@@ -177,7 +177,7 @@ test('app-tools resolves Redact only through the exact signed sidecar alias', ()
   });
   assert.throws(
     () => assertRecipeConsumers([recipe], consumers(recipe.upstream.version)),
-    /declare npm:@bleedingdev\/tanstack-redact@0\.2\.1 in source/u,
+    /declare npm:@bleedingdev\/tanstack-redact@0\.2\.2 in source/u,
   );
   assertRecipeConsumers(
     [recipe],
@@ -189,11 +189,14 @@ importers:
   ${importer}:
     dependencies:
       '@tanstack/redact':
-        specifier: npm:@bleedingdev/tanstack-redact@0.2.1
+        specifier: npm:@bleedingdev/tanstack-redact@0.2.2
         version: '${version}'
 `;
   const importer = 'packages/solutions/ultramodern-app-tools';
+  // 0.2.1 is the signed sidecar app-tools keeps until 0.2.2 is published.
   for (const version of [
+    '@bleedingdev/tanstack-redact@0.2.2',
+    '@bleedingdev/tanstack-redact@0.2.2(peer@1.0.0)',
     '@bleedingdev/tanstack-redact@0.2.1',
     '@bleedingdev/tanstack-redact@0.2.1(peer@1.0.0)',
   ]) {
@@ -203,12 +206,17 @@ importers:
     '0.2.1',
     '0.2.1(patch_hash=reviewed)',
     '0.2.2',
-    '@bleedingdev/tanstack-redact@0.2.2',
+    '@bleedingdev/tanstack-redact@0.2.0',
   ]) {
     assert.deepEqual(upstreamRecipeEdges(lock(importer, version)), [
       `${importer} dependencies.@tanstack/redact -> ${version}`,
     ]);
   }
+  const unlisted = 'packages/solutions/app-tools';
+  const previous = '@bleedingdev/tanstack-redact@0.2.1';
+  assert.deepEqual(upstreamRecipeEdges(lock(unlisted, previous)), [
+    `${unlisted} dependencies.@tanstack/redact -> ${previous}`,
+  ]);
 });
 
 test('a framework package resolving an upstream MF package or another sidecar version fails', () => {
