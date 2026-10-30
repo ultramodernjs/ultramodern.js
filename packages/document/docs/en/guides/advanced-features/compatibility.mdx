@@ -12,7 +12,7 @@ Modern.js supports three ways to set the range of browsers that a web applicatio
 
 Modern.js supports setting the range of browsers that a web application needs to support. You can set the [Browserslist](https://browsersl.ist/) values in the `.browserslistrc` file.
 
-When you create a new Modern.js project, a default `.browserslistrc` configuration is included, which indicates that JavaScript code will be compiled to ES6 format.
+UltraModern.js defaults to Chrome 144+, Edge 144+, Firefox 147+ and Safari 27+. These targets apply to JavaScript compilation and CSS processing when the project does not specify its own browser targets. To set the targets explicitly, add a `.browserslistrc` file with:
 
 import DefaultBrowserslist from '@site-docs/components/default-browserslist';
 
@@ -28,7 +28,7 @@ You can also configure browserslist by setting the `browserslist` field in the `
 ```json title="package.json"
 {
   "browserslist": [
-    "chrome >= 87"
+    "chrome >= 144"
     // Other browser configurations...
   ]
 }
@@ -42,7 +42,7 @@ You can also configure browserslist by setting the [`output.overrideBrowserslist
 export default {
   output: {
     overrideBrowserslist: [
-      'chrome >= 87',
+      'chrome >= 144',
       // Other browser configurations...
     ],
   },

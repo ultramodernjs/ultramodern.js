@@ -151,9 +151,6 @@ export default defineConfig(
         mainEntryName: 'index',
       },
       tools: {
-        autoprefixer: {
-          overrideBrowserslist: ['defaults'],
-        },
         bundlerChain: chain => {
           chain.output
             .uniqueName('{{value16}}')

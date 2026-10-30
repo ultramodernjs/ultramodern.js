@@ -92,7 +92,7 @@ describe('builder environment compat', () => {
       output: { filename: 'static/js/[name].js' },
       target: [
         'web',
-        'browserslist:chrome >= 87,edge >= 88,firefox >= 78,safari >= 14',
+        'browserslist:chrome >= 144,edge >= 144,firefox >= 147,safari >= 27',
       ],
     });
     expect(configsByName.server).toMatchObject({
