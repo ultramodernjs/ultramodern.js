@@ -170,61 +170,6 @@ test('a published Redact dependency must be the exact signed sidecar alias', () 
   }
 });
 
-test('a previous-fork edge accepts only that exact signed fork, never upstream', () => {
-  const recipe = {
-    id: 'tanstack-redact',
-    upstream: { name: '@tanstack/redact', version: '0.2.1' },
-    fork: { name: '@bleedingdev/tanstack-redact', version: '0.2.2' },
-    manifestChanges: {},
-  };
-  for (const consumer of [
-    'packages/solutions/ultramodern-app-tools',
-    '@bleedingdev/modern-js-ultramodern-app-tools',
-  ]) {
-    for (const specifier of [
-      'npm:@bleedingdev/tanstack-redact@0.2.1',
-      '@bleedingdev/tanstack-redact@0.2.1',
-      '@bleedingdev/tanstack-redact@0.2.1(peer@1.0.0)',
-    ])
-      assert.equal(
-        isUnpublishedForkEdge(consumer, '@tanstack/redact', specifier, recipe),
-        true,
-      );
-    for (const specifier of [
-      '0.2.1',
-      '0.2.1(patch_hash=reviewed)',
-      'npm:@bleedingdev/tanstack-redact@0.2.0',
-      'npm:@bleedingdev/tanstack-redact@^0.2.1',
-      '@bleedingdev/tanstack-redact@0.2.10',
-    ])
-      assert.equal(
-        isUnpublishedForkEdge(consumer, '@tanstack/redact', specifier, recipe),
-        false,
-      );
-  }
-  assert.equal(
-    isUnpublishedForkEdge(
-      'packages/solutions/app-tools',
-      '@tanstack/redact',
-      'npm:@bleedingdev/tanstack-redact@0.2.1',
-      recipe,
-    ),
-    false,
-  );
-  const manifest = {
-    name: '@bleedingdev/modern-js-ultramodern-app-tools',
-    dependencies: { '@tanstack/redact': '0.2.1' },
-  };
-  const consumers = { generatorPins: [], publishedManifests: [manifest] };
-  assert.throws(
-    () => assertRecipeConsumers([recipe], consumers),
-    /declare npm:@bleedingdev\/tanstack-redact@0\.2\.2 in source/u,
-  );
-  manifest.dependencies['@tanstack/redact'] =
-    'npm:@bleedingdev/tanstack-redact@0.2.1';
-  assertRecipeConsumers([recipe], consumers);
-});
-
 test('recipes reached only through a reachable recipe alias edge are consumed', () => {
   const child = {
     id: 'child',

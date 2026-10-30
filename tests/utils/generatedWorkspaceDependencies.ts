@@ -105,22 +105,6 @@ export function assertPackedRegistrySidecars(
   }
 }
 
-/**
- * A packed alias edge whose installed version differs from its spec (a listed
- * previousFork) resolves the packed fork from the same sidecar registry.
- */
-export function reboundRegistryOverrides(
-  edges: BleedingdevEdge[],
-): Record<string, string> {
-  const overrides: Record<string, string> = {};
-  for (const edge of edges) {
-    const installed = `npm:${edge.target}@${edge.version}`;
-    if (edge.spec.startsWith('npm:') && edge.spec !== installed)
-      overrides[`${edge.name}@${edge.spec}`] = installed;
-  }
-  return overrides;
-}
-
 function registrySidecars(sidecars: Record<string, PackedSidecar>) {
   return Object.entries(sidecars).map(([name, packed]) => {
     assertPacked(packed.tarball, name, packed.integrity);
@@ -175,7 +159,6 @@ function packedPrerequisites() {
   Object.assign(overrides, bleedingdevOverrides(edges, sidecars));
   return {
     framework: Object.keys(packages),
-    edges,
     overrides,
     sidecars,
     allowBuilds,
@@ -238,19 +221,15 @@ export async function materializeGeneratedWorkspaceDependencies(
 ): Promise<void> {
   const {
     overrides: packedOverrides,
-    edges,
     framework,
     sidecars,
     minimumReleaseAgeExclude,
   } = packedPrerequisites();
-  const overrides = {
-    ...Object.fromEntries(
-      Object.entries(packedOverrides).filter(([name]) =>
-        framework.includes(name),
-      ),
+  const overrides = Object.fromEntries(
+    Object.entries(packedOverrides).filter(([name]) =>
+      framework.includes(name),
     ),
-    ...reboundRegistryOverrides(edges),
-  };
+  );
   const generatedEdges = fs
     .globSync('**/package.json', {
       cwd: workspaceDir,

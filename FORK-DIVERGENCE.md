@@ -33,6 +33,13 @@ every PR.
 
 ---
 
+### 2026-10-30 Redact sidecar 0.2.2 in the runtime guides
+
+Owner: `bleedingdev`. Disposition: `inline-patch`. The English and Chinese
+UltraModern guides name the reviewed `@bleedingdev/tanstack-redact@0.2.2`
+build that app-tools now installs, whose synthetic events keep non-enumerable
+Event fields. Only the sidecar version in the existing Redact paragraph changes.
+
 ### 2026-10-28 Redact default runtime guides
 
 Owner: `bleedingdev`. Disposition: `inline-patch`. The English and Chinese
@@ -1307,6 +1314,8 @@ five previously invalid advisory rows remain non-authorizing historical prose.
     {"path":"packages/runtime/plugin-runtime/src/document/cli/index.ts","owner":"bleedingdev","reason":"Keep document template loading compatible with native ESM and expose native script-placeholder processing. Register the Document child compiler only for environments with HTML paths (and only their HTML entries): in the server compiler it rewrote the same temp entry file concurrently with the web compiler, so a truncated read failed the build with 'Document child compiler produced empty output'. Each compiler also writes its own temp entry, so two HTML environments cannot race either. Explicit parent runtime aliases now suppress the matching default React externals; otherwise a custom Document silently bypasses the selected Redact runtime. Native child-compilation tests verify aliased resources and no React externals.","dispositions":["inline-patch"]},
     {"path":"packages/document/docs/en/guides/get-started/ultramodern.mdx","owner":"bleedingdev","reason":"Document TanStack Redact as the default React runtime on server and client, the redact opt-out, real React for RSC applications and the reviewed Redact 0.2.1 patch.","dispositions":["inline-patch"]},
     {"path":"packages/document/docs/zh/guides/get-started/ultramodern.mdx","owner":"bleedingdev","reason":"Document TanStack Redact as the default React runtime on server and client, the redact opt-out, real React for RSC applications and the reviewed Redact 0.2.1 patch, in Chinese.","dispositions":["inline-patch"]},
+    {"path":"packages/document/docs/en/guides/get-started/ultramodern.mdx","owner":"bleedingdev","reason":"Name the reviewed Redact sidecar 0.2.2 that app-tools installs.","dispositions":["inline-patch"]},
+    {"path":"packages/document/docs/zh/guides/get-started/ultramodern.mdx","owner":"bleedingdev","reason":"Name the reviewed Redact sidecar 0.2.2 that app-tools installs, in Chinese.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-runtime/src/core/server/stream/createReadableStream.ts","owner":"bleedingdev","reason":"Run the generic processResponseStream extender hook on the completed Node document stream (not the shell-error fallback), so fork-owned plugins can merge serialization records after document assembly while cancellation still reaches the producer.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-runtime/src/core/server/stream/createReadableStream.worker.ts","owner":"bleedingdev","reason":"Run the generic processResponseStream extender hook on the completed Web document stream before response observation, matching the Node renderer.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-runtime/tests/ssr/serverRender/rendererHooks.test.tsx","owner":"bleedingdev","reason":"Verify processResponseStream transforms observe the assembled Node document before terminal completion.","dispositions":["inline-patch"]},
@@ -2699,6 +2708,8 @@ five previously invalid advisory rows remain non-authorizing historical prose.
 | `packages/runtime/plugin-runtime/src/document/cli/index.ts` | bleedingdev | Keep document template loading compatible with native ESM and expose native script-placeholder processing. Register the Document child compiler only for environments with HTML paths (and only their HTML entries): in the server compiler it rewrote the same temp entry file concurrently with the web compiler, so a truncated read failed the build with 'Document child compiler produced empty output'. Each compiler also writes its own temp entry, so two HTML environments cannot race either. Explicit parent runtime aliases now suppress the matching default React externals; otherwise a custom Document silently bypasses the selected Redact runtime. Native child-compilation tests verify aliased resources and no React externals. | `inline-patch` |
 | `packages/document/docs/en/guides/get-started/ultramodern.mdx` | bleedingdev | Document TanStack Redact as the default React runtime on server and client, the redact opt-out, real React for RSC applications and the reviewed Redact 0.2.1 patch. | `inline-patch` |
 | `packages/document/docs/zh/guides/get-started/ultramodern.mdx` | bleedingdev | Document TanStack Redact as the default React runtime on server and client, the redact opt-out, real React for RSC applications and the reviewed Redact 0.2.1 patch, in Chinese. | `inline-patch` |
+| `packages/document/docs/en/guides/get-started/ultramodern.mdx` | bleedingdev | Name the reviewed Redact sidecar 0.2.2 that app-tools installs. | `inline-patch` |
+| `packages/document/docs/zh/guides/get-started/ultramodern.mdx` | bleedingdev | Name the reviewed Redact sidecar 0.2.2 that app-tools installs, in Chinese. | `inline-patch` |
 | `packages/runtime/plugin-runtime/src/core/server/stream/createReadableStream.ts` | bleedingdev | Run the generic processResponseStream extender hook on the completed Node document stream (not the shell-error fallback), so fork-owned plugins can merge serialization records after document assembly while cancellation still reaches the producer. | `inline-patch` |
 | `packages/runtime/plugin-runtime/src/core/server/stream/createReadableStream.worker.ts` | bleedingdev | Run the generic processResponseStream extender hook on the completed Web document stream before response observation, matching the Node renderer. | `inline-patch` |
 | `packages/runtime/plugin-runtime/tests/ssr/serverRender/rendererHooks.test.tsx` | bleedingdev | Verify processResponseStream transforms observe the assembled Node document before terminal completion. | `inline-patch` |

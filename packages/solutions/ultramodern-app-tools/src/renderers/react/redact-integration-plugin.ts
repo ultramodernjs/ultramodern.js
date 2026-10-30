@@ -61,7 +61,7 @@ export function assertRedactPatch(read = readFileSync): void {
   );
   if (read(stream, 'utf8').split(/\r?\n/, 1)[0] !== REDACT_PATCH_MARKER) {
     throw new Error(
-      `[ultramodern] @tanstack/redact@0.2.1 requires the UltraModern reviewed SSR patch (${REDACT_PATCH_MARKER}) in ${stream}. Install the framework's npm:@bleedingdev/tanstack-redact@0.2.1 dependency; unpatched Redact must not ship. Set redact: false to use real React instead.`,
+      `[ultramodern] @tanstack/redact@0.2.1 requires the UltraModern reviewed SSR patch (${REDACT_PATCH_MARKER}) in ${stream}. Install the framework's npm:@bleedingdev/tanstack-redact@0.2.2 dependency; unpatched Redact must not ship. Set redact: false to use real React instead.`,
     );
   }
 }
