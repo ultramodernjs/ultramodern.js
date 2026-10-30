@@ -948,6 +948,29 @@ diff --git a/src/dom/root.ts b/src/dom/root.ts
        flushSyncWork(() => {
          renderRoot(root, null)
        })
+diff --git a/src/dom/synthetic-event.ts b/src/dom/synthetic-event.ts
+--- a/src/dom/synthetic-event.ts
++++ b/src/dom/synthetic-event.ts
+@@ -12,10 +12,15 @@
+     stopImmediatePropagation() { stopped = true; native.stopImmediatePropagation() },
+     persist() {},
+   }
+-  for (const key in native) {
+-    if (!(key in event)) {
+-      const value = (native as any)[key]
+-      event[key] = isFunction(value) ? value.bind(native) : value
++  // Walk the prototype chain instead of `for…in`: DOM implementations such as
++  // happy-dom define `type`, `target` and other Event fields as non-enumerable
++  // accessors. Object.prototype names are already `in event`, so they are skipped.
++  for (let o: object | null = native; o; o = Object.getPrototypeOf(o)) {
++    for (const key of Object.getOwnPropertyNames(o)) {
++      if (!(key in event)) {
++        const value = (native as any)[key]
++        event[key] = isFunction(value) ? value.bind(native) : value
++      }
+     }
+   }
+   return event
 diff --git a/src/dom/transitions.ts b/src/dom/transitions.ts
 --- a/src/dom/transitions.ts
 +++ b/src/dom/transitions.ts
@@ -2947,6 +2970,26 @@ diff --git a/dist/dom/root.js b/dist/dom/root.js
    hydrateRoot
  };
 -//# sourceMappingURL=root.js.map
+diff --git a/dist/dom/synthetic-event.js b/dist/dom/synthetic-event.js
+--- a/dist/dom/synthetic-event.js
++++ b/dist/dom/synthetic-event.js
+@@ -21,10 +21,12 @@
+     persist() {
+     }
+   };
+-  for (const key in native) {
+-    if (!(key in event)) {
+-      const value = native[key];
+-      event[key] = isFunction(value) ? value.bind(native) : value;
++  for (let o = native; o; o = Object.getPrototypeOf(o)) {
++    for (const key of Object.getOwnPropertyNames(o)) {
++      if (!(key in event)) {
++        const value = native[key];
++        event[key] = isFunction(value) ? value.bind(native) : value;
++      }
+     }
+   }
+   return event;
 diff --git a/dist/dom/transitions.d.ts b/dist/dom/transitions.d.ts
 --- a/dist/dom/transitions.d.ts
 +++ b/dist/dom/transitions.d.ts

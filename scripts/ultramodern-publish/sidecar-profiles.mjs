@@ -34,7 +34,7 @@ export const sidecarProfiles = Object.freeze({
   }),
   'tanstack-redact': Object.freeze({
     recipeIds: Object.freeze(['tanstack-redact']),
-    dependencies: Object.freeze({ '@bleedingdev/tanstack-redact': '0.2.1' }),
+    dependencies: Object.freeze({ '@bleedingdev/tanstack-redact': '0.2.2' }),
     probeKeys: Object.freeze([
       'packed-install',
       'redact-patch-marker',

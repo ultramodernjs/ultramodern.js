@@ -8,6 +8,7 @@ import { startSidecarRegistry } from '../../scripts/ultramodern-publish/qualify-
 import {
   assertPackedRegistrySidecars,
   bleedingdevOverrides,
+  reboundRegistryOverrides,
 } from './generatedWorkspaceDependencies';
 import {
   bleedingdevEdges,
@@ -173,6 +174,55 @@ test('npm aliases onto @bleedingdev resolve to packed tarballs by alias key', ()
       'file:/packed/mf-runtime.tgz',
     '@bleedingdev/ipx@3.2.2': 'file:/packed/ipx.tgz',
   });
+});
+
+test('a listed previous Redact fork installs the packed recipe fork under its own alias key', () => {
+  const sidecars = {
+    '@bleedingdev/tanstack-redact': {
+      tarball: '/packed/tanstack-redact.tgz',
+      version: '0.2.2',
+      integrity: '',
+    },
+  };
+  const previous = bleedingdevEdges({
+    dependencies: {
+      '@tanstack/redact': 'npm:@bleedingdev/tanstack-redact@0.2.1',
+    },
+  });
+  expect(previous).toEqual([
+    {
+      name: '@tanstack/redact',
+      spec: 'npm:@bleedingdev/tanstack-redact@0.2.1',
+      target: '@bleedingdev/tanstack-redact',
+      version: '0.2.2',
+    },
+  ]);
+  expect(bleedingdevOverrides(previous, sidecars)).toEqual({
+    '@tanstack/redact@npm:@bleedingdev/tanstack-redact@0.2.1':
+      'file:/packed/tanstack-redact.tgz',
+  });
+  expect(reboundRegistryOverrides(previous)).toEqual({
+    '@tanstack/redact@npm:@bleedingdev/tanstack-redact@0.2.1':
+      'npm:@bleedingdev/tanstack-redact@0.2.2',
+  });
+  expect(
+    reboundRegistryOverrides(
+      bleedingdevEdges({
+        dependencies: {
+          '@module-federation/runtime': 'npm:@bleedingdev/mf-runtime@2.9.3',
+        },
+        devDependencies: { '@bleedingdev/ipx': '3.2.2' },
+      }),
+    ),
+  ).toEqual({});
+  const unlisted = bleedingdevEdges({
+    dependencies: {
+      '@tanstack/redact': 'npm:@bleedingdev/tanstack-redact@0.2.0',
+    },
+  });
+  expect(() => bleedingdevOverrides(unlisted, sidecars)).toThrow(
+    'packed @bleedingdev/tanstack-redact: 0.2.2',
+  );
 });
 
 test('an unpacked @bleedingdev dependency names the supply manifest to fix', () => {
