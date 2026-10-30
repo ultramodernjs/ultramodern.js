@@ -53,6 +53,7 @@ test('should not throw error when the file is excluded', async () => {
 
 test('should not throw error when the targets are support es6', async () => {
   const cwd = path.join(__dirname, 'fixtures/basic');
+  const targets = ['chrome >= 60', 'edge >= 15'];
 
   await expect(
     build({
@@ -62,8 +63,11 @@ test('should not throw error when the targets are support es6', async () => {
         ...getCommonBuildConfig(cwd),
         security: {
           checkSyntax: {
-            targets: ['chrome >= 60', 'edge >= 15'],
+            targets,
           },
+        },
+        output: {
+          overrideBrowserslist: targets,
         },
       },
     }),
@@ -85,6 +89,10 @@ test('should throw error when using optional chaining and target is es6 browsers
             targets: ['chrome >= 53'],
           },
         },
+        output: {
+          // Preserve optional chaining without emitting newer runtime syntax.
+          overrideBrowserslist: ['chrome 80'],
+        },
       },
     }),
   ).rejects.toThrowError('incompatible syntax');
@@ -105,6 +113,9 @@ test('should not throw error when using optional chaining and ecmaVersion is 202
           checkSyntax: {
             ecmaVersion: 2020,
           },
+        },
+        output: {
+          overrideBrowserslist: ['chrome 80'],
         },
       },
     }),
