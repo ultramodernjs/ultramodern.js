@@ -47,10 +47,10 @@ exports[`lightningcss-loader > should register lightningcss-loader and disable p
             "options": {
               "errorRecovery": true,
               "targets": [
-                "chrome >= 87",
-                "edge >= 88",
-                "firefox >= 78",
-                "safari >= 14",
+                "chrome >= 144",
+                "edge >= 144",
+                "firefox >= 147",
+                "safari >= 27",
               ],
             },
           },
@@ -77,10 +77,10 @@ exports[`lightningcss-loader > should register lightningcss-loader and disable p
             "options": {
               "errorRecovery": true,
               "targets": [
-                "chrome >= 87",
-                "edge >= 88",
-                "firefox >= 78",
-                "safari >= 14",
+                "chrome >= 144",
+                "edge >= 144",
+                "firefox >= 147",
+                "safari >= 27",
               ],
             },
           },
@@ -118,10 +118,10 @@ exports[`lightningcss-loader > should register lightningcss-loader and disable p
             "options": {
               "errorRecovery": true,
               "targets": [
-                "chrome >= 87",
-                "edge >= 88",
-                "firefox >= 78",
-                "safari >= 14",
+                "chrome >= 144",
+                "edge >= 144",
+                "firefox >= 147",
+                "safari >= 27",
               ],
             },
           },
@@ -180,10 +180,10 @@ exports[`lightningcss-loader > should register lightningcss-loader and postcss-l
             "options": {
               "errorRecovery": true,
               "targets": [
-                "chrome >= 87",
-                "edge >= 88",
-                "firefox >= 78",
-                "safari >= 14",
+                "chrome >= 144",
+                "edge >= 144",
+                "firefox >= 147",
+                "safari >= 27",
               ],
             },
           },
@@ -226,10 +226,10 @@ exports[`lightningcss-loader > should register lightningcss-loader and postcss-l
             "options": {
               "errorRecovery": true,
               "targets": [
-                "chrome >= 87",
-                "edge >= 88",
-                "firefox >= 78",
-                "safari >= 14",
+                "chrome >= 144",
+                "edge >= 144",
+                "firefox >= 147",
+                "safari >= 27",
               ],
             },
           },
@@ -283,10 +283,10 @@ exports[`lightningcss-loader > should register lightningcss-loader and postcss-l
             "options": {
               "errorRecovery": true,
               "targets": [
-                "chrome >= 87",
-                "edge >= 88",
-                "firefox >= 78",
-                "safari >= 14",
+                "chrome >= 144",
+                "edge >= 144",
+                "firefox >= 147",
+                "safari >= 27",
               ],
             },
           },
@@ -1664,10 +1664,6 @@ exports[`plugin-postcssLegacy > should register postcss plugin correctly when in
                     "postcssPlugin": "postcss-flexbugs-fixes",
                   },
                   {
-                    "Declaration": [Function],
-                    "postcssPlugin": "postcss-page-break",
-                  },
-                  {
                     "AtRule": {
                       "custom-media": [Function],
                       "media": [Function],
@@ -1683,19 +1679,19 @@ exports[`plugin-postcssLegacy > should register postcss plugin correctly when in
                   },
                   {
                     "browsers": [
-                      "chrome >= 87",
-                      "edge >= 88",
-                      "firefox >= 78",
-                      "safari >= 14",
+                      "chrome >= 144",
+                      "edge >= 144",
+                      "firefox >= 147",
+                      "safari >= 27",
                     ],
                     "info": [Function],
                     "options": {
                       "flexbox": "no-2009",
                       "overrideBrowserslist": [
-                        "chrome >= 87",
-                        "edge >= 88",
-                        "firefox >= 78",
-                        "safari >= 14",
+                        "chrome >= 144",
+                        "edge >= 144",
+                        "firefox >= 147",
+                        "safari >= 27",
                       ],
                     },
                     "postcssPlugin": "autoprefixer",
@@ -1736,10 +1732,6 @@ exports[`plugin-postcssLegacy > should register postcss plugin correctly when in
                     "postcssPlugin": "postcss-flexbugs-fixes",
                   },
                   {
-                    "Declaration": [Function],
-                    "postcssPlugin": "postcss-page-break",
-                  },
-                  {
                     "AtRule": {
                       "custom-media": [Function],
                       "media": [Function],
@@ -1755,19 +1747,19 @@ exports[`plugin-postcssLegacy > should register postcss plugin correctly when in
                   },
                   {
                     "browsers": [
-                      "chrome >= 87",
-                      "edge >= 88",
-                      "firefox >= 78",
-                      "safari >= 14",
+                      "chrome >= 144",
+                      "edge >= 144",
+                      "firefox >= 147",
+                      "safari >= 27",
                     ],
                     "info": [Function],
                     "options": {
                       "flexbox": "no-2009",
                       "overrideBrowserslist": [
-                        "chrome >= 87",
-                        "edge >= 88",
-                        "firefox >= 78",
-                        "safari >= 14",
+                        "chrome >= 144",
+                        "edge >= 144",
+                        "firefox >= 147",
+                        "safari >= 27",
                       ],
                     },
                     "postcssPlugin": "autoprefixer",
@@ -1819,10 +1811,6 @@ exports[`plugin-postcssLegacy > should register postcss plugin correctly when in
                     "postcssPlugin": "postcss-flexbugs-fixes",
                   },
                   {
-                    "Declaration": [Function],
-                    "postcssPlugin": "postcss-page-break",
-                  },
-                  {
                     "AtRule": {
                       "custom-media": [Function],
                       "media": [Function],
@@ -1838,19 +1826,19 @@ exports[`plugin-postcssLegacy > should register postcss plugin correctly when in
                   },
                   {
                     "browsers": [
-                      "chrome >= 87",
-                      "edge >= 88",
-                      "firefox >= 78",
-                      "safari >= 14",
+                      "chrome >= 144",
+                      "edge >= 144",
+                      "firefox >= 147",
+                      "safari >= 27",
                     ],
                     "info": [Function],
                     "options": {
                       "flexbox": "no-2009",
                       "overrideBrowserslist": [
-                        "chrome >= 87",
-                        "edge >= 88",
-                        "firefox >= 78",
-                        "safari >= 14",
+                        "chrome >= 144",
+                        "edge >= 144",
+                        "firefox >= 147",
+                        "safari >= 27",
                       ],
                     },
                     "postcssPlugin": "autoprefixer",
@@ -1923,10 +1911,6 @@ exports[`plugin-postcssLegacy > should register postcss plugin correctly when in
                     "postcssPlugin": "postcss-flexbugs-fixes",
                   },
                   {
-                    "Declaration": [Function],
-                    "postcssPlugin": "postcss-page-break",
-                  },
-                  {
                     "AtRule": {
                       "custom-media": [Function],
                       "media": [Function],
@@ -2047,19 +2031,19 @@ exports[`plugin-postcssLegacy > should register postcss plugin correctly when in
                   },
                   {
                     "browsers": [
-                      "chrome >= 87",
-                      "edge >= 88",
-                      "firefox >= 78",
-                      "safari >= 14",
+                      "chrome >= 144",
+                      "edge >= 144",
+                      "firefox >= 147",
+                      "safari >= 27",
                     ],
                     "info": [Function],
                     "options": {
                       "flexbox": "no-2009",
                       "overrideBrowserslist": [
-                        "chrome >= 87",
-                        "edge >= 88",
-                        "firefox >= 78",
-                        "safari >= 14",
+                        "chrome >= 144",
+                        "edge >= 144",
+                        "firefox >= 147",
+                        "safari >= 27",
                       ],
                     },
                     "postcssPlugin": "autoprefixer",
@@ -2100,10 +2084,6 @@ exports[`plugin-postcssLegacy > should register postcss plugin correctly when in
                     "postcssPlugin": "postcss-flexbugs-fixes",
                   },
                   {
-                    "Declaration": [Function],
-                    "postcssPlugin": "postcss-page-break",
-                  },
-                  {
                     "AtRule": {
                       "custom-media": [Function],
                       "media": [Function],
@@ -2224,19 +2204,19 @@ exports[`plugin-postcssLegacy > should register postcss plugin correctly when in
                   },
                   {
                     "browsers": [
-                      "chrome >= 87",
-                      "edge >= 88",
-                      "firefox >= 78",
-                      "safari >= 14",
+                      "chrome >= 144",
+                      "edge >= 144",
+                      "firefox >= 147",
+                      "safari >= 27",
                     ],
                     "info": [Function],
                     "options": {
                       "flexbox": "no-2009",
                       "overrideBrowserslist": [
-                        "chrome >= 87",
-                        "edge >= 88",
-                        "firefox >= 78",
-                        "safari >= 14",
+                        "chrome >= 144",
+                        "edge >= 144",
+                        "firefox >= 147",
+                        "safari >= 27",
                       ],
                     },
                     "postcssPlugin": "autoprefixer",
@@ -2288,10 +2268,6 @@ exports[`plugin-postcssLegacy > should register postcss plugin correctly when in
                     "postcssPlugin": "postcss-flexbugs-fixes",
                   },
                   {
-                    "Declaration": [Function],
-                    "postcssPlugin": "postcss-page-break",
-                  },
-                  {
                     "AtRule": {
                       "custom-media": [Function],
                       "media": [Function],
@@ -2412,19 +2388,19 @@ exports[`plugin-postcssLegacy > should register postcss plugin correctly when in
                   },
                   {
                     "browsers": [
-                      "chrome >= 87",
-                      "edge >= 88",
-                      "firefox >= 78",
-                      "safari >= 14",
+                      "chrome >= 144",
+                      "edge >= 144",
+                      "firefox >= 147",
+                      "safari >= 27",
                     ],
                     "info": [Function],
                     "options": {
                       "flexbox": "no-2009",
                       "overrideBrowserslist": [
-                        "chrome >= 87",
-                        "edge >= 88",
-                        "firefox >= 78",
-                        "safari >= 14",
+                        "chrome >= 144",
+                        "edge >= 144",
+                        "firefox >= 147",
+                        "safari >= 27",
                       ],
                     },
                     "postcssPlugin": "autoprefixer",

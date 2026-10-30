@@ -118,6 +118,8 @@ describe('native workspace build policy', () => {
         'https://site.example',
       );
       expect(remote.server?.port).toBe(4030);
+      expect(shell.tools?.autoprefixer).toBeUndefined();
+      expect(remote.tools?.autoprefixer).toBeUndefined();
       expect(remote.dev?.server?.cors).toEqual({
         origin: [
           'http://localhost:3020',

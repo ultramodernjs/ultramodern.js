@@ -55,10 +55,10 @@ export const isHtmlDisabled = (
 };
 
 const DEFAULT_WEB_BROWSERSLIST = [
-  'chrome >= 87',
-  'edge >= 88',
-  'firefox >= 78',
-  'safari >= 14',
+  'chrome >= 144',
+  'edge >= 144',
+  'firefox >= 147',
+  'safari >= 27',
 ];
 
 const DEFAULT_BROWSERSLIST: Record<RsbuildTarget, string[]> = {

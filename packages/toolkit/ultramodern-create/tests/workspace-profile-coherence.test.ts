@@ -47,6 +47,14 @@ test('generated command plans reference emitted deployment capabilities', async 
       modernVersion: '3.2.1',
     });
 
+    for (const appDir of ['apps/shell-super-app', 'verticals/catalog']) {
+      const modernConfig = fs.readFileSync(
+        path.join(workspaceDir, appDir, 'modern.config.ts'),
+        'utf-8',
+      );
+      assert.doesNotMatch(modernConfig, /overrideBrowserslist/u);
+    }
+
     assertReferencedScriptsExist(workspaceDir);
     assert.equal(fs.existsSync(path.join(workspaceDir, 'zerops.yaml')), true);
     const packageJson = JSON.parse(
