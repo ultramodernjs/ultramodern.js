@@ -12,7 +12,7 @@ Modern.js 支持通过三种方式来设置 Web 应用需要兼容的浏览器�
 
 Modern.js 支持设置 Web 应用需要兼容的浏览器范围，你可以在 `.browserslistrc` 文件里设置 [Browserslist](https://browsersl.ist/) 的值。
 
-当你创建一个新的 Modern.js 项目时，默认会包含一份 `.browserslistrc` 配置，这表示 JavaScript 代码会被编译至 ES6 格式。
+UltraModern.js 默认支持 Chrome 144+、Edge 144+、Firefox 147+ 和 Safari 27+。项目未指定浏览器范围时，JavaScript 编译和 CSS 处理会使用这些目标。要显式配置目标，可以添加以下 `.browserslistrc` 文件：
 
 import DefaultBrowserslist from '@site-docs/components/default-browserslist';
 
@@ -27,7 +27,7 @@ import DefaultBrowserslist from '@site-docs/components/default-browserslist';
 ```json title="package.json"
 {
   "browserslist": [
-    "chrome >= 87"
+    "chrome >= 144"
     // 其他浏览器的配置...
   ]
 }
@@ -41,7 +41,7 @@ import DefaultBrowserslist from '@site-docs/components/default-browserslist';
 export default {
   output: {
     overrideBrowserslist: [
-      'chrome >= 87',
+      'chrome >= 144',
       // 其他浏览器的配置...
     ],
   },

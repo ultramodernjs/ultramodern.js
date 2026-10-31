@@ -4,9 +4,9 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1129,
-  "totalHunks": 3778,
-  "totalChangedLines": 86647,
+  "totalFiles": 1139,
+  "totalHunks": 3820,
+  "totalChangedLines": 86883,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/package.json",
@@ -99,6 +99,11 @@
       "changedLines": 376
     },
     {
+      "file": "packages/cli/builder/src/shared/utils.ts",
+      "hunks": 1,
+      "changedLines": 8
+    },
+    {
       "file": "packages/cli/builder/src/types.ts",
       "hunks": 14,
       "changedLines": 63
@@ -120,8 +125,8 @@
     },
     {
       "file": "packages/cli/builder/tests/__snapshots__/postcssLegacy.test.ts.snap",
-      "hunks": 43,
-      "changedLines": 91
+      "hunks": 67,
+      "changedLines": 259
     },
     {
       "file": "packages/cli/builder/tests/cache.test.ts",
@@ -529,6 +534,11 @@
       "changedLines": 9
     },
     {
+      "file": "packages/document/docs/en/components/default-browserslist.mdx",
+      "hunks": 1,
+      "changedLines": 8
+    },
+    {
       "file": "packages/document/docs/en/components/deploy-command.mdx",
       "hunks": 1,
       "changedLines": 1
@@ -582,6 +592,11 @@
       "file": "packages/document/docs/en/configure/app/output/disable-ts-checker.mdx",
       "hunks": 1,
       "changedLines": 2
+    },
+    {
+      "file": "packages/document/docs/en/configure/app/output/override-browserslist.mdx",
+      "hunks": 1,
+      "changedLines": 6
     },
     {
       "file": "packages/document/docs/en/configure/app/output/svg-default-export.mdx",
@@ -664,6 +679,11 @@
       "changedLines": 2
     },
     {
+      "file": "packages/document/docs/en/guides/advanced-features/compatibility.mdx",
+      "hunks": 3,
+      "changedLines": 6
+    },
+    {
       "file": "packages/document/docs/en/guides/advanced-features/international/api.mdx",
       "hunks": 8,
       "changedLines": 54
@@ -682,6 +702,11 @@
       "file": "packages/document/docs/en/guides/advanced-features/international/routing.mdx",
       "hunks": 2,
       "changedLines": 47
+    },
+    {
+      "file": "packages/document/docs/en/guides/advanced-features/page-performance/optimize-bundle.mdx",
+      "hunks": 3,
+      "changedLines": 6
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/page-performance/react-compiler.mdx",
@@ -854,6 +879,11 @@
       "changedLines": 9
     },
     {
+      "file": "packages/document/docs/zh/components/default-browserslist.mdx",
+      "hunks": 1,
+      "changedLines": 8
+    },
+    {
       "file": "packages/document/docs/zh/components/deploy-command.mdx",
       "hunks": 1,
       "changedLines": 1
@@ -907,6 +937,11 @@
       "file": "packages/document/docs/zh/configure/app/output/disable-ts-checker.mdx",
       "hunks": 1,
       "changedLines": 2
+    },
+    {
+      "file": "packages/document/docs/zh/configure/app/output/override-browserslist.mdx",
+      "hunks": 1,
+      "changedLines": 6
     },
     {
       "file": "packages/document/docs/zh/configure/app/output/svg-default-export.mdx",
@@ -989,6 +1024,11 @@
       "changedLines": 2
     },
     {
+      "file": "packages/document/docs/zh/guides/advanced-features/compatibility.mdx",
+      "hunks": 3,
+      "changedLines": 6
+    },
+    {
       "file": "packages/document/docs/zh/guides/advanced-features/international/api.mdx",
       "hunks": 8,
       "changedLines": 52
@@ -1007,6 +1047,11 @@
       "file": "packages/document/docs/zh/guides/advanced-features/international/routing.mdx",
       "hunks": 2,
       "changedLines": 47
+    },
+    {
+      "file": "packages/document/docs/zh/guides/advanced-features/page-performance/optimize-bundle.mdx",
+      "hunks": 3,
+      "changedLines": 6
     },
     {
       "file": "packages/document/docs/zh/guides/advanced-features/page-performance/react-compiler.mdx",
@@ -3922,6 +3967,11 @@
       "file": "packages/toolkit/create/src/index.ts",
       "hunks": 1,
       "changedLines": 2
+    },
+    {
+      "file": "packages/toolkit/create/template/.browserslistrc",
+      "hunks": 1,
+      "changedLines": 8
     },
     {
       "file": "packages/toolkit/i18n-utils/package.json",

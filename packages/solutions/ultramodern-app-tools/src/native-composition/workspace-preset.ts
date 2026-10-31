@@ -581,7 +581,6 @@ const resolveWorkspaceConfig = (
       mainEntryName: 'index',
     },
     tools: {
-      autoprefixer: { overrideBrowserslist: ['defaults'] },
       ...(mfName
         ? {
             bundlerChain: chain => {

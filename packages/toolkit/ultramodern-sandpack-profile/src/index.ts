@@ -202,7 +202,8 @@ export default function HomePage() {
 `;
 
 export const ultramodernSandpackFiles: UltramodernSandpackFiles = {
-  '/.browserslistrc': 'defaults\n',
+  '/.browserslistrc':
+    'chrome >= 144\nedge >= 144\nfirefox >= 147\nsafari >= 27\n',
   '/.codesandbox/environment.json': '{\n  "nodeVersion": "26"\n}\n',
   '/.codesandbox/tasks.json': codeSandboxTasks,
   '/modern.config.ts': modernConfig,
