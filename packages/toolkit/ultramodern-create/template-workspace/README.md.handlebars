@@ -108,7 +108,7 @@ core count minus 2, from 4 to 8. Change these defaults in this root
 `package.json` under `"ultramodern": { "typecheck": { "fast", "checkers", "builders" } }`,
 or for one run with `TSRS_FAST`, `ULTRAMODERN_TYPECHECK_CHECKERS` and
 `ULTRAMODERN_TYPECHECK_BUILDERS`. Flags passed to the command win over both.
-The workspace pins `tsrs@0.20.1-ts7.1.0-beta` and `@effect/tsgo@0.63.0`.
+The workspace pins `tsrs@0.21.0-ts7.1.0-beta` and `@effect/tsgo@0.67.0`.
 Postinstall runs `ultramodern-create ultramodern compiler-prepare` before skill
 setup. This uses installed tsrs platform metadata to run the official
 `effect-tsgo tsrs --version` readiness check on supported hosts, or

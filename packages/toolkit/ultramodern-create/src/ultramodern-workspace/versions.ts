@@ -31,9 +31,9 @@ export const RSBUILD_PLUGIN_TAILWINDCSS_VERSION = '2.0.3';
 // The cohort consumes upstream Effect without a patch or sidecar.
 // See FORK-DIVERGENCE.md, packages/toolkit/ultramodern-create.
 export const EFFECT_VERSION = '4.0.7';
-export const EFFECT_TSGO_VERSION = '0.63.0';
-export const TSRS_VERSION = '0.20.1-ts7.1.0-beta';
-// Reviewed 2026-10-28 npm release metadata. Only these exact compiler releases
+export const EFFECT_TSGO_VERSION = '0.67.0';
+export const TSRS_VERSION = '0.21.0-ts7.1.0-beta';
+// Reviewed 2026-11-04 npm release metadata. Only these exact compiler releases
 // and their declared platform packages bypass the normal 24h release-age gate.
 export const COMPILER_RELEASE_AGE_EXCEPTIONS = Object.freeze(
   [

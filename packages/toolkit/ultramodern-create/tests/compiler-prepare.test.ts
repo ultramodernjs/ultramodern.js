@@ -32,7 +32,7 @@ test.each([
         platformPackage,
         compilerStatus: status,
       });
-      assert.equal(fixture.manifest.version, '0.20.1-ts7.1.0-beta');
+      assert.equal(fixture.manifest.version, '0.21.0-ts7.1.0-beta');
       assert.equal(
         Object.hasOwn(fixture.manifest.optionalDependencies, platformPackage),
         !['@tsrs/win32-arm64', '@tsrs/linux-arm-gnu'].includes(platformPackage),
