@@ -135,8 +135,8 @@ try {
   const tsrs = compilerCohort.tsrs;
   const { getPlatformPackageName } = await import(pathToFileURL(join(tsrs.sourceDirectory, 'lib/platform.js')).href);
   // Upstream tsrs support does not imply that Effect ships its replacement.
-  // This independent expectation matches the official 0.63.0 CLI targets.
-  assert.equal(effect.sourcePackageJson.version, '0.63.0');
+  // This independent expectation matches the official 0.67.0 CLI targets.
+  assert.equal(effect.sourcePackageJson.version, '0.67.0');
   const nativeName = getPlatformPackageName();
   const supported = tsrs.sourcePackageJson.optionalDependencies[nativeName] === tsrs.sourcePackageJson.version
     && ['@tsrs/darwin-arm64', '@tsrs/darwin-x64', '@tsrs/win32-x64', '@tsrs/linux-x64-gnu', '@tsrs/linux-arm64-gnu'].includes(nativeName);

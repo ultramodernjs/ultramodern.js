@@ -175,8 +175,8 @@ export function createAcceptedNodeProofEnvironment(
   // may retain this reviewed exact compiler exception, never another release.
   const compilerTrustExclusions = context.release
     ? authenticatedCompilerTrustExclusions(context.release)
-    : nativeTrustExclusions.includes('tsrs@0.20.1-ts7.1.0-beta')
-      ? ['tsrs@0.20.1-ts7.1.0-beta']
+    : nativeTrustExclusions.includes('tsrs@0.21.0-ts7.1.0-beta')
+      ? ['tsrs@0.21.0-ts7.1.0-beta']
       : [];
   if (
     JSON.stringify(nativeTrustExclusions) !==

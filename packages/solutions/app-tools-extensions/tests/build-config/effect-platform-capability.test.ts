@@ -17,8 +17,8 @@ import {
 
 rs.mock('node:child_process', () => ({ execFileSync: rs.fn() }));
 
-const tsrsVersion = '0.20.1-ts7.1.0-beta';
-const effectVersion = '0.63.0';
+const tsrsVersion = '0.21.0-ts7.1.0-beta';
+const effectVersion = '0.67.0';
 const tsrsCommit = '3e9236361fa97a9e6c685f4833ac457ae2d8c50a';
 const nativeCommit = '2bd066d87f5bafd315be9f40889d0a60b9e58e0b';
 const nativeName = `@typescript/typescript-${process.platform}-${process.arch}`;
@@ -235,7 +235,7 @@ test('a new provider version requires a reviewed capability contract', () => {
 
 test('unsupported automatic replacement hosts still validate explicit compilers', () => {
   current = fixture('@tsrs/linux-x64-musl');
-  rs.mocked(execFileSync).mockReturnValue('Version 7.0.2+effect-tsgo.0.63.0');
+  rs.mocked(execFileSync).mockReturnValue('Version 7.0.2+effect-tsgo.0.67.0');
   validateConfiguredEffectCompiler(current.effectGo, current.from);
   rs.mocked(execFileSync).mockReturnValue('Version 7.0.2');
   assert.throws(

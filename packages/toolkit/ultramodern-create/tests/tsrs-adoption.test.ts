@@ -39,8 +39,8 @@ test.each(['workspace', 'install'] as const)(
       strategy,
       modernPackageVersion: '3.8.3',
     } satisfies ResolvedPackageSource;
-    assert.equal(TSRS_VERSION, '0.20.1-ts7.1.0-beta');
-    assert.equal(EFFECT_TSGO_VERSION, '0.63.0');
+    assert.equal(TSRS_VERSION, '0.21.0-ts7.1.0-beta');
+    assert.equal(EFFECT_TSGO_VERSION, '0.67.0');
     assert.equal(EFFECT_VERSION, '4.0.7');
     assert.equal(TYPESCRIPT_VERSION, '7.0.2');
     for (const renderer of ['react', 'solid', 'octane', 'none'] as const) {
@@ -272,7 +272,7 @@ function runInstalledTypecheck({
     writeExecutable(
       compiler,
       `if (process.argv[2] === '--version') {
-  console.log('Version 7.0.2+effect-tsgo.0.63.0');
+  console.log('Version 7.0.2+effect-tsgo.0.67.0');
   process.exit(0);
 }
 require('node:fs').writeFileSync(${JSON.stringify(log)}, JSON.stringify({

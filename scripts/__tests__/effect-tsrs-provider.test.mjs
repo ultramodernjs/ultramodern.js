@@ -8,9 +8,9 @@ const source = readFileSync(
   new URL('../tsrs-dts/compiler.cjs', import.meta.url),
   'utf8',
 );
-const tsrsVersion = '0.20.1-ts7.1.0-beta';
+const tsrsVersion = '0.21.0-ts7.1.0-beta';
 const typescriptCommit = '3e9236361fa97a9e6c685f4833ac457ae2d8c50a';
-const effectVersion = '0.63.0';
+const effectVersion = '0.67.0';
 const tsrsPath = '/fixture/node_modules/tsrs/package.json';
 const effectPath = '/fixture/node_modules/@effect/tsgo/package.json';
 const nativeRoot = '/fixture/node_modules/@effect/tsgo-darwin-arm64';

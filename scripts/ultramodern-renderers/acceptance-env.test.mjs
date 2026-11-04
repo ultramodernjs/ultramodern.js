@@ -11,7 +11,7 @@ import { mergePnpmLockfileDocuments } from '../lib/pnpm-lockfile-documents.mjs';
 import { createRegistryEnv } from '../ultramodern-publish/lib/source-create-proof/runtime-proof/registry.mjs';
 import { createRendererAcceptanceEnv } from './acceptance-env.mjs';
 
-const compilerVersion = '0.20.1-ts7.1.0-beta';
+const compilerVersion = '0.21.0-ts7.1.0-beta';
 const compiler = `tsrs@${compilerVersion}`;
 const version = '3.9.3-ultramodern.42';
 const targetName = '@bleedingdev/modern-js-ultramodern-create';
@@ -227,19 +227,19 @@ for (const mode of ['source', 'published'])
     assert.equal(env.npm_config_store_dir, storeDir);
     assert.deepEqual(JSON.parse(env.pnpm_config_minimum_release_age_exclude), [
       '@bleedingdev/modern-js-ultramodern-create@3.9.3-ultramodern.42',
-      '@tsrs/darwin-arm64@0.20.1-ts7.1.0-beta',
-      '@tsrs/darwin-x64@0.20.1-ts7.1.0-beta',
-      '@tsrs/linux-arm64-gnu@0.20.1-ts7.1.0-beta',
-      '@tsrs/linux-arm64-musl@0.20.1-ts7.1.0-beta',
-      '@tsrs/linux-x64-gnu@0.20.1-ts7.1.0-beta',
-      '@tsrs/linux-x64-musl@0.20.1-ts7.1.0-beta',
-      '@tsrs/win32-x64@0.20.1-ts7.1.0-beta',
-      'tsrs@0.20.1-ts7.1.0-beta',
+      '@tsrs/darwin-arm64@0.21.0-ts7.1.0-beta',
+      '@tsrs/darwin-x64@0.21.0-ts7.1.0-beta',
+      '@tsrs/linux-arm64-gnu@0.21.0-ts7.1.0-beta',
+      '@tsrs/linux-arm64-musl@0.21.0-ts7.1.0-beta',
+      '@tsrs/linux-x64-gnu@0.21.0-ts7.1.0-beta',
+      '@tsrs/linux-x64-musl@0.21.0-ts7.1.0-beta',
+      '@tsrs/win32-x64@0.21.0-ts7.1.0-beta',
+      'tsrs@0.21.0-ts7.1.0-beta',
     ]);
     if (mode === 'source')
       assert.deepEqual(JSON.parse(env.pnpm_config_trust_policy_exclude), [
         '@bleedingdev/modern-js-ultramodern-create@3.9.3-ultramodern.42',
-        'tsrs@0.20.1-ts7.1.0-beta',
+        'tsrs@0.21.0-ts7.1.0-beta',
       ]);
     // Published consumers retain their generated workspace's exact exception.
     else assert.equal(env.pnpm_config_trust_policy_exclude, undefined);
