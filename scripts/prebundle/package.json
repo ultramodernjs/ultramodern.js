@@ -69,7 +69,7 @@
     "filesize": "11.0.26",
     "find-up": "8.0.0",
     "fs-extra": "11.4.1",
-    "glob": "13.0.6",
+    "glob": "14.0.2",
     "globby": "16.2.4",
     "gzip-size": "7.0.0",
     "import-lazy": "4.0.0",
