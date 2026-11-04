@@ -206,7 +206,7 @@
     "typescript": "7.0.2",
     "@volar/language-core": "2.4.28",
     "jsonc-parser": "3.3.1",
-    "seroval": "1.6.9",
+    "seroval": "1.6.11",
     "seroval-plugins": "1.6.9"
   },
   "peerDependencies": {

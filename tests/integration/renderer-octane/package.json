@@ -7,7 +7,7 @@
     "@modern-js/renderer-octane": "workspace:*",
     "@octanejs/tanstack-router": "https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz",
     "octane": "https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz",
-    "seroval": "1.6.9",
+    "seroval": "1.6.11",
     "seroval-plugins": "1.6.9",
     "@tsrx/oxc": "0.20.0",
     "@tanstack/router-core": "https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz"
