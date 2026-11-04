@@ -1989,8 +1989,8 @@ importers:
         specifier: ^2.6.9
         version: 2.6.9
       i18next-http-backend:
-        specifier: ^4.0.3
-        version: 4.0.3
+        specifier: ^4.0.4
+        version: 4.0.4
       i18next-http-middleware:
         specifier: ^3.9.9
         version: 3.9.9
@@ -16214,8 +16214,8 @@ packages:
   i18next-fs-backend@2.6.9:
     resolution: {integrity: sha512-YZ5PQUV9xnAeh45CCSQW095wYDWZEwKse/1wr3m0z0Mij5zoCFMs67Q3M+w/9un8fUruubMR4DzETnDGH85heQ==}
 
-  i18next-http-backend@4.0.3:
-    resolution: {integrity: sha512-B5GJysCsJwqiDQRpUcikWsut82Vmekix58WIyiCpYtxaZ/wY8kwJCicMRvVcMoIa1x84siiRl5vBt6iCBVO6zg==}
+  i18next-http-backend@4.0.4:
+    resolution: {integrity: sha512-nG9OQKvUsPiTVUBg1rCGmvmWhzxC9GOxVbGdTYyejHVMSUjutt1hiBNVSzhB/ZE7keL9Xkb880kUfhDovV5T5g==}
     engines: {node: '>=18'}
 
   i18next-http-middleware@3.9.9:
@@ -29529,7 +29529,7 @@ snapshots:
 
   i18next-fs-backend@2.6.9: {}
 
-  i18next-http-backend@4.0.3: {}
+  i18next-http-backend@4.0.4: {}
 
   i18next-http-middleware@3.9.9: {}
 
