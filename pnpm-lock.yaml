@@ -2333,8 +2333,8 @@ importers:
   packages/runtime/renderer-core:
     dependencies:
       seroval:
-        specifier: 1.6.9
-        version: 1.6.9
+        specifier: 1.6.11
+        version: 1.6.11
     devDependencies:
       '@modern-js/rslib':
         specifier: workspace:*
@@ -2419,11 +2419,11 @@ importers:
         specifier: 3.3.1
         version: 3.3.1
       seroval:
-        specifier: 1.6.9
-        version: 1.6.9
+        specifier: 1.6.11
+        version: 1.6.11
       seroval-plugins:
         specifier: 1.6.9
-        version: 1.6.9(seroval@1.6.9)
+        version: 1.6.9(seroval@1.6.11)
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -6016,11 +6016,11 @@ importers:
         specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz
         version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       seroval:
-        specifier: 1.6.9
-        version: 1.6.9
+        specifier: 1.6.11
+        version: 1.6.11
       seroval-plugins:
         specifier: 1.6.9
-        version: 1.6.9(seroval@1.6.9)
+        version: 1.6.9(seroval@1.6.11)
     devDependencies:
       '@modern-js/ultramodern-app-tools':
         specifier: workspace:*
@@ -19458,6 +19458,10 @@ packages:
     engines: {node: '>=10'}
     peerDependencies:
       seroval: 1.6.9
+
+  seroval@1.6.11:
+    resolution: {integrity: sha512-hpb6XnMCGN/A+79Uf8V7/iTGkyyyazNn5X0CoCAp7Uy9vT3RT8jZ9GLcnxGoVjg3P8AArbe4ZVHq6C8oT2a0kA==}
+    engines: {node: '>=10'}
 
   seroval@1.6.9:
     resolution: {integrity: sha512-UeEzHwAK+yl0YLbsvROV1t5yMYEwZZ0CfKYxDvUgS2fO9Vxdf8djqVIB+OuVpuawRNPqw68LE1Du/GMsW2ZPqA==}
@@ -33341,9 +33345,15 @@ snapshots:
     dependencies:
       seroval: 1.6.9
 
+  seroval-plugins@1.6.9(seroval@1.6.11):
+    dependencies:
+      seroval: 1.6.11
+
   seroval-plugins@1.6.9(seroval@1.6.9):
     dependencies:
       seroval: 1.6.9
+
+  seroval@1.6.11: {}
 
   seroval@1.6.9: {}
 
