@@ -6,7 +6,6 @@ import type {
   BaseLocaleDetectionOptions,
 } from '../shared/type';
 import type { I18nInitOptions, I18nInstance } from './i18n';
-import { getI18nInstance } from './i18n';
 import { mergeBackendOptions } from './i18n/backend';
 import {
   detectLanguageWithPriority,
@@ -14,6 +13,7 @@ import {
   mergeDetectionOptions,
 } from './i18n/detection';
 import { useI18nextLanguageDetector } from './i18n/detection/middleware';
+import { getI18nInstance } from './i18n/instance';
 import type { ReactI18nextIntegration } from './reactI18next';
 import { getPathname } from './utils';
 

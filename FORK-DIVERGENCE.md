@@ -33,6 +33,14 @@ every PR.
 
 ---
 
+### 2026-11-09 i18n async backend bootstrap
+
+Owner: `bleedingdev`. Disposition: `inline-patch`. The extracted i18n runtime
+setup imports `getI18nInstance` directly from its instance module instead of
+the barrel that also exports backend utilities. This keeps asynchronous
+Module Federation backend providers out of synchronous SSR bootstrap without
+changing application sharing or backend initialization.
+
 ### 2026-10-30 Redact sidecar 0.2.2 in the runtime guides
 
 Owner: `bleedingdev`. Disposition: `inline-patch`. The English and Chinese
