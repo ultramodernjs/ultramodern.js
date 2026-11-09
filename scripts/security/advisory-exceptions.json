@@ -1,13 +1,1 @@
-[
-  {
-    "id": "GHSA-vfj7-8cjw-p6xm",
-    "package": "braces",
-    "version": "3.0.3",
-    "parents": ["chokidar", "micromatch"],
-    "correction": "repository-braces-depth-bound",
-    "owner": "bleedingdev",
-    "reason": "Every repository consumer receives the authenticated upstream depth correction; installed bytes and public parser/AST regressions must pass before acknowledging the version-only registry alert.",
-    "remediation": "Retire this correction after adopting a mature signed fixed dependency or an authenticated upstream replacement that preserves the bounded behavior.",
-    "expires": "2026-11-06"
-  }
-]
+[]

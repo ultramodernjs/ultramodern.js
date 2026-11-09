@@ -18,10 +18,17 @@ import {
 } from '../braces-correction.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
-const policy = () =>
-  JSON.parse(
-    fs.readFileSync(new URL('../advisory-exceptions.json', import.meta.url)),
-  )[0];
+const policy = () => ({
+  id: bracesCorrection.id,
+  package: bracesCorrection.package,
+  version: bracesCorrection.version,
+  parents: ['chokidar', 'micromatch'],
+  correction: bracesCorrection.correction,
+  owner: bracesCorrection.owner,
+  reason: 'Historical correction fixture for the withdrawn advisory.',
+  remediation: 'Retire the live exception when the advisory is withdrawn.',
+  expires: bracesCorrection.expires,
+});
 const advisory = () => ({
   github_advisory_id: bracesCorrection.id,
   module_name: 'braces',
