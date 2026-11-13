@@ -30,27 +30,3 @@ export type InfoOptions = {
   config?: string;
   json?: boolean;
 };
-
-export type RuntimeStatusOptions = {
-  endpoint?: string;
-  token?: string;
-  tokenEnv?: string;
-  headerName?: string;
-  timeout?: string;
-  json?: boolean;
-};
-
-export type RuntimeFallbackSignalOptions = {
-  endpoint?: string;
-  app: string;
-  reason?: string;
-  phase?: string;
-  entry?: string;
-  runtimeDigest?: string;
-  metadata?: string;
-  token?: string;
-  tokenEnv?: string;
-  headerName?: string;
-  timeout?: string;
-  json?: boolean;
-};

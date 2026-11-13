@@ -1,13 +1,13 @@
+import path from 'path';
 import {
+  fs,
+  OUTPUT_CONFIG_FILE,
   lodash as _,
   compatibleRequire,
   ensureAbsolutePath,
-  fs,
-  OUTPUT_CONFIG_FILE,
   requireExistModule,
 } from '@modern-js/utils';
 import { parse } from 'flatted';
-import path from 'path';
 import type { CliConfig, ServerConfig, UserConfig } from '../../../types';
 
 const requireConfig = async (

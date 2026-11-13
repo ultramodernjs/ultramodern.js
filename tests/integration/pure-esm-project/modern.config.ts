@@ -6,7 +6,6 @@ import { applyBaseConfig } from '../../utils/applyBaseConfig';
 export default applyBaseConfig({
   bff: {
     enableHandleWeb: true,
-    runtimeFramework: 'hono',
   },
   dev: {
     // This suite clicks right after `domcontentloaded`, racing hydration, and

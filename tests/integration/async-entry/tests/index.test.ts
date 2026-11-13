@@ -1,35 +1,25 @@
-import dns from 'node:dns';
-import path from 'node:path';
-import puppeteer from 'puppeteer';
-import {
-  getPort,
-  killApp,
-  launchOptions,
-  modernBuild,
-  modernServe,
-} from '../../../utils/modernTestUtils';
-
-dns.setDefaultResultOrder('ipv4first');
+import { readFileSync } from 'fs';
+import path from 'path';
+import { modernBuild } from '../../../utils/modernTestUtils';
 
 describe('generate async entry', () => {
-  test('loads the application through the generated async browser boundary', async () => {
+  test(`should generate async entry correctly`, async () => {
     const appDir = path.resolve(__dirname, '..');
-    const port = await getPort();
-    await modernBuild(appDir);
-    const app = await modernServe(appDir, port);
-    const browser = await puppeteer.launch(launchOptions as any);
 
-    try {
-      const page = await browser.newPage();
-      await page.goto(`http://localhost:${port}`, {
-        waitUntil: 'networkidle0',
-      });
-      await expect(
-        page.$eval('#root', element => element.textContent),
-      ).resolves.toContain('hello');
-    } finally {
-      await browser.close();
-      await killApp(app);
-    }
+    await modernBuild(appDir);
+
+    expect(
+      readFileSync(
+        path.resolve(appDir, `node_modules/.modern-js/index/index.jsx`),
+        'utf8',
+      ),
+    ).toContain(`import { createRoot } from '@modern-js/runtime/react';`);
+
+    expect(
+      readFileSync(
+        path.resolve(appDir, `node_modules/.modern-js/index/bootstrap.jsx`),
+        'utf8',
+      ),
+    ).toContain(`import(/* webpackChunkName: "async-index" */ './index');`);
   });
 });

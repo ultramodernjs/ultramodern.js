@@ -1,14 +1,13 @@
 export const EN_US = {
   // Announcement
   announcementLabel: 'NEW',
-  announcementText: 'UltraModern.js 3.0 is ready for SuperApps',
+  announcementText: 'Modern.js 3.0 is released!',
 
-  introduction: 'UltraModern Guide',
-  quickStart: 'Start Building',
+  introduction: 'Introduction',
+  quickStart: 'Quick Start',
 
   // Slogans
-  slogan:
-    'The SuperApp framework for Effect, TanStack, SSR, BFF, and Micro Verticals',
+  slogan: 'A Progressive React Framework for modern web development',
   secondSlogan1: 'Enjoy the development experience.',
   secondSlogan2: 'Make innovation happen faster.',
 
@@ -43,4 +42,13 @@ export const EN_US = {
   pluginSystem: 'Plugin System',
   githubDiscussion: 'Github Discussion',
   changelog: 'Changelog',
+
+  // Showcases
+  doubao: 'Doubao',
+  writingo: 'Writingo',
+  volctrans: 'Volctrans',
+  shidianbaike: 'Shidian Baike',
+  xiaohe: 'Xiaohe',
+  dongchedi: 'Dongchedi',
+  volcengineDeveloper: 'Volcengine Developer',
 } as const;

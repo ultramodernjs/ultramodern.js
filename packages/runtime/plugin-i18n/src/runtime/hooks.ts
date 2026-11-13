@@ -1,45 +1,32 @@
-import type { LocalisedUrlsOption } from '@modern-js/i18n-runtime-extensions';
 import { isBrowser } from '@modern-js/runtime';
+import type { TRuntimeContext } from '@modern-js/runtime';
 import type React from 'react';
-import { useCallback, useEffect, useRef } from 'react';
-import {
-  cacheI18nLanguage,
-  changeI18nInstanceLanguage,
-} from './contextHelpers';
+import { useEffect, useRef } from 'react';
 import type { I18nInstance } from './i18n';
 import {
-  getI18nSdkBackendId,
   I18N_SDK_RESOURCES_LOADED_EVENT,
   type I18nSdkResourcesLoadedEventDetail,
+  getI18nSdkBackendId,
 } from './i18n/backend/sdk-event';
-import { useI18nRouterAdapter } from './routerAdapter';
+import { cacheUserLanguage } from './i18n/detection';
 import {
   buildLocalizedUrl,
   detectLanguageFromPath,
   getEntryPath,
+  getPathname,
   shouldIgnoreRedirect,
+  useRouterHooks,
 } from './utils';
 
-type WindowWithSSRData = Window & {
-  _SSR_DATA?: unknown;
-};
-
-type ResourceStoreWithEvents = NonNullable<I18nInstance['store']> & {
-  emit?: (event: string, ...args: unknown[]) => void;
-};
+interface RuntimeContextWithI18n extends TRuntimeContext {
+  i18nInstance?: I18nInstance;
+}
 
 function createMinimalI18nInstance(language: string): I18nInstance {
   const minimalInstance: I18nInstance = {
     language,
     isInitialized: false,
     init: () => Promise.resolve(undefined),
-    // Keep the pre-existing loud failure: an uninitialised instance has no
-    // translator. Never echo the key back — that would silently render raw
-    // keys as if they were translations. This throws the same error that
-    // translateI18n (contextHelpers.ts:187) already throws today.
-    t: () => {
-      throw new Error('i18nInstance.t required');
-    },
     use: () => {},
     createInstance: () => minimalInstance,
     services: {},
@@ -54,9 +41,7 @@ export function createContextValue(
   languages: string[],
   localePathRedirect: boolean,
   ignoreRedirectRoutes: string[] | ((pathname: string) => boolean) | undefined,
-  localisedUrls: LocalisedUrlsOption | undefined,
   setLang: (lang: string) => void,
-  synchronizeLanguage: (lang: string) => void,
 ) {
   const instance = i18nInstance || createMinimalI18nInstance(lang);
   return {
@@ -66,9 +51,7 @@ export function createContextValue(
     languages,
     localePathRedirect,
     ignoreRedirectRoutes,
-    localisedUrls,
     updateLanguage: setLang,
-    synchronizeLanguage,
   };
 }
 
@@ -108,7 +91,7 @@ export function useSdkResourcesLoader(
       }
 
       const triggerUpdate = (retryCount = 0) => {
-        const store = i18nInstance.store as ResourceStoreWithEvents | undefined;
+        const store = (i18nInstance as any).store;
         const hasResource = store?.data?.[language]?.[namespace];
 
         if (hasResource || retryCount >= 10) {
@@ -179,10 +162,10 @@ export function useClientSideRedirect(
   languages: string[],
   fallbackLanguage: string,
   ignoreRedirectRoutes?: string[] | ((pathname: string) => boolean),
-  localisedUrls?: LocalisedUrlsOption,
 ) {
-  const urlRef = useRef('');
-  const { navigate, location, hasRouter } = useI18nRouterAdapter();
+  const hasRedirectedRef = useRef(false);
+  // Get router hooks safely
+  const { navigate, location, hasRouter } = useRouterHooks();
 
   useEffect(() => {
     if (process.env.MODERN_TARGET !== 'browser') {
@@ -193,7 +176,7 @@ export function useClientSideRedirect(
     }
 
     try {
-      const ssrData = (window as WindowWithSSRData)._SSR_DATA;
+      const ssrData = (window as any)._SSR_DATA;
       if (ssrData) {
         return;
       }
@@ -201,7 +184,7 @@ export function useClientSideRedirect(
       // Ignore errors when checking SSR data
     }
 
-    if (urlRef.current === (location?.pathname || window.location.pathname)) {
+    if (hasRedirectedRef.current) {
       return;
     }
 
@@ -230,23 +213,19 @@ export function useClientSideRedirect(
       localePathRedirect,
     );
 
-    const targetLanguage =
-      pathDetection.language ||
-      i18nInstance.language ||
-      fallbackLanguage ||
-      languages[0] ||
-      'en';
+    if (pathDetection.detected) {
+      return;
+    }
 
-    const newPath = buildLocalizedUrl(
-      relativePath,
-      targetLanguage,
-      languages,
-      localisedUrls,
-    );
+    const targetLanguage =
+      i18nInstance.language || fallbackLanguage || languages[0] || 'en';
+
+    const newPath = buildLocalizedUrl(relativePath, targetLanguage, languages);
     const newUrl = entryPath + newPath + currentSearch + currentHash;
 
-    urlRef.current = currentPathname;
     if (newUrl !== currentPathname + currentSearch + currentHash) {
+      hasRedirectedRef.current = true;
+
       // Use navigate if router is available (similar to changeLanguage implementation)
       if (hasRouter && navigate && location) {
         navigate(newUrl, { replace: true });
@@ -265,7 +244,6 @@ export function useClientSideRedirect(
     languages,
     fallbackLanguage,
     ignoreRedirectRoutes,
-    localisedUrls,
   ]);
 }
 
@@ -273,88 +251,36 @@ export function useLanguageSync(
   i18nInstance: I18nInstance | undefined,
   localePathRedirect: boolean,
   languages: string[],
-  pathname: string | undefined,
+  runtimeContextRef: React.MutableRefObject<RuntimeContextWithI18n>,
   prevLangRef: React.MutableRefObject<string>,
   setLang: (lang: string) => void,
 ) {
-  const latestRequestRef = useRef(0);
-  const syncQueueRef = useRef(Promise.resolve());
-  const isMountedRef = useRef(false);
-  const desiredLanguageRef = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      latestRequestRef.current += 1;
-    };
-  }, []);
-
-  useEffect(() => {
-    desiredLanguageRef.current = undefined;
-    latestRequestRef.current += 1;
-    syncQueueRef.current = Promise.resolve();
-  }, [i18nInstance]);
-
-  const synchronizeLanguage = useCallback(
-    (currentLang: string) => {
-      if (
-        !i18nInstance ||
-        !currentLang ||
-        desiredLanguageRef.current === currentLang
-      ) {
-        return;
-      }
-
-      desiredLanguageRef.current = currentLang;
-      const requestId = ++latestRequestRef.current;
-      syncQueueRef.current = syncQueueRef.current.then(async () => {
-        if (requestId !== latestRequestRef.current || !isMountedRef.current) {
-          return;
-        }
-
-        try {
-          if (i18nInstance.language !== currentLang) {
-            await changeI18nInstanceLanguage(i18nInstance, currentLang);
-          }
-
-          if (requestId !== latestRequestRef.current || !isMountedRef.current) {
-            return;
-          }
-
-          prevLangRef.current = currentLang;
-          setLang(currentLang);
-          cacheI18nLanguage(i18nInstance, currentLang);
-        } catch (error) {
-          if (requestId === latestRequestRef.current && isMountedRef.current) {
-            desiredLanguageRef.current = undefined;
-            console.error(
-              `Failed to synchronize i18n language "${currentLang}".`,
-              error,
-            );
-          }
-        }
-      });
-    },
-    [i18nInstance, prevLangRef, setLang],
-  );
-
   useEffect(() => {
     if (!i18nInstance) {
       return;
     }
 
     if (localePathRedirect) {
+      const currentPathname = getPathname(runtimeContextRef.current);
       const pathDetection = detectLanguageFromPath(
-        pathname || '',
+        currentPathname,
         languages,
         localePathRedirect,
       );
       if (pathDetection.detected && pathDetection.language) {
-        synchronizeLanguage(pathDetection.language);
+        const currentLang = pathDetection.language;
+        if (currentLang !== prevLangRef.current) {
+          prevLangRef.current = currentLang;
+          setLang(currentLang);
+          i18nInstance.setLang?.(currentLang);
+          i18nInstance.changeLanguage?.(currentLang);
+          if (isBrowser()) {
+            const detectionOptions = i18nInstance.options?.detection;
+            cacheUserLanguage(i18nInstance, currentLang, detectionOptions);
+          }
+        }
       }
     } else {
-      latestRequestRef.current += 1;
       const instanceLang = i18nInstance.language;
       if (instanceLang && instanceLang !== prevLangRef.current) {
         prevLangRef.current = instanceLang;
@@ -365,11 +291,8 @@ export function useLanguageSync(
     i18nInstance,
     localePathRedirect,
     languages,
-    pathname,
+    runtimeContextRef,
     prevLangRef,
     setLang,
-    synchronizeLanguage,
   ]);
-
-  return synchronizeLanguage;
 }

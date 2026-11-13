@@ -1,11 +1,11 @@
-import { useModernI18n } from '@modern-js/plugin-i18n/runtime';
+import { useTranslation } from 'react-i18next';
 
 export default () => {
-  const { i18nInstance } = useModernI18n();
+  const { t } = useTranslation();
   return (
     <>
-      <div id="about">{i18nInstance.t('about')}</div>
-      <div id="key_1">{i18nInstance.t('key_1')}</div>
+      <div id="about">{t('about')}</div>
+      <div id="key_1">{t('key_1')}</div>
     </>
   );
 };

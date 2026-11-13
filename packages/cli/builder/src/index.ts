@@ -1,36 +1,41 @@
 import { type BuilderInstance, createRspackBuilder } from './createBuilder';
 import type { CreateBuilderOptions } from './types';
 
-export {
-  type ChainIdentifier,
-  type ConfigChain,
-  logger,
-  type NormalizedConfig,
-  type RsbuildConfig,
-  type RsbuildContext,
-  type RsbuildPlugin,
-  type RsbuildPlugins,
-  type RsbuildTarget,
-  type Rspack,
-  type RspackChain,
-} from '@rsbuild/core';
-export { parseConfig as parseRspackConfig } from './createBuilder';
-export {
-  castArray,
-  isHtmlDisabled,
-  RUNTIME_CHUNK_NAME,
-  RUNTIME_CHUNK_REGEX,
-  SERVICE_WORKER_ENVIRONMENT_NAME,
-} from './shared/utils';
+export type { CreateBuilderOptions, BuilderInstance };
+
 export type {
   BuilderConfig,
   BundlerType,
-  CacheGroup,
+  ToolsDevServerConfig,
   MetaOptions,
+  Stats,
   MultiStats,
   RspackConfig,
-  Stats,
-  ToolsDevServerConfig,
+  CacheGroup,
 } from './types';
-export type { BuilderInstance, CreateBuilderOptions };
+
 export { createRspackBuilder as createBuilder };
+
+export {
+  logger,
+  type ConfigChain,
+  type RsbuildPlugin,
+  type RsbuildPlugins,
+  type ChainIdentifier,
+  type RspackChain,
+  type Rspack,
+  type RsbuildContext,
+  type RsbuildConfig,
+  type RsbuildTarget,
+  type NormalizedConfig,
+} from '@rsbuild/core';
+
+export {
+  RUNTIME_CHUNK_NAME,
+  RUNTIME_CHUNK_REGEX,
+  SERVICE_WORKER_ENVIRONMENT_NAME,
+  isHtmlDisabled,
+  castArray,
+} from './shared/utils';
+
+export { parseConfig as parseRspackConfig } from './createBuilder';

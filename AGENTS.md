@@ -1,98 +1,49 @@
-# Agent Working Rules
+# AGENTS.md — Modern.js monorepo
 
-1. Default publish/push remote is the user's fork: `bleedingdev`.
-2. Do not push or publish to upstream `origin` (`web-infra-dev/modern.js`) unless the user explicitly requests it.
-3. Hacks that hide framework defects in an app or demo are forbidden. Do not add app-level shims, custom navigation wrappers, manual click interception, synthetic `<a>` handlers, local config suppressions, generated-file edits, hook bypasses, or one-off patches to make a broken framework behavior look fixed. Use native framework/router primitives directly in apps, and fix broken behavior in the owning framework/runtime/tooling layer. "Owning layer" is not a licence to edit upstream files: when the owning layer is fork-owned, fix it there directly; when it is upstream-owned, Rule 5 decides how the fix lands.
-4. If `/Users/satan/side/experiments/tractor-store-vertical` exists when UltraModern.js generator/runtime/tooling changes, update and validate that demo as downstream release acceptance before closing the work. Preserve its visible Tractor UI unless the user explicitly requests a design change.
-5. Fork boundary — every change under `packages/**` is in exactly one of two buckets.
-   - **Bucket A — additive fork behavior** (new features, subsystems, plugins, gates, instrumentation) MUST live in fork-owned packages. The reference shape is `@modern-js/server-runtime-extensions` (`packages/server/runtime-extensions`), which hosts the fork's Module Federation server logic behind the existing `ServerPlugin` extension point. Never write a new fork subsystem into a vanilla upstream package, and never grow an existing one there.
-   - **Bucket B — changes to upstream-owned lines** (any file that exists at the audited base recorded in `FORK-DIVERGENCE.md`, including its identity across renames) is allowed only as one of: (1) a PR to upstream `origin`, (2) use of an existing upstream extension point, or (3) a size-capped patch. Resolution (3) has an exact hard maximum of **20 added-plus-removed PR lines per audited-base-owned file**; split anything larger into Bucket A or send it upstream instead.
-   - Every accepted **non-shrink** Bucket-B change requires a same-PR `FORK-DIVERGENCE.md` entry — owner, reason, and a disposition drawn from that file's "Disposition vocabulary" table. A componentwise genuine shrink (neither cumulative metric grows and at least one falls) needs no ledger ceremony. Equal-count replacement and rename are non-shrinks.
-   - The enforcing gate is `node scripts/ultramodern-boundary-check/check-fork-import-boundary.js`. Verification measures the complete canonical scope recorded in `scripts/ultramodern-boundary-check/divergence-allowlist.json` against its fixed audited base (`eded841256`, upstream's `Release v3.8.2 (#8810)` mainline commit); caller-selected roots, pathspecs, alternate allowlists, malformed budgets/totals, or unresolved refs fail closed. Plain `--write-divergence-allowlist` only locks in shrink. A raised/new budget additionally requires the explicit `--record-growth --merge-base <PR-base> --head <commit>` writer operation, an exact `<= 20`-line PR delta, and a same-PR ledger change; CI independently re-derives all three. Base/scope transitions require `--rebase-divergence-allowlist` with the same reviewed ref and ledger evidence. `allowlist.json` is separate and used only by `--mode imports`; do not confuse the two. The `v3.8.2` tag (`e642cd16`) is patch-equivalent to the audited base commit but not an ancestor of `HEAD`; measure against the mainline commit, never the tag.
+> 给在本仓库工作的 AI Agent 的常驻指引：开发命令、修改约束和维护者工作流入口。
 
-# AGENTS.md - Modern.js monorepo
+## 这是什么仓库
 
-## Repository Shape
+- Modern.js：基于 React 的渐进式 Web 框架（当前主仓为 **v3**）。
+- pnpm + nx monorepo。包的划分见 `pnpm-workspace.yaml`，主要分区：
+  - `packages/solutions/app-tools` — 应用工程方案（高风险区）
+  - `packages/cli/*` — 构建器与 CLI 插件（builder 等，高风险区）
+  - `packages/runtime/*` — 运行时（高风险区）
+  - `packages/server/*` — 服务端 / BFF（高风险区）
+  - `packages/toolkit/*` — 工具库（含 `create` 脚手架）
+  - `packages/document` — 文档站（rspress，产出 llms.txt）
 
-- Modern.js is a React-based progressive web framework; the upstream mainline is v3.
-- This is a pnpm + nx monorepo. Major package areas:
-  - `packages/solutions/app-tools` - app engineering solution, high-risk.
-  - `packages/cli/*` - builder and CLI plugins, high-risk.
-  - `packages/runtime/*` - runtime, high-risk.
-  - `packages/server/*` - server and BFF, high-risk.
-  - `packages/toolkit/*` - utilities, including `create`.
-  - `packages/document` - Rspress documentation site, emits llms.txt.
+## 常用命令
 
-## Common Commands
+- 安装依赖：`pnpm install`
+- 构建单包：`pnpm --filter <pkg> build`
+- 跑测试（按类型分别跑）：
+  - 单测（rstest）：根目录 `pnpm test:ut`，或单包 `pnpm --filter <pkg> test`（包内即 `rstest`）。
+  - 框架集成测试：`pnpm test:framework`（实际在 `tests/` 下跑 rstest 集成用例）。
+  - 构建器（builder）e2e 测试：`pnpm test:builder`（在 `tests/e2e/builder` 下）。
+  - Skill 回归：`node tests/skill/run.mjs`（migrate-to-v3）、`node tests/skill/feature-enable.mjs`（feature-enable）。
+- 代码与格式检查：`pnpm check`（Rstack CLI，见 `rstack.config.mts`）。仅代码校验：`pnpm lint`。
+- 全仓格式化：`pnpm format`
+- 变更需 changeset：`pnpm change`（影响发布的改动必须加）。
 
-- Install dependencies: `pnpm install`
-- Build one package: `pnpm --filter <pkg> build`
-- Unit tests: `pnpm test:ut` from repo root, or `pnpm --filter <pkg> test` for a package.
-- Framework integration tests: `pnpm test:framework`
-- Builder e2e tests: `pnpm test:builder`
-- Skill regressions: `node tests/skill/run.mjs` and `node tests/skill/feature-enable.mjs`
-- Style: Biome via `biome.json`; run lint before submit.
-- Published changes need a changeset: `pnpm change`
+## 禁改区（除非任务明确要求并人工确认）
 
-## Boundaries
+- 不手改 `pnpm-lock.yaml`、`dist/`、`node_modules/`、各包 `CHANGELOG.md`。
+- 不改框架运行时语义而不加测试。
+- 不提交 secret / token。
 
-- Do not hand-edit `pnpm-lock.yaml`, `dist/`, `node_modules/`, or package `CHANGELOG.md` unless the task explicitly requires it.
-- Do not change framework runtime semantics without tests.
-- Do not commit secrets or tokens.
-- Prefer Modern.js docs lookup through `https://modernjs.dev/llms.txt`; use `https://modernjs.dev/llms-full.txt` only for larger targeted excerpts.
-- Match answers and changes to the repository's current version, not unreleased future docs.
+## 查文档（知识检索）
 
-## Skills Routing
+- API / 配置 / 概念问题优先查 llms.txt：https://modernjs.dev/llms.txt
+- 全文（体积大，按需取片段）：https://modernjs.dev/llms-full.txt
+- 回答须匹配仓库当前版本，勿用更新版本未发布的特性。
 
-- User-facing Modern.js application skills live under root `skills/<name>/`.
-- Maintainer-facing repository skills live under `scripts/skills/<name>/`.
-- `.claude/skills`, `.agents/skills`, and `.cursor/skills` are generated mirrors from `pnpm sync:skills` and should not be hand-edited.
+## 文档写作
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
-## Beads Issue Tracker
+- 新增或修改文档时，不使用英文分号 `;`。使用中文分号 `；`、句号 `。` 或有序／无序列表表达。
 
-**Note:** `br` is non-invasive and never executes git commands. After `br sync --flush-only`, you must manually run `git add .beads/ && git commit`.
+## 维护者工作流
 
-This project uses **br (beads_rust)** for issue tracking.
-
-### Quick Reference
-
-```bash
-br ready                # Find available work
-br show <id>            # View issue details
-br update <id> --claim  # Claim work
-br close <id>           # Complete work
-```
-
-### Rules
-
-- Use `br` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-
-## Session Completion
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   br sync --flush-only
-   git add .beads/
-   git commit -m "sync beads"
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-<!-- END BEADS INTEGRATION -->
+- 环境搭建与开发流程：见[贡献指南](packages/document/docs/zh/community/contributing-guide.mdx)。
+- 提交 PR：遵循 [PR 模板](.github/PULL_REQUEST_TEMPLATE.md)，说明改动、关联 issue 和验证结果。涉及用户行为或 API 的改动同步更新文档。提交信息和 PR 标题遵循 Conventional Commits。
+- 依赖排查：使用 [dependency-audit](.agents/skills/dependency-audit/SKILL.md)。

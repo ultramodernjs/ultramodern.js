@@ -1,13 +1,13 @@
+import * as path from 'path';
 import type { ServerConfig } from '@modern-js/server-core';
 import {
-  CONFIG_FILE_EXTENSIONS,
-  ensureAbsolutePath,
   fs,
-  getServerConfig,
+  CONFIG_FILE_EXTENSIONS,
   OUTPUT_CONFIG_FILE,
+  ensureAbsolutePath,
+  getServerConfig,
 } from '@modern-js/utils';
 import { stringify } from 'flatted';
-import * as path from 'path';
 import type { AppNormalizedConfig } from '../types';
 
 export const emitResolvedConfig = async (

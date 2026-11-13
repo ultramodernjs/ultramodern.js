@@ -1,6 +1,8 @@
 /// <reference types="node" />
 /// <reference types="react" />
 /// <reference types="react-dom" />
+/// <reference types="@rsbuild/core/types" />
+/// <reference path="../dist/types/index.d.ts" />
 
 declare namespace NodeJS {
   interface ProcessEnv {
@@ -10,8 +12,7 @@ declare namespace NodeJS {
   }
 }
 
-// Keep this app-environment surface independent from framework configuration
-// declarations so strict app typecheck does not enter toolchain internals.
+// reference @rsbuild/core/types, but there are some differences, such as svg
 /**
  * Image assets
  */
@@ -184,7 +185,6 @@ declare module '*?url' {
   const src: string;
   export default src;
 }
-
 
 declare module '*.css' {
   const classes: { readonly [key: string]: string };

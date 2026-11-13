@@ -1,5 +1,188 @@
 # @modern-js/plugin-bff
 
+## 3.11.3
+
+### Patch Changes
+
+- Updated dependencies [4d498bb]
+  - @modern-js/builder@3.11.3
+  - @modern-js/server-core@3.11.3
+  - @modern-js/server-utils@3.11.3
+  - @modern-js/bff-core@3.11.3
+  - @modern-js/create-request@3.11.3
+  - @modern-js/utils@3.11.3
+
+## 3.11.2
+
+### Patch Changes
+
+- @modern-js/builder@3.11.2
+- @modern-js/bff-core@3.11.2
+- @modern-js/server-core@3.11.2
+- @modern-js/create-request@3.11.2
+- @modern-js/server-utils@3.11.2
+- @modern-js/utils@3.11.2
+
+## 3.11.1
+
+### Patch Changes
+
+- Updated dependencies [fc6ee73]
+- Updated dependencies [a1c2feb]
+- Updated dependencies [b11c3cd]
+  - @modern-js/builder@3.11.1
+  - @modern-js/bff-core@3.11.1
+  - @modern-js/server-core@3.11.1
+  - @modern-js/server-utils@3.11.1
+  - @modern-js/create-request@3.11.1
+  - @modern-js/utils@3.11.1
+
+## 3.11.0
+
+### Patch Changes
+
+- @modern-js/server-core@3.11.0
+- @modern-js/create-request@3.11.0
+- @modern-js/server-utils@3.11.0
+- @modern-js/builder@3.11.0
+- @modern-js/bff-core@3.11.0
+- @modern-js/utils@3.11.0
+
+## 3.10.4
+
+### Patch Changes
+
+- Updated dependencies [1a6805d]
+  - @modern-js/bff-core@3.10.4
+  - @modern-js/builder@3.10.4
+  - @modern-js/server-core@3.10.4
+  - @modern-js/create-request@3.10.4
+  - @modern-js/server-utils@3.10.4
+  - @modern-js/utils@3.10.4
+
+## 3.10.3
+
+### Patch Changes
+
+- Updated dependencies [52b4a4e]
+  - @modern-js/server-core@3.10.3
+  - @modern-js/server-utils@3.10.3
+  - @modern-js/builder@3.10.3
+  - @modern-js/bff-core@3.10.3
+  - @modern-js/create-request@3.10.3
+  - @modern-js/utils@3.10.3
+
+## 3.10.2
+
+### Patch Changes
+
+- 1a71148: perf: skip body parsing for GET and HEAD BFF requests and reuse per-route param names
+
+  perf: BFF 的 GET 和 HEAD 请求跳过请求体解析，并复用每个路由的参数名
+
+- Updated dependencies [0c7dad2]
+- Updated dependencies [2f314e5]
+- Updated dependencies [23587d0]
+- Updated dependencies [3b42ce4]
+- Updated dependencies [6a891f0]
+  - @modern-js/builder@3.10.2
+  - @modern-js/server-core@3.10.2
+  - @modern-js/create-request@3.10.2
+  - @modern-js/server-utils@3.10.2
+  - @modern-js/bff-core@3.10.2
+  - @modern-js/utils@3.10.2
+
+## 3.10.1
+
+### Patch Changes
+
+- Updated dependencies [e046a11]
+  - @modern-js/server-core@3.10.1
+  - @modern-js/server-utils@3.10.1
+  - @modern-js/builder@3.10.1
+  - @modern-js/bff-core@3.10.1
+  - @modern-js/create-request@3.10.1
+  - @modern-js/utils@3.10.1
+
+## 3.10.0
+
+### Patch Changes
+
+- da0fe78: chore: upgrade Rsbuild to v2.2.13
+
+  chore: 升级 Rsbuild 至 v2.2.13
+
+- Updated dependencies [da0fe78]
+- Updated dependencies [b5f56d5]
+- Updated dependencies [9a766ec]
+- Updated dependencies [1d7a38e]
+- Updated dependencies [7d9f0bb]
+  - @modern-js/builder@3.10.0
+  - @modern-js/server-core@3.10.0
+  - @modern-js/server-utils@3.10.0
+  - @modern-js/bff-core@3.10.0
+  - @modern-js/create-request@3.10.0
+  - @modern-js/utils@3.10.0
+
+## 3.9.3
+
+### Patch Changes
+
+- 9f475f6: chore: upgrade Rsbuild to v2.2.9
+
+  chore: 升级 Rsbuild 至 v2.2.9
+
+- 1dcb43c: fix: correct the "Middlware" typo in BFF middleware identifiers — the exported `PublicMiddlwareOptions` type from `@modern-js/server-core` is renamed to `PublicMiddlewareOptions`, and the internal `routeMiddlwares` variable in `@modern-js/plugin-bff` is renamed to `routeMiddlewares`
+  fix: 修正 BFF 中间件标识符里的 "Middlware" 拼写错误——`@modern-js/server-core` 导出的 `PublicMiddlwareOptions` 类型更名为 `PublicMiddlewareOptions`，`@modern-js/plugin-bff` 内部变量 `routeMiddlwares` 更名为 `routeMiddlewares`
+- Updated dependencies [9f475f6]
+- Updated dependencies [1dcb43c]
+- Updated dependencies [283dc5a]
+- Updated dependencies [a851cf4]
+  - @modern-js/builder@3.9.3
+  - @modern-js/server-core@3.9.3
+  - @modern-js/server-utils@3.9.3
+  - @modern-js/create-request@3.9.3
+  - @modern-js/bff-core@3.9.3
+  - @modern-js/utils@3.9.3
+
+## 3.9.2
+
+### Patch Changes
+
+- b4dec57: chore: upgrade Rsbuild to v2.2.6
+
+  chore: 升级 Rsbuild 至 v2.2.6
+
+- e2bbad2: chore: upgrade Rsbuild to v2.2.7
+
+  chore: 升级 Rsbuild 至 v2.2.7
+
+- Updated dependencies [b4dec57]
+- Updated dependencies [e2bbad2]
+  - @modern-js/builder@3.9.2
+  - @modern-js/server-core@3.9.2
+  - @modern-js/server-utils@3.9.2
+  - @modern-js/bff-core@3.9.2
+  - @modern-js/create-request@3.9.2
+  - @modern-js/utils@3.9.2
+
+## 3.9.1
+
+### Patch Changes
+
+- 4af5bf0: Upgrade Rsbuild to 2.2.4 and support its stricter bundler chain types, preserving service worker library options and handling non-string public paths in asset prefix templates.
+
+  升级 Rsbuild 至 2.2.4，兼容更严格的 bundler chain 类型，保留 service worker 的 library 配置，并在 assetPrefix 模板中处理非字符串 publicPath。
+
+- Updated dependencies [bc59ee1]
+- Updated dependencies [4af5bf0]
+  - @modern-js/server-utils@3.9.1
+  - @modern-js/builder@3.9.1
+  - @modern-js/server-core@3.9.1
+  - @modern-js/create-request@3.9.1
+  - @modern-js/bff-core@3.9.1
+  - @modern-js/utils@3.9.1
+
 ## 3.9.0
 
 ### Patch Changes

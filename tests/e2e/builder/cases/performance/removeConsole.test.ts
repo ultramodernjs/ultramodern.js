@@ -1,24 +1,25 @@
-import { expect, test } from '@playwright/test';
-import { build, getHrefByEntryName } from '@scripts/shared';
 import { join } from 'path';
+import { expect, test } from '@playwright/test';
+import { build } from '@scripts/shared';
 
 const cwd = join(__dirname, 'removeConsole');
 
 const expectConsoleType = async (
   builder: Awaited<ReturnType<typeof build>>,
-  page: import('@playwright/test').Page,
   consoleType: Record<string, boolean>,
 ) => {
-  const messages: string[] = [];
-  page.on('console', message => messages.push(message.text()));
-  await page.goto(getHrefByEntryName('main', builder.port));
+  const files = await builder.unwrapOutputJSON();
+  const mainFile = Object.keys(files).find(
+    name => name.includes('main.') && name.endsWith('.js'),
+  )!;
+  const content = files[mainFile];
 
   Object.entries(consoleType).forEach(([key, value]) => {
-    expect(messages.includes(`test-console-${key}`)).toEqual(value);
+    expect(content.includes(`test-console-${key}`)).toEqual(value);
   });
 };
 
-test('should remove specified console correctly', async ({ page }) => {
+test('should remove specified console correctly', async () => {
   const builder = await build({
     cwd,
     entry: {
@@ -34,20 +35,17 @@ test('should remove specified console correctly', async ({ page }) => {
         removeConsole: ['log', 'warn'],
       },
     },
-    runServer: true,
   });
 
-  await expectConsoleType(builder, page, {
+  await expectConsoleType(builder, {
     log: false,
     warn: false,
     debug: true,
     error: true,
   });
-  builder.close();
-  await builder.clean();
 });
 
-test('should remove all console correctly', async ({ page }) => {
+test('should remove all console correctly', async () => {
   const builder = await build({
     cwd,
     entry: {
@@ -63,15 +61,12 @@ test('should remove all console correctly', async ({ page }) => {
         removeConsole: true,
       },
     },
-    runServer: true,
   });
 
-  await expectConsoleType(builder, page, {
+  await expectConsoleType(builder, {
     log: false,
     warn: false,
     debug: false,
     error: false,
   });
-  builder.close();
-  await builder.clean();
 });

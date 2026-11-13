@@ -1,20 +1,19 @@
-import { AGGRED_DIR } from '@modern-js/server-core';
+import path from 'path';
 import {
   SERVER_BUNDLE_DIRECTORY,
   SERVER_DIR,
   type WatchOptions,
 } from '@modern-js/utils';
-import path from 'path';
 import Watcher, {
-  mergeWatchOptions,
   type WatchEvent,
+  mergeWatchOptions,
 } from '../dev-tools/watcher';
 import { resolveMockDirectory } from './mock';
 
+export * from './repack';
 export * from './devOptions';
 export * from './fileReader';
 export * from './mock';
-export * from './repack';
 
 export function startWatcher({
   pwd,

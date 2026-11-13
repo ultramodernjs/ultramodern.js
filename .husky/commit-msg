@@ -1,5 +1,0 @@
-#!/usr/bin/env sh
-
-# Commit message linting is intentionally not wired here: the repository keeps
-# the TypeScript toolchain on TS-Go v7 only, while commitlint currently pulls the
-# classic TypeScript compiler through cosmiconfig-typescript-loader.

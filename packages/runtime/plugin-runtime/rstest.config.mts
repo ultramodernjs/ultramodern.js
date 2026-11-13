@@ -23,10 +23,8 @@ export default {
       name: 'plugin-runtime-node',
       testEnvironment: 'node',
       exclude: [
-        'tests/boundary-debugger/client.test.tsx',
-        'tests/router/plugin.client.test.tsx',
         'tests/router/prefetch.test.tsx',
-        'tests/router/prefetch-realm-isolation.test.tsx',
+        'tests/router/useTransitions.test.tsx',
       ],
       extends: commonConfig,
       plugins: [
@@ -52,10 +50,8 @@ export default {
       name: 'plugin-runtime-client',
       testEnvironment: 'happy-dom',
       include: [
-        'tests/boundary-debugger/client.test.tsx',
-        'tests/router/plugin.client.test.tsx',
         'tests/router/prefetch.test.tsx',
-        'tests/router/prefetch-realm-isolation.test.tsx',
+        'tests/router/useTransitions.test.tsx',
       ],
       extends: commonConfig,
       plugins: [
@@ -71,15 +67,10 @@ export default {
                 code: string;
                 resourcePath: string;
               }) => {
-                return code
-                  .replace(
-                    '__webpack_chunk_load__',
-                    '__webpack_chunk_load_test__',
-                  )
-                  .replace(
-                    '__webpack_public_path__',
-                    '__webpack_public_path_test__',
-                  );
+                return code.replace(
+                  '__webpack_chunk_load__',
+                  '__webpack_chunk_load_test__',
+                );
               },
             );
           },

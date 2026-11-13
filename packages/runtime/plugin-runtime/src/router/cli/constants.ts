@@ -30,7 +30,6 @@ export const NESTED_ROUTE = {
   PAGE_FILE: 'page',
   PAGE_CONFIG_FILE: 'page.config',
   PAGE_LOADER_FILE: 'page.loader',
-  PAGE_SEARCH_FILE: 'page.search',
   PAGE_DATA_FILE: 'page.data',
   PAGE_CLIENT_LOADER: 'page.data.client',
   SPLATE_FILE: '$',

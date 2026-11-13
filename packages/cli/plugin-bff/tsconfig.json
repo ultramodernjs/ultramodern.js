@@ -2,15 +2,13 @@
   "extends": "@modern-js/tsconfig/base",
   "compilerOptions": {
     "declaration": true,
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
     "jsx": "preserve",
+    "baseUrl": ".",
     "skipLibCheck": true,
     "esModuleInterop": true,
     "isolatedModules": true,
     "paths": {},
-    "types": ["node"],
-    "rootDir": "./src"
+    "types": ["node"]
   },
   "include": ["src"]
 }

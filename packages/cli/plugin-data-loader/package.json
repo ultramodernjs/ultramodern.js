@@ -15,7 +15,7 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.0",
+  "version": "3.11.3",
   "engines": {
     "node": ">=20"
   },
@@ -43,35 +43,32 @@
   },
   "scripts": {
     "prepublishOnly": "only-allow-pnpm",
-    "build": "rslib build",
-    "dev": "rslib build --watch",
+    "build": "rs lib",
+    "dev": "rs lib --watch",
     "test": "rstest --passWithNoTests"
   },
   "dependencies": {
-    "@modern-js/runtime-extensions": "workspace:*",
     "@modern-js/runtime-utils": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@swc/helpers": "^0.5.23",
-    "path-to-regexp": "^8.4.2"
+    "@swc/helpers": "^0.5.17",
+    "path-to-regexp": "^6.3.0"
   },
   "devDependencies": {
     "@modern-js/rslib": "workspace:*",
     "@modern-js/server-core": "workspace:*",
     "@modern-js/types": "workspace:*",
-    "@rsbuild/core": "2.2.3",
-    "@rslib/core": "1.0.0",
+    "@rsbuild/core": "2.3.2",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.4.1",
-    "@types/supertest": "^7.2.1",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "memfs": "^4.71.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "supertest": "^7.2.2",
-    "typescript": "^7.0.2"
+    "@types/node": "^20",
+    "@types/supertest": "^2.0.16",
+    "memfs": "^3.5.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "supertest": "^6.3.4",
+    "typescript": "^5"
   },
   "peerDependencies": {
-    "react": "^19.2.8"
+    "react": ">=18.3.1"
   },
   "sideEffects": false,
   "publishConfig": {

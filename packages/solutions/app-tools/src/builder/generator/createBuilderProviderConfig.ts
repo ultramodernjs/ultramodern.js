@@ -69,12 +69,9 @@ export function createBuilderProviderConfig(
         compress: {
           filter: (req: IncomingMessage) => {
             const bffPrefix = resolveConfig.bff?.prefix || DEFAULT_API_PREFIX;
-            const bffPrefixes = Array.isArray(bffPrefix)
-              ? bffPrefix
-              : [bffPrefix];
             const url = req.url;
 
-            if (bffPrefixes.some(prefix => url?.startsWith(prefix))) {
+            if (url?.startsWith(bffPrefix)) {
               return false;
             }
 

@@ -114,7 +114,7 @@ export const preResolvedFnStr = `function p(e,r){return void 0!==r?Promise.rejec
       Object.assign(_ROUTER_DATA.loaderData[routeIdJsonStr], source);
     };
  */
-export const mergeLoaderDataStr = `function mergeLoaderData(e,n){var r=n.reduce((function(e,{key:n,routerDataFnName:r,routerDataFnArgs:a}){var t=a.map((e=>{if("undefined"!==e&&null!==e)return JSON.parse(e)}));return{...e,[n]:_ROUTER_DATA[r](...t)}}),{});_ROUTER_DATA.loaderData=_ROUTER_DATA.loaderData||{},_ROUTER_DATA.loaderData[e]=_ROUTER_DATA.loaderData[e]||{},Object.assign(_ROUTER_DATA.loaderData[e],r)}`;
+export const mergeLoaderDataStr = `function mergeLoaderData(e,n){var r=n.reduce((function(e,{key:n,routerDataFnName:r,routerDataFnArgs:a}){var t=a.map((e=>{if("undefined"!==e&&null!==e)return JSON.parse(e)}));return console.info("args",t),{...e,[n]:_ROUTER_DATA[r](...t)}}),{});Object.assign(_ROUTER_DATA.loaderData[e],r)}`;
 
 /**
    * This original string is: ${setupFnStr};${resolveFnStr};${preResolvedFnStr};

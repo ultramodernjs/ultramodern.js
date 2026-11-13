@@ -13,7 +13,7 @@ title: tsconfigPath
 
 - BFF / API 编译（`@modern-js/plugin-bff`）
 - 自定义 Server 编译（`server/` 目录下的 `*.ts` 文件）
-- 运行时 Node 原生 TypeScript 注册（如 SSR、`modern.config.ts`、`config/` 目录下的 `.ts` 文件）
+- 运行时 ts-node 注册（如 SSR、`modern.config.ts`、`config/` 目录下的 `.ts` 文件）
 
 未配置时，默认使用 `<appDirectory>/tsconfig.json`。
 
@@ -40,9 +40,9 @@ title: tsconfigPath
     "types": ["node"],
     "esModuleInterop": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "emitDecoratorMetadata": true,
   },
-  "include": ["api", "shared", "server", "config", "modern.config.ts"]
+  "include": ["api", "shared", "server", "config", "modern.config.ts"],
 }
 ```
 
@@ -60,4 +60,4 @@ export default defineConfig({
 
 - `tsconfigPath` 相对 `appDirectory` 解析，也支持绝对路径。
 - 建议通过 `extends` 继承根 tsconfig 中的 `paths` 等公共配置，避免重复维护。
-- 如果配置的文件不存在，运行时 TypeScript 设置 会在启动时抛出错误。
+- 如果配置的文件不存在，TypeScript / ts-node 会在启动时抛出错误。

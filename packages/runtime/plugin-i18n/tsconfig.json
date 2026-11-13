@@ -4,12 +4,9 @@
     "declaration": false,
     "lib": ["DOM", "ESNext", "dom.iterable"],
     "jsx": "preserve",
-    // FORK: `baseUrl` removed. TypeScript 7 / tsgo reject it outright (TS5102),
-    // so this package's own tsconfig could not be typechecked at all. `paths`
-    // is empty here, so nothing resolved through baseUrl.
+    "baseUrl": "./",
     "isolatedModules": true,
-    "paths": {},
-    "rootDir": "./src"
+    "paths": {}
   },
   "include": ["src", "types"]
 }

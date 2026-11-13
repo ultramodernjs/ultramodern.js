@@ -3,13 +3,8 @@
   "compilerOptions": {
     "declaration": false,
     "jsx": "preserve",
-    "isolatedModules": true,
-    "paths": {
-      "@modern-js/render/rsc": ["./src/rsc.ts"],
-      "@modern-js/render/rsc-worker": ["./src/rsc.worker.ts"]
-    },
-    "rootDir": "./src",
-    "types": ["node"]
+    "baseUrl": "./",
+    "isolatedModules": true
   },
   "include": ["src", "env.d.ts"]
 }

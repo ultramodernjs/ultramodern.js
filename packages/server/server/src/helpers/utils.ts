@@ -1,4 +1,3 @@
 import { createDebugger } from '@modern-js/utils';
 
-export const debug: ReturnType<typeof createDebugger> =
-  createDebugger('server');
+export const debug = createDebugger('server');

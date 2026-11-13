@@ -1,6 +1,6 @@
+import path from 'path';
 import readChangesets from '@changesets/read';
 import { execa } from '@modern-js/utils';
-import path from 'path';
 import { getCommitType, getReleaseInfo, getReleaseNoteLine } from './changeset';
 import {
   formatRsbuildUpgradeNote,

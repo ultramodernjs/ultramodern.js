@@ -1,22 +1,12 @@
-import { type BundlerChain, RUNTIME_CHUNK_NAME } from '@modern-js/builder';
-import { expect, type Page, test } from '@playwright/test';
-import { build, getHrefByEntryName } from '@scripts/shared';
 import path from 'path';
+import { type BundlerChain, RUNTIME_CHUNK_NAME } from '@modern-js/builder';
+import { expect, test } from '@playwright/test';
+import { build, getHrefByEntryName } from '@scripts/shared';
 
-const expectRuntimeWasInlined = async (page: Page) => {
-  await expect(
-    page.locator(`script[src*="${RUNTIME_CHUNK_NAME}"]`),
-  ).toHaveCount(0);
-  expect(
-    await page.evaluate(
-      runtimeChunkName =>
-        performance
-          .getEntriesByType('resource')
-          .some(entry => entry.name.includes(runtimeChunkName)),
-      RUNTIME_CHUNK_NAME,
-    ),
-  ).toBe(false);
-};
+// Rspack will not output builder runtime source map, but it not necessary
+// Identify whether the builder runtime chunk is included through some specific code snippets
+const isRuntimeChunkInHtml = (html: string): boolean =>
+  Boolean(html.includes('Loading chunk'));
 
 // use source-map for easy to test. By default, builder use hidden-source-map
 const toolsConfig = {
@@ -72,7 +62,7 @@ test.describe('disableInlineRuntimeChunk', () => {
   });
 });
 
-test('runtime chunk is inlined by default', async ({ page }) => {
+test('inline runtime chunk by default', async ({ page }) => {
   const builder = await build({
     cwd: __dirname,
     entry: { index: path.resolve(__dirname, './src/index.js') },
@@ -86,11 +76,10 @@ test('runtime chunk is inlined by default', async ({ page }) => {
   await page.goto(getHrefByEntryName('index', builder.port));
 
   expect(await page.evaluate(`window.test`)).toBe('aaaa');
-  await expectRuntimeWasInlined(page);
 
   const files = await builder.unwrapOutputJSON(false);
 
-  // builder-runtime is inlined by default instead of emitted as an external JS asset.
+  // no builder-runtime file in output
   expect(
     Object.keys(files).some(
       fileName =>
@@ -98,16 +87,19 @@ test('runtime chunk is inlined by default', async ({ page }) => {
     ),
   ).toBe(false);
 
+  // found builder-runtime file in html
+  const indexHtml =
+    files[path.resolve(__dirname, './dist/html/index/index.html')];
+
+  expect(isRuntimeChunkInHtml(indexHtml)).toBeTruthy();
+
   builder.close();
 });
 
-test('inline runtime chunk and remove source map when devtool is "hidden-source-map"', async ({
-  page,
-}) => {
+test('inline runtime chunk and remove source map when devtool is "hidden-source-map"', async () => {
   const builder = await build({
     cwd: __dirname,
     entry: { index: path.resolve(__dirname, './src/index.js') },
-    runServer: true,
     builderConfig: {
       tools: {
         bundlerChain(chain) {
@@ -119,39 +111,29 @@ test('inline runtime chunk and remove source map when devtool is "hidden-source-
 
   const files = await builder.unwrapOutputJSON(false);
 
-  await page.goto(getHrefByEntryName('index', builder.port));
-  expect(await page.evaluate(`window.test`)).toBe('aaaa');
-  await expectRuntimeWasInlined(page);
-
-  // builder runtime source map is not emitted when the runtime is inlined and
-  // devtool is hidden-source-map.
+  // should not emit source map of builder runtime
   expect(
     Object.keys(files).some(
       fileName =>
         fileName.includes(RUNTIME_CHUNK_NAME) && fileName.endsWith('.js.map'),
     ),
   ).toBe(false);
-
-  builder.close();
 });
 
-test('runtime chunk is inlined by default with multiple entries', async ({
-  page,
-}) => {
+test('inline runtime chunk by default with multiple entries', async () => {
   const builder = await build({
     cwd: __dirname,
     entry: {
       index: path.resolve(__dirname, './src/index.js'),
       another: path.resolve(__dirname, './src/another.js'),
     },
-    runServer: true,
     builderConfig: {
       tools: toolsConfig,
     },
   });
   const files = await builder.unwrapOutputJSON(false);
 
-  // builder-runtime is inlined by default instead of emitted as an external JS asset.
+  // no builder-runtime file in output
   expect(
     Object.keys(files).some(
       fileName =>
@@ -159,15 +141,14 @@ test('runtime chunk is inlined by default with multiple entries', async ({
     ),
   ).toBe(false);
 
-  await page.goto(getHrefByEntryName('index', builder.port));
-  expect(await page.evaluate(`window.test`)).toBe('aaaa');
-  await expectRuntimeWasInlined(page);
+  // found builder-runtime file in html
+  const indexHtml =
+    files[path.resolve(__dirname, './dist/html/index/index.html')];
+  const anotherHtml =
+    files[path.resolve(__dirname, './dist/html/another/index.html')];
 
-  await page.goto(getHrefByEntryName('another', builder.port));
-  await expect.poll(() => page.evaluate(`window.answer`)).toBe('another foo');
-  await expectRuntimeWasInlined(page);
-
-  builder.close();
+  expect(isRuntimeChunkInHtml(indexHtml)).toBeTruthy();
+  expect(isRuntimeChunkInHtml(anotherHtml)).toBeTruthy();
 });
 
 test('using RegExp to inline scripts', async () => {

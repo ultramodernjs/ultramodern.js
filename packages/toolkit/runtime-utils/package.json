@@ -15,7 +15,7 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.0",
+  "version": "3.11.3",
   "_comment": "Provide ESM and CJS exports, ESM is used by runtime package, for treeshaking",
   "exports": {
     "./router": {
@@ -156,20 +156,21 @@
   },
   "scripts": {
     "prepublishOnly": "only-allow-pnpm",
-    "dev": "rslib build --watch",
-    "build": "rslib build",
+    "dev": "rs lib --watch",
+    "build": "rs lib",
     "test": "rstest --passWithNoTests"
   },
   "dependencies": {
     "@modern-js/types": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@swc/helpers": "^0.5.23",
-    "lru-cache": "^11.5.2",
-    "react-router": "7.18.2"
+    "@swc/helpers": "^0.5.17",
+    "lru-cache": "^10.4.3",
+    "react-router": "7.18.4",
+    "serialize-javascript": "^7.1.2"
   },
   "peerDependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react": ">=18.3.1",
+    "react-dom": ">=18.3.1"
   },
   "peerDependenciesMeta": {
     "react": {
@@ -181,17 +182,14 @@
   },
   "devDependencies": {
     "@modern-js/rslib": "workspace:*",
-    "@rslib/core": "1.0.0",
     "@scripts/rstest-config": "workspace:*",
     "@types/ioredis-mock": "^8.2.8",
-    "@types/node": "^26.4.1",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "happy-dom": "^20.14.0",
-    "ioredis": "^5.11.1",
+    "@types/node": "^20",
+    "@types/serialize-javascript": "^5.0.4",
     "ioredis-mock": "^8.13.1",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "typescript": "^7.0.2"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^5"
   },
   "sideEffects": false
 }

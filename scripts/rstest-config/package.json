@@ -1,14 +1,14 @@
 {
   "name": "@scripts/rstest-config",
   "private": true,
-  "version": "2.66.0",
+  "version": "2.66.7",
   "type": "module",
   "main": "src/index.ts",
   "typings": "src/index.ts",
   "dependencies": {
     "@modern-js/tsconfig": "workspace:*",
-    "@types/node": "^26.4.1",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "path-serializer": "0.7.0"
+    "@types/node": "^20",
+    "path-serializer": "0.7.0",
+    "typescript": "^5"
   }
 }

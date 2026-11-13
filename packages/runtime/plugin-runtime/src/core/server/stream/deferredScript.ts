@@ -1,7 +1,5 @@
-// @effect-diagnostics processEnv:off strictBooleanExpressions:off
 import type { DeferredData } from '@modern-js/runtime-utils/browser';
 import { runRouterDataFnStr } from '../../../router/runtime/constants';
-import { shouldRedactServerError } from '../utils';
 
 export type DeferredDataLike = Pick<DeferredData, 'data' | 'pendingKeys'> & {
   data?: Record<string, unknown>;
@@ -40,17 +38,13 @@ export function toErrorInfo(error: unknown): {
   message: string;
   stack?: string;
 } {
-  if (shouldRedactServerError()) {
-    return { message: 'Unexpected Server Error' };
-  }
-
   if (error && typeof error === 'object') {
     const maybeMsg = (error as { message?: unknown }).message;
     const maybeStack = (error as { stack?: string }).stack;
     return {
       message:
         typeof maybeMsg === 'string' ? maybeMsg : String(maybeMsg ?? error),
-      stack: maybeStack,
+      stack: process.env.NODE_ENV !== 'production' ? maybeStack : undefined,
     };
   }
   return { message: String(error) };
@@ -66,31 +60,70 @@ export function buildDeferredDataScript(
   return `<script async${nonceAttr} data-fn-name="r" data-script-src="modern-run-router-data-fn" data-fn-args='${escaped}' suppressHydrationWarning>${runRouterDataFnStr}</script>`;
 }
 
+function getSerializedKeys(
+  routeId: string,
+  value: DeferredDataLike,
+  deferredScriptKeys: Map<string, string[]> | undefined,
+): string[] {
+  return deferredScriptKeys
+    ? (deferredScriptKeys.get(routeId) ?? [])
+    : (value.pendingKeys ?? []);
+}
+
+/**
+ * Whether `enqueueFromEntries` would emit any resolver script for `entries`.
+ */
+export function hasDeferredResolvers(
+  entries: Array<[string, unknown]>,
+  deferredScriptKeys: Map<string, string[]> | undefined,
+): boolean {
+  return entries.some(
+    ([routeId, value]) =>
+      isDeferredDataLike(value) &&
+      getSerializedKeys(routeId, value, deferredScriptKeys).some(key =>
+        isPromiseLike(value.data?.[key]),
+      ),
+  );
+}
+
 export function enqueueFromEntries(
   entries: Array<[string, unknown]>,
+  deferredScriptKeys: Map<string, string[]> | undefined,
   nonce: string | undefined,
   emit: (script: string) => void,
-): void {
+): Promise<void> {
+  const pendingResolvers: Promise<void>[] = [];
+
   entries.forEach(([routeId, value]) => {
     if (!isDeferredDataLike(value)) return;
-    const pendingKeys = new Set<string>(value.pendingKeys ?? []);
-    pendingKeys.forEach((key: string) => {
+    const serializedKeys = getSerializedKeys(
+      routeId,
+      value,
+      deferredScriptKeys,
+    );
+    serializedKeys.forEach((key: string) => {
       const tracked = value.data?.[key];
       if (isPromiseLike(tracked)) {
-        (tracked as Promise<unknown>).then(
-          (val: unknown) =>
-            emit(buildDeferredDataScript(nonce, [routeId, key, val])),
-          (err: unknown) =>
-            emit(
-              buildDeferredDataScript(nonce, [
-                routeId,
-                key,
-                undefined,
-                toErrorInfo(err),
-              ]),
-            ),
+        pendingResolvers.push(
+          Promise.resolve(tracked).then(
+            (val: unknown) => {
+              emit(buildDeferredDataScript(nonce, [routeId, key, val]));
+            },
+            (err: unknown) => {
+              emit(
+                buildDeferredDataScript(nonce, [
+                  routeId,
+                  key,
+                  undefined,
+                  toErrorInfo(err),
+                ]),
+              );
+            },
+          ),
         );
       }
     });
   });
+
+  return Promise.all(pendingResolvers).then(() => undefined);
 }

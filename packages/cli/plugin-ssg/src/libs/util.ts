@@ -1,12 +1,12 @@
+import path from 'path';
 import type { ServerUserConfig } from '@modern-js/app-tools';
 import type { ServerRoute as ModernRoute } from '@modern-js/types';
 import {
   fs,
-  isSingleEntry,
   ROUTE_SPEC_FILE,
   SERVER_BUNDLE_DIRECTORY,
+  isSingleEntry,
 } from '@modern-js/utils';
-import path from 'path';
 import type {
   AgreedRoute,
   EntryPoint,

@@ -1,13 +1,13 @@
-import { fs } from '@modern-js/utils';
 import os from 'os';
 import path from 'path';
+import { fs } from '@modern-js/utils';
 import clientGenerator, {
   buildClientTypeFacade,
   readDirectoryFiles,
 } from '../src/utils/clientGenerator';
 
 describe('clientGenerator', () => {
-  it('adds the generated API export to package.json', async () => {
+  it('writes package.json with a trailing newline', async () => {
     const appDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bff-client-gen-'));
     const lambdaDir = path.join(appDir, 'api', 'lambda');
 
@@ -33,8 +33,13 @@ describe('clientGenerator', () => {
         apiFiles: [path.join(lambdaDir, 'user.ts')],
       });
 
-      const packageJson = await fs.readJSON(path.join(appDir, 'package.json'));
-      expect(packageJson.exports).toHaveProperty('./api/*');
+      const packageContent = await fs.readFile(
+        path.join(appDir, 'package.json'),
+        'utf8',
+      );
+
+      expect(packageContent.endsWith('\n')).toBe(true);
+      expect(JSON.parse(packageContent).exports).toHaveProperty('./api/user');
     } finally {
       await fs.remove(appDir);
     }

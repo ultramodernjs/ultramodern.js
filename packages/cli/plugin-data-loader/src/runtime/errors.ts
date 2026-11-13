@@ -62,30 +62,11 @@ export function sanitizeError<T = unknown>(error: T) {
     process.env.NODE_ENV !== 'development' &&
     process.env.NODE_ENV !== 'test'
   ) {
-    const sanitized = new Error('Unexpected Server Error');
+    const sanitized = new Error(error.message || 'Unexpected Server Error');
     sanitized.stack = undefined;
     return sanitized;
   }
   return error;
-}
-
-function shouldRedactRouteErrorResponse(error: ErrorResponse) {
-  return (
-    error.status >= 500 &&
-    process.env.NODE_ENV !== 'development' &&
-    process.env.NODE_ENV !== 'test'
-  );
-}
-
-function serializeRouteErrorResponse(error: ErrorResponse) {
-  const shouldRedact = shouldRedactRouteErrorResponse(error);
-
-  return {
-    status: error.status,
-    statusText: shouldRedact ? 'Internal Server Error' : error.statusText,
-    data: shouldRedact ? 'Unexpected Server Error' : error.data,
-    __type: 'RouteErrorResponse',
-  };
 }
 
 export function sanitizeErrors(
@@ -123,7 +104,7 @@ export function serializeErrors(
     // Hey you!  If you change this, please change the corresponding logic in
     // deserializeErrors in remix-react/errors.ts :)
     if (isRouteErrorResponse(val)) {
-      serialized[key] = serializeRouteErrorResponse(val);
+      serialized[key] = { ...val, __type: 'RouteErrorResponse' };
     } else if (val instanceof Error) {
       const sanitized = sanitizeError(val);
       serialized[key] = {
@@ -148,14 +129,12 @@ export function serializeErrors(
 }
 
 export function errorResponseToJson(errorResponse: ErrorResponse): Response {
-  const serializedErrorResponse = serializeRouteErrorResponse(errorResponse);
-
   return Response.json(
     // @ts-expect-error This is "private" from users but intended for internal use
     serializeError(errorResponse.error || new Error('Unexpected Server Error')),
     {
       status: errorResponse.status,
-      statusText: serializedErrorResponse.statusText,
+      statusText: errorResponse.statusText,
       headers: {
         'X-Modernjs-Error': 'yes',
       },

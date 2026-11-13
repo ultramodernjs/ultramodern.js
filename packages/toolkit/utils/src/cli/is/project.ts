@@ -1,5 +1,5 @@
 import path from 'path';
-import pkgUp from '../../../compiled/pkg-up/index.js';
+import pkgUp from '../../../compiled/pkg-up';
 import { fs, minimist, semver } from '../../compiled';
 import { getArgv } from '../commands';
 import { createDebugger } from '../common';

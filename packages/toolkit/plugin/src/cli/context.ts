@@ -12,7 +12,7 @@ interface ContextParams<Extends extends CLIPluginExtends> {
 
 export function initAppContext<Extends extends CLIPluginExtends>(params: {
   packageName: string;
-  configFile: string | false;
+  configFile: string;
   command: string;
   appDirectory: string;
   metaName: string;

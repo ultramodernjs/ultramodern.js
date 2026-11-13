@@ -1,14 +1,7 @@
+import type { RuntimePlugin } from './core/plugin';
+
 export const isBrowser = () =>
   typeof window !== 'undefined' && window.name !== 'nodejs';
-
-export type RuntimePlugin<Extends = unknown> = {
-  name?: string;
-  registryHooks?: Extends extends { extendHooks: infer Hooks }
-    ? Hooks
-    : Record<string, unknown>;
-  setup?: (...args: any[]) => unknown;
-  [key: string]: unknown;
-};
 
 export interface RuntimeConfig {
   plugins?: RuntimePlugin[];

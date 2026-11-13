@@ -1,8 +1,5 @@
 import type { APIHandlerInfo } from '@modern-js/bff-core';
-import { resolveAdapterCrossProjectPolicy } from '@modern-js/plugin-bff-extensions/cross-project-policy';
-import { bindHonoRouteHandlers } from '@modern-js/plugin-bff-extensions/hono';
 import type { ServerMiddleware, ServerPluginAPI } from '@modern-js/server-core';
-import { logger } from '@modern-js/utils';
 
 import createHonoRoutes from '../../utils/createHonoRoutes';
 
@@ -21,21 +18,13 @@ export class HonoAdapter {
       return;
     }
     const { apiHandlerInfos } = this.api.getServerContext();
-    const handlers = (apiHandlerInfos ?? []) as APIHandlerInfo[];
 
-    const honoHandlers = createHonoRoutes(handlers);
-    const policy = resolveAdapterCrossProjectPolicy(this.api, handlers);
+    const honoHandlers = createHonoRoutes(apiHandlerInfos as APIHandlerInfo[]);
     this.apiMiddleware = honoHandlers.map(({ path, method, handler }) => ({
       name: 'hono-bff-api',
       path,
       method,
-      handler: bindHonoRouteHandlers({
-        handler,
-        policy,
-        routePath: path,
-        onError: this.api.getServerConfig()?.onError,
-        reportError: error => logger.error(error),
-      }),
+      handler,
       order: 'post',
       before,
     }));
@@ -50,7 +39,7 @@ export class HonoAdapter {
    * runtime — including this plugin — from scratch), so BFF no longer needs its
    * own swappable Hono sub-app / dynamic dispatch middleware.
    */
-  registerMiddleware = async (_options?: unknown) => {
+  registerMiddleware = async () => {
     const { bffRuntimeFramework } = this.api.getServerContext();
 
     if (bffRuntimeFramework !== 'hono') {

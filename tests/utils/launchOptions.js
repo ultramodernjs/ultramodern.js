@@ -1,45 +1,3 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-
-const resolveHeadlessShellExecutable = () => {
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-    return process.env.PUPPETEER_EXECUTABLE_PATH;
-  }
-
-  const rootDir = path.join(
-    os.homedir(),
-    '.cache/puppeteer/chrome-headless-shell',
-  );
-  if (!fs.existsSync(rootDir)) {
-    return undefined;
-  }
-
-  const revisions = fs
-    .readdirSync(rootDir, { withFileTypes: true })
-    .filter(entry => entry.isDirectory())
-    .map(entry => entry.name)
-    .sort((left, right) => right.localeCompare(left));
-
-  const candidates = [
-    ['chrome-headless-shell-mac-arm64', 'chrome-headless-shell'],
-    ['chrome-headless-shell-mac-x64', 'chrome-headless-shell'],
-    ['chrome-headless-shell-linux64', 'chrome-headless-shell'],
-    ['chrome-headless-shell-win64', 'chrome-headless-shell.exe'],
-  ];
-
-  for (const revision of revisions) {
-    for (const [folder, executable] of candidates) {
-      const resolvedPath = path.join(rootDir, revision, folder, executable);
-      if (fs.existsSync(resolvedPath)) {
-        return resolvedPath;
-      }
-    }
-  }
-
-  return undefined;
-};
-
 const launchOptions = {
   headless: 'new',
   dumpio: true,
@@ -91,11 +49,6 @@ const launchOptions = {
   // see: https://github.com/puppeteer/puppeteer/issues/9927
   protocolTimeout: 0,
 };
-
-const headlessShellExecutable = resolveHeadlessShellExecutable();
-if (headlessShellExecutable) {
-  launchOptions.executablePath = headlessShellExecutable;
-}
 
 module.exports = {
   launchOptions,

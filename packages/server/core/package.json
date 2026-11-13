@@ -15,7 +15,7 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.0",
+  "version": "3.11.3",
   "types": "./src/index.ts",
   "main": "./dist/cjs/index.js",
   "exports": {
@@ -49,23 +49,20 @@
   "typesVersions": {
     "*": {
       ".": [
-        "./dist/types/index.d.ts",
-        "./src/index.ts"
+        "./dist/types/index.d.ts"
       ],
       "node": [
-        "./dist/types/adapters/node/index.d.ts",
-        "./src/adapters/node/index.ts"
+        "./dist/types/adapters/node/index.d.ts"
       ],
       "hono": [
-        "./dist/types/hono.d.ts",
-        "./src/hono.ts"
+        "./dist/types/hono.d.ts"
       ]
     }
   },
   "scripts": {
     "prepublishOnly": "only-allow-pnpm",
-    "dev": "rslib build --watch",
-    "build": "rslib build",
+    "dev": "rs lib --watch",
+    "build": "rs lib",
     "test": "rstest --passWithNoTests"
   },
   "engines": {
@@ -73,29 +70,26 @@
   },
   "dependencies": {
     "@modern-js/plugin": "workspace:*",
-    "@modern-js/runtime-extensions": "workspace:*",
     "@modern-js/runtime-utils": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@swc/helpers": "^0.5.23",
+    "@swc/helpers": "^0.5.17",
     "@web-std/fetch": "^4.2.1",
     "@web-std/file": "^3.0.3",
     "@web-std/stream": "^1.0.3",
     "cloneable-readable": "^3.0.0",
     "flatted": "^3.4.4",
-    "hono": "^4.13.7",
+    "hono": "^4.11.7",
     "ts-deepmerge": "8.0.0"
   },
   "devDependencies": {
     "@modern-js/rslib": "workspace:*",
     "@modern-js/types": "workspace:*",
-    "@rslib/core": "1.0.0",
     "@scripts/rstest-config": "workspace:*",
     "@types/cloneable-readable": "^2.0.3",
     "@types/merge-deep": "^3.0.3",
-    "@types/node": "^26.4.1",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "http-proxy-middleware": "^4.2.0",
-    "typescript": "^7.0.2"
+    "@types/node": "^20",
+    "http-proxy-middleware": "^2.0.11",
+    "typescript": "^5"
   },
   "sideEffects": false,
   "publishConfig": {

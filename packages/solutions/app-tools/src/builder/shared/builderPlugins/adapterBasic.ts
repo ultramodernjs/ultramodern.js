@@ -12,16 +12,13 @@ export const builderPluginAdapterBasic = (
     api.modifyBundlerChain((chain, { target, CHAIN_ID, environment }) => {
       const isServiceWorker =
         environment.name === SERVICE_WORKER_ENVIRONMENT_NAME;
-      const isWebTargetServiceWorker = isServiceWorker && target === 'web';
 
       // apply node compat
       if (target === 'node' || isServiceWorker) {
-        applyNodeCompat(isServiceWorker, chain, {
-          includeNodeExtensions: !isWebTargetServiceWorker,
-        });
+        applyNodeCompat(isServiceWorker, chain);
       }
 
-      if (target === 'web' && !isServiceWorker) {
+      if (target === 'web') {
         const bareServerModuleReg = /\.(server|node)\.[tj]sx?$/;
         const depExt = process.env.MODERN_LIB_FORMAT === 'esm' ? 'mjs' : 'js';
         chain.module.rule(CHAIN_ID.RULE.JS).exclude.add(bareServerModuleReg);
@@ -35,12 +32,11 @@ export const builderPluginAdapterBasic = (
       }
 
       const { appContext } = options;
-      const { metaName } = appContext;
 
+      // Keep the array form: plugins such as Module Federation append their
+      // own entries to an array, but replace a single RegExp.
       chain.watchOptions({
-        ignored: [
-          `[\\\\/](?:node_modules(?![\\\\/]\\.${metaName})|.git)[\\\\/]`,
-        ],
+        ignored: [createWatchIgnored(appContext.internalDirectory)],
       });
     });
 
@@ -48,29 +44,18 @@ export const builderPluginAdapterBasic = (
     api.modifyRspackConfig((config, { target, environment }) => {
       const isServiceWorker =
         environment.name === SERVICE_WORKER_ENVIRONMENT_NAME;
-      const isWebTargetServiceWorker = isServiceWorker && target === 'web';
 
       if (target === 'node' || isServiceWorker) {
         // Define extensionAlias for server and node files
         // a .mjs file will resolve in order of .node.mjs, .server.mjs, .mjs
-        const extensionAlias: Record<string, string[]> =
-          isWebTargetServiceWorker
-            ? {
-                '.js': ['.worker.js', '.server.js', '.js'],
-                '.jsx': ['.worker.jsx', '.server.jsx', '.jsx'],
-                '.ts': ['.worker.ts', '.server.ts', '.ts'],
-                '.tsx': ['.worker.tsx', '.server.tsx', '.tsx'],
-                '.mjs': ['.worker.mjs', '.server.mjs', '.mjs'],
-                '.json': ['.worker.json', '.server.json', '.json'],
-              }
-            : {
-                '.js': ['.node.js', '.server.js', '.js'],
-                '.jsx': ['.node.jsx', '.server.jsx', '.jsx'],
-                '.ts': ['.node.ts', '.server.ts', '.ts'],
-                '.tsx': ['.node.tsx', '.server.tsx', '.tsx'],
-                '.mjs': ['.node.mjs', '.server.mjs', '.mjs'],
-                '.json': ['.node.json', '.server.json', '.json'],
-              };
+        const extensionAlias: Record<string, string[]> = {
+          '.js': ['.node.js', '.server.js', '.js'],
+          '.jsx': ['.node.jsx', '.server.jsx', '.jsx'],
+          '.ts': ['.node.ts', '.server.ts', '.ts'],
+          '.tsx': ['.node.tsx', '.server.tsx', '.tsx'],
+          '.mjs': ['.node.mjs', '.server.mjs', '.mjs'],
+          '.json': ['.node.json', '.server.json', '.json'],
+        };
 
         config.resolve ??= {};
         config.resolve.extensionAlias = {
@@ -83,12 +68,7 @@ export const builderPluginAdapterBasic = (
 });
 
 /** compat some config, if target is `node` or `worker` */
-function applyNodeCompat(
-  isServiceWorker: boolean,
-  chain: RspackChain,
-  options: { includeNodeExtensions?: boolean } = {},
-) {
-  const { includeNodeExtensions = true } = options;
+function applyNodeCompat(isServiceWorker: boolean, chain: RspackChain) {
   const nodeExts = [
     '.node.js',
     '.node.jsx',
@@ -108,10 +88,8 @@ function applyNodeCompat(
     '.worker.tsx',
   ];
   // apply node resolve extensions
-  if (includeNodeExtensions) {
-    for (const ext of nodeExts) {
-      chain.resolve.extensions.prepend(ext);
-    }
+  for (const ext of nodeExts) {
+    chain.resolve.extensions.prepend(ext);
   }
 
   if (isServiceWorker) {
@@ -119,4 +97,20 @@ function applyNodeCompat(
       chain.resolve.extensions.prepend(ext);
     }
   }
+}
+
+// Ignore node_modules and .git, but keep watching the generated internal
+// directory (`output.tempDir`), which usually lives inside node_modules.
+function createWatchIgnored(internalDirectory: string) {
+  const segments = internalDirectory.split(/[\\/]/);
+  const index = segments.lastIndexOf('node_modules');
+  const internalPath = segments
+    .slice(index + 1)
+    .map(segment => segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('[\\\\/]');
+  const nodeModules =
+    index === -1 || !internalPath
+      ? 'node_modules'
+      : `node_modules(?![\\\\/]${internalPath}(?:[\\\\/]|$))`;
+  return new RegExp(`[\\\\/](?:${nodeModules}|\\.git)[\\\\/]`);
 }

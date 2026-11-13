@@ -8,8 +8,7 @@
     "esModuleInterop": true,
     "paths": {
       "@/*": ["./src/*"]
-    },
-    "rootDir": "./src"
+    }
   },
   "include": ["src", "api", "server", "electron"]
 }

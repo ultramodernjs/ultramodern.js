@@ -7,10 +7,12 @@ import {
   toSchemaCtor,
 } from 'farrow-schema';
 import {
-  createSchemaValidator,
   type ValidationError,
   type Validator,
+  createSchemaValidator,
 } from 'farrow-schema/validator';
+import type { TypeOfRouterRequestField } from './types';
+
 import type {
   PureTypeOfRequestSchema,
   RequestSchema,
@@ -22,7 +24,6 @@ import {
   InputValidationError,
   OutputValidationError,
 } from './response';
-import type { TypeOfRouterRequestField } from './types';
 
 export type NormalHandler = (...args: any[]) => any;
 export type Handler<I, O> = (input: I) => MaybeAsync<O>;

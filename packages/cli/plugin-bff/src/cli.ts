@@ -1,38 +1,182 @@
-// @effect-diagnostics asyncFunction:off nodeBuiltinImport:off processEnv:off strictBooleanExpressions:off unnecessaryArrowBlock:off
+import type { IncomingMessage } from 'http';
+import path from 'path';
 import type { AppTools, CliPlugin } from '@modern-js/app-tools';
 import { ApiRouter } from '@modern-js/bff-core';
+import type { ToolsDevServerConfig } from '@modern-js/builder';
+import { compile } from '@modern-js/server-utils';
 import type { ServerRoute } from '@modern-js/types';
-import { normalizeOutputPath } from '@modern-js/utils';
-import path from 'path';
-import { createCompressConfig } from './cli/compress';
-import { createBffGenerator } from './cli/generator';
-import { getPrimaryPrefix } from './cli/prefix';
-import { isWatchableBffFile } from './cli/watch';
+import {
+  fs,
+  API_DIR,
+  type Alias,
+  DEFAULT_API_PREFIX,
+  SHARED_DIR,
+  normalizeOutputPath,
+  resolveServerTsconfig,
+} from '@modern-js/utils';
+import type { ConfigChain } from '@rsbuild/core';
+import clientGenerator from './utils/clientGenerator';
+import pluginGenerator from './utils/pluginGenerator';
+import runtimeGenerator from './utils/runtimeGenerator';
+
+const RUNTIME_CREATE_REQUEST = '@modern-js/plugin-bff/client';
 
 export const bffPlugin = (): CliPlugin<AppTools> => ({
   name: '@modern-js/plugin-bff',
   setup: api => {
-    {
-      const appContext = api.getAppContext();
-      const userRuntimeFramework = api.getConfig()?.bff?.runtimeFramework;
-      api.updateAppContext({
-        ...appContext,
-        bffRuntimeFramework:
-          userRuntimeFramework === 'hono' ? 'hono' : 'effect',
-      });
-    }
+    const compileApi = async () => {
+      const {
+        appDirectory,
+        distDirectory,
+        apiDirectory,
+        sharedDirectory,
+        moduleType,
+      } = api.getAppContext();
+      const modernConfig = api.getNormalizedConfig();
 
-    const { compileApi, handleCrossProjectInvocation } =
-      createBffGenerator(api);
+      const distDir = path.resolve(distDirectory);
+      const apiDir = apiDirectory || path.resolve(appDirectory, API_DIR);
+      const sharedDir =
+        sharedDirectory || path.resolve(appDirectory, SHARED_DIR);
+      const tsconfigPath = resolveServerTsconfig(
+        appDirectory,
+        modernConfig?.server?.tsconfigPath,
+      );
+
+      const sourceDirs = [];
+      if (await fs.pathExists(apiDir)) {
+        sourceDirs.push(apiDir);
+      }
+
+      if (await fs.pathExists(sharedDir)) {
+        sourceDirs.push(sharedDir);
+      }
+
+      const { server } = modernConfig;
+      const { alias } = modernConfig.source;
+      const { alias: resolveAlias } = modernConfig.resolve;
+
+      if (sourceDirs.length > 0) {
+        const combinedAlias = ([] as unknown[])
+          .concat(alias ?? [])
+          .concat(resolveAlias ?? []) as ConfigChain<Alias>;
+        await compile(
+          appDirectory,
+          {
+            server,
+            alias: combinedAlias,
+          },
+          {
+            sourceDirs,
+            distDir,
+            tsconfigPath,
+            moduleType,
+            throwErrorInsteadOfExit: true,
+          },
+        );
+      }
+    };
+
+    const generator = async () => {
+      const { appDirectory, apiDirectory, lambdaDirectory, port, moduleType } =
+        api.getAppContext();
+
+      const modernConfig = api.getNormalizedConfig();
+      const relativeDistPath = modernConfig?.output?.distPath?.root || 'dist';
+      const { bff } = modernConfig || {};
+      const prefix = bff?.prefix || DEFAULT_API_PREFIX;
+      const httpMethodDecider = bff?.httpMethodDecider;
+
+      const apiRouter = new ApiRouter({
+        apiDir: apiDirectory,
+        appDir: appDirectory,
+        lambdaDir: lambdaDirectory,
+        prefix,
+        httpMethodDecider,
+        isBuild: true,
+      });
+
+      const lambdaDir = apiRouter.getLambdaDir();
+      const existLambda = apiRouter.isExistLambda();
+
+      const runtime =
+        (bff as any)?.runtimeCreateRequest || RUNTIME_CREATE_REQUEST;
+      const relativeApiPath = path.relative(appDirectory, apiDirectory);
+      const relativeLambdaPath = path.relative(appDirectory, lambdaDir);
+
+      await pluginGenerator({
+        prefix,
+        appDirectory,
+        relativeDistPath,
+        relativeApiPath,
+        relativeLambdaPath,
+      });
+      await clientGenerator({
+        prefix,
+        appDir: appDirectory,
+        apiDir: apiDirectory,
+        lambdaDir,
+        existLambda,
+        port,
+        requestCreator: (bff as any)?.requestCreator,
+        httpMethodDecider,
+        relativeDistPath,
+        relativeApiPath,
+        moduleType,
+        apiFiles: apiRouter.getApiFiles(),
+      });
+      await runtimeGenerator({
+        runtime,
+        appDirectory,
+        relativeDistPath,
+      });
+    };
+
+    const handleCrossProjectInvocation = async (isBuild = false) => {
+      const { bff } = api.getNormalizedConfig();
+      if (bff?.crossProject) {
+        if (!isBuild) {
+          await compileApi();
+        }
+        await generator();
+      }
+    };
 
     const isHono = () => {
       const { bffRuntimeFramework } = api.getAppContext();
       return bffRuntimeFramework === 'hono';
     };
 
+    const createCompressConfig = (
+      devServer: ToolsDevServerConfig | undefined,
+      prefix: string,
+    ) => {
+      if (
+        !devServer ||
+        typeof devServer !== 'object' ||
+        Array.isArray(devServer)
+      ) {
+        return undefined;
+      }
+
+      const { compress } = devServer;
+
+      if (compress === undefined || compress === true) {
+        return {
+          filter: (req: IncomingMessage) => !req.url?.includes(prefix),
+        };
+      }
+
+      if (compress === false) {
+        return false;
+      }
+
+      return compress;
+    };
+
     api.config(async () => {
       const devServer = api.getConfig()?.tools?.devServer;
-      const prefix = api.getConfig()?.bff?.prefix;
+      const prefix = api.getConfig()?.bff?.prefix || DEFAULT_API_PREFIX;
 
       const compress = createCompressConfig(devServer, prefix);
 
@@ -42,16 +186,11 @@ export const bffPlugin = (): CliPlugin<AppTools> => ({
             compress,
           },
           bundlerChain: (chain, { CHAIN_ID, isServer }) => {
-            const {
-              port,
-              appDirectory,
-              apiDirectory,
-              lambdaDirectory,
-              bffRuntimeFramework,
-            } = api.getAppContext();
+            const { port, appDirectory, apiDirectory, lambdaDirectory } =
+              api.getAppContext();
             const modernConfig = api.getNormalizedConfig();
             const { bff } = modernConfig || {};
-            const prefix = getPrimaryPrefix(bff?.prefix);
+            const prefix = bff?.prefix || DEFAULT_API_PREFIX;
             const httpMethodDecider = bff?.httpMethodDecider;
 
             const apiRouter = new ApiRouter({
@@ -87,14 +226,10 @@ export const bffPlugin = (): CliPlugin<AppTools> => ({
                 lambdaDir,
                 existLambda,
                 port,
-                requestId: bff?.requestId,
                 target: name,
                 // Internal field
-                requestCreator: bff?.requestCreator,
+                requestCreator: (bff as any)?.requestCreator,
                 httpMethodDecider,
-                bffRuntimeFramework,
-                effectEntry: bff?.effect?.entry,
-                effectDataPlatformBatch: bff?.effect?.dataPlatform?.batch,
               });
           },
         },
@@ -159,9 +294,7 @@ export const bffPlugin = (): CliPlugin<AppTools> => ({
       const config = api.getNormalizedConfig();
 
       if (config?.bff?.crossProject) {
-        return [appContext.apiDirectory, appContext.sharedDirectory].filter(
-          Boolean,
-        ) as string[];
+        return [appContext.apiDirectory];
       } else {
         return [];
       }
@@ -169,23 +302,13 @@ export const bffPlugin = (): CliPlugin<AppTools> => ({
 
     api.onFileChanged(async e => {
       const { filename, eventType, isPrivate } = e;
-      const { appDirectory, apiDirectory, sharedDirectory } =
-        api.getAppContext();
+      const { appDirectory, apiDirectory } = api.getAppContext();
       const relativeApiPath = path.relative(appDirectory, apiDirectory);
-      const relativeSharedPath = sharedDirectory
-        ? path.relative(appDirectory, sharedDirectory)
-        : '';
-      const isApiFile = filename.startsWith(`${relativeApiPath}/`);
-      const isSharedFile = relativeSharedPath
-        ? filename.startsWith(`${relativeSharedPath}/`)
-        : false;
       if (
         !isPrivate &&
-        (eventType === 'add' ||
-          eventType === 'change' ||
-          eventType === 'unlink') &&
-        (isApiFile || isSharedFile) &&
-        isWatchableBffFile(filename)
+        (eventType === 'change' || eventType === 'unlink') &&
+        filename.startsWith(`${relativeApiPath}/`) &&
+        (filename.endsWith('.ts') || filename.endsWith('.js'))
       ) {
         await handleCrossProjectInvocation();
       }

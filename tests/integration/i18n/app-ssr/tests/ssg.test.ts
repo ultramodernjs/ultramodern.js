@@ -1,30 +1,12 @@
-import { fs } from '@modern-js/utils';
 import path, { join } from 'path';
+import { fs } from '@modern-js/utils';
 import { modernBuild } from '../../../../utils/modernTestUtils';
-import { acquireTestLock } from '../../test-utils';
 
-rstest.setConfig({ testTimeout: 1000 * 60 * 3, hookTimeout: 1000 * 60 * 3 });
+rstest.setConfig({ testTimeout: 1000 * 60 * 2, hookTimeout: 1000 * 60 * 2 });
 
 const projectDir = path.resolve(__dirname, '..');
 
 describe('ssg', () => {
-  let releaseLock: (() => Promise<void>) | undefined;
-
-  beforeAll(async () => {
-    // index.test.ts runs dev and serve suites against the SAME fixture
-    // directory; this build rewrites node_modules/.modern-js/*/routes.js
-    // which would force HMR full reloads under the dev server. Serialize.
-    releaseLock = await acquireTestLock('i18n-app-ssr-fixture', {
-      timeoutMs: 240_000,
-    });
-  });
-
-  afterAll(async () => {
-    if (releaseLock) {
-      await releaseLock();
-    }
-  });
-
   test('should simple ssg work correctly', async () => {
     const appDir = projectDir;
     await modernBuild(appDir, ['--config', 'modern.ssg.config.ts']);

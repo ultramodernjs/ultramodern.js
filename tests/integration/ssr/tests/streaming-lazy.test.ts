@@ -126,12 +126,14 @@ describe('Streaming SSR with lazy compilation', () => {
 
     // Forcing the route component eager pulls its whole STATIC import subgraph
     // (About + B) into the route chunk, so every nested component's CSS is
-    // applied on the first screen — not just the route file's own styles.
-    const [aboutColor, deeplyNestedColor] = await Promise.all([
-      page.$eval('.about', element => getComputedStyle(element).color),
-      page.$eval('.b-deep', element => getComputedStyle(element).color),
-    ]);
-    expect(aboutColor).toBe('rgb(0, 0, 255)');
-    expect(deeplyNestedColor).toBe('rgb(0, 128, 0)');
+    // merged into the single route CSS file — not just the route file's own.
+    // Fetch that CSS and assert both the 2nd-level (.about) and the
+    // 3rd-level (.b-deep) styles are present.
+    const cssRes = await page.goto(
+      `http://localhost:${appPort}/static/css/async/about/page.css`,
+    );
+    const css = await cssRes!.text();
+    expect(css).toMatch(/\.about\b/);
+    expect(css).toMatch(/\.b-deep\b/);
   });
 });

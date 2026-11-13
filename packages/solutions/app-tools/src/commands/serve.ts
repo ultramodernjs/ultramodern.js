@@ -1,13 +1,13 @@
+import path from 'path';
 import type { CLIPluginAPI } from '@modern-js/plugin';
 import { createProdServer } from '@modern-js/prod-server';
 import {
+  SERVER_DIR,
   getMeta,
   getTargetDir,
   isApiOnly,
   logger,
-  SERVER_DIR,
 } from '@modern-js/utils';
-import path from 'path';
 import type { AppNormalizedConfig, AppTools } from '../types';
 import { loadServerPlugins } from '../utils/loadPlugins';
 import { printInstructions } from '../utils/printInstructions';

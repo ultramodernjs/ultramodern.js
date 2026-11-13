@@ -15,7 +15,7 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.0",
+  "version": "3.11.3",
   "types": "./src/index.ts",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.mjs",
@@ -30,7 +30,6 @@
       "default": "./dist/cjs/index.js"
     },
     "./universal": {
-      "types": "./dist/types/universal/index.d.ts",
       "node": {
         "module": "./dist/esm/universal/index.mjs",
         "import": "./dist/esm-node/universal/index.mjs",
@@ -39,7 +38,6 @@
       "default": "./dist/esm/universal/index.mjs"
     },
     "./universal/constants": {
-      "types": "./dist/types/universal/constants.d.ts",
       "node": {
         "module": "./dist/esm/universal/constants.mjs",
         "import": "./dist/esm-node/universal/constants.mjs",
@@ -48,69 +46,27 @@
       "default": "./dist/esm/universal/constants.mjs"
     },
     "./commander": {
-      "types": "./dist/compiled/commander/typings/index.d.ts",
       "import": "./dist/compiled/commander/index.mjs",
       "default": "./dist/compiled/commander/index.js"
     },
-    "./ora": {
-      "types": "./dist/compiled/ora/index.d.ts",
-      "default": "./dist/compiled/ora/index.js"
-    },
-    "./glob": {
-      "types": "./dist/compiled/glob/index.d.ts",
-      "default": "./dist/compiled/glob/index.js"
-    },
-    "./chalk": {
-      "types": "./dist/compiled/chalk/index.d.ts",
-      "default": "./dist/compiled/chalk/index.js"
-    },
-    "./execa": {
-      "types": "./dist/compiled/execa/index.d.ts",
-      "default": "./dist/compiled/execa/index.js"
-    },
-    "./json5": {
-      "types": "./dist/compiled/json5/lib/index.d.ts",
-      "default": "./dist/compiled/json5/index.js"
-    },
-    "./semver": {
-      "types": "./dist/compiled/semver/index.d.ts",
-      "default": "./dist/compiled/semver/index.js"
-    },
+    "./ora": "./dist/compiled/ora/index.js",
+    "./glob": "./dist/compiled/glob/index.js",
+    "./chalk": "./dist/compiled/chalk/index.js",
+    "./execa": "./dist/compiled/execa/index.js",
+    "./json5": "./dist/compiled/json5/index.js",
+    "./semver": "./dist/compiled/semver/index.js",
     "./lodash": {
-      "types": "./dist/compiled/lodash/index.d.ts",
       "import": "./dist/compiled/lodash/index.mjs",
       "default": "./dist/compiled/lodash/index.js"
     },
-    "./globby": {
-      "types": "./dist/compiled/globby/index.d.ts",
-      "default": "./dist/compiled/globby/index.js"
-    },
-    "./fs-extra": {
-      "types": "./dist/compiled/fs-extra/index.d.ts",
-      "default": "./dist/compiled/fs-extra/index.js"
-    },
-    "./fast-glob": {
-      "types": "./dist/compiled/fast-glob/out/index.d.ts",
-      "default": "./dist/compiled/fast-glob/index.js"
-    },
-    "./gzip-size": {
-      "types": "./dist/compiled/gzip-size/index.d.ts",
-      "default": "./dist/compiled/gzip-size/index.js"
-    },
-    "./mime-types": {
-      "types": "./dist/compiled/mime-types/index.d.ts",
-      "default": "./dist/compiled/mime-types/index.js"
-    },
-    "./strip-ansi": {
-      "types": "./dist/compiled/strip-ansi/index.d.ts",
-      "default": "./dist/compiled/strip-ansi/index.js"
-    },
-    "./browserslist": {
-      "types": "./dist/compiled/browserslist/index.d.ts",
-      "default": "./dist/compiled/browserslist/index.js"
-    },
+    "./globby": "./dist/compiled/globby/index.js",
+    "./fs-extra": "./dist/compiled/fs-extra/index.js",
+    "./fast-glob": "./dist/compiled/fast-glob/index.js",
+    "./gzip-size": "./dist/compiled/gzip-size/index.js",
+    "./mime-types": "./dist/compiled/mime-types/index.js",
+    "./strip-ansi": "./dist/compiled/strip-ansi/index.js",
+    "./browserslist": "./dist/compiled/browserslist/index.js",
     "./tsconfig-paths": {
-      "types": "./dist/compiled/tsconfig-paths/lib/index.d.ts",
       "import": "./dist/compiled/tsconfig-paths/index.mjs",
       "default": "./dist/compiled/tsconfig-paths/index.js"
     }
@@ -138,7 +94,7 @@
         "./dist/compiled/chalk/index.d.ts"
       ],
       "json5": [
-        "./dist/compiled/json5/lib/index.d.ts"
+        "./dist/compiled/json5/index.d.ts"
       ],
       "semver": [
         "./dist/compiled/semver/index.d.ts"
@@ -153,7 +109,7 @@
         "./dist/compiled/fs-extra/index.d.ts"
       ],
       "fast-glob": [
-        "./dist/compiled/fast-glob/out/index.d.ts"
+        "./dist/compiled/fast-glob/index.d.ts"
       ],
       "gzip-size": [
         "./dist/compiled/gzip-size/index.d.ts"
@@ -180,31 +136,29 @@
   },
   "scripts": {
     "prepublishOnly": "only-allow-pnpm",
-    "dev": "rslib build --watch",
-    "build": "rslib build",
+    "dev": "rs lib --watch",
+    "build": "rs lib",
     "test": "rstest --passWithNoTests"
   },
   "dependencies": {
-    "@swc/helpers": "^0.5.23",
-    "caniuse-lite": "^1.0.30001810",
+    "@swc/helpers": "^0.5.17",
+    "caniuse-lite": "^1.0.30001520",
     "import-meta-resolve": "^4.2.0",
     "lodash": "^4.18.1",
     "lodash-es": "^4.18.1",
-    "rslog": "^2.3.0"
+    "rslog": "^1.3.2"
   },
   "devDependencies": {
     "@modern-js/rslib": "workspace:*",
     "@modern-js/types": "workspace:*",
-    "@rslib/core": "1.0.0",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.4.1",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "happy-dom": "^20.14.0",
-    "rxjs": "7.8.2"
+    "@types/node": "^20",
+    "happy-dom": "^21.0.4",
+    "typescript": "^5"
   },
   "peerDependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "peerDependenciesMeta": {
     "react": {

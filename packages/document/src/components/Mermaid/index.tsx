@@ -1,10 +1,9 @@
-import type { CSSProperties, PropsWithChildren } from 'react';
 import React from 'react';
+import type { CSSProperties, PropsWithChildren } from 'react';
 import './style.scss';
 
 import mermaid, { type MermaidConfig } from 'mermaid';
 import { useEffect, useId, useState } from 'react';
-
 interface Props {
   style?: CSSProperties;
   title?: string;

@@ -7,13 +7,10 @@ import {
   launchOptions,
 } from '../../../../utils/modernTestUtils';
 import {
-  acquireTestLock,
   conditionalTest,
   gotoWithSSRRetry,
   waitForHydration,
 } from '../../test-utils';
-
-rstest.setConfig({ testTimeout: 1000 * 60 * 3, hookTimeout: 1000 * 60 * 3 });
 
 const projectDir = path.resolve(__dirname, '..');
 
@@ -22,14 +19,7 @@ describe('router-ssr-i18n', () => {
   let page: Page;
   let browser: Browser;
   let appPort: number;
-  let releaseLock: (() => Promise<void>) | undefined;
   beforeAll(async () => {
-    // The ssg suite (ssg.test.ts) builds the SAME fixture directory and
-    // rewrites node_modules/.modern-js/*/routes.js, which makes the dev
-    // server trigger HMR full reloads mid-test. Serialize the two suites.
-    releaseLock = await acquireTestLock('i18n-routes-ssr-fixture', {
-      timeoutMs: 240_000,
-    });
     const appDir = projectDir;
     appPort = await getPort();
     app = await launchApp(appDir, appPort);
@@ -69,9 +59,6 @@ describe('router-ssr-i18n', () => {
     }
     if (app) {
       await killApp(app);
-    }
-    if (releaseLock) {
-      await releaseLock();
     }
   });
 

@@ -26,10 +26,10 @@ Modern.js 开发环境和生产环境的 Web 服务器流程是完全同构的�
 
 Modern.js 支持在任何 Node.js 环境运行构建产物。在 CI 环境中，通常情况下已经安装了应用全部的依赖。
 
-你可以执行 [`modern build`](/apis/app/commands#modern-build) 来构建应用，执行 [`modern serve`](/apis/app/commands#modern-serve) 命令来运行 Web 服务器，启动 UltraModern.js 应用。
+你可以执行 [`modern build`](/apis/app/commands#modern-build) 来构建应用，执行 [`modern serve`](/apis/app/commands#modern-serve) 命令来运行 Web 服务器，启动 Modern.js 应用。
 
 ## 在生产环境中运行
 
 在部署到生产环境时，产物体积应该尽可能小，而上述在 CI 中运行的方案，会保留原项目的所有产物。因此在生产环境，不推荐通过上述命令运行应用。
 
-UltraModern.js 提供了独立的部署方案，当运行 [`modern deploy`](/apis/app/commands#modern-deploy) 命令时，产物中会包含可运行 Web 服务器的入口文件。
+Modern.js 提供了独立的部署方案，当运行 [`modern deploy`](/apis/app/commands#modern-deploy) 命令时，产物中会包含可运行 Web 服务器的入口文件。

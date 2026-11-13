@@ -22,6 +22,18 @@ server: {
 }
 ```
 
+### dev.lazyCompilation
+
+**Change**: The default value in development has changed. Pure CSR and streaming SSR applications enable lazy compilation by default with `{ imports: true, entries: false }`; applications using string SSR, RSC or SSG keep it disabled by default. This only affects development and does not change production build output.
+
+**Migration Example**: To keep the 2.0 behavior, disable it explicitly:
+
+```typescript
+dev: {
+  lazyCompilation: false;
+}
+```
+
 ## html
 
 ### html.appIcon
@@ -334,7 +346,7 @@ export default {
 
 ### tools.rsdoctor
 
-**Change**: This configuration has been deprecated. In v3, use [`performance.rsdoctor`](/configure/app/performance/rsdoctor) to opt in to Rsdoctor diagnostics.
+**Change**: This configuration has been deprecated, please refer to the [Rsdoctor documentation](/guides/basic-features/debug/rsdoctor) and use Rspack's [Rsdoctor plugin](https://rsdoctor.dev/) to enable support.
 
 **Migration Example**:
 
@@ -348,10 +360,22 @@ tools: {
 },
 
 // v3
+import { RsdoctorRspackPlugin } from '@rsdoctor/rspack-plugin';
+
 export default {
-  performance: {
-    rsdoctor: {
-      enabled: true,
+  // ...
+  tools: {
+    bundlerChain(chain) {
+      // Only register the plugin when RSDOCTOR is true, as the plugin will increase build time
+      if (process.env.RSDOCTOR) {
+        chain.plugin('rsdoctor').use(RsdoctorRspackPlugin, [
+          {
+            // Plugin options
+            disableClientServer: true,
+            features: ['bundle', 'loader', 'plugins', 'resolver'],
+          },
+        ]);
+      }
     },
   },
 };
@@ -359,9 +383,7 @@ export default {
 
 ### tools.babel
 
-**Change**: This configuration has been deprecated, the framework no longer includes Babel by default. Please use [Rsbuild's Babel plugin](https://rsbuild.rs/plugins/list/plugin-babel) to enable support.
-
-When your Babel options are plain serializable data, set `parallel: true` to run Babel through Rsbuild's worker mode. Do not enable it for Babel options that contain functions.
+**Change**: This configuration has been deprecated, the framework no longer includes Babel by default. Please use [Rsbuild's Babel plugin](https://v0.rsbuild.rs/plugins/list/plugin-babel) to enable support.
 
 **Migration Example**:
 
@@ -389,7 +411,6 @@ export default {
   // ...
   builderPlugins: [
     pluginBabel({
-      parallel: true,
       babelLoaderOptions: {
         plugins: [
           [

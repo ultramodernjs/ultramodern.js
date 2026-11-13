@@ -1,7 +1,7 @@
+import UserData from '@/loader/routes/user/UserData';
 import { redirect } from '@modern-js/runtime';
 import { Outlet } from '@modern-js/runtime/router';
 import { Suspense } from 'react';
-import UserData from '@/loader/routes/user/UserData';
 
 const fetchUserData = async (): Promise<string> => {
   return new Promise(resolve =>

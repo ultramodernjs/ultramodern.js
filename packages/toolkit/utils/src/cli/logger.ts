@@ -1,1 +1,1 @@
-export { createLogger, type Logger, logger } from 'rslog';
+export { logger, createLogger, type Logger } from 'rslog';

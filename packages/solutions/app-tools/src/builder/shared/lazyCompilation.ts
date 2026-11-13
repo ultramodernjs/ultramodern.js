@@ -1,7 +1,7 @@
 import {
   type EagerRouteComponentFilesByEntry,
-  normalizeModulePath,
   type RouteComponentFileCollection,
+  normalizeModulePath,
 } from '@modern-js/utils';
 
 // The COLLECTION side of this feature (`collectRouteComponentFiles`,
@@ -16,10 +16,10 @@ import {
 // Re-export the collection helpers (which live in utils) so the SSR builder
 // plugin's matching side and app-tools' own unit tests have one import surface.
 export {
-  collectRouteComponentFiles,
   type EagerRouteComponentFilesByEntry,
-  normalizeModulePath,
   type RouteComponentFileCollection,
+  collectRouteComponentFiles,
+  normalizeModulePath,
 } from '@modern-js/utils';
 
 type ModuleLike = { resource?: string };

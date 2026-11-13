@@ -1,6 +1,6 @@
-import { createPluginManager, type Plugin } from '@modern-js/plugin';
-import { createContext, initPluginAPI } from '@modern-js/plugin/cli';
 import path from 'path';
+import { type Plugin, createPluginManager } from '@modern-js/plugin';
+import { createContext, initPluginAPI } from '@modern-js/plugin/cli';
 import { runtimePlugin } from '../../../../runtime/plugin-runtime/src/cli';
 import { appTools } from '../../src';
 import { handleSetupResult } from '../../src/compat/hooks';

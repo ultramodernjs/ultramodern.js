@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "deploy-server",
-  "version": "2.66.0",
+  "version": "2.66.7",
   "scripts": {
     "dev": "modern dev",
     "dev:bff": "modern dev --api-only",
@@ -16,20 +16,18 @@
     "@modern-js/runtime": "workspace:*",
     "@modern-js/server-runtime": "workspace:*",
     "koa": "3.2.1",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "ts-node": "^10.9.2",
-    "tsconfig-paths": "4.2.0",
-    "zod": "^4.5.4"
+    "tsconfig-paths": "3.15.0",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@modern-js/app-tools": "workspace:*",
-    "@types/jest": "^30.0.0",
-    "@types/koa": "3.0.3",
-    "@types/node": "^26.4.1",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "typescript": "^7.0.2"
+    "@types/koa": "2.15.2",
+    "@types/node": "^20",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^5"
   }
 }

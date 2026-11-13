@@ -8,10 +8,10 @@ Install the dependencies:
 pnpm install
 ```
 
-Install the Playwright browser runtimes before running browser tests:
+Install Chromium before running Playwright tests:
 
 ```bash
-pnpm install:browsers
+pnpm exec playwright install chromium
 ```
 
 ## Get Started

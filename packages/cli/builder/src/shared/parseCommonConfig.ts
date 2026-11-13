@@ -1,9 +1,9 @@
 import {
-  mergeRsbuildConfig,
   type ResolveConfig,
   type RsbuildConfig,
   type RsbuildPlugin,
   type ToolsConfig,
+  mergeRsbuildConfig,
 } from '@rsbuild/core';
 import { pluginCssMinimizer } from '@rsbuild/plugin-css-minimizer';
 import { pluginLess } from '@rsbuild/plugin-less';
@@ -17,21 +17,15 @@ import { pluginHtmlMinifierTerser } from '../plugins/htmlMinify';
 import { pluginRuntimeChunk } from '../plugins/runtimeChunk';
 import type { BuilderConfig, CreateBuilderCommonOptions } from '../types';
 import { transformToRsbuildServerOptions } from './devServer';
+import {
+  normalizeLessOptions,
+  normalizeSassOptions,
+  resolveSvgrOptions,
+} from './pluginOptions';
 import { NODE_MODULES_REGEX } from './utils';
 
 const CSS_MODULES_REGEX = /\.modules?\.\w+$/i;
 const GLOBAL_CSS_REGEX = /\.global\.\w+$/;
-const DEFAULT_CSS_MINIFIER_OPTIONS = {
-  minimizerOptions: {
-    preset: [
-      'default',
-      {
-        calc: false,
-        mergeLonghand: false,
-      },
-    ],
-  },
-};
 
 /** Determine if a file path is a CSS module when disableCssModuleExtension is enabled. */
 export const isLooseCssModules = (path: string) => {
@@ -97,6 +91,7 @@ export async function parseCommonConfig(
       minifyCss,
       less,
       sass,
+      svgr,
       htmlPlugin,
       autoprefixer,
       ...toolsConfig
@@ -227,20 +222,14 @@ export async function parseCommonConfig(
   rsbuildConfig.html = html;
   rsbuildConfig.output = output;
 
-  const { sourceBuild } = builderConfig.experiments || {};
-
   const rsbuildPlugins: RsbuildPlugin[] = [
     pluginGlobalVars(globalVars),
     pluginDevtool({
       sourceMap,
     }),
     pluginEmitRouteFile(),
-    pluginSass({
-      sassLoaderOptions: sass,
-    }),
-    pluginLess({
-      lessLoaderOptions: less,
-    }),
+    pluginSass(normalizeSassOptions(sass)),
+    pluginLess(normalizeLessOptions(less)),
     pluginEnvironmentDefaults(distPath),
     pluginHtmlMinifierTerser(),
   ];
@@ -269,9 +258,8 @@ export async function parseCommonConfig(
   }
 
   if (enableCssModuleTSDeclaration) {
-    const { pluginTypedCSSModules } = await import(
-      '@rsbuild/plugin-typed-css-modules'
-    );
+    const { pluginTypedCSSModules } =
+      await import('@rsbuild/plugin-typed-css-modules');
     rsbuildPlugins.push(pluginTypedCSSModules());
   }
 
@@ -279,6 +267,7 @@ export async function parseCommonConfig(
     pluginRuntimeChunk(builderConfig.output?.disableInlineRuntimeChunk),
   );
 
+  const { sourceBuild } = builderConfig.experiments || {};
   if (sourceBuild) {
     const { pluginSourceBuild } = await import('@rsbuild/plugin-source-build');
 
@@ -288,24 +277,17 @@ export async function parseCommonConfig(
   }
 
   rsbuildPlugins.push(
-    pluginReact(
-      options?.disableReactCompiler || reactCompiler === undefined
-        ? {}
-        : { reactCompiler },
-    ),
+    pluginReact(reactCompiler !== undefined ? { reactCompiler } : {}),
   );
 
-  if (!disableSvgr) {
+  const svgrOptions = resolveSvgrOptions({
+    svgr,
+    disableSvgr,
+    svgDefaultExport,
+  });
+  if (svgrOptions !== false) {
     const { pluginSvgr } = await import('@rsbuild/plugin-svgr');
-    rsbuildPlugins.push(
-      pluginSvgr({
-        mixedImport: true,
-        parallel: true,
-        svgrOptions: {
-          exportType: svgDefaultExport === 'component' ? 'default' : 'named',
-        },
-      }),
-    );
+    rsbuildPlugins.push(pluginSvgr(svgrOptions));
   }
 
   // assetsRetry inject should be later
@@ -330,7 +312,7 @@ export async function parseCommonConfig(
 
   rsbuildPlugins.push(
     pluginCssMinimizer({
-      pluginOptions: minifyCss ?? DEFAULT_CSS_MINIFIER_OPTIONS,
+      pluginOptions: minifyCss,
     }),
   );
 

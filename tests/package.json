@@ -10,9 +10,6 @@
     "test:framework": "cross-env MODERN_SERVER_LOG_LEVEL=info rstest",
     "test:rstest-adapter": "rstest -c rstest.adapter.config.mts",
     "test:builder": "cd e2e/builder && pnpm test",
-    "test:module-tools": "rstest run -c rstest.module-tools.config.ts --passWithNoTests",
-    "test:superapp-contracts": "rstest run -c rstest.superapp-contracts.config.mts",
-    "test:ut": "pnpm -w run test:ut",
     "prepare": "node node_modules/puppeteer/install.mjs",
     "pretest:rstest-adapter": "pnpm --dir integration/rstest/basic-app-rstest-browser exec playwright install chromium"
   },
@@ -20,19 +17,18 @@
     "@modern-js/app-tools": "workspace:*",
     "@modern-js/plugin-polyfill": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@swc/core": "1.16.2",
-    "@types/node": "^26.4.1",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
+    "@swc/core": "1.16.21",
+    "@types/node": "^20",
     "cross-spawn": "^7.0.6",
-    "enhanced-resolve": "5.24.5",
-    "fs-extra": "^11.4.0",
-    "get-port": "7.2.0",
+    "enhanced-resolve": "5.26.0",
+    "fs-extra": "^10.1.0",
+    "get-port": "5.1.1",
     "kill-port": "^2.0.1",
-    "puppeteer": "^25.10.0",
+    "puppeteer": "^24.43.1",
     "rimraf": "^6.1.3",
     "tree-kill": "^1.2.2",
     "ts-node": "^10.9.2",
     "tsm": "2.3.0",
-    "typescript": "^7.0.2"
+    "typescript": "^5"
   }
 }

@@ -1,6 +1,5 @@
 import { parseRspackConfig } from '@modern-js/builder';
 import { createConfigOptions } from '@modern-js/plugin/cli';
-import { INTERNAL_RUNTIME_PLUGINS } from '@modern-js/utils';
 import {
   builderPluginAdapterBasic,
   builderPluginAdapterHooks,
@@ -8,7 +7,6 @@ import {
 import { DEFAULT_CONFIG_FILE } from './constants';
 import type { AppNormalizedConfig, AppTools, AppUserConfig } from './types';
 import { getConfigFile } from './utils/getConfigFile';
-import { loadInternalPlugins } from './utils/loadPlugins';
 
 const MODERN_META_NAME = 'modern-js';
 
@@ -16,7 +14,6 @@ type ResolveModernRsbuildConfigOptions = {
   command: string;
   configPath?: string;
   cwd?: string;
-  disableReactCompiler?: boolean;
   metaName?: string;
   modifyModernConfig?: (
     config: AppUserConfig,
@@ -41,7 +38,6 @@ export async function resolveModernRsbuildConfig(
       command: options.command,
       cwd,
       configFile,
-      internalPlugins: await loadInternalPlugins(cwd, INTERNAL_RUNTIME_PLUGINS),
       metaName,
       modifyModernConfig: options.modifyModernConfig,
     });
@@ -53,15 +49,11 @@ export async function resolveModernRsbuildConfig(
 
   const appContext = getAppContext();
 
-  const builderOptions = {
-    cwd,
-    ...(options.disableReactCompiler === undefined
-      ? {}
-      : { disableReactCompiler: options.disableReactCompiler }),
-  };
   const { rsbuildConfig, rsbuildPlugins } = await parseRspackConfig(
     nonStandardConfig,
-    builderOptions,
+    {
+      cwd,
+    },
   );
 
   const adapterParams = {

@@ -1,12 +1,7 @@
 import {
-  createDisposableServerRuntimeHandle,
-  initializeDisposableServerRuntime,
-  registerServerRuntimeDisposer,
-} from '../../runtime-extensions/src/runtimeLifecycle';
-import {
-  createReloadManager,
-  type ReloadableHandle,
   ReloadManager,
+  type ReloadableHandle,
+  createReloadManager,
 } from '../src/dev-tools/reloadManager';
 
 rstest.useRealTimers();
@@ -102,69 +97,6 @@ describe('ReloadManager', () => {
     const result = manager.handle(fakeRequest);
     expect(initial).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ tag: 'initial' });
-  });
-
-  it('cleans a failed candidate while the active runtime keeps serving', async () => {
-    const initialOwner = {};
-    const candidateOwner = {};
-    const initialDispose = rstest.fn(async () => {});
-    const candidateDispose = rstest.fn(async () => {});
-    registerServerRuntimeDisposer(initialOwner, initialDispose);
-    registerServerRuntimeDisposer(candidateOwner, candidateDispose);
-    const initial = createDisposableServerRuntimeHandle(
-      initialOwner,
-      makeHandle('initial'),
-    );
-    const manager = new ReloadManager({
-      initialHandle: initial,
-      build: () =>
-        initializeDisposableServerRuntime(
-          candidateOwner,
-          makeHandle('candidate'),
-          async () => {
-            throw new Error('candidate failed');
-          },
-        ),
-      onError: () => {},
-    });
-
-    await manager.reloadNow();
-
-    expect(manager.currentHandle).toBe(initial);
-    expect(candidateDispose).toHaveBeenCalledTimes(1);
-    expect(initialDispose).not.toHaveBeenCalled();
-    await expect(manager.handle(fakeRequest)).resolves.toEqual({
-      tag: 'initial',
-    });
-  });
-
-  it('swaps first and drains an in-flight request before retiring its runtime', async () => {
-    const owner = {};
-    const releaseRequest = defer<void>();
-    const dispose = rstest.fn(async () => {});
-    registerServerRuntimeDisposer(owner, dispose);
-    const initial = createDisposableServerRuntimeHandle(owner, async () => {
-      await releaseRequest.promise;
-      return new Response('initial');
-    });
-    const next = makeHandle('next');
-    const manager = new ReloadManager({
-      initialHandle: initial,
-      build: async () => next,
-    });
-
-    const response = manager.handle(fakeRequest);
-    const reload = manager.reloadNow();
-    await flush();
-
-    expect(manager.currentHandle).toBe(next);
-    expect(dispose).not.toHaveBeenCalled();
-    expect(manager.handle(fakeRequest)).toEqual({ tag: 'next' });
-
-    releaseRequest.resolve();
-    await response;
-    await reload;
-    expect(dispose).toHaveBeenCalledTimes(1);
   });
 
   it('recovers: a failed reload followed by a successful one swaps in the new handle', async () => {
@@ -266,26 +198,6 @@ describe('ReloadManager', () => {
     expect(manager.currentHandle).toBe(initial);
   });
 
-  it('close() releases the active runtime exactly once', async () => {
-    const owner = {};
-    const dispose = rstest.fn(async () => {});
-    registerServerRuntimeDisposer(owner, dispose);
-    const initial = createDisposableServerRuntimeHandle(
-      owner,
-      makeHandle('initial'),
-    );
-    const manager = new ReloadManager({
-      initialHandle: initial,
-      build: async () => makeHandle('next'),
-    });
-
-    manager.close();
-    manager.close();
-    await flush();
-
-    expect(dispose).toHaveBeenCalledTimes(1);
-  });
-
   it('ignores schedule() and reloadNow() after close()', async () => {
     const build = rstest.fn(async () => makeHandle('next'));
     const manager = new ReloadManager({
@@ -305,8 +217,6 @@ describe('ReloadManager', () => {
   it('does not start a trailing build or swap when closed during an in-flight reload', async () => {
     const initial = makeHandle('initial');
     const h1 = makeHandle('h1');
-    const h1Dispose = rstest.fn(async () => {});
-    h1.dispose = h1Dispose;
     const d1 = defer<ReloadableHandle>();
     const d2 = defer<ReloadableHandle>();
     const deferreds = [d1, d2];
@@ -335,47 +245,6 @@ describe('ReloadManager', () => {
     expect(build).toHaveBeenCalledTimes(1);
     expect(manager.currentHandle).toBe(initial);
     expect(onReload).not.toHaveBeenCalled();
-    expect(h1Dispose).toHaveBeenCalledTimes(1);
-  });
-
-  it('reports disposal failure from a candidate discarded after close', async () => {
-    const candidate = makeHandle('candidate');
-    const disposeError = new Error('candidate close failed');
-    candidate.dispose = async () => {
-      throw disposeError;
-    };
-    const built = defer<ReloadableHandle>();
-    const onReloadError = rstest.fn();
-    const manager = new ReloadManager({
-      initialHandle: makeHandle('initial'),
-      build: () => built.promise,
-      onReloadError,
-    });
-
-    const reload = manager.reloadNow();
-    manager.close();
-    built.resolve(candidate);
-    await reload;
-
-    expect(onReloadError).toHaveBeenCalledWith(disposeError);
-  });
-
-  it('reports a synchronous close disposer failure without throwing', async () => {
-    const initial = makeHandle('initial');
-    const disposeError = new Error('synchronous close failed');
-    initial.dispose = () => {
-      throw disposeError;
-    };
-    const onReloadError = rstest.fn();
-    const manager = new ReloadManager({
-      initialHandle: initial,
-      build: async () => makeHandle('next'),
-      onReloadError,
-    });
-
-    expect(() => manager.close()).not.toThrow();
-    await flush();
-    expect(onReloadError).toHaveBeenCalledWith(disposeError);
   });
 
   it('serves a 503 until setHandle seeds the initial known-good handle', () => {

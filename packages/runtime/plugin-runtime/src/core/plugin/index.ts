@@ -13,7 +13,7 @@ export type { RuntimePlugin };
 export function registerPlugin(
   internalPlugins: RuntimePlugin[],
   runtimeConfig?: RuntimeConfig,
-): InternalRuntimeContext<RuntimeExtends> {
+) {
   const { plugins = [] } = runtimeConfig || {};
   const { runtimeContext } = runtime.run({
     plugins: [
@@ -25,14 +25,10 @@ export function registerPlugin(
     config: runtimeConfig || {},
     handleSetupResult,
   });
-  const internalRuntimeContext =
-    runtimeContext as unknown as InternalRuntimeContext<RuntimeExtends>;
   setGlobalInternalRuntimeContext(
-    internalRuntimeContext as unknown as Parameters<
-      typeof setGlobalInternalRuntimeContext
-    >[0],
+    runtimeContext as unknown as InternalRuntimeContext<RuntimeExtends>,
   );
-  return internalRuntimeContext;
+  return runtimeContext;
 }
 
 export function mergeConfig(

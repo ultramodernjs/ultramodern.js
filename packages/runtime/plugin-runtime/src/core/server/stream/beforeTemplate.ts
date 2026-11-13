@@ -1,25 +1,27 @@
-// @effect-diagnostics asyncFunction:off processEnv:off strictBooleanExpressions:off unnecessaryArrowBlock:off
 // Todo: This import will introduce router code, like remix, even if router config is false
 import { matchRoutes } from '@modern-js/runtime-utils/router';
-import { getRouterMatchedRouteIds } from '../../../router/runtime/lifecycle';
+import ReactHelmet, { type HelmetData } from 'react-helmet';
 import type { TInternalRuntimeContext } from '../../context';
 import { CHUNK_CSS_PLACEHOLDER } from '../constants';
-import { createFederatedCssLinks } from '../federatedCss';
-import { createReplaceHelemt, getHelmetData } from '../helmet';
+import { createReplaceHelemt } from '../helmet';
 import type { HandleRequestConfig } from '../requestHandler';
 import { type BuildHtmlCb, buildHtml } from '../shared';
-import { checkIsNode, hasStylesheetLink, safeReplace } from '../utils';
+import {
+  checkIsNode,
+  hasStylesheetLink,
+  readAssetWithCache,
+  safeReplace,
+} from '../utils';
 
 const readAsset = async (chunk: string) => {
   // working node env
-  const fs = await import('fs/promises');
   const path = await import('path');
 
   // only working in 'production' env
   // we need ensure the assetsDir is same as ssr bundles.
   const filepath = path.join(__dirname, chunk);
 
-  return fs.readFile(filepath, 'utf-8');
+  return readAssetWithCache(filepath);
 };
 
 const checkIsInline = (
@@ -43,30 +45,16 @@ export interface BuildShellBeforeTemplateOptions {
   entryName: string;
   config: HandleRequestConfig;
   styledComponentsStyleTags?: string;
-  moduleFederationCssAssets?: string[];
 }
-
-type RouteManifest = {
-  referenceCssAssets?: string[];
-};
-
-type RouteManifestLike = {
-  routeAssets?: Record<string, RouteManifest | undefined>;
-};
 
 export async function buildShellBeforeTemplate(
   beforeAppTemplate: string,
   options: BuildShellBeforeTemplateOptions,
 ) {
-  const {
-    config,
-    runtimeContext,
-    styledComponentsStyleTags,
-    entryName,
-    moduleFederationCssAssets,
-  } = options;
+  const { config, runtimeContext, styledComponentsStyleTags, entryName } =
+    options;
 
-  const helmetData = getHelmetData(runtimeContext);
+  const helmetData: HelmetData = ReactHelmet.renderStatic();
 
   const callbacks: BuildHtmlCb[] = [
     createReplaceHelemt(helmetData),
@@ -84,72 +72,51 @@ export async function buildShellBeforeTemplate(
     if (styledComponentsStyleTags) {
       css += styledComponentsStyleTags;
     }
-    css += createFederatedCssLinks(moduleFederationCssAssets, {
-      template,
-      existingAssets: css
-        .match(/href="([^"]+)"/g)
-        ?.map(item => item.replace(/^href="/, '').replace(/"$/, '')),
-    });
     return safeReplace(template, CHUNK_CSS_PLACEHOLDER, css);
 
     async function getCssChunks() {
       const { routeManifest, routerContext, routes } = runtimeContext;
-      const routeAssets = (routeManifest as RouteManifestLike | undefined)
-        ?.routeAssets;
-      if (!routeAssets) {
+      if (!routeManifest || !routerContext || !routes) {
         return '';
       }
 
-      let matchedRouteManifests: RouteManifest[] = [];
+      const { routeAssets } = routeManifest;
 
-      const matchedRouteIds = getRouterMatchedRouteIds(runtimeContext);
-
-      if (matchedRouteIds?.length) {
-        matchedRouteManifests = matchedRouteIds
-          .map(routeId => routeAssets[routeId] as RouteManifest | undefined)
-          .filter(Boolean) as RouteManifest[];
-      } else if (routerContext && routes) {
-        const matches = matchRoutes(
-          routes,
-          routerContext.location,
-          routerContext.basename,
-        );
-        matchedRouteManifests =
-          matches
-            ?.map((match, index) => {
-              if (!index) {
-                return;
-              }
-
-              const routeId = match.route.id;
-              if (routeId) {
-                return routeAssets[routeId] as RouteManifest | undefined;
-              }
-            })
-            .filter(
-              (routeManifest): routeManifest is RouteManifest =>
-                routeManifest !== undefined,
-            ) ?? [];
-      }
-
-      const asyncEntry = routeAssets[`async-${entryName}`] as
-        | RouteManifest
-        | undefined;
-      if (asyncEntry) {
-        matchedRouteManifests.push(asyncEntry);
-      }
-
-      const cssChunks = matchedRouteManifests.reduce(
-        (chunks, routeManifest) => {
-          const { referenceCssAssets = [] } = routeManifest;
-          const _cssChunks = referenceCssAssets.filter(
-            (asset?: string) =>
-              asset?.endsWith('.css') && !hasStylesheetLink(template, asset),
-          );
-          return [...chunks, ..._cssChunks];
-        },
-        [] as string[],
+      const matches = matchRoutes(
+        routes,
+        routerContext.location,
+        routerContext.basename,
       );
+      const matchedRouteManifests = matches
+        ?.map((match, index) => {
+          if (!index) {
+            return;
+          }
+
+          const routeId = match.route.id;
+          if (routeId) {
+            const routeManifest = routeAssets[routeId];
+            return routeManifest;
+          }
+        })
+        .filter(Boolean);
+      const asyncEntry = routeAssets[`async-${entryName}`];
+      if (asyncEntry) {
+        matchedRouteManifests?.push(asyncEntry);
+      }
+
+      const cssChunks: string[] = matchedRouteManifests
+        ? matchedRouteManifests?.reduce((chunks, routeManifest) => {
+            const { referenceCssAssets = [] } = routeManifest as {
+              referenceCssAssets?: string[];
+            };
+            const _cssChunks = referenceCssAssets.filter(
+              (asset?: string) =>
+                asset?.endsWith('.css') && !hasStylesheetLink(template, asset),
+            );
+            return [...chunks, ..._cssChunks];
+          }, [] as string[])
+        : [];
 
       const { inlineStyles } = config;
 

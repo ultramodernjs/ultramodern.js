@@ -8,10 +8,9 @@ import type {
   ServerBaseOptions,
   ServerPlugin,
 } from '@modern-js/server-core';
-import { AGGRED_DIR } from '@modern-js/server-core';
 import { connectMid2HonoMid } from '@modern-js/server-core/node';
 import type { RequestHandler } from '@modern-js/types';
-import { API_DIR, logger, SHARED_DIR } from '@modern-js/utils';
+import { API_DIR, SHARED_DIR, logger } from '@modern-js/utils';
 import type { WatchEvent } from './dev-tools/watcher';
 import {
   getDevOptions,
@@ -46,6 +45,7 @@ export type DevPluginOptions = ModernDevServerOptions<ServerBaseOptions> & {
 export const devRuntimeMiddlewarePlugin = (
   options: DevPluginOptions,
   compiler: Rspack.Compiler | Rspack.MultiCompiler | null,
+  runtimeServer: ServerBase,
 ): ServerPlugin => ({
   name: '@modern-js/plugin-dev',
 
@@ -109,7 +109,7 @@ export const devRuntimeMiddlewarePlugin = (
 
       middlewares.push({
         name: 'init-file-reader',
-        handler: initFileReader(compiler),
+        handler: initFileReader(compiler, runtimeServer.fileReader),
       });
     });
   },
@@ -184,7 +184,7 @@ export function setupDevInfra({
     if (stats.toJson({ all: false }).name !== 'server') {
       const runtimeServer = getRuntimeServer();
       if (runtimeServer) {
-        onRepack(distDir, runtimeServer.hooks);
+        onRepack(distDir, runtimeServer.hooks, runtimeServer.fileReader);
       }
     }
   });

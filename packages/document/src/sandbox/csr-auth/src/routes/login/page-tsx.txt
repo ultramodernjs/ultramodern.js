@@ -1,7 +1,4 @@
-import {
-  useLocation,
-  useNavigate,
-} from '@modern-js/plugin-tanstack/runtime';
+import { useLocation, useNavigate } from '@modern-js/runtime/router';
 import { useAuth } from '../Auth';
 
 export default function Login() {
@@ -9,8 +6,7 @@ export default function Login() {
   const location = useLocation();
   const auth = useAuth();
 
-  const from =
-    new URLSearchParams(location.searchStr).get('redirect') || '/';
+  const from = location.state?.from?.pathname || '/';
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -25,7 +21,7 @@ export default function Login() {
       // when they get to the protected page and click the back button, they
       // won't end up back on the login page, which is also really nice for the
       // user experience.
-      void navigate({ replace: true, to: from });
+      navigate(from, { replace: true });
     });
   }
 

@@ -27,8 +27,6 @@ export const renderRscHandler = async (
 
   const loadableStats = serverManifest.loadableStats || {};
   const routeManifest = serverManifest.routeManifest || {};
-  const moduleFederationCssAssets =
-    serverManifest.moduleFederationCssAssets || [];
   const config = createRequestHandlerConfig(options.config);
 
   const requestHandlerOptions: RscPayloadHandlerOptions = {
@@ -36,7 +34,6 @@ export const renderRscHandler = async (
       route: routeInfo,
       loadableStats,
       routeManifest,
-      moduleFederationCssAssets,
       entryName: routeInfo.entryName || MAIN_ENTRY_NAME,
     },
     config,

@@ -1,6 +1,6 @@
 import dns from 'node:dns';
-import { fs } from '@modern-js/utils';
 import path, { join } from 'path';
+import { fs } from '@modern-js/utils';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import {
   getPort,
@@ -43,7 +43,7 @@ describe('init with SSR', () => {
     await page.goto(`http://localhost:${appPort}`, {
       waitUntil: 'load',
     });
-    const scriptAry = await page.$$eval('script', scripts =>
+    const scriptAry = await page.$$eval('body > script', scripts =>
       scripts
         .filter(script => script.src && script.type !== 'application/json')
         .map(script => {

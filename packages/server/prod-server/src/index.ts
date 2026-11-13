@@ -3,38 +3,23 @@ import {
   createNodeServer,
   loadServerCliConfig,
   loadServerEnv,
-  loadServerPlugins,
   loadServerRuntimeConfig,
 } from '@modern-js/server-core/node';
-import { disposeServerRuntime } from '@modern-js/server-runtime-extensions/runtime-lifecycle';
-import { logger } from '@modern-js/utils';
 import { applyPlugins } from './apply';
 import type { BaseEnv, ProdServerOptions } from './types';
 
-export type { ServerPlugin } from '@modern-js/server-core';
-export type {
-  TelemetryHealthEvaluation,
-  TelemetryQueueStats,
-  TelemetrySloAlert,
-} from '@modern-js/server-runtime-extensions';
+export { applyPlugins, type ApplyPlugins } from './apply';
+
 export {
-  createOtlpTelemetryExporter,
-  createTelemetryAwareMetrics,
-  createVictoriaMetricsTelemetryExporter,
-  hasEnabledTelemetryExporters,
-  TelemetryHealthMonitor,
-  TelemetryRegistry,
-  TelemetryStartupHealthError,
-} from '@modern-js/server-runtime-extensions';
-export { type ApplyPlugins, applyPlugins } from './apply';
-export type { BaseEnv, ProdServerOptions } from './types';
-export { loadServerPlugins };
+  loadServerPlugins,
+  loadServerRuntimeConfig,
+} from '@modern-js/server-core/node';
 
-export type ProdServerInstance = Awaited<ReturnType<typeof createNodeServer>>;
+export type { ServerPlugin } from '@modern-js/server-core';
 
-export const createProdServer = async (
-  options: ProdServerOptions,
-): Promise<ProdServerInstance> => {
+export type { ProdServerOptions, BaseEnv } from './types';
+
+export const createProdServer = async (options: ProdServerOptions) => {
   await loadServerEnv(options);
 
   const serverBaseOptions = options;
@@ -64,23 +49,10 @@ export const createProdServer = async (
 
   // load env file.
   const nodeServer = await createNodeServer(server.handle.bind(server));
-  nodeServer.once('close', () => {
-    void disposeServerRuntime(server).catch((error: unknown) =>
-      logger.error(error),
-    );
-  });
 
-  try {
-    await applyPlugins(server, options, nodeServer);
-    await server.init();
-  } catch (error) {
-    await disposeServerRuntime(server).catch((disposeError: unknown) =>
-      logger.error(disposeError),
-    );
-    throw error;
-  }
+  await applyPlugins(server, options, nodeServer);
+
+  await server.init();
 
   return nodeServer;
 };
-
-export default createProdServer;

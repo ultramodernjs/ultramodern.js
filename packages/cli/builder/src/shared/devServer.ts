@@ -1,6 +1,7 @@
 import { applyOptionsChain, isProd } from '@modern-js/utils';
-import type { DevConfig, ServerConfig } from '@rsbuild/core';
 import { merge } from 'ts-deepmerge';
+
+import type { DevConfig, ServerConfig } from '@rsbuild/core';
 
 import type { BuilderConfig, ToolsDevServerConfig } from '../types';
 

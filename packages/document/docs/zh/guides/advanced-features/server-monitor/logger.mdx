@@ -6,10 +6,10 @@
 
 基于服务端运行逻辑，Modern.js 在内部提供了以下日志事件：
 
-| 阶段          | 消息                                         | Level |
-| ------------- | -------------------------------------------- | ----- |
-| RENDER_HTML   | App Render To HTML                           | error |
-| RENDER_STREAM | An error occurs during streaming SSR         | error |
+| 阶段          | 消息                                          | Level |
+| ------------- | --------------------------------------------- | ----- |
+| RENDER_HTML   | App Render To HTML                            | error |
+| RENDER_STREAM | An error occurs during streaming SSR          | error |
 | RENDER_SHELL  | An error occurs during streaming render shell | error |
 
 ## 内置 Monitor
@@ -18,4 +18,4 @@ import InternalLogger from '@site-docs/components/internal-logger.mdx';
 
 <InternalLogger />
 
-
+如需通过 `MODERN_SERVER_LOG_LEVEL` 配置内置生产服务器的日志级别，请参阅[生产服务器日志](../../basic-features/deploy#生产服务器日志)。

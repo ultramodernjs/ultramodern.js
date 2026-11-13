@@ -30,7 +30,7 @@ const expected = fs
   .filter(entry => {
     const rel = path.relative(
       docsBuild,
-      path.join(entry.parentPath, entry.name),
+      path.join(entry.parentPath ?? entry.path, entry.name),
     );
     return !rel.startsWith(`zh${path.sep}`);
   }).length;

@@ -1,11 +1,11 @@
-import {
-  compatPlugin,
-  createServerBase,
-  type ServerPlugin,
-} from '@modern-js/server-core';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import {
+  type ServerPlugin,
+  compatPlugin,
+  createServerBase,
+} from '@modern-js/server-core';
 import { getMockMiddleware } from '../src/helpers';
 
 function getDefaultConfig() {

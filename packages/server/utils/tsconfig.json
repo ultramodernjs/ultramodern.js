@@ -3,10 +3,10 @@
   "compilerOptions": {
     "declaration": false,
     "jsx": "preserve",
+    "baseUrl": "./",
     "isolatedModules": true,
     "paths": {},
-    "types": ["node"],
-    "rootDir": "./src"
+    "types": ["node"]
   },
   "include": ["src"]
 }

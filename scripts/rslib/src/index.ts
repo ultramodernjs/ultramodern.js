@@ -1,15 +1,5 @@
 import { pluginReact } from '@rsbuild/plugin-react';
-import type { Dts, RslibConfig } from '@rslib/core';
-
-/** Rslib owns checked TypeScript 7 declaration emit, rewriting, and watch. */
-export const ts7DtsConfig: Exclude<Dts, boolean> = {
-  abortOnError: true,
-  bundle: false,
-  distPath: './dist/types',
-};
-
-export const RSLIB_CODE_ENTRY_GLOB =
-  './src/**/*.{js,jsx,ts,tsx,mjs,mts,cjs,cts}';
+import type { RslibConfig } from 'rstack/lib';
 
 export const rslibConfig: RslibConfig = {
   plugins: [pluginReact()],
@@ -30,11 +20,10 @@ export const rslibConfig: RslibConfig = {
         },
         target: 'node' as const,
       },
-      dts: false,
+      dts: {
+        distPath: 'dist/types',
+      },
       source: {
-        entry: {
-          index: [RSLIB_CODE_ENTRY_GLOB],
-        },
         define: {
           'process.env.MODERN_LIB_FORMAT': '"esm"',
         },
@@ -54,9 +43,6 @@ export const rslibConfig: RslibConfig = {
       bundle: false,
       outBase: './src',
       source: {
-        entry: {
-          index: [RSLIB_CODE_ENTRY_GLOB],
-        },
         define: {
           'process.env.MODERN_LIB_FORMAT': '"esm"',
         },
@@ -68,14 +54,12 @@ export const rslibConfig: RslibConfig = {
         },
         target: 'web' as const,
       },
-      dts: false,
     },
     {
       id: 'cjs-node',
       format: 'cjs' as const,
       syntax: 'es2021' as const,
       bundle: false,
-      dts: ts7DtsConfig,
       outBase: './src',
       output: {
         distPath: {
@@ -84,9 +68,6 @@ export const rslibConfig: RslibConfig = {
         target: 'node' as const,
       },
       source: {
-        entry: {
-          index: [RSLIB_CODE_ENTRY_GLOB],
-        },
         define: {
           'process.env.MODERN_LIB_FORMAT': '"cjs"',
         },

@@ -1,15 +1,14 @@
 import type { Server as NodeServer } from 'node:http';
 import type { Http2SecureServer } from 'node:http2';
 import {
+  ErrorDigest,
+  type ServerBase,
   createDefaultPlugins,
   createErrorHtml,
-  createSafeJsonFailureResponse,
-  ErrorDigest,
   faviconPlugin,
   injectConfigMiddlewarePlugin,
   onError,
   renderPlugin,
-  type ServerBase,
 } from '@modern-js/server-core';
 import {
   injectNodeSeverPlugin,
@@ -18,11 +17,6 @@ import {
   loadCacheConfig,
   serverStaticPlugin,
 } from '@modern-js/server-core/node';
-import {
-  injectMfAssetCacheHeadersPlugin,
-  injectModuleFederationCssPlugin,
-  injectTelemetryPlugin,
-} from '@modern-js/server-runtime-extensions';
 import { createLogger, isProd, logger } from '@modern-js/utils';
 import type { ProdServerOptions } from './types';
 
@@ -30,7 +24,9 @@ import type { ProdServerOptions } from './types';
 function getLogger(_?: boolean | Record<string, unknown>) {
   if (process.env.DEBUG || process.env.NODE_ENV === 'production') {
     return createLogger({
-      level: (process.env.MODERN_SERVER_LOG_LEVEL as any) || 'verbose',
+      level:
+        (process.env.MODERN_SERVER_LOG_LEVEL as any) ||
+        (process.env.DEBUG ? 'verbose' : 'info'),
     });
   } else {
     return createLogger();
@@ -73,13 +69,15 @@ export async function applyPlugins(
       }
     }
     const bffPrefix = config.bff?.prefix || '/api';
-    const bffPrefixList = Array.isArray(bffPrefix) ? bffPrefix : [bffPrefix];
-    const isApiPath = bffPrefixList.some(prefix =>
-      c.req.path.startsWith(prefix),
-    );
+    const isApiPath = c.req.path.startsWith(bffPrefix);
 
     if (isApiPath) {
-      return createSafeJsonFailureResponse(err);
+      return c.json(
+        {
+          message: (err as any)?.message || '[BFF] Internal Server Error',
+        },
+        (err as any)?.status || 500,
+      );
     } else {
       return c.html(createErrorHtml(500), 500);
     }
@@ -96,15 +94,9 @@ export async function applyPlugins(
       logger:
         loggerOptions === false ? false : optLogger || getLogger(loggerOptions),
     }),
-    // ultramodern.js fork plugins live in @modern-js/server-runtime-extensions
-    // and are registered here (instead of inside server-core) for both the
-    // production server and the dev server, which share this plugin assembly.
-    injectTelemetryPlugin(),
     injectConfigMiddlewarePlugin(middlewares, renderMiddlewares),
     ...(options.plugins || []),
     injectResourcePlugin(),
-    injectModuleFederationCssPlugin(),
-    injectMfAssetCacheHeadersPlugin(),
     injectRscManifestPlugin(enableRsc),
     serverStaticPlugin(),
     faviconPlugin(),

@@ -1,10 +1,10 @@
+import { writeFileSync } from 'fs';
+import path from 'path';
 import {
   type AppTools,
   type CliPlugin,
   defineConfig,
 } from '@modern-js/app-tools';
-import { writeFileSync } from 'fs';
-import path from 'path';
 import { applyBaseConfig } from '../../../../utils/applyBaseConfig';
 
 export default defineConfig(params => {

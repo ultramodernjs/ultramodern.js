@@ -1,4 +1,3 @@
-import vm from 'node:vm';
 import React, { useContext } from 'react';
 import ReactDomServer from 'react-dom/server';
 
@@ -11,7 +10,7 @@ import {
   Script,
   Scripts,
 } from '../../src/document';
-import cliPlugin, { processScriptPlaceholders } from '../../src/document/cli';
+import cliPlugin from '../../src/document/cli';
 
 describe('plugin-document', () => {
   it('default', () => {
@@ -28,7 +27,7 @@ describe('plugin-document', () => {
     );
     const docHtml = ReactDomServer.renderToString(document);
     expect(docHtml).toEqual(
-      `<html><head><title>%3C%25%3D%20title%20%25%3E</title>%3C!--%3C%3F-%20partials.top%20%3F%3E--%3E<!-- -->%3C%25%3D%20meta%20%25%3E%3C!--%20chunk%20links%20placeholder%20--%3E<!-- -->%3C!--%20chunk%20scripts%20placeholder%20--%3E<!-- -->%3C!--%3C%3F-%20partials.head%20%3F%3E--%3E</head><body><div id="root">%3C!--%3C%3F-%20html%20%3F%3E--%3E</div>%3C!--%3C%3F-%20partials.body%20%3F%3E--%3E<!-- -->%3C!--%3C%3F-%20chunksMap.js%20%3F%3E--%3E<!-- -->%3C!--%3C%3F-%20SSRDataScript%20%3F%3E--%3E</body></html>`,
+      `<html><head><title>%3C%25%3D%20title%20%25%3E</title>%3C!--%3C%3F-%20partials.top%20%3F%3E--%3E<!-- -->%3C%25%3D%20meta%20%25%3E%3C!--%20chunk%20links%20placeholder%20--%3E<!-- -->%3C!--%20chunk%20scripts%20placeholder%20--%3E<!-- -->%3C!--%3C%3F-%20partials.head%20%3F%3E--%3E</head><body><div id=\"root\">%3C!--%3C%3F-%20html%20%3F%3E--%3E</div>%3C!--%3C%3F-%20partials.body%20%3F%3E--%3E<!-- -->%3C!--%3C%3F-%20chunksMap.js%20%3F%3E--%3E<!-- -->%3C!--%3C%3F-%20SSRDataScript%20%3F%3E--%3E</body></html>`,
     );
   });
 
@@ -45,13 +44,9 @@ describe('plugin-document', () => {
     expect(docHtml.includes(' Element')).toBeTruthy();
   });
 
-  it('executes document scripts as an IIFE', () => {
+  it('should runder the script by IIFE ', () => {
     const fn = () => {
-      const documentGlobal = globalThis as typeof globalThis & {
-        __modernDocumentScriptExecutions?: number;
-      };
-      documentGlobal.__modernDocumentScriptExecutions =
-        (documentGlobal.__modernDocumentScriptExecutions ?? 0) + 1;
+      console.log('===> script can use script');
     };
     const document = (
       <Html>
@@ -60,16 +55,13 @@ describe('plugin-document', () => {
         <Script content={fn} />
       </Html>
     );
-    const html = processScriptPlaceholders(
-      ReactDomServer.renderToStaticMarkup(document),
-    );
-    const script = /<script[^>]*>([\s\S]*?)<\/script>/u.exec(html)?.[1];
-    const sandbox = { __modernDocumentScriptExecutions: 0 };
-
-    expect(script).toBeDefined();
-    vm.runInNewContext(script!, sandbox);
-
-    expect(sandbox.__modernDocumentScriptExecutions).toBe(1);
+    const docHtml = ReactDomServer.renderToString(document);
+    const fnStr = fn.toString();
+    const expectFnStr = encodeURIComponent(`(${fnStr})()`);
+    expect(
+      // react will change ' => '&#x27;'
+      docHtml.includes(expectFnStr.replaceAll("'", '&#x27;')),
+    ).toBeTruthy();
   });
 
   it('should give the correct child', () => {

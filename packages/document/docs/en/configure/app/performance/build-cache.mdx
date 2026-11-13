@@ -28,11 +28,6 @@ type BuildCacheConfig =
 
 Controls the caching behavior during the build process.
 
-When persistent Rspack cache is enabled, Modern.js treats `cacheDirectory` as a
-base directory and stores each Rsbuild/Rspack environment in its own child
-directory, such as `client`, `server`, or `workerSSR`. This avoids concurrent
-environment compilers writing to the same filesystem cache root.
-
 Modern.js will enable build cache by default to improve the compile speed. You can disable the build cache by setting it to `false`:
 
 ```js

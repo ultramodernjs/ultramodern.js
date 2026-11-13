@@ -8,30 +8,27 @@
     "build": "modern build",
     "start": "modern start",
     "serve": "modern serve",
-    "install:browsers": "playwright install chromium",
     "test": "npx playwright test"
   },
   "engines": {
-    "node": ">=26.7.0"
+    "node": ">=20.19.5"
   },
   "eslintIgnore": [
     "node_modules/",
     "dist/"
   ],
   "dependencies": {
-    "@modern-js/runtime": "workspace:*",
+    "@modern-js/runtime": "latest",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@modern-js/app-tools": "workspace:*",
-    "@modern-js/tsconfig": "workspace:*",
+    "@modern-js/app-tools": "latest",
+    "@modern-js/tsconfig": "latest",
     "@playwright/test": "^1.60.0",
-    "@types/jest": "~29.2.4",
     "@types/node": "^20",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
-    "prettier": "~2.8.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "rimraf": "~3.0.2",
     "typescript": "~5.0.4"
   }

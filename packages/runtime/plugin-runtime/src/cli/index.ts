@@ -1,10 +1,6 @@
-// @effect-diagnostics asyncFunction:off nodeBuiltinImport:off processEnv:off strictBooleanExpressions:off unnecessaryArrowBlock:off
-import type { AppTools, CliPlugin } from '@modern-js/app-tools';
-import {
-  isReact18 as checkIsReact18,
-  cleanRequireCache,
-} from '@modern-js/utils';
 import path from 'path';
+import type { AppTools, CliPlugin } from '@modern-js/app-tools';
+import { cleanRequireCache } from '@modern-js/utils';
 import { documentPlugin } from '../document/cli';
 import { routerPlugin } from '../router/cli';
 import { builderPluginAlias } from './alias';
@@ -13,19 +9,8 @@ import { ENTRY_BOOTSTRAP_FILE_NAME, ENTRY_POINT_FILE_NAME } from './constants';
 import { isRuntimeEntry } from './entry';
 import { ssrPlugin } from './ssr';
 
-export {
-  getEntrypointRoutesDir,
-  getEntrypointRoutesOwner,
-  handleFileChange,
-  handleGeneratorEntryCode,
-  handleModifyEntrypoints,
-  isRouteEntry,
-  updateNestedRoutesSpec,
-} from '../router/cli';
-export { makeLegalIdentifier } from '../router/cli/code/makeLegalIdentifier';
-export { getPathWithoutExt } from '../router/cli/code/utils';
 export { isRuntimeEntry } from './entry';
-export { documentPlugin, routerPlugin, ssrPlugin };
+export { ssrPlugin, routerPlugin, documentPlugin };
 export const runtimePlugin = (params?: {
   plugins?: CliPlugin<AppTools>[];
 }): CliPlugin<AppTools> => ({

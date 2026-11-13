@@ -1,5 +1,5 @@
-// @effect-diagnostics asyncFunction:off nodeBuiltinImport:off strictBooleanExpressions:off unnecessaryArrowBlock:off
 import { open as fsOpen } from 'node:fs/promises';
+import path from 'path';
 import type {
   AppNormalizedConfig,
   AppToolsContext,
@@ -13,22 +13,26 @@ import type {
   SSRMode,
 } from '@modern-js/types';
 import {
+  fs,
+  JS_EXTENSIONS,
   findExists,
   formatImportPath,
-  fs,
   getEntryOptions,
   isSSGEntry,
-  JS_EXTENSIONS,
   slash,
 } from '@modern-js/utils';
 import { ROUTE_MODULES } from '@modern-js/utils/universal/constants';
-import path from 'path';
 import {
   APP_CONFIG_NAME,
   APP_INIT_EXPORTED,
   TEMP_LOADERS_DIR,
 } from '../constants';
-import { getPathWithoutExt, parseModule, replaceWithAlias } from './utils';
+import {
+  getPathWithoutExt,
+  getServerLoadersFile,
+  parseModule,
+  replaceWithAlias,
+} from './utils';
 
 export const routesForServer = ({
   routesForServerLoaderMatches,
@@ -184,8 +188,6 @@ export const fileSystemRoutes = async ({
   // bundle code (component / lazyImport); all other routes are rendered
   // via the RSC payload from the server.
   isRscClientBundle = false,
-  hydrateRscClientRoutes = false,
-  isolateRouteDataInRscLayer = false,
   srcDirectory,
   internalSrcAlias,
 }: {
@@ -197,8 +199,6 @@ export const fileSystemRoutes = async ({
   internalDirectory: string;
   splitRouteChunks?: boolean;
   isRscClientBundle?: boolean;
-  hydrateRscClientRoutes?: boolean;
-  isolateRouteDataInRscLayer?: boolean;
   srcDirectory?: string;
   internalSrcAlias?: string;
 }) => {
@@ -228,14 +228,6 @@ export const fileSystemRoutes = async ({
     'map.json',
   );
 
-  // Must stay a static default/named import: @swc/plugin-loadable-components
-  // only rewrites `loadable(...)` call sites whose binding is imported as
-  // `default`/`lazy` from the configured source. Routing the binding through a
-  // runtime interop helper leaves the call sites untransformed, which breaks
-  // string-mode SSR ("SSR requires `@loadable/babel-plugin`"). ESM/CJS interop
-  // (e.g. Cloudflare double-default wrapping) is handled inside
-  // `@<metaName>/runtime/loadable` itself (src/exports/loadable.ts), which
-  // always exports a callable default and a named `lazy`.
   const importLazyCode = `
     import { lazy } from "react";
     import loadable, { lazy as loadableLazy } from "@${metaName}/runtime/loadable"
@@ -288,7 +280,7 @@ export const fileSystemRoutes = async ({
         ? `/* webpackMode: "eager" */  `
         : '';
 
-    return `() => import(${importOptions}'${componentPath}').then(routeModule => handleRouteModule(routeModule, "${routeId}")).catch(handleRouteModuleError)`;
+    return `() => import(${importOptions}'${componentPath}').then(routeModule => handleRouteModule(routeModule, "${routeId}"))`;
   };
 
   const traverseRouteTree = async (
@@ -351,6 +343,7 @@ export const fileSystemRoutes = async ({
             componentPath: route._component,
             routeId: route.id,
           });
+          rootLayoutCode = `import RootLayout from '${route._component}'`;
           component = 'RootLayout';
         } else if (splitRouteChunks) {
           lazyImport = createLazyImport({
@@ -361,17 +354,26 @@ export const fileSystemRoutes = async ({
           // csr and streaming ssr use lazy
           component =
             ssrMode === 'string'
-              ? `loadable(${lazyImport}, { resolveComponent: resolveRouteComponent })`
+              ? `loadable(${lazyImport})`
               : `lazy(${lazyImport})`;
         } else {
-          components.push(route._component);
-          component = `component_${components.length - 1}`;
+          if (ssrMode === 'string') {
+            components.push(route._component);
+            component = `component_${components.length - 1}`;
+          } else {
+            lazyImport = createLazyImport({
+              componentPath: route._component,
+              routeId: route.id,
+              eager: true,
+            });
+            component = `lazy(${lazyImport})`;
+          }
         }
       }
     } else if (route._component) {
       if (splitRouteChunks) {
         lazyImport = `() => import('${route._component}')`;
-        component = `loadable(${lazyImport}, { resolveComponent: resolveRouteComponent })`;
+        component = `loadable(${lazyImport})`;
       } else {
         components.push(route._component);
         component = `component_${components.length - 1}`;
@@ -389,21 +391,7 @@ export const fileSystemRoutes = async ({
         internalSrcAlias,
       ));
 
-    const shouldHydrateRscRoute =
-      hydrateRscClientRoutes &&
-      isRscClientBundle &&
-      !isClientComponent &&
-      (route.type !== 'nested' || (!route.loader && !route.data));
-    const shouldIncludeClientBundle =
-      !isRscClientBundle || isClientComponent || shouldHydrateRscRoute;
-    if (
-      route.type === 'nested' &&
-      route.isRoot &&
-      route._component &&
-      shouldIncludeClientBundle
-    ) {
-      rootLayoutCode = `import RootLayout from '${route._component}'`;
-    }
+    const shouldIncludeClientBundle = !isRscClientBundle || isClientComponent;
 
     const finalRoute: any = {
       ...route,
@@ -456,7 +444,7 @@ export const fileSystemRoutes = async ({
         .replace(/\\"/g, '"');
       routeComponentsCode += `${newRouteStr},`;
     } else {
-      const component = `loadable(() => import('${route._component}'), { resolveComponent: resolveRouteComponent })`;
+      const component = `loadable(() => import('${route._component}'))`;
       const finalRoute = {
         ...route,
         component,
@@ -491,52 +479,44 @@ export const fileSystemRoutes = async ({
     .join('');
 
   let importLoadersCode = '';
-  const isolatedRouteDataDirectory = path.join(
-    internalDirectory,
-    entryName,
-    '__rsc_route_data__',
-  );
-  await fs.remove(isolatedRouteDataDirectory);
-  if (isolateRouteDataInRscLayer) {
-    await fs.ensureDir(isolatedRouteDataDirectory);
-  }
 
   for (const [key, loaderInfo] of Object.entries(loadersMap)) {
-    const { route } = loaderInfo;
-    const loaderRequest = `${slash(loaderInfo.filePath)}${getDataLoaderPath({
-      loaderId: key,
-      clientData: loaderInfo.clientData,
-      action: route.action || false,
-      inline: loaderInfo.inline,
-      routeId: loaderInfo.routeId,
-      inValidSSRRoute: loaderInfo.inValidSSRRoute,
-    })}`;
-    let loaderImport = loaderRequest;
-
-    if (isolateRouteDataInRscLayer) {
-      const isolatedLoaderFile = path.join(
-        isolatedRouteDataDirectory,
-        `${key}.js`,
-      );
-      const isolatedLoaderCode = loaderInfo.inline
-        ? route.action
-          ? `export { loader, action } from ${JSON.stringify(loaderRequest)};`
-          : `export { loader } from ${JSON.stringify(loaderRequest)};`
-        : `export { default } from ${JSON.stringify(loaderRequest)};`;
-      await fs.outputFile(isolatedLoaderFile, isolatedLoaderCode, 'utf8');
-      loaderImport = `./__rsc_route_data__/${key}.js`;
-    }
-
     if (loaderInfo.inline) {
+      const { route } = loaderInfo;
       if (route.action) {
         importLoadersCode += `import { loader as ${key}, action as action_${
           loaderInfo.loaderId
-        } } from "${loaderImport}";\n`;
+        } } from "${slash(loaderInfo.filePath)}${getDataLoaderPath({
+          loaderId: key,
+          clientData: loaderInfo.clientData,
+          action: route.action,
+          inline: loaderInfo.inline,
+          routeId: loaderInfo.routeId,
+          inValidSSRRoute: loaderInfo.inValidSSRRoute,
+        })}";\n`;
       } else {
-        importLoadersCode += `import { loader as ${key} } from "${loaderImport}";\n`;
+        importLoadersCode += `import { loader as ${key} } from "${slash(
+          loaderInfo.filePath,
+        )}${getDataLoaderPath({
+          loaderId: key,
+          clientData: loaderInfo.clientData,
+          action: false,
+          inline: loaderInfo.inline,
+          routeId: route.id!,
+          inValidSSRRoute: loaderInfo.inValidSSRRoute,
+        })}";\n`;
       }
     } else {
-      importLoadersCode += `import ${key} from "${loaderImport}";\n`;
+      importLoadersCode += `import ${key} from "${slash(
+        loaderInfo.filePath,
+      )}${getDataLoaderPath({
+        loaderId: key,
+        clientData: loaderInfo.clientData,
+        action: false,
+        inline: loaderInfo.inline,
+        routeId: loaderInfo.routeId,
+        inValidSSRRoute: loaderInfo.inValidSSRRoute,
+      })}";\n`;
     }
   }
 
@@ -550,7 +530,7 @@ export const fileSystemRoutes = async ({
   await fs.writeJSON(loadersMapFile, loadersMap);
 
   const importRuntimeRouterCode = `
-    import { createShouldRevalidate, handleRouteModule, handleRouteModuleError, resolveRouteComponent } from '@${metaName}/runtime/routerHelper';
+    import { createShouldRevalidate, handleRouteModule } from '@${metaName}/runtime/routerHelper';
   `;
   const routeModulesCode = `
     if(typeof document !== 'undefined'){
@@ -562,7 +542,7 @@ export const fileSystemRoutes = async ({
     ${importLazyCode}
     ${!isRscClientBundle ? importComponentsCode : ''}
     ${importRuntimeRouterCode}
-    ${rootLayoutCode}
+    ${!isRscClientBundle ? rootLayoutCode : ''}
     ${importLoadingCode}
     ${importErrorComponentsCode}
     ${importLoadersCode}
@@ -577,10 +557,9 @@ export function ssrLoaderCombinedModule(
   entrypoint: Entrypoint,
   config: AppNormalizedConfig,
   appContext: AppToolsContext,
-  options: { includeRouteServerLoaders?: boolean } = {},
 ) {
   const { entryName, isMainEntry } = entrypoint;
-  const { packageName } = appContext;
+  const { packageName, internalDirectory } = appContext;
 
   const ssr = getEntryOptions(
     entryName,
@@ -592,29 +571,16 @@ export function ssrLoaderCombinedModule(
 
   const ssg = isSSGEntry(config, entryName, entrypoints);
   if (entrypoint.nestedRoutesEntry && (ssr || ssg)) {
-    const serverLoaderRuntime = require.resolve(
-      '@modern-js/plugin-data-loader/runtime',
+    const serverLoaderRuntime =
+      require.resolve('@modern-js/plugin-data-loader/runtime');
+    const serverLoadersFile = getServerLoadersFile(
+      internalDirectory,
+      entryName,
     );
-    const serverLoadersFile = './route-server-loaders.js';
-    const includeRouteServerLoaders =
-      options.includeRouteServerLoaders !== false;
-
-    if (!includeRouteServerLoaders) {
-      if (!config.source.enableAsyncEntry) {
-        return `export * from "${slash(serverLoaderRuntime)}"`;
-      }
-      return `
-      async function loadModules() {
-        return import("${slash(serverLoaderRuntime)}");
-      }
-
-      export { loadModules };
-      `;
-    }
 
     const combinedModule = `export * from "${slash(
       serverLoaderRuntime,
-    )}"; export * from "${serverLoadersFile}"`;
+    )}"; export * from "${slash(serverLoadersFile)}"`;
 
     if (!config.source.enableAsyncEntry) {
       return combinedModule;
@@ -624,7 +590,7 @@ export function ssrLoaderCombinedModule(
     async function loadModules() {
       const [moduleA, moduleB] = await Promise.all([
         import("${slash(serverLoaderRuntime)}"),
-        import("${serverLoadersFile}")
+        import("${slash(serverLoadersFile)}")
       ]);
 
       return {
@@ -647,7 +613,6 @@ export const runtimeGlobalContext = async ({
   internalSrcAlias,
   globalApp,
   rscType = false,
-  routesImportPath = './routes',
   basename,
 }: {
   entryName: string;
@@ -657,7 +622,6 @@ export const runtimeGlobalContext = async ({
   internalSrcAlias: string;
   globalApp?: string | false;
   rscType?: 'server' | 'client' | false;
-  routesImportPath?: string;
   basename?: string;
 }) => {
   const imports = [
@@ -709,7 +673,7 @@ export const runtimeGlobalContext = async ({
   if (isClient) {
     return `${imports.join('\n')}
 
-    import { routes } from '${routesImportPath}';
+    import { routes } from './routes';
 
     const entryName = '${entryName}';
     const basename = '${basename || '/'}';
@@ -726,7 +690,7 @@ export const runtimeGlobalContext = async ({
   } else {
     return `${imports.join('\n')}
 
-    import { routes } from '${routesImportPath}';
+    import { routes } from './routes';
 
     const entryName = '${entryName}';
     const basename = '${basename || '/'}';

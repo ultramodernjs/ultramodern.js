@@ -1,6 +1,6 @@
 import dns from 'node:dns';
 import path from 'path';
-import puppeteer, { type Browser, type Page } from 'puppeteer';
+import puppeteer, { type Page, type Browser } from 'puppeteer';
 import {
   getPort,
   killApp,

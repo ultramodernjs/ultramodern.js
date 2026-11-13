@@ -1,9 +1,0 @@
-{
-  "extends": "@modern-js/tsconfig/base",
-  "compilerOptions": {
-    "declaration": false,
-    "paths": {},
-    "rootDir": "./src"
-  },
-  "include": ["src"]
-}

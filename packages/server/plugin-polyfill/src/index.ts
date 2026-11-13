@@ -1,9 +1,7 @@
 import { getPolyfillString } from '@modern-js/polyfill-lib';
 import type { ServerPlugin } from '@modern-js/server-core';
 import { mime } from '@modern-js/utils';
-
-import UAParser = require('ua-parser-js');
-
+import Parser from 'ua-parser-js';
 import { defaultPolyfill, getDefaultFeatures } from './const';
 import PolyfillCache, { generateCacheKey } from './libs/cache';
 
@@ -31,9 +29,7 @@ export default (): ServerPlugin => ({
           return next();
         }
 
-        const parsedUA = new UAParser.UAParser(
-          context.req.header('user-agent'),
-        ).getResult();
+        const parsedUA = Parser(context.req.header('user-agent'));
         const { name = '', version = '' } = parsedUA.browser;
 
         const cacheKey = generateCacheKey({

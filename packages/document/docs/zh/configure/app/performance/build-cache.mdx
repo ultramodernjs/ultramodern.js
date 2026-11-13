@@ -28,10 +28,6 @@ type BuildCacheConfig =
 
 控制 Modern.js 在构建过程中的缓存行为。
 
-启用 Rspack 持久化缓存时，Modern.js 会把 `cacheDirectory` 视为基础目录，并为每个
-Rsbuild/Rspack environment 写入独立子目录，例如 `client`、`server` 或
-`workerSSR`。这样可以避免并发 environment compiler 写入同一个文件系统 cache 根目录。
-
 在构建时，Modern.js 默认会开启构建缓存来提升二次构建的速度。如果不希望缓存，你可以将 `buildCache` 置为 `false` 将其禁用掉：
 
 ```js

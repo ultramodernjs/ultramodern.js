@@ -1,7 +1,7 @@
+import path from 'path';
 import { expect, test } from '@playwright/test';
 import type { RsbuildConfig } from '@rsbuild/core';
 import { build, proxyConsole } from '@scripts/shared';
-import path from 'path';
 
 function getCommonBuildConfig(cwd: string): RsbuildConfig {
   return {
@@ -24,7 +24,7 @@ test('should throw error when exist syntax errors', async () => {
           checkSyntax: true,
         },
         output: {
-          overrideBrowserslist: ['> 0.01%', 'not dead', 'not op_mini all'],
+          overrideBrowserslist: ['ie 11'],
         },
       },
     }),

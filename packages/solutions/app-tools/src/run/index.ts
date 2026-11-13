@@ -26,26 +26,26 @@ export async function createRunOptions({
   const nodeVersion = process.versions.node;
   const versionArr = nodeVersion.split('.').map(Number);
 
-  if (versionArr[0] < 26 || (versionArr[0] === 26 && versionArr[1] < 7)) {
-    throw new Error(`
-  ${chalk.bgRed.white.bold(' UNSUPPORTED NODE.JS RUNTIME ')}
+  if (versionArr[0] <= 16) {
+    console.warn(`
+  ${chalk.bgRed.white.bold(' ⚠️ CRITICAL NODE.JS VERSION ALERT ⚠️ ')}
 
-  ${chalk.red.bold(`UltraModern.js requires Node.js >=26.7.0; detected v${nodeVersion}.`)}
-  ${chalk.red('- Legacy Node runtimes and TypeScript transpiler fallbacks are unsupported.')}
+  ${chalk.red.bold('Node.js 16 End-of-Life Notice:')}
+  ${chalk.red('- Security updates and support have ended for Node.js 16')}
 
   ${chalk.yellow('▸ Detected Runtime:')}  ${chalk.yellow.bold(`Node.js v${nodeVersion}`)}
-  ${chalk.green('▸ Required Minimum:')} ${chalk.green.bold('Node.js v26.7.0 or higher')}
-  ${chalk.green('▸ Pinned Runtime:')} ${chalk.green.bold('Node.js v26.7.0')}
+  ${chalk.green('▸ Required Minimum:')} ${chalk.green.bold('Node.js LTS (v18.x or higher)')}
+  ${chalk.green('▸ Recommended:')} ${chalk.green.bold('Node.js LTS (v22.x or higher)')}
 
   ${chalk.cyan('Immediate Action Required:')}
     ${chalk.gray('├──')} ${chalk.yellow('Recommended Upgrade')}
-       ${chalk.bold('mise install && mise exec -- node --version')}
+       ${chalk.bold('nvm install 22 --lts && nvm use 22')}
     ${chalk.gray('├──')} ${chalk.yellow('Manual Installation')}
-       ${chalk.underline('https://nodejs.org/download/release/v26.7.0/')}
+       ${chalk.underline('https://nodejs.org/download/release/lts-hydrogen/')}
      ${chalk.gray('└──')} ${chalk.yellow('Environment Verification')}
        ${chalk.bold('node -v && npm -v')}
 
-  ${chalk.hex('#AAAAAA').italic('[Runtime Policy] Upgrade Node; UltraModern.js intentionally carries no legacy transpiler fallback.')}
+  ${chalk.hex('#AAAAAA').italic('[Security Advisory] Node.js 16 is no longer supported. Upgrade immediately for security and compatibility.')}
       `);
   }
   const command = process.argv[2];
@@ -80,7 +80,7 @@ export async function createRunOptions({
   }
 
   const appDirectory = await initAppDir(cwd);
-  const finalConfigFile = customConfigFile || getConfigFile(configFile);
+  const finalConfigFile: string = customConfigFile || getConfigFile(configFile);
 
   const plugins = await loadInternalPlugins(appDirectory, internalPlugins);
 

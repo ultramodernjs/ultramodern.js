@@ -1,9 +1,8 @@
 import { isBrowser } from '@modern-js/runtime';
 import LanguageDetector from 'i18next-browser-languagedetector';
+import type { detectLanguageFromRequest } from '../../../shared/detection.js';
 import type { I18nInstance, LanguageDetectorOptions } from '../instance';
 import { getActualI18nextInstance, isI18nWrapperInstance } from '../instance';
-
-type BrowserDetectorInitOptions = Parameters<LanguageDetector['init']>[1];
 
 /**
  * Register LanguageDetector plugin to i18n instance
@@ -30,6 +29,8 @@ export const useI18nextLanguageDetector = (i18nInstance: I18nInstance) => {
  */
 export const readLanguageFromStorage = (
   detectionOptions?: LanguageDetectorOptions,
+  _request?: Parameters<typeof detectLanguageFromRequest>[0],
+  _languages?: string[],
 ): string | undefined => {
   try {
     const options = detectionOptions || {};
@@ -114,8 +115,8 @@ export const readLanguageFromStorage = (
  */
 export const detectLanguage = (
   i18nInstance: I18nInstance,
-  _request?: unknown,
-  detectionOptions?: LanguageDetectorOptions,
+  _request?: any,
+  detectionOptions?: any,
 ): string | undefined => {
   try {
     // For wrapper instances, get the underlying i18next instance
@@ -162,10 +163,7 @@ export const detectLanguage = (
         const mergedOptions = detectionOptions
           ? { ...optionsToUse, detection: detectionOptions }
           : optionsToUse;
-        manualDetector.init(
-          servicesToUse,
-          mergedOptions as unknown as BrowserDetectorInitOptions,
-        );
+        manualDetector.init(servicesToUse, mergedOptions as any);
 
         const result = manualDetector.detect();
         if (typeof result === 'string') {
@@ -191,7 +189,7 @@ export const detectLanguage = (
 export const cacheUserLanguage = (
   i18nInstance: I18nInstance,
   language: string,
-  detectionOptions?: unknown,
+  detectionOptions?: any,
 ): void => {
   if (typeof window === 'undefined') {
     return;
@@ -236,10 +234,7 @@ export const cacheUserLanguage = (
           : optionsToUse;
 
         const manualDetector = new LanguageDetector();
-        manualDetector.init(
-          servicesToUse,
-          mergedOptions as unknown as BrowserDetectorInitOptions,
-        );
+        manualDetector.init(servicesToUse, mergedOptions as any);
 
         if (typeof manualDetector.cacheUserLanguage === 'function') {
           manualDetector.cacheUserLanguage(language);

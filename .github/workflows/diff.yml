@@ -1,62 +1,53 @@
 name: Diff
 
-concurrency:
-  group: diff-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
-
 on:
   pull_request:
     types: [opened, synchronize, reopened]
   push:
     branches:
       - main
-      - main-ultramodern
-
-# Default to read-only; the Build job elevates only what rsdoctor needs.
-permissions:
-  contents: read
 
 jobs:
   Build:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: read
+      contents: write
       issues: write
       pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: false
 
-      - name: Setup mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
-        with:
-          version: 2026.8.3
-          install: true
+      - name: Setup Pnpm
+        run: |
+          npm install -g corepack@latest --force
+          corepack enable
 
-      - name: Setup Node.js 26.7.0
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '26.7.0'
+          node-version: 22
           cache: 'pnpm'
 
       - name: Install Dependencies and Build
         run: |
           pnpm install
-          pnpm run build:required
 
       - name: Build Demo Project
         run: |
           cd benchmark/bundle-diff
           RSDOCTOR=1 pnpm run build
 
+      - name: Verify render build output
+        run: pnpm --filter @modern-js/render test:build
+
       - name: Report Compressed Size
         uses: web-infra-dev/rsdoctor-action@8fd3b03827afc9de3acf17810be26bb87b6ca6b5 # main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           file_path: 'benchmark/bundle-diff/dist/rsdoctor-data.json'
-          target_branch: 'main-ultramodern'
+          target_branch: 'main'

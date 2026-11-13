@@ -2,23 +2,21 @@ import type { Server as NodeServer } from 'node:http';
 import type { Http2SecureServer } from 'node:http2';
 import type { BuilderInstance, Rspack } from '@modern-js/builder';
 import type {
-  ServerBase,
-  ServerBaseOptions,
-  ServerPlugin,
-} from '@modern-js/server-core';
-import type {
   DevServerHttpsOptions,
   ExposeServerApis,
   RequestHandler,
 } from '@modern-js/types';
 
+import type {
+  ServerBase,
+  ServerBaseOptions,
+  ServerPlugin,
+} from '@modern-js/server-core';
+
 export type { DevServerHttpsOptions };
 
 type StaticOrigin =
-  | boolean
-  | string
-  | RegExp
-  | Array<boolean | string | RegExp>;
+  boolean | string | RegExp | Array<boolean | string | RegExp>;
 
 type CustomOrigin = (
   requestOrigin: string | undefined,

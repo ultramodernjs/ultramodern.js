@@ -15,11 +15,10 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.0",
+  "version": "3.11.3",
   "types": "./src/cli.ts",
   "main": "./dist/cjs/cli.js",
   "exports": {
-    "./package.json": "./package.json",
     ".": {
       "types": "./dist/types/cli.d.ts",
       "node": {
@@ -45,81 +44,12 @@
       "default": "./dist/cjs/server.js"
     },
     "./server": {
-      "types": "./dist/types/runtime/effect/index.d.ts",
-      "node": {
-        "import": "./dist/esm-node/runtime/effect/index.mjs",
-        "require": "./dist/cjs/runtime/effect/index.js"
-      },
-      "default": "./dist/cjs/runtime/effect/index.js"
-    },
-    "./hono-server": {
       "types": "./dist/types/runtime/hono/index.d.ts",
       "node": {
         "import": "./dist/esm-node/runtime/hono/index.mjs",
         "require": "./dist/cjs/runtime/hono/index.js"
       },
       "default": "./dist/cjs/runtime/hono/index.js"
-    },
-    "./effect-server": {
-      "types": "./dist/types/runtime/effect/index.d.ts",
-      "node": {
-        "import": "./dist/esm-node/runtime/effect/index.mjs",
-        "require": "./dist/cjs/runtime/effect/index.js"
-      },
-      "default": "./dist/cjs/runtime/effect/index.js"
-    },
-    "./effect": {
-      "types": "./dist/types/runtime/effect/index.d.ts",
-      "node": {
-        "import": "./dist/esm-node/runtime/effect/index.mjs",
-        "require": "./dist/cjs/runtime/effect/index.js"
-      },
-      "default": "./dist/cjs/runtime/effect/index.js"
-    },
-    "./effect-edge": {
-      "types": "./dist/types/runtime/effect/edge.d.ts",
-      "node": {
-        "import": "./dist/esm-node/runtime/effect/edge.mjs",
-        "require": "./dist/cjs/runtime/effect/edge.js"
-      },
-      "import": "./dist/esm/runtime/effect/edge.mjs",
-      "default": "./dist/esm/runtime/effect/edge.mjs"
-    },
-    "./effect-edge/dispatcher": {
-      "types": "./dist/types/runtime/effect/edge-dispatcher.d.ts",
-      "node": {
-        "import": "./dist/esm-node/runtime/effect/edge-dispatcher.mjs",
-        "require": "./dist/cjs/runtime/effect/edge-dispatcher.js"
-      },
-      "import": "./dist/esm/runtime/effect/edge-dispatcher.mjs",
-      "default": "./dist/esm/runtime/effect/edge-dispatcher.mjs"
-    },
-    "./effect-client": {
-      "types": "./dist/types/runtime/effect-client/index.d.ts",
-      "node": {
-        "import": "./dist/esm-node/runtime/effect-client/index.mjs",
-        "require": "./dist/cjs/runtime/effect-client/index.js"
-      },
-      "import": "./dist/esm/runtime/effect-client/index.mjs",
-      "default": "./dist/esm/runtime/effect-client/index.mjs"
-    },
-    "./effect-client-runtime": {
-      "types": "./dist/types/runtime/effect-client/runtime.d.ts",
-      "node": {
-        "import": "./dist/esm-node/runtime/effect-client/runtime.mjs",
-        "require": "./dist/cjs/runtime/effect-client/runtime.js"
-      },
-      "import": "./dist/esm/runtime/effect-client/runtime.mjs",
-      "default": "./dist/esm/runtime/effect-client/runtime.mjs"
-    },
-    "./data-platform": {
-      "types": "./dist/types/runtime/data-platform/index.d.ts",
-      "node": {
-        "import": "./dist/esm-node/runtime/data-platform/index.mjs",
-        "require": "./dist/cjs/runtime/data-platform/index.js"
-      },
-      "import": "./dist/esm/runtime/data-platform/index.mjs",
-      "default": "./dist/esm/runtime/data-platform/index.mjs"
     },
     "./client": {
       "types": "./dist/types/runtime/create-request/index.d.ts",
@@ -129,7 +59,7 @@
   "typesVersions": {
     "*": {
       ".": [
-        "./dist/types/cli.d.ts"
+        "./dist/types/index.d.ts"
       ],
       "cli": [
         "./dist/types/cli.d.ts"
@@ -138,31 +68,7 @@
         "./dist/types/server.d.ts"
       ],
       "server": [
-        "./dist/types/runtime/effect/index.d.ts"
-      ],
-      "hono-server": [
         "./dist/types/runtime/hono/index.d.ts"
-      ],
-      "effect-server": [
-        "./dist/types/runtime/effect/index.d.ts"
-      ],
-      "effect": [
-        "./dist/types/runtime/effect/index.d.ts"
-      ],
-      "effect-edge": [
-        "./dist/types/runtime/effect/edge.d.ts"
-      ],
-      "effect-edge/dispatcher": [
-        "./dist/types/runtime/effect/edge-dispatcher.d.ts"
-      ],
-      "effect-client": [
-        "./dist/types/runtime/effect-client/index.d.ts"
-      ],
-      "effect-client-runtime": [
-        "./dist/types/runtime/effect-client/runtime.d.ts"
-      ],
-      "data-platform": [
-        "./dist/types/runtime/data-platform/index.d.ts"
       ],
       "client": [
         "./dist/types/runtime/create-request/index.d.ts"
@@ -171,62 +77,36 @@
   },
   "scripts": {
     "prepublishOnly": "only-allow-pnpm",
-    "build": "rslib build",
-    "dev": "rslib build --watch",
+    "build": "rs lib",
+    "dev": "rs lib --watch",
     "test": "rstest --passWithNoTests"
   },
   "dependencies": {
     "@modern-js/bff-core": "workspace:*",
-    "@modern-js/bff-effect": "workspace:*",
+    "@modern-js/builder": "workspace:*",
     "@modern-js/create-request": "workspace:*",
-    "@modern-js/plugin-bff-extensions": "workspace:*",
     "@modern-js/server-core": "workspace:*",
     "@modern-js/server-utils": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@swc/core": "1.16.2",
-    "qs": "^6.16.0",
-    "type-is": "^2.1.0"
-  },
-  "peerDependencies": {
-    "@effect/opentelemetry": "4.0.0-rc.112",
-    "@modern-js/app-tools": "workspace:^3.9.0",
-    "effect": "4.0.0-rc.112"
-  },
-  "peerDependenciesMeta": {
-    "@effect/opentelemetry": {
-      "optional": true
-    },
-    "@modern-js/app-tools": {
-      "optional": true
-    },
-    "effect": {
-      "optional": true
-    }
+    "@swc/helpers": "^0.5.17",
+    "qs": "^6.16.1",
+    "type-is": "^1.6.18"
   },
   "devDependencies": {
-    "@effect/opentelemetry": "4.0.0-rc.112",
     "@modern-js/app-tools": "workspace:*",
     "@modern-js/bff-runtime": "workspace:*",
-    "@modern-js/builder": "workspace:*",
     "@modern-js/plugin": "workspace:*",
     "@modern-js/rslib": "workspace:*",
     "@modern-js/runtime": "workspace:*",
     "@modern-js/types": "workspace:*",
-    "@rsbuild/core": "2.2.3",
-    "@rslib/core": "1.0.0",
+    "@rsbuild/core": "2.3.2",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.4.1",
+    "@types/node": "^20",
     "@types/qs": "^6.15.1",
     "@types/type-is": "^1.6.7",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "effect": "4.0.0-rc.112",
-    "esbuild": "^0.28.2",
-    "memfs": "^4.71.0",
-    "typescript": "^7.0.2",
-    "zod": "^4.5.4"
-  },
-  "engines": {
-    "node": ">=26.7.0"
+    "memfs": "^3.5.3",
+    "typescript": "^5",
+    "zod": "^4.0.0"
   },
   "sideEffects": false,
   "publishConfig": {

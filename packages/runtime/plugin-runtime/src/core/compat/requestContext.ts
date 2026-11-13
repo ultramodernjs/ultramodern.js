@@ -1,4 +1,3 @@
-// @effect-diagnostics strictBooleanExpressions:off
 import type { BaseSSRServerContext } from '@modern-js/types';
 // this plugin is use to provide request context to runtime context
 import type { TInternalRuntimeContext } from '../context';
@@ -27,9 +26,7 @@ export const requestContextPlugin = (): RuntimePlugin => ({
 
   setup(api) {
     api.onBeforeRender(context => {
-      const requestContext = makeRequestContext(
-        context,
-      ) as unknown as TInternalRuntimeContext['requestContext'];
+      const requestContext = makeRequestContext(context);
       context.requestContext = requestContext;
       context.context = requestContext; // deprecated, keep for backward compatibility
     });

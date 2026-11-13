@@ -45,18 +45,20 @@ declare namespace hoistNonReactStatics {
       [key: string]: true;
     } = {},
   > = {
-    [key in Exclude<
-      keyof S,
-      S extends React.MemoExoticComponent<any>
-        ? keyof MEMO_STATICS | keyof C
-        : S extends React.ForwardRefExoticComponent<any>
-          ? keyof FORWARD_REF_STATICS | keyof C
-          : keyof REACT_STATICS | keyof KNOWN_STATICS | keyof C
-    >]: S[key];
+    [
+      key in Exclude<
+        keyof S,
+        S extends React.MemoExoticComponent<any>
+          ? keyof MEMO_STATICS | keyof C
+          : S extends React.ForwardRefExoticComponent<any>
+            ? keyof FORWARD_REF_STATICS | keyof C
+            : keyof REACT_STATICS | keyof KNOWN_STATICS | keyof C
+      >
+    ]: S[key];
   };
 }
 declare module 'hoist-non-react-statics' {
-  function hoistNonReactStatics<
+  declare function hoistNonReactStatics<
     T extends React.ComponentType<any>,
     S extends React.ComponentType<any>,
     C extends {

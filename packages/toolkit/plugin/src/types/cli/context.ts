@@ -17,7 +17,7 @@ export type AppContext<Extends extends CLIPluginExtends> = {
   // current project package name
   packageName: string;
   // current config file absolute path
-  configFile: string | false;
+  configFile: string;
   // current command name
   command: string;
   // is prod mode

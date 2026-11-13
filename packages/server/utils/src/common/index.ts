@@ -1,9 +1,9 @@
+import * as path from 'path';
 import type {
   SourceNormalizedConfig,
   ToolsNormalizedConfig,
 } from '@modern-js/server-core';
 import { fs } from '@modern-js/utils';
-import * as path from 'path';
 
 export interface Pattern {
   from: string;

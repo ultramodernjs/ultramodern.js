@@ -1,9 +1,15 @@
-import type { ClientManifest } from '@modern-js/types/server';
+import type {
+  ClientManifest,
+  SSRManifest,
+  SSRModuleMap,
+} from '@modern-js/types/server';
 import { SSR_HYDRATION_ID_PREFIX } from '@modern-js/utils/universal/constants';
-import React, { type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { ReactDOMServerReadableStream } from 'react-dom/server';
 import { renderToReadableStream } from 'react-dom/server.edge';
 import { ServerElementsProvider } from '../../client/index';
+
+declare const RSPACK_RSC_MANIFEST: typeof __rspack_rsc_manifest__;
 
 function CSSLinks({ cssFiles }: { cssFiles: string[] }) {
   if (cssFiles.length === 0) {
@@ -21,12 +27,6 @@ function CSSLinks({ cssFiles }: { cssFiles: string[] }) {
 type Options = {
   request: Request;
   routes?: unknown[];
-  rscManifest?: {
-    clientManifest?: ClientManifest;
-    serverConsumerModuleMap?: unknown;
-    serverManifest?: unknown;
-    entryCssFiles?: Record<string, string[]>;
-  };
 } & Parameters<typeof renderToReadableStream>[1];
 
 function wrapStream(
@@ -47,10 +47,10 @@ export const renderSSRStream = async (
   children: React.ReactNode,
   options: Options & { rscRoot: React.ReactElement },
 ): Promise<ReturnType<typeof renderToReadableStream>> => {
-  const { rscManifest, rscRoot, routes } = options;
-  const clientManifest = rscManifest?.clientManifest;
-  const serverConsumerModuleMap = rscManifest?.serverConsumerModuleMap;
-  const entryCssFiles = rscManifest?.entryCssFiles;
+  const { rscRoot, routes } = options;
+  const clientManifest = RSPACK_RSC_MANIFEST?.clientManifest;
+  const serverConsumerModuleMap = RSPACK_RSC_MANIFEST?.serverConsumerModuleMap;
+  const entryCssFiles = RSPACK_RSC_MANIFEST?.entryCssFiles;
 
   const hasRoutes = Boolean(routes && routes.length > 0);
 
@@ -62,13 +62,9 @@ export const renderSSRStream = async (
   }
 
   try {
-    const rscRuntime =
-      process.env.MODERN_SSR_ENV === 'edge'
-        ? import('@modern-js/render/rsc-worker')
-        : import('@modern-js/render/rsc');
     const [{ renderRsc }, { createFromReadableStream }, { injectRSCPayload }] =
       await Promise.all([
-        rscRuntime,
+        import('../rsc/index'),
         import('react-server-dom-rspack/client.edge'),
         import('../../rsc-html-stream/server'),
       ]);

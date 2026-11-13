@@ -1,5 +1,5 @@
-import { execa, fs as fse } from '@modern-js/utils';
 import path from 'path';
+import { execa, fs as fse } from '@modern-js/utils';
 import {
   getPort,
   killApp,
@@ -10,35 +10,6 @@ import {
 rstest.setConfig({ testTimeout: 1000 * 60 * 2, hookTimeout: 1000 * 60 * 2 });
 
 const appDir = path.resolve(__dirname, '../');
-
-function parseNetlifyRedirectRules(content: string) {
-  return content
-    .split(/\r?\n/u)
-    .map(line => line.trim())
-    .filter(line => line !== '' && !line.startsWith('#'))
-    .map(line => {
-      const fields = line.split(/\s+/u);
-      const source = fields.at(0);
-      const destination = fields.at(1);
-      const statusText = fields.at(2);
-
-      if (
-        fields.length !== 3 ||
-        source === undefined ||
-        destination === undefined ||
-        statusText === undefined
-      ) {
-        throw new Error(`Invalid Netlify redirect rule: ${line}`);
-      }
-
-      const status = Number(statusText);
-      if (!Number.isInteger(status)) {
-        throw new Error(`Invalid Netlify redirect status: ${statusText}`);
-      }
-
-      return { source, destination, status };
-    });
-}
 
 async function checkAppRun(host: string) {
   // Page render
@@ -170,9 +141,7 @@ describe('deploy', () => {
     const staticDirectory = path.join(publishDir, 'static');
     const funcsDirectory = path.join(outputDirectory, 'functions');
     const redirectFilePath = path.join(publishDir, '_redirects');
-    const redirectRules = parseNetlifyRedirectRules(
-      (await fse.readFile(redirectFilePath)).toString(),
-    );
+    const redirects = (await fse.readFile(redirectFilePath)).toString();
 
     const bootstrapFile = path.join(funcsDirectory, 'index.js');
     const htmlDirectory = path.join(funcsDirectory, 'html');
@@ -180,12 +149,6 @@ describe('deploy', () => {
     expect(await fse.pathExists(staticDirectory)).toBe(true);
     expect(await fse.pathExists(htmlDirectory)).toBe(true);
     expect(await fse.pathExists(bootstrapFile)).toBe(true);
-    expect(redirectRules).toEqual([
-      {
-        source: '/*',
-        destination: '/.netlify/functions/index',
-        status: 200,
-      },
-    ]);
+    expect(redirects).toMatchSnapshot();
   });
 });

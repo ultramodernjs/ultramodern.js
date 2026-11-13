@@ -4,8 +4,8 @@ import { compatPlugin } from './compat';
 import { logPlugin } from './log';
 import {
   initMonitorsPlugin,
-  injectloggerPlugin,
   injectServerTiming,
+  injectloggerPlugin,
 } from './monitors';
 import { processedByPlugin } from './processedBy';
 import {

@@ -1,14 +1,14 @@
 import type { InternalPlugins } from '@modern-js/types';
 
 export {
-  DEFAULT_ENTRY_NAME,
-  MAIN_ENTRY_NAME,
   NESTED_ROUTE_SPEC_FILE,
+  MAIN_ENTRY_NAME,
+  DEFAULT_ENTRY_NAME,
   ROUTE_SPEC_FILE,
   SERVER_BUNDLE_DIRECTORY,
+  SERVER_RENDER_FUNCTION_NAME,
   SERVER_PLUGIN_BFF,
   SERVER_PLUGIN_POLYFILL,
-  SERVER_RENDER_FUNCTION_NAME,
 } from '../universal/constants';
 
 export const JS_EXTENSIONS = ['.js', '.ts', '.jsx', '.tsx'];

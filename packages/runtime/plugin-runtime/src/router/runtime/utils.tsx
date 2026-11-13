@@ -1,17 +1,18 @@
-// @effect-diagnostics processEnv:off strictBooleanExpressions:off
 import { renderNestedRoute } from '@modern-js/runtime-utils/browser';
-import type { DataRouter } from '@modern-js/runtime-utils/router';
 import {
   UNSAFE_ErrorResponseImpl as ErrorResponseImpl,
+  type StaticHandlerContext,
+} from '@modern-js/runtime-utils/router';
+import type { DataRouter } from '@modern-js/runtime-utils/router';
+import {
   Route,
   type RouteObject,
-  type StaticHandlerContext,
+  isRouteErrorResponse,
 } from '@modern-js/runtime-utils/router';
 import type { NestedRoute, PageRoute, SSRMode } from '@modern-js/types';
 import React from 'react';
 import { DefaultNotFound } from './DefaultNotFound';
 import DeferredDataScripts from './DeferredDataScripts';
-import { isRouteErrorResponse } from './routerHelper';
 import type { ModernRouteObject, RouterConfig } from './types';
 
 export function getRouteComponents(
@@ -111,6 +112,7 @@ export function getRouteObjects(
         id: route.id,
         loader: route.loader,
         action: route.action,
+        hasErrorBoundary: route.hasErrorBoundary,
         shouldRevalidate: route.shouldRevalidate,
         handle: {
           ...route.handle,
@@ -121,8 +123,6 @@ export function getRouteObjects(
         hasClientLoader: !!route.clientData,
         hasAction: !!route.action,
         ...(route.isClientComponent ? { isClientComponent: true } : {}),
-        ...(route.inValidSSRRoute ? { inValidSSRRoute: true } : {}),
-        lazyImport: route.lazyImport,
         Component: route.component ? route.component : undefined,
         errorElement: route.error ? <route.error /> : undefined,
         children: route.children
@@ -155,7 +155,6 @@ export function getRouteObjects(
   routeObjects.push({
     path: '*',
     element: <DefaultNotFound />,
-    loader: () => new Response('404', { status: 404 }),
   });
 
   return routeObjects;
@@ -177,7 +176,7 @@ export function createRouteObjectsFromConfig({
   if (!routes) {
     return null;
   }
-  return getRouteObjects(routes as (NestedRoute | PageRoute)[], {
+  return getRouteObjects(routes, {
     globalApp,
     ssrMode,
     props,
@@ -200,14 +199,11 @@ export function renderRoutes({
   if (!routes) {
     return null;
   }
-  const routeElements = getRouteComponents(
-    routes as (NestedRoute | PageRoute)[],
-    {
-      globalApp,
-      ssrMode,
-      props,
-    },
-  );
+  const routeElements = getRouteComponents(routes, {
+    globalApp,
+    ssrMode,
+    props,
+  });
   return routeElements;
 }
 
@@ -267,60 +263,18 @@ export function serializeErrors(
     // Hey you!  If you change this, please change the corresponding logic in
     // deserializeErrors
     if (isRouteErrorResponse(val)) {
-      serialized[key] = serializeRouteErrorResponse(val);
+      serialized[key] = { ...val, __type: 'RouteErrorResponse' };
     } else if (val instanceof Error) {
-      serialized[key] = serializeError(val);
+      serialized[key] = {
+        message: val.message,
+        stack: val.stack,
+        __type: 'Error',
+      };
     } else {
       serialized[key] = val;
     }
   }
   return serialized;
-}
-
-function shouldRedactServerError() {
-  return (
-    process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test'
-  );
-}
-
-function serializeError(error: Error) {
-  if (shouldRedactServerError()) {
-    return {
-      message: 'Unexpected Server Error',
-      stack: undefined,
-      __type: 'Error',
-    };
-  }
-
-  return {
-    message: error.message,
-    stack: error.stack,
-    __type: 'Error',
-  };
-}
-
-function serializeRouteErrorResponse(error: unknown) {
-  if (!isRouteErrorResponse(error)) {
-    return error;
-  }
-
-  if (error.status >= 500 && shouldRedactServerError()) {
-    return {
-      status: error.status,
-      statusText: 'Internal Server Error',
-      data: 'Unexpected Server Error',
-      internal: error.internal,
-      __type: 'RouteErrorResponse',
-    };
-  }
-
-  return {
-    status: error.status,
-    statusText: error.statusText,
-    data: error.data,
-    internal: error.internal,
-    __type: 'RouteErrorResponse',
-  };
 }
 
 /**

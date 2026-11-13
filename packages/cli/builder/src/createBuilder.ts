@@ -1,12 +1,12 @@
+import { createRsbuild } from '@rsbuild/core';
 import type {
   RsbuildConfig,
   RsbuildInstance,
   RsbuildPlugin,
 } from '@rsbuild/core';
-import { createRsbuild } from '@rsbuild/core';
 import { getRscPlugins } from './plugins/rscConfig';
 import { parseCommonConfig } from './shared/parseCommonConfig';
-import { rscDisabledRuntimePlugin } from './shared/rsc/rscDisabledRuntime';
+import { rscClientBrowserFallbackPlugin } from './shared/rsc/rscClientBrowserFallback';
 import type {
   BuilderConfig,
   CreateBuilderCommonOptions,
@@ -65,12 +65,7 @@ export async function parseConfig(
     );
     rsbuildPlugins.push(...rscPlugins);
   } else {
-    // Keep the disabled-runtime guard after user plugins so its final config
-    // hook cannot be overwritten by a later resolver alias.
-    rsbuildConfig.plugins = [
-      ...(rsbuildConfig.plugins ?? []),
-      rscDisabledRuntimePlugin(),
-    ];
+    rsbuildPlugins.push(rscClientBrowserFallbackPlugin());
   }
 
   return {

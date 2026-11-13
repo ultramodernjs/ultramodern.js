@@ -1,7 +1,6 @@
 {
   "extends": "@modern-js/tsconfig/base",
   "compilerOptions": {
-    "ignoreDeprecations": "5.0",
     "module": "ES2020",
     "outDir": "./dist",
     "noUnusedLocals": true,

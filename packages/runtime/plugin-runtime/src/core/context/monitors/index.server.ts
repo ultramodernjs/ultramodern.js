@@ -1,7 +1,8 @@
 import { storage } from '@modern-js/runtime-utils/node';
-import { defaultMonitors, type RuntimeMonitors } from './default';
+import type { Monitors } from '@modern-js/types';
+import { defaultMonitors } from './default';
 
-export const getMonitors = (): RuntimeMonitors => {
+export const getMonitors = (): Omit<Monitors, 'push'> => {
   const storageContext = storage.useContext();
   return storageContext.monitors || defaultMonitors;
 };

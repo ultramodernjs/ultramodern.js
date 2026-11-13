@@ -3,8 +3,8 @@
   "compilerOptions": {
     "declaration": false,
     "jsx": "preserve",
-    "isolatedModules": true,
-    "rootDir": "./src"
+    "baseUrl": "./",
+    "isolatedModules": true
   },
   "include": ["src"]
 }

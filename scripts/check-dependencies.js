@@ -1,7 +1,18 @@
-const ignoreDeps = ['fs-extra', 'tailwindcss', 'tsconfig-paths'];
+const ignoreDeps = [
+  'fs-extra',
+  'react-router-dom',
+  'tailwindcss',
+  'tsconfig-paths',
+  'typescript',
+  'lru-cache',
+  'tsx',
+  // MCP SDK requires zod >=4.2, while existing BFF APIs still use zod 3.
+  'zod',
+];
 
-// Use the workspace-pinned version to avoid unexpected breaking changes from @latest.
-const command = `pnpm exec check-dependency-version-consistency . ${ignoreDeps
+// examples/ intentionally track the published packages (`latest`) and mirror
+// real user apps, so they are exempt from workspace version consistency.
+const command = `npx check-dependency-version-consistency . ${ignoreDeps
   .map(dep => `--ignore-dep "${dep}"`)
   .join(' ')} --ignore-package-pattern "^@examples/"`;
 

@@ -72,11 +72,16 @@ When a nested dependency of the project has a problem and Modern.js cannot be up
 
 ### pnpm
 
-For projects using pnpm, add the following configuration to `pnpm-workspace.yaml` in the **root directory** of the project, and then run `pnpm install` again:
+For projects using pnpm, add the following configuration to the `package.json` in the **root directory** of the project, and then run `pnpm install` again:
 
-```yaml title="pnpm-workspace.yaml"
-overrides:
-  package-name: ^1.0.0
+```json title="package.json"
+{
+  "pnpm": {
+    "overrides": {
+      "package-name": "^1.0.0"
+    }
+  }
+}
 ```
 
 ### Yarn
@@ -104,6 +109,6 @@ For projects using Npm, add the following configuration to the `package.json` in
 ```
 
 :::info
-For Monorepo repositories, lock dependency versions in the package-manager configuration at the project root. The override affects every package in the Monorepo.
+For Monorepo repositories, you can only lock dependency versions in the `package.json` in the root directory of the project, and it will affect all packages in the Monorepo.
 
 :::

@@ -1,5 +1,7 @@
 // Rstest Snapshot v1
 
+exports[`deploy > support server when deploy target is netlify 1`] = `"/* /.netlify/functions/index 200"`;
+
 exports[`deploy > support server when deploy target is vercel 1`] = `
 {
   "default": {

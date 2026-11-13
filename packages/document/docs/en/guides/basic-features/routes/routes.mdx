@@ -4,17 +4,12 @@ sidebar_position: 2
 
 # Routing
 
-Modern.js supports conventional routing on top of both [React Router](https://reactrouter.com/en/main) and [TanStack Router](https://tanstack.com/router), offering file convention-based routing capabilities and supporting the industry-popular **nested routing** pattern. When an entry is recognized as [conventional routing](/guides/concept/entries.html#conventional-routing), Modern.js automatically generates the corresponding routing structure based on the file system.
+Modern.js routing is based on [React Router v7](https://reactrouter.com/en/main), offering file convention-based routing capabilities and supporting the industry-popular **nested routing** pattern. When an entry is recognized as [conventional routing](/guides/concept/entries.html#conventional-routing), Modern.js automatically generates the corresponding routing structure based on the file system.
 
 :::note
 
 The routing mentioned in this section all refers to conventional routing.
 
-:::
-
-:::tip
-This page uses React Router import paths in examples (`@modern-js/runtime/router`).  
-If your project is created with `--router tanstack`, use `@modern-js/plugin-tanstack/runtime` instead.
 :::
 
 ## What is Nested Routing
@@ -93,7 +88,7 @@ export default () => {
 
 :::note
 
-`<Outlet>` is an API provided by React Router. For more details, see [Outlet](https://reactrouter.com/en/main/components/outlet#outlet).
+`<Outlet>` is an API provided by React Router v7. For more details, see [Outlet](https://reactrouter.com/en/main/components/outlet#outlet).
 
 :::
 
@@ -464,7 +459,7 @@ When defining a `loading.tsx`, if the route transitions from `/` to `/blog` or f
 
 ## Prefetching
 
-Most white screens during route transitions can be optimized by defining a `<Loading>` component. Modern.js also supports navigation warmup with the `prefetch` and `preload` attributes on `<Link>` components.
+Most white screens during route transitions can be optimized by defining a `<Loading>` component. Modern.js also supports preloading static resources and data with the `prefetch` attribute on `<Link>` components.
 
 For applications with higher performance requirements, prefetching can further enhance the user experience by reducing the time spent displaying the `<Loading>` component:
 
@@ -474,36 +469,21 @@ For applications with higher performance requirements, prefetching can further e
 
 :::tip
 
-In SSR projects, same-origin route data returned by the [Data Loader](/guides/basic-features/data/data-fetch) is prefetched for matched routes with callable loaders. Set `handle.navigationWarmup.data` to `false` on a route when its loader data should not be requested before navigation.
+Data preloading currently only preloads data returned by the [Data Loader](/guides/basic-features/data/data-fetch) in SSR projects.
 
 :::
 
-By default, same-origin links prefetch the route module and matching loader data when the `<Link>` renders. Modern.js skips these automatic warmups on Save-Data or slow network connections.
+The `prefetch` attribute has three optional values:
 
-The `prefetch` attribute has four optional values:
-
-- `render`: The default value. When the `<Link>` component is rendered, it begins warming the corresponding route module.
-- `intent`: When users focus, hover, or touch the link, it starts warming the corresponding route module. If the intent is canceled before warmup starts, the warmup is canceled.
-- `viewport`: When the `<Link>` component enters the viewport, it begins warming the corresponding route module.
-- `none`: Disables automatic prefetching. It also disables implicit preload unless an explicit `preload` value is provided.
-
-The `preload` attribute accepts the same timing values and defaults to the `prefetch` timing. Explicit `preload` values always win, and `preload={false}` disables preload behavior.
-
-To opt a route out of SSR data warmup:
-
-```ts title="routes/page.config.ts"
-export const handle = {
-  navigationWarmup: {
-    data: false,
-  },
-};
-```
+- `none`: The default value. No prefetching, no additional behavior.
+- `intent`: This is the recommended value for most scenarios. When you hover over the Link, it will automatically start loading the corresponding chunk and the data defined in the Data Loader. If the mouse moves away, the loading is automatically canceled. In our tests, even quick clicks can reduce load time by approximately 200ms.
+- `render`: When the `<Link>` component is rendered, it begins loading the corresponding chunk and data defined in the Data Loader.
 
 :::details Difference Between "render" and Not Using Route Splitting
 
-- `render` allows you to control route-module warmup with the position of the `<Link>` component in the tree.
-- `viewport` lets you defer module warmup until the link is close to becoming actionable.
-- SSR data prefetching is enabled by default; use `handle.navigationWarmup.data = false` for routes whose loader data is not safe or useful to fetch before navigation.
+- `render` allows you to control the timing of route splitting, triggering only when the `<Link>` component enters the viewport. You can control the loading timing of the split by adjusting the rendering position of the `<Link>` component.
+- `render` loads static resources only during idle times, thus not occupying the loading time of critical modules.
+- Besides preloading route splits, `render` will also initiate data prefetching in SSR projects.
 
 :::
 
@@ -513,20 +493,14 @@ import Motivation from '@site-docs-en/components/convention-routing-motivation';
 
 ## FAQ
 
-1. Why should I import from `@modern-js/runtime/router` or `@modern-js/plugin-tanstack/runtime`?
+1. Why is there `@modern-js/runtime/router` to re-export React Router API?
 
-Modern.js provides framework-specific runtime exports:
+Notice that all the code examples in the documentation uses APIs exported from the `@modern-js/runtime/router` package instead of directly using the API exported from the React Router package. So, what is the difference?
 
-- `@modern-js/runtime/router` for React Router mode.
-- `@modern-js/plugin-tanstack/runtime` for TanStack Router mode.
+The API exported from `@modern-js/runtime/router` is the same as the API from the React Router package. If you encounter issues while using an API, check the React Router documentation and issues first.
 
-Use the Modern.js runtime export that matches your selected router framework, instead of importing directly from the upstream router package. This avoids dependency duplication and ensures compatibility with Modern.js route generation/runtime behavior.
-
-If you encounter API usage issues, check the corresponding upstream docs:
-
-- React Router docs for `@modern-js/runtime/router`.
-- TanStack Router docs for `@modern-js/plugin-tanstack/runtime`.
+Additionally, when using conventional routing, make sure to use the API from `@modern-js/runtime/router` instead of directly using the React Router API. Modern.js internally installs React Router, and using the React Router API directly in your application may result in two versions of React Router being present, causing unexpected behavior.
 
 :::note
-If you must directly use the React Router package's API (e.g., route behavior wrapped in a unified npm package), you can set [`source.alias`](/configure/app/source/alias) to point `react-router` to the project's dependency, avoiding the issue of two React Router versions.
+If you must directly use the React Router package's API (e.g., route behavior wrapped in a unified npm package), you can set [`source.alias`](/configure/app/source/alias) to point `react-router` and `react-router-dom` to the project's dependencies, avoiding the issue of two versions of React Router.
 :::

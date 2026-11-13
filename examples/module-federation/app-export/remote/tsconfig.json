@@ -3,6 +3,7 @@
   "compilerOptions": {
     "declaration": false,
     "jsx": "preserve",
+    "baseUrl": "./",
     "paths": {
       "@/*": ["./src/*"],
       "@shared/*": ["./shared/*"]

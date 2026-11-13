@@ -1,22 +1,9 @@
-const SCRIPT_UNSAFE_CHARACTER = /[<>/\u2028\u2029]/gu;
-
-const SCRIPT_UNSAFE_CHARACTER_ESCAPE: Readonly<Record<string, string>> = {
-  '<': '\\u003C',
-  '>': '\\u003E',
-  '/': '\\u002F',
-  '\u2028': '\\u2028',
-  '\u2029': '\\u2029',
-};
+/**
+ *  MARK: `serialize-javascript` can only be used in browser env, so don't export this module in index.ts.
+ *  Only use it through subpath.
+ */
+import serialize from 'serialize-javascript';
 
 export const serializeJson = (data: any) => {
-  const serialized = JSON.stringify(data);
-
-  if (typeof serialized !== 'string') {
-    return String(serialized);
-  }
-
-  return serialized.replace(
-    SCRIPT_UNSAFE_CHARACTER,
-    character => SCRIPT_UNSAFE_CHARACTER_ESCAPE[character],
-  );
+  return serialize(data, { isJSON: true });
 };

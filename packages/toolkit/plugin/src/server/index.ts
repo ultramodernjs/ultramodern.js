@@ -1,10 +1,10 @@
 export { initPluginAPI } from './api';
-export { createServerContext, initServerContext } from './context';
+export { initServerContext, createServerContext } from './context';
 export {
-  type Hooks,
   initHooks,
-  type ModifyConfigFn,
+  type Hooks,
   type OnPrepareFn,
+  type ModifyConfigFn,
   type OnResetFn,
 } from './hooks';
-export { createServer, type ServerCreateOptions, server } from './run';
+export { server, createServer, type ServerCreateOptions } from './run';

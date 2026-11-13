@@ -1,35 +1,30 @@
 import { LanguageDetector } from 'i18next-http-middleware';
+import { detectLanguageFromRequest } from '../../../shared/detection.js';
 import type { I18nInstance, LanguageDetectorOptions } from '../instance';
-
-type HttpDetectorInit = (
-  services: NonNullable<I18nInstance['services']>,
-  options?: unknown,
-  allOptions?: unknown,
-) => void;
-
-type HttpDetectorDetect = (
-  request: unknown,
-  response: unknown,
-  detectionOrder?: unknown,
-) => string | string[] | undefined;
 
 export const cacheUserLanguage = (
   _i18nInstance: I18nInstance,
   _language: string,
-  _detectionOptions?: unknown,
+  _detectionOptions?: any,
 ): void => {
   return;
 };
 
-/**
- * Read language directly from storage (localStorage/cookie)
- * Not available in Node.js environment, returns undefined
- */
 export const readLanguageFromStorage = (
-  _detectionOptions?: LanguageDetectorOptions,
+  detectionOptions?: LanguageDetectorOptions,
+  request?: Parameters<typeof detectLanguageFromRequest>[0],
+  languages: string[] = [],
 ): string | undefined => {
-  // In Node.js environment, storage-based detection is not available
-  return undefined;
+  if (!request) {
+    return undefined;
+  }
+
+  const detectedLanguage = detectLanguageFromRequest(
+    request,
+    languages,
+    detectionOptions,
+  );
+  return detectedLanguage ?? undefined;
 };
 /**
  * Register LanguageDetector plugin to i18n instance
@@ -48,8 +43,8 @@ export const useI18nextLanguageDetector = (i18nInstance: I18nInstance) => {
  */
 export const detectLanguage = (
   i18nInstance: I18nInstance,
-  request?: unknown,
-  detectionOptions?: LanguageDetectorOptions,
+  request?: any,
+  detectionOptions?: any,
 ): string | undefined => {
   if (!request) {
     return undefined;
@@ -77,16 +72,9 @@ export const detectLanguage = (
       const optionsToUse = detectionOptions
         ? { ...i18nInstance.options, detection: detectionOptions }
         : i18nInstance.options;
-      (manualDetector.init as unknown as HttpDetectorInit)(
-        i18nInstance.services,
-        optionsToUse,
-      );
+      manualDetector.init(i18nInstance.services, optionsToUse as any);
 
-      const result = (manualDetector.detect as unknown as HttpDetectorDetect)(
-        request,
-        {},
-        undefined,
-      );
+      const result = (manualDetector.detect as any)(request, {}, undefined);
       if (typeof result === 'string') {
         return result;
       }

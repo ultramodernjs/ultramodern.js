@@ -6,7 +6,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/web-infra-dev/modern.js",
-    "directory": "packages/toolkit/sandpack-react"
+    "directory": "packages/generator/sandpack-react"
   },
   "license": "MIT",
   "keywords": [
@@ -15,7 +15,7 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.0",
+  "version": "3.11.3",
   "types": "./src/index.ts",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.mjs",
@@ -34,31 +34,28 @@
   },
   "scripts": {
     "prepublishOnly": "only-allow-pnpm",
-    "build": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/template.mts && rslib build",
-    "dev": "rslib build --watch",
+    "build": "ts-node scripts/template.ts && rs lib",
+    "dev": "rs lib --watch",
     "test": "rstest --passWithNoTests"
   },
   "dependencies": {
     "@codesandbox/sandpack-react": "^2.20.0",
-    "@swc/helpers": "^0.5.23",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "@swc/helpers": "^0.5.17",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@modern-js/codesmith": "2.6.9",
     "@modern-js/codesmith-api-handlebars": "2.6.9",
     "@modern-js/codesmith-utils": "2.6.9",
     "@modern-js/create": "workspace:*",
     "@modern-js/rslib": "workspace:*",
-    "@rslib/core": "1.0.0",
-    "@types/node": "^26.4.1",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
+    "@types/node": "^20",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@types/recursive-readdir": "^2.2.4",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "recursive-readdir": "^2.2.3",
     "ts-node": "^10.9.2",
-    "typescript": "^7.0.2"
+    "typescript": "^5"
   },
   "sideEffects": false,
   "publishConfig": {

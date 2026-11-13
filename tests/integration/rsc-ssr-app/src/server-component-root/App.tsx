@@ -1,16 +1,12 @@
 'use server-entry';
 import 'server-only';
-import {
-  getRequest,
-  redirect,
-  setHeaders,
-  setStatus,
-} from '@modern-js/runtime';
+import { getRequest, redirect, setHeaders } from '@modern-js/runtime';
+import { setStatus } from '@modern-js/runtime';
 import { Suspense } from 'react';
 import styles from './App.module.less';
+import Suspended from './Suspended';
 import { Counter } from './components/Counter';
 import { getCountState } from './components/ServerState';
-import Suspended from './Suspended';
 
 const handleResponse = (responseType: string) => {
   switch (responseType) {

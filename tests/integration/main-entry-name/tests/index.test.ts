@@ -1,13 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import puppeteer, { type Browser, type Page } from 'puppeteer';
+import puppeteer from 'puppeteer';
 import {
   getPort,
   killApp,
   launchApp,
   launchOptions,
   modernBuild,
-  modernServe,
 } from '../../../utils/modernTestUtils';
 
 const appDir = path.resolve(__dirname, '../');
@@ -43,30 +42,18 @@ describe('test dev', () => {
 
 describe('test build', () => {
   let buildRes: { code: number };
-  let app: unknown;
-  let browser: Browser;
-  let page: Page;
   beforeAll(async () => {
     buildRes = await modernBuild(appDir);
-    const appPort = await getPort();
-    app = await modernServe(appDir, appPort);
-    browser = await puppeteer.launch(launchOptions as any);
-    page = await browser.newPage();
-    await page.goto(`http://localhost:${appPort}`, {
-      waitUntil: ['networkidle0'],
-    });
-  });
-
-  afterAll(async () => {
-    await killApp(app);
-    await page.close();
-    await browser.close();
   });
 
   test(`should get right entry name build!`, async () => {
     expect(buildRes.code === 0).toBe(true);
     expect(existsSync('route.json')).toBe(true);
     expect(existsSync('html/index/index.html')).toBe(true);
-    expect(await page.title()).toBe('TikTok');
+    const html = fs.readFileSync(
+      path.join(appDir, 'dist', 'html/index/index.html'),
+      'utf-8',
+    );
+    expect(html).toContain('TikTok');
   });
 });

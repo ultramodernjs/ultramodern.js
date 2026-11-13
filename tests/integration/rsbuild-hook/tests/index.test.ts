@@ -4,7 +4,11 @@ import { modernBuild } from '../../../utils/modernTestUtils';
 const appDir = path.resolve(__dirname, '../');
 
 function processStdout(stdout: string) {
-  const cleaned = stdout.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+  const cleaned = stdout.replace(
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: <explanation>
+    /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g,
+    '',
+  );
   return cleaned.replace(/\r\n/g, '\n').trim();
 }
 

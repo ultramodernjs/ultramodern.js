@@ -35,7 +35,7 @@ The app is built using Modern.js and relies on some methods from the lib:
 
 **When using artifact referencing, the current project references the artifacts built from other sub-projects.**
 
-In the example above, the lib is written in TypeScript. Typically, we need to build the lib's code in advance to generate JavaScript artifacts so that the app can reference it correctly. When the lib's code is updated, we need to rebuild it (or use `tsgo --watch`) to ensure that the app can use the latest code.
+In the example above, the lib is written in TypeScript. Typically, we need to build the lib's code in advance to generate JavaScript artifacts so that the app can reference it correctly. When the lib's code is updated, we need to rebuild it (or use `tsc --watch`) to ensure that the app can use the latest code.
 
 The advantages of this approach are:
 
@@ -142,7 +142,7 @@ At the same time, we need to set `composite` to `true` in the lib project's `tsc
 {
   "compilerOptions": {
     "composite": true
-  },
+  }
 }
 ```
 

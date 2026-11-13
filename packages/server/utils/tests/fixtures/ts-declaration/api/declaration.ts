@@ -1,6 +1,5 @@
 // Top-level `import type` → ImportDeclaration specifier in the emitted d.ts.
 import type { SharedUser } from '@shared/types';
-
 // `import x = require(...)` → ImportEqualsDeclaration specifier.
 import shared = require('@shared/types');
 

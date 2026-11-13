@@ -15,7 +15,7 @@ const HomepageHeader = () => {
       <header className={clsx('hero hero--primary', styles.heroBanner)}>
         <div className={styles.mask} />
         <a
-          href={useUrl('/guides/get-started/ultramodern')}
+          href={useUrl('/community/blog/v3-release-note')}
           className={styles.announcement}
         >
           <span className={styles.announcementLabel}>
@@ -28,13 +28,13 @@ const HomepageHeader = () => {
         </a>
         <h1 className={styles.title}>
           <span className={clsx([styles.titleGradient, styles.mainTitle])}>
-            UltraModern.js 3.0
+            Modern.js 3.0
           </span>
           <div>{t('slogan')}</div>
         </h1>
         <div className={styles.buttons}>
           <a
-            href={useUrl('/guides/get-started/ultramodern')}
+            href={useUrl('/guides/get-started/introduction')}
             className={styles.leftButton}
           >
             {t('introduction')}

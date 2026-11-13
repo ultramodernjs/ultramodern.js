@@ -56,7 +56,7 @@ export function bundleDocs({
     if (!entry.isFile()) {
       continue;
     }
-    const from = path.join(entry.parentPath, entry.name);
+    const from = path.join(entry.parentPath ?? entry.path, entry.name);
     const rel = path.relative(source, from);
     if (!isBundled(rel)) {
       continue;

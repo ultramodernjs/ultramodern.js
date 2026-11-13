@@ -1,8 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "include": [
-    "src/custom/export-app.tsx",
-    "src/i18n-mf-app-provider/export-app.tsx",
-    "src/modern-app-env.d.ts"
-  ]
-}

@@ -1,20 +1,15 @@
+import type { IncomingMessage } from 'http';
 import type { Logger, Metrics, Reporter, ServerRoute } from '@modern-js/types';
 import type {
   Monitors,
-  NodeRequest,
   ClientManifest as RscClientManifest,
-  ServerManifest as RscServerManifest,
   SSRManifest as RscSSRManifest,
+  ServerManifest as RscServerManifest,
 } from '@modern-js/types/server';
+import type { NodeRequest } from '@modern-js/types/server';
 import { MAIN_ENTRY_NAME } from '@modern-js/utils/universal/constants';
-import type { IncomingMessage } from 'http';
 import { X_MODERNJS_RENDER } from '../../constants';
-import type {
-  CacheConfig,
-  Context,
-  ServerManifest,
-  UserConfig,
-} from '../../types';
+import type { CacheConfig, ServerManifest, UserConfig } from '../../types';
 import type {
   OnError,
   OnTiming,
@@ -22,7 +17,7 @@ import type {
   RequestHandlerConfig,
   RequestHandlerOptions,
 } from '../../types/requestHandler';
-import { getPathname, parseHeaders } from '../../utils';
+import { getPathname } from '../../utils';
 import { getCacheResult, matchCacheControl, shouldUseCache } from './ssrCache';
 import { createRequestHandlerConfig } from './utils';
 
@@ -40,7 +35,6 @@ export interface SSRRenderOptions {
   rscSSRManifest?: RscSSRManifest;
 
   loaderContext: Map<string, unknown>;
-  serverContext?: Context;
 
   params: Params;
   /** Produce by custom server hook */
@@ -81,18 +75,6 @@ export async function ssrRender(
   const { entryName } = routeInfo;
   const loadableStats = serverManifest.loadableStats || {};
   const routeManifest = serverManifest.routeManifest || {};
-  const moduleFederationCssAssets =
-    serverManifest.moduleFederationCssAssets || [];
-
-  const headers = parseHeaders(request);
-
-  if (nodeReq) {
-    for (const key in nodeReq.headers) {
-      if (!headers[key]) {
-        headers[key] = nodeReq.headers[key] as string;
-      }
-    }
-  }
 
   const renderBundle =
     serverManifest.renderBundles?.[entryName || MAIN_ENTRY_NAME];
@@ -110,7 +92,6 @@ export async function ssrRender(
       route: routeInfo,
       loadableStats,
       routeManifest,
-      moduleFederationCssAssets,
       htmlTemplate: html,
       entryName: entryName || MAIN_ENTRY_NAME,
     },

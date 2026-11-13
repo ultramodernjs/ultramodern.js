@@ -1,4 +1,3 @@
-// @effect-diagnostics unnecessaryArrowBlock:off
 // legacy withRouter
 
 import {

@@ -2,8 +2,8 @@ import type { Logger, Metrics, Reporter, ServerRoute } from '@modern-js/types';
 import type {
   Monitors,
   ClientManifest as RscClientManifest,
-  ServerManifest as RscServerManifest,
   SSRManifest as RscSSRManifest,
+  ServerManifest as RscServerManifest,
 } from '@modern-js/types/server';
 import type { ServerUserConfig, SourceUserConfig } from './config';
 
@@ -13,7 +13,6 @@ export type Resource = {
   route: ServerRoute;
   htmlTemplate: string;
   entryName: string;
-  moduleFederationCssAssets?: string[];
 };
 
 export type Params = Record<string, any>;

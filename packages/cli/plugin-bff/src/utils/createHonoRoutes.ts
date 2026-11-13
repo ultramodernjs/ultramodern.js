@@ -1,11 +1,10 @@
-// @effect-diagnostics asyncFunction:off strictBooleanExpressions:off
 import type { APIHandlerInfo } from '@modern-js/bff-core';
 import {
   HttpMetadata,
-  isWithMetaHandler,
   type ResponseMeta,
   ResponseMetaType,
   ValidationError,
+  isWithMetaHandler,
 } from '@modern-js/bff-core';
 import type { Context, Next } from '@modern-js/server-core';
 import { parse } from 'qs';
@@ -13,20 +12,21 @@ import typeIs from 'type-is';
 
 type Handler = APIHandlerInfo['handler'];
 
-const createHonoRoutes = (handlerInfos: APIHandlerInfo[] = []) =>
-  handlerInfos.map(({ routePath, handler, httpMethod }) => {
-    const routeMiddlwares = Reflect.getMetadata('middleware', handler) || [];
+const createHonoRoutes = (handlerInfos: APIHandlerInfo[] = []) => {
+  return handlerInfos.map(({ routePath, handler, httpMethod }) => {
+    const routeMiddlewares = Reflect.getMetadata('middleware', handler) || [];
     const honoHandler = createHonoHandler(handler);
 
     return {
       method: httpMethod.toLowerCase() as any,
       path: routePath,
       handler:
-        routeMiddlwares.length > 0
-          ? [...routeMiddlwares, honoHandler]
+        routeMiddlewares.length > 0
+          ? [...routeMiddlewares, honoHandler]
           : honoHandler,
     };
   });
+};
 
 const handleResponseMeta = (c: Context, handler: Handler) => {
   const responseMeta: ResponseMeta[] = Reflect.getMetadata(
@@ -54,54 +54,68 @@ const handleResponseMeta = (c: Context, handler: Handler) => {
   return null;
 };
 
-export const createHonoHandler = (handler: Handler) => async (c: Context) => {
-  const input = await getHonoInput(c);
+const getParamNames = (routePath: string) => {
+  const paramNames = routePath.match(/:\w+/g)?.map(s => s.slice(1)) || [];
+  // Use object keys to keep the order and de-duplication of the params object.
+  return Object.keys(Object.fromEntries(paramNames.map(name => [name, true])));
+};
 
-  if (isWithMetaHandler(handler)) {
-    try {
-      const response = handleResponseMeta(c, handler);
-      if (response) {
-        return response;
-      }
-      if (c.finalized) return;
+export const createHonoHandler = (handler: Handler) => {
+  // The route path of a handler does not change between requests, so the
+  // param names only need to be parsed again when it changes.
+  let cachedRoutePath: string | undefined;
+  let paramNames: string[] = [];
 
-      const result = await handler(input);
-      if (result instanceof Response) {
-        return result;
-      }
-      return result && typeof result === 'object'
-        ? c.json(result)
-        : c.body(result);
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        c.status((error as any).status);
+  return async (c: Context) => {
+    const input = await getHonoInput(c);
 
-        return c.json({
-          message: error.message,
-        });
+    if (isWithMetaHandler(handler)) {
+      try {
+        const response = handleResponseMeta(c, handler);
+        if (response) {
+          return response;
+        }
+        if (c.finalized) return;
+
+        const result = await handler(input);
+        if (result instanceof Response) {
+          return result;
+        }
+        return result && typeof result === 'object'
+          ? c.json(result)
+          : c.body(result);
+      } catch (error) {
+        if (error instanceof ValidationError) {
+          c.status((error as any).status);
+
+          return c.json({
+            message: error.message,
+          });
+        }
+        throw error;
       }
-      throw error;
+    } else {
+      const routePath = c.req.routePath;
+      if (routePath !== cachedRoutePath) {
+        cachedRoutePath = routePath;
+        paramNames = getParamNames(routePath);
+      }
+      const args: any[] = paramNames.map(name => input.params[name]);
+      args.push(input);
+
+      const body = await handler(...args);
+      if (c.finalized) {
+        return await Promise.resolve();
+      }
+
+      if (typeof body !== 'undefined') {
+        if (body instanceof Response) {
+          return body;
+        }
+        return c.json(body);
+      }
     }
-  } else {
-    const routePath = c.req.routePath;
-    const paramNames = routePath.match(/:\w+/g)?.map(s => s.slice(1)) || [];
-    const params = Object.fromEntries(
-      paramNames.map(name => [name, input.params[name]]),
-    );
-    const args = Object.values(params).concat(input);
-
-    const body = await handler(...args);
-    if (c.finalized) {
-      return await Promise.resolve();
-    }
-
-    if (typeof body !== 'undefined') {
-      if (body instanceof Response) {
-        return body;
-      }
-      return c.json(body);
-    }
-  }
+  };
 };
 
 const getHonoInput = async (c: Context) => {
@@ -114,13 +128,23 @@ const getHonoInput = async (c: Context) => {
 
   try {
     const contentType = c.req.header('content-type') || '';
+    const type = typeIs.is(contentType, [
+      'application/json',
+      'multipart/form-data',
+      'application/x-www-form-urlencoded',
+    ]);
+    const { method } = c.req;
 
-    if (typeIs.is(contentType, ['application/json'])) {
-      draft.data = await c.req.json();
-    } else if (typeIs.is(contentType, ['multipart/form-data'])) {
+    if (type === 'multipart/form-data') {
       draft.formData = await c.req.parseBody();
-    } else if (typeIs.is(contentType, ['application/x-www-form-urlencoded'])) {
+    } else if (type === 'application/x-www-form-urlencoded') {
       draft.formUrlencoded = await c.req.parseBody();
+    } else if (method === 'GET' || method === 'HEAD') {
+      // GET and HEAD requests cannot have a body, so `c.req.json()` would
+      // always throw here. Use the fallback value without parsing.
+      draft.body = null;
+    } else if (type === 'application/json') {
+      draft.data = await c.req.json();
     } else {
       draft.body = await c.req.json();
     }

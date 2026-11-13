@@ -1,36 +1,36 @@
 export { initPluginAPI } from './api';
-export { createContext, initAppContext } from './context';
+export { initAppContext, createContext } from './context';
 export {
+  initHooks,
+  type Hooks,
+  type OnAfterBuildFn,
+  type OnAfterCreateCompilerFn,
+  type OnBeforeBuildFn,
+  type OnBeforeCreateCompilerFn,
+  type OnDevCompileDoneFn,
   type AddCommandFn,
   type AddWatchFilesFn,
   type ConfigFn,
-  type Hooks,
-  type InternalRuntimePluginsFn,
-  type InternalServerPluginsFn,
-  initHooks,
   type ModifyBundlerChainFn,
   type ModifyConfigFn,
   type ModifyHtmlPartialsFn,
   type ModifyResolvedConfigFn,
   type ModifyRsbuildConfigFn,
   type ModifyRspackConfigFn,
-  type ModifyServerRoutesFn,
-  type OnAfterBuildFn,
-  type OnAfterCreateCompilerFn,
   type OnAfterDeployFn,
-  type OnAfterDevFn,
-  type OnBeforeBuildFn,
-  type OnBeforeCreateCompilerFn,
   type OnBeforeDeployFn,
   type OnBeforeDevFn,
+  type OnAfterDevFn,
   type OnBeforeExitFn,
   type OnBeforeRestartFn,
-  type OnDevCompileDoneFn,
   type OnFileChangedFn,
   type OnPrepareFn,
+  type InternalRuntimePluginsFn,
+  type InternalServerPluginsFn,
+  type ModifyServerRoutesFn,
   type RuntimePluginConfig,
   type ServerPluginConfig,
 } from './hooks';
-export { cli, createCli, createLoadedConfig, initAppDir } from './run';
+export { cli, createLoadedConfig, initAppDir, createCli } from './run';
 export { createConfigOptions, createStorybookOptions } from './run/create';
 export { mergeConfig } from './run/utils/mergeConfig';

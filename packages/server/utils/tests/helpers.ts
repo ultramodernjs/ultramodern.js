@@ -1,6 +1,5 @@
-import { fs, MAIN_ENTRY_NAME, normalizeOutputPath } from '@modern-js/utils';
-import os from 'os';
 import path from 'path';
+import { MAIN_ENTRY_NAME, normalizeOutputPath } from '@modern-js/utils';
 
 const sourceDefaults = {
   entries: undefined,
@@ -86,25 +85,4 @@ export const defaults = {
 
 export const join = (...paths: string[]) => {
   return normalizeOutputPath(path.join(...paths));
-};
-
-export const createIsolatedTsExample = async (
-  prefix = 'server-utils-ts-example-',
-) => {
-  const tempRoot = await fs.realpath(
-    await fs.mkdtemp(path.join(os.tmpdir(), prefix)),
-  );
-  const example = path.join(tempRoot, 'ts-example');
-  const fixture = path.join(__dirname, 'fixtures', 'ts-example');
-
-  await fs.copy(fixture, example, {
-    filter: src => {
-      const name = path.basename(src);
-      return (
-        !/^dist/u.test(name) && !/^\.tsgo\..*\.resolved\.json$/u.test(name)
-      );
-    },
-  });
-
-  return { example, tempRoot };
 };

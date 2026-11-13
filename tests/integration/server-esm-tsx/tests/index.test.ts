@@ -1,7 +1,7 @@
 import dns from 'node:dns';
 import { pathToFileURL } from 'node:url';
-import { fs as fse } from '@modern-js/utils';
 import path from 'path';
+import { fs as fse } from '@modern-js/utils';
 import {
   getPort,
   killApp,
@@ -24,6 +24,17 @@ describe('custom server under native esm', () => {
 
   afterAll(async () => {
     await fse.remove(path.join(appDir, 'dist'));
+  });
+
+  it('should rewrite specifiers to the files that are actually emitted', async () => {
+    const serverEntry = (
+      await fse.readFile(path.join(serverDistDir, 'modern.server.js'))
+    ).toString();
+
+    // `./foo` is backed by `foo/index.tsx`, so it must not collapse to `./foo.js`.
+    expect(serverEntry).toContain('./foo/index.js');
+    expect(serverEntry).not.toContain('"./foo.js"');
+    expect(serverEntry).toContain('../shared/message.js');
   });
 
   it('should emit js for tsx entries and keep sources out of dist', async () => {

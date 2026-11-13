@@ -85,11 +85,10 @@ describe('initialize plugin: default lazyCompilation', () => {
 });
 
 describe('initialize plugin: programmatic dev port', () => {
-  it.each([
-    'dev',
-    'start',
-  ])('selects an available port for appContext.command=%s', async command => {
+  it('does not select another port from appContext.command alone', async () => {
+    const previousModernArgv = process.env.MODERN_ARGV;
     const previousNodeEnv = process.env.NODE_ENV;
+    process.env.MODERN_ARGV = 'node rstest test';
     process.env.NODE_ENV = 'development';
     const occupiedServer = createServer();
     await new Promise<void>(resolve => {
@@ -100,7 +99,10 @@ describe('initialize plugin: programmatic dev port', () => {
       typeof address === 'object' && address ? address.port : 0;
 
     try {
-      const captured = setupPlugin({}, { appDirectory: '/tmp/app', command });
+      const captured = setupPlugin(
+        {},
+        { appDirectory: '/tmp/app', command: 'dev' },
+      );
       await captured.modifyCb?.({
         dev: {},
         output: {},
@@ -108,7 +110,7 @@ describe('initialize plugin: programmatic dev port', () => {
         source: {},
       });
 
-      expect(captured.updatedContext?.port).not.toBe(occupiedPort);
+      expect(captured.updatedContext?.port).toBe(occupiedPort);
     } finally {
       await new Promise<void>((resolve, reject) => {
         occupiedServer.close(error => {
@@ -119,6 +121,11 @@ describe('initialize plugin: programmatic dev port', () => {
           }
         });
       });
+      if (previousModernArgv === undefined) {
+        delete process.env.MODERN_ARGV;
+      } else {
+        process.env.MODERN_ARGV = previousModernArgv;
+      }
       if (previousNodeEnv === undefined) {
         delete process.env.NODE_ENV;
       } else {

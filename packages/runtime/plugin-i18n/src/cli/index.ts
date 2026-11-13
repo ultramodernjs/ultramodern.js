@@ -1,20 +1,26 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import type { AppTools, CliPlugin } from '@modern-js/app-tools';
-import {
-  applyLocalisedUrlsToRoutes,
-  resolveLocalisedUrlsConfig,
-} from '@modern-js/i18n-runtime-extensions';
+import type { AppTools, AppUserConfig, CliPlugin } from '@modern-js/app-tools';
 import { getPublicDirRoutePrefixes } from '@modern-js/server-core';
-import type {
-  Entrypoint,
-  NestedRouteForCli,
-  PageRoute,
-} from '@modern-js/types';
+import type { Entrypoint } from '@modern-js/types';
 import type { BackendOptions, LocaleDetectionOptions } from '../shared/type';
 import { getBackendOptions, getLocaleDetectionOptions } from '../shared/utils';
 import { applyDetectedBackendPaths, detectLocalesDirectory } from './locales';
 import '../runtime/types';
+
+type BundlerChain = NonNullable<AppUserConfig['tools']>['bundlerChain'];
+
+// Before the first render the runtime loads react-i18next with a dynamic import.
+// Bundle that module eagerly so it doesn't become an extra async request. Only
+// runtime/i18n/react-i18next is matched: the i18next fallback import in
+// runtime/i18n/instance stays lazy, so apps that pass their own instance don't
+// get an unused copy of i18next in the initial chunk.
+const eagerReactI18next: BundlerChain = chain => {
+  chain.module
+    .rule('plugin-i18n-react-i18next')
+    .test(
+      /[\\/]plugin-i18n[\\/]dist[\\/][^\\/]+[\\/]runtime[\\/]i18n[\\/]react-i18next\.m?js$/,
+    )
+    .parser({ dynamicImportMode: 'eager' });
+};
 
 export type TransformRuntimeConfigFn = (
   extendedConfig: Record<string, any>,
@@ -49,6 +55,8 @@ export const i18nPlugin = (
       customPlugin,
       ...restOptions
     } = options;
+
+    api.config(() => ({ tools: { bundlerChain: eagerReactI18next } }));
 
     api._internalRuntimePlugins(({ entrypoint, plugins }) => {
       const localeDetectionOptions = localeDetection
@@ -126,55 +134,15 @@ export const i18nPlugin = (
         backend: backendOptions,
         ...extendedConfig,
       };
-      const { reactI18next } = extendedConfig as { reactI18next?: boolean };
-      const runtimePluginPath =
-        customPlugin?.runtime?.path ||
-        (reactI18next === false
-          ? `@${metaName}/plugin-i18n/runtime/no-react-i18next`
-          : `@${metaName}/plugin-i18n/runtime`);
 
       plugins.push({
         name: customPlugin?.runtime?.name || 'i18n',
-        path: runtimePluginPath,
+        path: customPlugin?.runtime?.path || `@${metaName}/plugin-i18n/runtime`,
         config,
       });
       return {
         entrypoint,
         plugins,
-      };
-    });
-
-    api.modifyFileSystemRoutes(({ entrypoint, routes }) => {
-      if (!localeDetection) {
-        return { entrypoint, routes };
-      }
-
-      const localeDetectionOptions = getLocaleDetectionOptions(
-        entrypoint.entryName,
-        localeDetection,
-      );
-      const {
-        localePathRedirect,
-        languages = [],
-        localisedUrls,
-      } = localeDetectionOptions;
-
-      if (!localePathRedirect || languages.length === 0) {
-        return { entrypoint, routes };
-      }
-
-      const localisedUrlsConfig = resolveLocalisedUrlsConfig(localisedUrls);
-      if (!localisedUrlsConfig.enabled) {
-        return { entrypoint, routes };
-      }
-
-      return {
-        entrypoint,
-        routes: applyLocalisedUrlsToRoutes(
-          routes as (NestedRouteForCli | PageRoute)[],
-          languages,
-          localisedUrlsConfig.map,
-        ) as (NestedRouteForCli | PageRoute)[],
       };
     });
 

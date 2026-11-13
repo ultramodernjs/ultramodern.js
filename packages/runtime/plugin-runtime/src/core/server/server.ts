@@ -1,10 +1,13 @@
+export { renderString } from './string';
+
+export { renderStreaming } from './stream';
+
 export {
-  type CreateRequestHandler,
   createRequestHandler,
   type HandleRequest,
-  type HandleRequestConfig,
   type HandleRequestOptions,
+  type HandleRequestConfig,
+  type CreateRequestHandler,
 } from './requestHandler';
-export type { RenderOptions, RenderStreaming, RenderString } from './shared';
-export { renderStreaming } from './stream';
-export { renderString } from './string';
+
+export type { RenderStreaming, RenderString, RenderOptions } from './shared';

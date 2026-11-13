@@ -4,14 +4,6 @@
   align-items: center;
 }
 
-.avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 999px;
-  transition: all 0.2s ease-in-out;
-  background-color: #f8f8f8;
-}
-
 .link {
   display: flex;
   align-items: center;
@@ -26,6 +18,14 @@
       transform: scale(1.15);
     }
   }
+}
+
+.avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  transition: all 0.2s ease-in-out;
+  background-color: #f8f8f8;
 }
 
 .name {

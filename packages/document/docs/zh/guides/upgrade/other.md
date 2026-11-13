@@ -22,10 +22,10 @@ Modern.js 3.0 将项目默认入口名称改为 `index`，默认构建出的 HTM
 
 Modern.js 3.0 对部分运行时进行了调整，需要更新相关的导入路径。路径映射对照如下：
 
-| 旧版路径 | 新版路径 | 说明 |
-|---------|---------|------|
-| `@modern-js/runtime/bff` | `@modern-js/plugin-bff/runtime` | BFF 运行时路径 |
-| `@modern-js/runtime/server` | `@modern-js/server-runtime` | 服务端运行时路径 |
+| 旧版路径                    | 新版路径                        | 说明             |
+| --------------------------- | ------------------------------- | ---------------- |
+| `@modern-js/runtime/bff`    | `@modern-js/plugin-bff/runtime` | BFF 运行时路径   |
+| `@modern-js/runtime/server` | `@modern-js/server-runtime`     | 服务端运行时路径 |
 
 ## useRuntimeContext 已废弃
 
@@ -81,21 +81,38 @@ Modern.js 3.0 将 `server.ssr.mode` 的默认值从 `'string'` 改为 `'stream'`
 
 对于 React 18 及以上项目，把 `ssr.mode` 的值由 `'stream'` 改为 `'string'`，不对 Data Loader 中的代码进行修改或使用 Suspense 的话，从渲染结果上没有任何影响。如果你的项目依赖了 React17，请把 `ssr.mode` 的值手动设置为 `'string'`。
 
-
 ## 使用 React Router v7
 
 Modern.js 3.0 默认使用 React Router v7 作为路由库。React Router v7 相比 v6 只有少量的 [不兼容变更](https://reactrouter.com/upgrading/v6)。
 
 如果需要使用 React Router v5 或 React Router v6，需要使用**自控式路由**模式。自控式路由允许你完全控制路由配置，不受 Modern.js 约定式路由的限制。
 
-## 使用 @bleedingdev/modern-js-create 创建 Monorepo 和 Modern.js Module
+### 路由更新默认使用 transition
 
-Modern.js 3.0 不再支持通过 `@bleedingdev/modern-js-create` 创建 Monorepo 项目和 Modern.js Module 项目。
+React Router v7 默认用 `React.startTransition` 包裹路由状态更新，在 v6 中需要开启 `future.v7_startTransition` 才有这一行为。升级后，首屏 Data Loader 完成后的页面挂载和路由跳转会从同步渲染变为并发渲染，渲染可能被丢弃后重新执行，渲染与提交之间也可能有间隔。
+
+如果项目在渲染过程中修改外部状态，升级后可能出现以下问题：
+
+- 在 `useMemo` 中创建实例并赋值给全局变量，重复执行后出现多个实例，依赖单例的逻辑报错。
+- 在页面内嵌套使用 React Router v6 的 `RouterProvider`。它在渲染时读取 router 状态、在 `useLayoutEffect` 中才订阅，可能错过初始化完成的通知，页面一直显示空白，参考 [React Router issue #14356](https://github.com/remix-run/react-router/issues/14356)。
+
+推荐按 React 的要求保持渲染过程没有副作用：
+
+- 创建实例、注册监听、上报埋点、修改全局变量等操作放到 `useEffect` 中执行。
+- 读取外部状态使用 [`useSyncExternalStore`](https://react.dev/reference/react/useSyncExternalStore)。
+- router、store 等对象在组件外创建。
+- 开发环境开启 `StrictMode`，提前暴露重复执行的问题。
+
+如果暂时无法改造，可以将 [`router.useTransitions`](/configure/app/runtime/router#usetransitions) 设置为 `false`，恢复同步渲染。
+
+## 使用 @modern-js/create 创建 Monorepo 和 Modern.js Module
+
+Modern.js 3.0 不再支持通过 `@modern-js/create` 创建 Monorepo 项目和 Modern.js Module 项目。
 
 **变更内容**：
 
-- 在 [v2.53.0](https://github.com/web-infra-dev/modern.js/releases/tag/v2.53.0) 版本中，移除了使用 `@bleedingdev/modern-js-create` 创建 Monorepo 项目的功能
-- 在 [v2.61.0](https://github.com/web-infra-dev/modern.js/releases/tag/v2.61.0) 版本中，移除了使用 `@bleedingdev/modern-js-create` 和 `modern new` 命令创建 Modern.js Module 项目的功能
+- 在 [v2.53.0](https://github.com/web-infra-dev/modern.js/releases/tag/v2.53.0) 版本中，移除了使用 `@modern-js/create` 创建 Monorepo 项目的功能
+- 在 [v2.61.0](https://github.com/web-infra-dev/modern.js/releases/tag/v2.61.0) 版本中，移除了使用 `@modern-js/create` 和 `modern new` 命令创建 Modern.js Module 项目的功能
 
 **处理方式**：
 
@@ -182,8 +199,3 @@ antd v5 使用了 CSS-in-JS 方案，已原生支持按需加载，无需配置 
 ## Eslint 规则集
 
 Modern.js 之前提供了 ESLint 的完整规则集，涵盖了 @modern-js（针对 Node.js 项目的 Lint 规则）和 @modern-js-app（针对前端项目的 Lint 规则）。在 [v2.60.0](https://github.com/web-infra-dev/modern.js/releases/tag/v2.60.0) 版本中，我们正式移除了这些规则集。我们鼓励开发者根据自身需求选择合适的代码规范工具，直接使用 ESLint 并结合社区推荐的规则，或使用 Biome 以提升代码格式化的性能。
-
-
-
-
-

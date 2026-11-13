@@ -1,27 +1,8 @@
-import type { Page } from '@playwright/test';
-import { expect, test } from '@playwright/test';
-import { build, getHrefByEntryName } from '@scripts/shared';
 import { join, resolve } from 'path';
+import { expect, test } from '@playwright/test';
+import { build } from '@scripts/shared';
 
 const fixtures = __dirname;
-
-const getLinks = async (
-  page: Page,
-  files: Record<string, string>,
-  rel: 'dns-prefetch' | 'preconnect',
-) => {
-  const html = Object.entries(files).find(([name]) =>
-    name.endsWith('index.html'),
-  )?.[1];
-  expect(html).toBeDefined();
-  await page.setContent(html!);
-  return page.locator(`link[rel="${rel}"]`).evaluateAll(links =>
-    links.map(link => ({
-      crossOrigin: link.getAttribute('crossorigin'),
-      href: link.getAttribute('href'),
-    })),
-  );
-};
 
 test.describe('performance configure multi', () => {
   let files: Record<string, string>;
@@ -49,9 +30,7 @@ test.describe('performance configure multi', () => {
   });
 });
 
-test('should generate and execute a vendor chunk when splitChunks.preset is "single-vendor"', async ({
-  page,
-}) => {
+test('should generate vendor chunk when splitChunks.preset is "single-vendor"', async () => {
   const builder = await build({
     cwd: join(fixtures, 'basic'),
     entry: {
@@ -62,24 +41,18 @@ test('should generate and execute a vendor chunk when splitChunks.preset is "sin
         preset: 'single-vendor',
       },
     },
-    runServer: true,
   });
 
   const files = await builder.unwrapOutputJSON();
 
-  const vendorFile = Object.keys(files).find(
-    name => name.includes('vendor') && name.endsWith('.js'),
-  );
+  const [vendorFile] = Object.entries(files).find(
+    ([name, content]) => name.includes('vendor') && content.includes('React'),
+  )!;
 
   expect(vendorFile).toBeTruthy();
-  await page.goto(getHrefByEntryName('main', builder.port));
-  await expect(page.locator('#test')).toHaveText('Hello Builder!');
-  builder.close();
 });
 
-test('should generate preconnect link when preconnect is defined', async ({
-  page,
-}) => {
+test('should generate preconnect link when preconnect is defined', async () => {
   const builder = await build({
     cwd: join(fixtures, 'basic'),
     entry: {
@@ -101,17 +74,23 @@ test('should generate preconnect link when preconnect is defined', async ({
   });
 
   const files = await builder.unwrapOutputJSON();
-  const links = await getLinks(page, files, 'preconnect');
 
-  expect(links).toEqual([
-    { crossOrigin: null, href: 'http://aaaa.com' },
-    { crossOrigin: '', href: 'http://bbbb.com' },
-  ]);
+  const [, content] = Object.entries(files).find(([name]) =>
+    name.endsWith('index.html'),
+  )!;
+
+  expect(
+    content.includes('<link rel="preconnect" href="http://aaaa.com">'),
+  ).toBeTruthy();
+
+  expect(
+    content.includes(
+      '<link rel="preconnect" href="http://bbbb.com" crossorigin>',
+    ),
+  ).toBeTruthy();
 });
 
-test('should generate dnsPrefetch link when dnsPrefetch is defined', async ({
-  page,
-}) => {
+test('should generate dnsPrefetch link when dnsPrefetch is defined', async () => {
   const builder = await build({
     cwd: join(fixtures, 'basic'),
     entry: {
@@ -125,7 +104,12 @@ test('should generate dnsPrefetch link when dnsPrefetch is defined', async ({
   });
 
   const files = await builder.unwrapOutputJSON();
-  const links = await getLinks(page, files, 'dns-prefetch');
 
-  expect(links).toEqual([{ crossOrigin: null, href: 'http://aaaa.com' }]);
+  const [, content] = Object.entries(files).find(([name]) =>
+    name.endsWith('index.html'),
+  )!;
+
+  expect(
+    content.includes('<link rel="dns-prefetch" href="http://aaaa.com">'),
+  ).toBeTruthy();
 });

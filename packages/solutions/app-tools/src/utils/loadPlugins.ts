@@ -1,16 +1,16 @@
-import type { CLIPluginAPI, Plugin } from '@modern-js/plugin';
+import type { CLIPluginAPI } from '@modern-js/plugin';
+import type { Plugin } from '@modern-js/plugin';
+import { loadServerPlugins as loadServerPluginInstances } from '@modern-js/prod-server';
 import type { ServerPlugin as ServerPluginInstance } from '@modern-js/server-core';
-import { loadServerPlugins as loadServerPluginInstances } from '@modern-js/server-core/node';
-import type { InternalPlugins, ServerPlugin } from '@modern-js/types';
+import type { ServerPlugin } from '@modern-js/types';
+import type { InternalPlugins } from '@modern-js/types';
 import {
   compatibleRequire,
   createDebugger,
-  dynamicImport,
   getInternalPlugins,
   tryResolve,
 } from '@modern-js/utils';
 import type { AppTools } from '../types';
-
 const debug = createDebugger('load-plugins');
 
 export async function getServerPlugins(
@@ -51,13 +51,7 @@ const resolveCliPlugin = async (
   const pkg = typeof p === 'string' ? p : p[0];
   const pluginOptions = typeof p === 'string' ? undefined : p[1];
   const path = tryResolve(pkg, appDirectory);
-  let module;
-  try {
-    module = await compatibleRequire(path);
-  } catch (e) {
-    // load esm module
-    ({ default: module } = await dynamicImport(path));
-  }
+  const module = await compatibleRequire(path);
 
   // handle string plugin
   if (typeof module === 'function') {

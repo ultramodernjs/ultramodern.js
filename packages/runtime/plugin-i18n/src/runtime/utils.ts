@@ -1,17 +1,11 @@
-import {
-  type LocalisedUrlsOption,
-  localiseTargetPathname,
-  shouldSkipLocaleRedirect,
-} from '@modern-js/i18n-runtime-extensions';
 import { isBrowser } from '@modern-js/runtime';
-import { getGlobalBasename } from '@modern-js/runtime/context';
+import {
+  type TInternalRuntimeContext,
+  getGlobalBasename,
+} from '@modern-js/runtime/context';
+import { useLocation, useNavigate, useParams } from '@modern-js/runtime/router';
 
-// Structural parameter: hooks.ts passes a public-TRuntimeContext-based
-// context while core.tsx passes the internal one; both carry the request
-// pathname shape this helper needs.
-export const getPathname = (context: {
-  ssrContext?: { request?: { pathname?: string } };
-}): string => {
+export const getPathname = (context: TInternalRuntimeContext): string => {
   if (isBrowser()) {
     return window.location.pathname;
   }
@@ -48,45 +42,28 @@ export const getLanguageFromPath = (
 };
 
 /**
- * Split a link target into its pathname, search and hash parts without
- * relying on `new URL` (SSR-hot path; targets are relative).
- */
-export const splitUrlTarget = (
-  target: string,
-): { pathname: string; search: string; hash: string } => {
-  const hashIndex = target.indexOf('#');
-  const hash = hashIndex >= 0 ? target.slice(hashIndex) : '';
-  const beforeHash = hashIndex >= 0 ? target.slice(0, hashIndex) : target;
-  const searchIndex = beforeHash.indexOf('?');
-  const search = searchIndex >= 0 ? beforeHash.slice(searchIndex) : '';
-  const pathname =
-    searchIndex >= 0 ? beforeHash.slice(0, searchIndex) : beforeHash;
-
-  return { pathname, search, hash };
-};
-
-/**
  * Helper function to build localized URL
- * @param target - The language-agnostic target; may include `?search` and `#hash`
+ * @param pathname - The current pathname
  * @param language - The target language
  * @param languages - Array of supported languages
- * @returns The localized URL path with search and hash re-appended verbatim
+ * @returns The localized URL path
  */
 export const buildLocalizedUrl = (
-  target: string,
+  pathname: string,
   language: string,
   languages: string[],
-  localisedUrls?: LocalisedUrlsOption,
 ): string => {
-  const { pathname, search, hash } = splitUrlTarget(target);
-  const localizedPathname = localiseTargetPathname(
-    pathname,
-    language,
-    languages,
-    localisedUrls,
-  );
+  const segments = pathname.split('/').filter(Boolean);
 
-  return `${localizedPathname}${search}${hash}`;
+  if (segments.length > 0 && languages.includes(segments[0])) {
+    // Replace existing language prefix
+    segments[0] = language;
+  } else {
+    // Add language prefix
+    segments.unshift(language);
+  }
+
+  return `/${segments.join('/')}`;
 };
 
 export const detectLanguageFromPath = (
@@ -132,5 +109,51 @@ export const shouldIgnoreRedirect = (
   languages: string[],
   ignoreRedirectRoutes?: string[] | ((pathname: string) => boolean),
 ): boolean => {
-  return shouldSkipLocaleRedirect(pathname, languages, ignoreRedirectRoutes);
+  if (!ignoreRedirectRoutes) {
+    return false;
+  }
+
+  // Remove language prefix if present (e.g., /en/api -> /api)
+  const segments = pathname.split('/').filter(Boolean);
+  let pathWithoutLang = pathname;
+  if (segments.length > 0 && languages.includes(segments[0])) {
+    // Remove language prefix
+    pathWithoutLang = `/${segments.slice(1).join('/')}`;
+  }
+
+  // Normalize path (ensure it starts with /)
+  const normalizedPath = pathWithoutLang.startsWith('/')
+    ? pathWithoutLang
+    : `/${pathWithoutLang}`;
+
+  if (typeof ignoreRedirectRoutes === 'function') {
+    return ignoreRedirectRoutes(normalizedPath);
+  }
+
+  // Check if pathname matches any of the ignore patterns
+  return ignoreRedirectRoutes.some(pattern => {
+    // Support both exact match and prefix match
+    return (
+      normalizedPath === pattern || normalizedPath.startsWith(`${pattern}/`)
+    );
+  });
+};
+
+// Safe hook wrapper to handle cases where router context is not available
+export const useRouterHooks = () => {
+  try {
+    return {
+      navigate: useNavigate(),
+      location: useLocation(),
+      params: useParams(),
+      hasRouter: true,
+    };
+  } catch (error) {
+    return {
+      navigate: null,
+      location: null,
+      params: {},
+      hasRouter: false,
+    };
+  }
 };

@@ -1,6 +1,7 @@
 import path from 'path';
-import type { Page } from 'puppeteer';
 import puppeteer, { type Browser } from 'puppeteer';
+
+import type { Page } from 'puppeteer';
 import {
   getPort,
   killApp,

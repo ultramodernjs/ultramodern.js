@@ -1,18 +1,17 @@
-import { readFile } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { moduleResolve } from 'import-meta-resolve';
 import { findExists } from './fs';
 
-async function importPath(path: string) {
+async function importPath(path: string, options?: any) {
   const modulePath = isAbsolute(path) ? pathToFileURL(path).href : path;
   if (process.env.NODE_ENV === 'development') {
     const timestamp = Date.now();
     // @ts-ignore
-    return await import(`${modulePath}?t=${timestamp}`);
+    return await import(`${modulePath}?t=${timestamp}`, options);
   } else {
     // @ts-ignore
-    return await import(modulePath);
+    return await import(modulePath, options);
   }
 }
 
@@ -27,29 +26,14 @@ async function compatibleRequireESM(
   interop = true,
 ): Promise<any> {
   if (path.endsWith('.json')) {
-    return JSON.parse(await readFile(path, 'utf8'));
+    const res = await importPath(path, {
+      with: { type: 'json' },
+    });
+    return res.default;
   }
 
   const requiredModule = await importPath(path);
-  if (!interop || !Object.hasOwn(requiredModule, 'default')) {
-    return requiredModule;
-  }
-  let value = requiredModule.default;
-  // Node marks CJS namespaces; genuine ESM default payloads stay untouched.
-  if (requiredModule['module.exports'] === value) {
-    const seen = new Set();
-    while (
-      value &&
-      typeof value === 'object' &&
-      value.__esModule === true &&
-      Object.hasOwn(value, 'default') &&
-      !seen.has(value)
-    ) {
-      seen.add(value);
-      value = value.default;
-    }
-  }
-  return value;
+  return interop ? requiredModule.default : requiredModule;
 }
 
 async function compatibleRequireCJS(
@@ -66,11 +50,13 @@ async function compatibleRequireCJS(
       ? requiredModule.default
       : requiredModule;
   } catch (err: any) {
-    if (err.code === 'ERR_REQUIRE_ESM') {
+    if (
+      err?.code === 'ERR_REQUIRE_ESM' ||
+      err?.code === 'ERR_REQUIRE_ASYNC_MODULE'
+    ) {
       return await compatibleRequireESM(path, interop);
-    } else {
-      throw err;
     }
+    throw err;
   }
 }
 
@@ -107,7 +93,7 @@ export async function loadFromProject(moduleName: string, appDir: string) {
   }
 }
 
-// Avoid `import` to be tranpiled to `require` by babel/TS-Go/rollup
+// Avoid `import` to be tranpiled to `require` by babel/tsc/rollup
 export const dynamicImport = new Function(
   'modulePath',
   'return import(modulePath)',
@@ -158,7 +144,7 @@ const tryResolveESM = (name: string, ...resolvePath: string[]) => {
         pathToFileURL(`${p}/`),
         conditions,
         false,
-      ).pathname.replace(/^\/(\w):/, '$1:');
+      ).pathname.replace(/^\/(\w)\:/, '$1:');
     } catch (err) {
       // ignore
     }

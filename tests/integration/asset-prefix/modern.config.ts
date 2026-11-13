@@ -18,7 +18,7 @@ export default applyBaseConfig({
               'static',
               'test.js',
             ),
-            'globalThis.__testStaticAssetLoaded = true;',
+            'console.log("test")',
           );
         });
       },

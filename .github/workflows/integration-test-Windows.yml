@@ -4,17 +4,10 @@ name: Integration Test(Windows)
 on:
   # Triggers the workflow on pull request events but only for the main branch
   push:
-    branches: [main, main-ultramodern, renovate/main-rsbuild]
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
-      - '.changeset/**'
+    branches: [main, renovate/main-rsbuild]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-
-permissions:
-  contents: read
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -35,16 +28,12 @@ jobs:
           git config --system core.longpaths true
 
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
         with:
-          fetch-depth: 0
-          persist-credentials: false
+          fetch-depth: 1
 
-      - name: Setup mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
-        with:
-          version: 2026.8.3
-          install: true
+      - name: Install Pnpm
+        run: npm i -g --force corepack && corepack enable
 
       - name: Check skip CI
         shell: bash
@@ -52,19 +41,17 @@ jobs:
         id: skip-ci
 
       - name: Log skip CI result
-        env:
-          SKIP_CI_RESULT: ${{ steps.skip-ci.outputs.RESULT }}
-        run: echo "$env:SKIP_CI_RESULT"
+        run: echo "${{steps.skip-ci.outputs.RESULT}}"
 
-      - name: Setup Node.js 26.7.0
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - name: Setup Node.js 22.x
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610 # v3
         with:
-          node-version: '26.7.0'
+          node-version: 22.x
           cache: 'pnpm'
 
       - name: Nx Cache
         id: nx-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
         with:
           path: .nx/cache
           key: nx-${{ github.ref_name }}-${{ github.sha }}
@@ -74,21 +61,15 @@ jobs:
 
       - name: Install Dependencies
         if: ${{steps.skip-ci.outputs.RESULT != 'true'}}
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --ignore-scripts --frozen-lockfile
 
       - name: Prepare
         if: ${{steps.skip-ci.outputs.RESULT != 'true'}}
-        # The root `prepare` script is a deliberate no-op in CI
-        # (scripts/prepare-root.mjs); run the build gate explicitly.
-        run: pnpm run prepare-build
+        run: pnpm run prepare
 
       - name: Install Puppeteer
         if: ${{steps.skip-ci.outputs.RESULT != 'true'}}
         run: cd ./tests/node_modules/puppeteer && npm run postinstall && cd ../..
-
-      - name: Install Playwright Chromium
-        if: ${{steps.skip-ci.outputs.RESULT != 'true'}}
-        run: pnpm --dir tests/integration/rstest/basic-app-rstest-browser exec playwright install chromium
 
       - name: Test
         if: ${{steps.skip-ci.outputs.RESULT != 'true'}}

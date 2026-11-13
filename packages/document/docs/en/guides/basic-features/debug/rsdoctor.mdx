@@ -1,47 +1,45 @@
+import { PackageManagerTabs } from '@theme';
+
 # Using Rsdoctor
 
 Rsdoctor is a Rspack build analysis tool. In Modern.js, we recommend using Rsdoctor to diagnose and analyze the build process and build outputs.
 
-Modern.js does not enable Rsdoctor by default. Configure `performance.rsdoctor` when you want to run Rsdoctor for a build.
+## Install Dependencies
+
+<PackageManagerTabs command="add @rsdoctor/rspack-plugin -D" />
+
+## Register Plugin
+
+In `modern.config.ts`, you can register the Rspack plugin via `tools.bundlerChain`. Refer to the example below:
+
+```ts title="modern.config.ts"
+import { RsdoctorRspackPlugin } from '@rsdoctor/rspack-plugin';
+
+export default {
+  // ...
+  tools: {
+    bundlerChain(chain) {
+      // Only register the plugin when RSDOCTOR is true, as the plugin will increase build time.
+      if (process.env.RSDOCTOR) {
+        chain.plugin('rsdoctor').use(RsdoctorRspackPlugin, [
+          {
+            // Plugin options
+          },
+        ]);
+      }
+    },
+  },
+};
+```
 
 ## Execute Build
 
-```ts title="modern.config.ts"
-export default defineConfig({
-  performance: {
-    rsdoctor: true,
-  },
-});
-```
+You can execute the build command within your project. After the build is complete, Rsdoctor will automatically open the analysis page for the build.
 
 ```bash
-npm run build
+RSDOCTOR=true npm run build
 ```
 
-## Disable Rsdoctor
-
-If you want to disable Rsdoctor after enabling it in shared config:
-
-```ts title="modern.config.ts"
-export default defineConfig({
-  performance: {
-    rsdoctor: false,
-  },
-});
-```
-
-You can also use object form:
-
-```ts title="modern.config.ts"
-export default defineConfig({
-  performance: {
-    rsdoctor: {
-      enabled: true,
-    },
-  },
-});
-```
-
-## Related Docs
+## Related Documentation
 
 For more information, please refer to the [Rsdoctor Website](https://rsdoctor.rs/).

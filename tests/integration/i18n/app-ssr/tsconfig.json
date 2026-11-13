@@ -11,5 +11,5 @@
     },
     "types": ["@rstest/core/globals"]
   },
-  "include": ["src", "modern.config.ts", "modern.ssg.config.ts"]
+  "include": ["src", "tests", "modern.config.ts"]
 }

@@ -1,1 +1,1 @@
-export { parse, stringify } from 'qs';
+export { stringify, parse } from 'qs';

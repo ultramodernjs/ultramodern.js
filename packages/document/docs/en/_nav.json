@@ -1,7 +1,7 @@
 [
   {
-    "text": "UltraModern Guide",
-    "link": "/guides/get-started/ultramodern",
+    "text": "guide",
+    "link": "/guides/get-started/introduction",
     "activeMatch": "/guides/"
   },
   {
@@ -30,7 +30,7 @@
     "activeMatch": "/community/"
   },
   {
-    "text": "Upstream Modern.js 2.x Docs",
+    "text": "Modern.js 2.x Docs",
     "link": "https://modernjs.dev/v2"
   }
 ]

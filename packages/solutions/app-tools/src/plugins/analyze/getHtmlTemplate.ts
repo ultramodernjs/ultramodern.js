@@ -1,6 +1,6 @@
-import type { Entrypoint, HtmlPartials, HtmlTemplates } from '@modern-js/types';
-import { findExists, fs } from '@modern-js/utils';
 import path from 'path';
+import type { Entrypoint, HtmlPartials, HtmlTemplates } from '@modern-js/types';
+import { fs, findExists } from '@modern-js/utils';
 import type { AppNormalizedConfig } from '../../types';
 import type { AppToolsContext, AppToolsHooks } from '../../types/plugin';
 import { HTML_PARTIALS_EXTENSIONS, HTML_PARTIALS_FOLDER } from './constants';
@@ -73,27 +73,6 @@ export const getModifyHtmlPartials = (
   };
 };
 
-const resolveConfiguredTemplate = (
-  template: AppNormalizedConfig['html']['template'],
-  entryName: string,
-  appDirectory: string,
-) => {
-  const filepath =
-    typeof template === 'function'
-      ? (template as (params: { entryName: string }) => string | undefined)({
-          entryName,
-        })
-      : template;
-
-  if (typeof filepath !== 'string' || filepath.length === 0) {
-    return null;
-  }
-
-  return path.isAbsolute(filepath)
-    ? filepath.replace(/\\/g, '/')
-    : path.resolve(appDirectory, filepath).replace(/\\/g, '/');
-};
-
 // generate html template for
 export const getHtmlTemplate = async (
   entrypoints: Entrypoint[],
@@ -123,16 +102,6 @@ export const getHtmlTemplate = async (
   for (const entrypoint of entrypoints) {
     const { entryName, isMainEntry } = entrypoint;
     const name = entrypoints.length === 1 && isMainEntry ? '' : entryName;
-    const configuredTemplate = resolveConfiguredTemplate(
-      config.html.template,
-      entryName,
-      appDirectory,
-    );
-
-    if (configuredTemplate) {
-      htmlTemplates[entryName] = configuredTemplate;
-      continue;
-    }
 
     const customIndexTemplate = findPartials(
       htmlDir,

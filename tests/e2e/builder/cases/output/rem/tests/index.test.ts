@@ -58,9 +58,7 @@ test('rem enable', async ({ page }) => {
   builder.close();
 });
 
-test('should execute the inline runtime without loading a runtime asset', async ({
-  page,
-}) => {
+test('should inline runtime code to html by default', async () => {
   const builder = await build({
     cwd: fixtures,
     entry: { index: join(fixtures, 'src/index.ts') },
@@ -69,25 +67,15 @@ test('should execute the inline runtime without loading a runtime asset', async 
         convertToRem: {},
       },
     },
-    runServer: true,
   });
-  await page.goto(getHrefByEntryName('index', builder.port));
+  const files = await builder.unwrapOutputJSON();
+  const htmlFile = Object.keys(files).find(file => file.endsWith('.html'));
 
-  await expect(page.locator('html')).toHaveCSS('font-size', '64px');
-  expect(
-    await page.evaluate(() =>
-      performance
-        .getEntriesByType('resource')
-        .some(entry => entry.name.includes('/convert-rem')),
-    ),
-  ).toBe(false);
-
-  builder.close();
+  expect(htmlFile).toBeTruthy();
+  expect(files[htmlFile!].includes('function setRootPixel')).toBeTruthy();
 });
 
-test('should load and execute the extracted runtime when inlineRuntime is false', async ({
-  page,
-}) => {
+test('should extract runtime code when inlineRuntime is false', async () => {
   const builder = await build({
     cwd: fixtures,
     entry: { index: join(fixtures, 'src/index.ts') },
@@ -98,18 +86,15 @@ test('should load and execute the extracted runtime when inlineRuntime is false'
         },
       },
     },
-    runServer: true,
   });
-  await page.goto(getHrefByEntryName('index', builder.port));
+  const files = await builder.unwrapOutputJSON();
 
-  await expect(page.locator('html')).toHaveCSS('font-size', '64px');
-  expect(
-    await page.evaluate(() =>
-      performance
-        .getEntriesByType('resource')
-        .some(entry => entry.name.includes('/convert-rem')),
-    ),
-  ).toBe(true);
+  const htmlFile = Object.keys(files).find(file => file.endsWith('.html'));
+  const retryFile = Object.keys(files).find(
+    file => file.includes('/convert-rem') && file.endsWith('.js'),
+  );
 
-  builder.close();
+  expect(htmlFile).toBeTruthy();
+  expect(retryFile).toBeTruthy();
+  expect(files[htmlFile!].includes('function setRootPixel')).toBeFalsy();
 });

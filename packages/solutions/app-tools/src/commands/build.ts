@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { CLIPluginAPI } from '@modern-js/plugin';
-import { type Alias, fs, logger } from '@modern-js/utils';
+import { fs, type Alias, logger } from '@modern-js/utils';
 import type { ConfigChain } from '@rsbuild/core';
 import type { AppTools } from '../types';
 import { loadServerPlugins } from '../utils/loadPlugins';
@@ -65,7 +65,7 @@ export const build = async (
   // we need load server plugin to appContext for ssg & deploy commands.
   await loadServerPlugins(api, appContext.appDirectory, appContext.metaName);
 
-  // Setup Node-native TypeScript path alias support.
+  // Setup ts-node and tsconfig-paths for TypeScript runtime support
   await setupTsRuntime(
     appContext.appDirectory,
     appContext.distDirectory,
@@ -109,10 +109,7 @@ export const build = async (
   await appContext.builder.onAfterBuild(async () => {
     return copyEnvFiles(appContext.appDirectory, appContext.distDirectory);
   });
-  const buildResult = await appContext.builder.build({
+  await appContext.builder.build({
     watch: options?.watch,
   });
-  if (!options?.watch) {
-    await buildResult?.close();
-  }
 };

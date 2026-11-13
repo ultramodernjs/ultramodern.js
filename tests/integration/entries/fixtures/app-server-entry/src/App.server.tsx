@@ -1,8 +1,8 @@
 import { RuntimeContext } from '@modern-js/runtime';
 import {
-  createStaticRouter,
   type StaticHandlerContext,
   StaticRouterProvider,
+  createStaticRouter,
 } from '@modern-js/runtime-utils/router';
 import { use } from 'react';
 import { routes } from './routes';

@@ -14,6 +14,17 @@ test('output.charset default (ascii)', async ({ page }) => {
   await page.goto(getHrefByEntryName('index', builder.port));
   expect(await page.evaluate('window.a')).toBe('你好 world!');
 
+  const files = await builder.unwrapOutputJSON();
+
+  const [, content] = Object.entries(files).find(
+    ([name]) => name.endsWith('.js') && name.includes('static/js/index'),
+  )!;
+
+  // in rspack is: \\u4f60\\u597D world!
+  expect(
+    content.toLocaleLowerCase().includes('\\u4f60\\u597d world!'),
+  ).toBeTruthy();
+
   builder.close();
 });
 
@@ -33,6 +44,14 @@ test('output.charset (utf8)', async ({ page }) => {
 
   await page.goto(getHrefByEntryName('index', builder.port));
   expect(await page.evaluate('window.a')).toBe('你好 world!');
+
+  const files = await builder.unwrapOutputJSON();
+
+  const [, content] = Object.entries(files).find(
+    ([name]) => name.endsWith('.js') && name.includes('static/js/index'),
+  )!;
+
+  expect(content.includes('你好 world!')).toBeTruthy();
 
   builder.close();
 });

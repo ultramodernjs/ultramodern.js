@@ -1,6 +1,6 @@
+import path from 'path';
 import { expect, test } from '@playwright/test';
 import { build } from '@scripts/shared';
-import path from 'path';
 
 test('should build web-worker target correctly', async () => {
   const builder = await build({

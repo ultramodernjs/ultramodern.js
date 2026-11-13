@@ -1,4 +1,3 @@
-// @effect-diagnostics asyncFunction:off strictBooleanExpressions:off unnecessaryArrowBlock:off
 import type { Operator } from '@modern-js/bff-core';
 import {
   type Context,

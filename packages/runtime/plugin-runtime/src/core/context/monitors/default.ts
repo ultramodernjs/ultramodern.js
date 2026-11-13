@@ -1,14 +1,6 @@
-export type RuntimeMonitors = {
-  counter: (name: string, ...args: any[]) => void;
-  info: (...args: any[]) => void;
-  debug: (...args: any[]) => void;
-  trace: (...args: any[]) => void;
-  warn: (...args: any[]) => void;
-  error: (...args: any[]) => void;
-  timing: (name: string, dur: number, ...args: any[]) => void;
-};
+import type { Monitors } from '@modern-js/types';
 
-export const defaultMonitors: RuntimeMonitors = {
+export const defaultMonitors: Omit<Monitors, 'push'> = {
   counter(name: string, ...args: any[]) {},
 
   info: console.info,

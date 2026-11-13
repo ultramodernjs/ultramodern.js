@@ -15,29 +15,6 @@ const getMockImage = () => {
 const Page = () => {
   const [file, setFile] = React.useState<FileList | null>();
   const [fileName, setFileName] = React.useState<string>('');
-  const setFileNameFromUploadResponse = (result: unknown) => {
-    if (typeof result !== 'object' || result === null) {
-      return;
-    }
-    const response = result as Record<string, unknown>;
-    const directData =
-      typeof response.data === 'object' && response.data !== null
-        ? (response.data as Record<string, unknown>)
-        : undefined;
-    const nestedData =
-      directData &&
-      typeof directData.data === 'object' &&
-      directData.data !== null
-        ? (directData.data as Record<string, unknown>)
-        : undefined;
-    const fileNameValue =
-      typeof directData?.file_name === 'string'
-        ? directData.file_name
-        : typeof nestedData?.file_name === 'string'
-          ? nestedData.file_name
-          : '';
-    setFileName(fileNameValue);
-  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFile(e.target.files);
@@ -56,6 +33,7 @@ const Page = () => {
       });
     }
   };
+
   const click = () => {
     if (!file) {
       return;
@@ -64,18 +42,17 @@ const Page = () => {
       files: {
         images: file,
       },
-    }).then(setFileNameFromUploadResponse);
+    });
   };
 
   useEffect(() => {
-    // No fetch fallback on purpose: the test must fail when the generated
-    // upload client breaks instead of silently downgrading to raw fetch.
-    const mockImage = getMockImage();
     upload({
       files: {
-        images: mockImage,
+        images: getMockImage(),
       },
-    }).then(setFileNameFromUploadResponse);
+    }).then(res => {
+      setFileName(res.data.file_name);
+    });
   }, []);
 
   return (

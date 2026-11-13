@@ -9,7 +9,6 @@ import { SdkBackend } from './sdk-backend';
 
 type BackendConfigWithChained = BaseBackendOptions &
   Partial<ChainedBackendConfig>;
-type BackendConstructor = new (...args: never[]) => unknown;
 
 function checkBackendConfig(backend?: BackendConfigWithChained) {
   const hasSdk = backend?.sdk && typeof backend.sdk === 'function';
@@ -21,7 +20,7 @@ function checkBackendConfig(backend?: BackendConfigWithChained) {
 
 function buildChainedBackendConfig(
   backend: BackendConfigWithChained,
-  BackendWithSave: BackendConstructor,
+  BackendWithSave: new (...args: any[]) => any,
 ) {
   const cacheHitMode = backend.cacheHitMode || 'refreshAndUpdateStore';
 
@@ -52,7 +51,7 @@ function buildChainedBackendConfig(
 function setupChainedBackend(
   i18nInstance: I18nInstance,
   backend: BackendConfigWithChained,
-  BackendWithSave: BackendConstructor,
+  BackendWithSave: new (...args: any[]) => any,
 ) {
   i18nInstance.use(ChainedBackend);
   const actualInstance = getActualI18nextInstance(i18nInstance);
@@ -87,8 +86,8 @@ function cleanBackendConfig(backend: BackendConfigWithChained) {
  */
 export function useI18nextBackendCommon(
   i18nInstance: I18nInstance,
-  BackendWithSave: BackendConstructor,
-  BackendBase: BackendConstructor,
+  BackendWithSave: new (...args: any[]) => any,
+  BackendBase: new (...args: any[]) => any,
   backend?: BackendConfigWithChained,
 ) {
   if (!backend) {

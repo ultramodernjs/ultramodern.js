@@ -1,2 +1,2 @@
-export * from './deferreds';
 export * from './nestedRoutes';
+export * from './deferreds';

@@ -7,7 +7,7 @@ const PublicPage = (): JSX.Element => (
       <link
         rel="icon"
         type="image/x-icon"
-        href="https://bleedingdev.github.io/ultramodern.js/img/favicon.ico"
+        href="https://lf3-static.bytednsdoc.com/obj/eden-cn/uhbfnupenuhf/favicon.ico"
       />
     </Helmet>
     <h3>Public</h3>

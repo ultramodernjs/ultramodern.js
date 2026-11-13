@@ -1,22 +1,32 @@
-import {
-  getCommand,
-  JS_EXTENSIONS,
-  normalizeToPosixPath,
-} from '@modern-js/utils';
-import { parse } from 'es-module-lexer';
-import { transform } from 'esbuild';
 import fs from 'fs';
 import path from 'path';
+import {
+  JS_EXTENSIONS,
+  getCommand,
+  normalizeToPosixPath,
+} from '@modern-js/utils';
+import { transform } from '@swc/core';
+import { parse } from 'es-module-lexer';
 
-export const walkDirectory = (dir: string): string[] =>
-  fs.readdirSync(dir).reduce<string[]>((previous, filename) => {
-    const filePath = path.join(dir, filename);
-    if (fs.statSync(filePath).isDirectory()) {
-      return [...previous, ...walkDirectory(filePath)];
-    } else {
-      return [...previous, filePath];
+export const walkDirectory = (dir: string): string[] => {
+  const files: string[] = [];
+  const walk = (current: string) => {
+    for (const dirent of fs.readdirSync(current, { withFileTypes: true })) {
+      const filePath = path.join(current, dirent.name);
+      // Only stat symlinks, so they are followed like before.
+      const isDirectory = dirent.isSymbolicLink()
+        ? fs.statSync(filePath).isDirectory()
+        : dirent.isDirectory();
+      if (isDirectory) {
+        walk(filePath);
+      } else {
+        files.push(filePath);
+      }
     }
-  }, []);
+  };
+  walk(dir);
+  return files;
+};
 
 export const replaceWithAlias = (
   base: string,
@@ -43,22 +53,19 @@ export const parseModule = async ({
 
   if (JS_EXTENSIONS.some(ext => filename.endsWith(ext))) {
     const ext = path.extname(filename);
+    const isTs = ext === '.ts' || ext === '.tsx';
+    const isJsx = ext === '.jsx' || ext === '.tsx';
     const result = await transform(content, {
-      sourcefile: filename,
-      format: 'esm',
-      loader:
-        ext === '.ts'
-          ? 'ts'
-          : ext === '.tsx'
-            ? 'tsx'
-            : ext === '.jsx'
-              ? 'jsx'
-              : 'js',
-      target: 'es2022',
-      tsconfigRaw: {
-        compilerOptions: {
-          experimentalDecorators: true,
-        },
+      filename,
+      isModule: true,
+      module: { type: 'es6' },
+      jsc: {
+        parser: isTs
+          ? { syntax: 'typescript', tsx: isJsx, decorators: true }
+          : { syntax: 'ecmascript', jsx: isJsx, decorators: true },
+        transform: { legacyDecorator: true },
+        target: 'es2022',
+        keepClassNames: true,
       },
     });
     content = result.code;
@@ -74,7 +81,7 @@ export const getServerCombinedModuleFile = (
   return path.join(internalDirectory, entryName, 'server-loader-combined.js');
 };
 
-export const checkIsBuildCommands = (contextCommand?: string) => {
+export const checkIsBuildCommands = () => {
   const buildCommands = [
     'dev',
     'start',
@@ -85,16 +92,7 @@ export const checkIsBuildCommands = (contextCommand?: string) => {
   ];
   const command = getCommand();
 
-  if (buildCommands.includes(command)) {
-    return true;
-  }
-
-  return (
-    contextCommand === 'dev' ||
-    contextCommand === 'start' ||
-    contextCommand === 'build' ||
-    contextCommand === 'deploy'
-  );
+  return buildCommands.includes(command);
 };
 
 export const checkIsServeCommand = () => {

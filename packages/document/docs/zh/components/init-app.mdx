@@ -1,32 +1,22 @@
-UltraModern.js 提供 BleedingDev create 包来创建 SuperApp workspace，不需要全局安装，直接使用 `pnpm dlx` 按需运行即可。
+Modern.js 提供了 `@modern-js/create` 工具来创建项目，不需要全局安装，直接使用 `npx` 按需运行即可。
 
-pnpm 支持的命令契约是 scoped package specifier：
-`pnpm dlx @bleedingdev/modern-js-ultramodern-create <target>`。不要简写成
-`pnpm dlx modern-js-ultramodern-create`；npm 上没有这个未加 scope 的包。
-
-你可以在当前已有的空目录中初始化项目：
+你可以在已有的空目录来创建项目：
 
 ```bash
 mkdir myapp && cd myapp
-pnpm dlx @bleedingdev/modern-js-ultramodern-create .
+npx @modern-js/create@latest
 ```
 
 也可以直接用新目录创建项目：
 
 ```bash
-pnpm dlx @bleedingdev/modern-js-ultramodern-create myapp
+npx @modern-js/create@latest myapp
 ```
 
-使用 workspace 协议依赖初始化（用于在本地 monorepo 中联调未发布的 Modern.js 包）：
+`@modern-js/create` 会直接创建应用，不再提供问答界面：
 
 ```bash
-pnpm dlx @bleedingdev/modern-js-ultramodern-create myapp --workspace
-```
-
-BleedingDev create 包会直接创建应用，不再提供问答界面：
-
-```bash
-🚀 欢迎使用 UltraModern.js
+🚀 欢迎使用 Modern.js
 
 📦 正在创建项目 "myapp"...
 
@@ -48,41 +38,29 @@ BleedingDev create 包会直接创建应用，不再提供问答界面：
 
 ⚡ 启动开发服务器：
 
-  pnpm start
+  pnpm dev
 ```
 
 现在，项目结构如下：
 
 ```
 .
-├── apps
-│   └── shell-super-app
+├── modern.config.ts
 ├── package.json
-├── packages
-│   ├── shared-contracts
-│   ├── shared-design-tokens
-│   └── shared-effect-client
-├── scripts
-├── topology
-└── verticals
+├── README.md
+├── rstack.config.mts
+├── src
+│   ├── modern.runtime.ts
+│   └── routes
+│       ├── index.css
+│       ├── layout.tsx
+│       └── page.tsx
+└── tsconfig.json
 ```
 
-默认 workspace 从 shell 起步，并安装已发布的 BleedingDev 包别名：
+新建的独立项目使用 [Rstack CLI](https://rstack.rs/) 进行代码校验和格式化：
 
 ```bash
-pnpm dlx @bleedingdev/modern-js-ultramodern-create my-super-app
+pnpm check
+pnpm format
 ```
-
-在已生成的 SuperApp workspace 根目录中，可以就地添加业务
-MicroVertical：
-
-```bash
-pnpm dlx @bleedingdev/modern-js-ultramodern-create transportation --vertical
-```
-
-`--vertical` 会修改当前 workspace：新增 vertical 包，并写入 topology、
-ownership 元数据、shell Module Federation、开发 overlays、包依赖、生成契约、
-路由归属 i18n、CSS 隔离，以及 Effect BFF/client surface。
-
-底层 `--ultramodern-package-*` 参数只保留给发布工程和本地包源测试使用。
-BleedingDev 包通过 GitHub Actions trusted publishing 发布；不要从开发机器手动发布。

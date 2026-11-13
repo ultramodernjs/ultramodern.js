@@ -1,11 +1,11 @@
 import type { PluginHook, PluginHookTap } from '../hooks';
 import type { DeepPartial } from '../utils';
 import type { RuntimeContext } from './context';
+import type { Hooks } from './hooks';
 import type {
   ConfigFn,
   ExtendStreamSSRFn,
   ExtendStringSSRCollectorsFn,
-  Hooks,
   OnBeforeRenderFn,
   PickContextFn,
   StringSSRCollectorsInfo,

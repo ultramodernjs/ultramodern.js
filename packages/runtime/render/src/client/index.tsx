@@ -1,19 +1,14 @@
-import React, {
-  createContext,
-  type ReactNode,
-  useContext,
-  useState,
-} from 'react';
+import React from 'react';
+import { type ReactNode, createContext, useContext, useState } from 'react';
 import {
-  createFromFetch,
   createFromReadableStream,
   createServerReference,
   setServerCallback,
 } from 'react-server-dom-rspack/client.browser';
-
 export { rscStream } from '../rsc-html-stream/client';
+export { createFromReadableStream, createServerReference };
 export { callServer } from './callServer';
-export { createFromFetch, createFromReadableStream, createServerReference };
+export { createFromFetch } from 'react-server-dom-rspack/client.browser';
 
 declare global {
   interface Window {

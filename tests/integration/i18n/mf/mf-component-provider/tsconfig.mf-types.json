@@ -1,4 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "include": ["src/components/Text.tsx", "src/modern-app-env.d.ts"]
-}

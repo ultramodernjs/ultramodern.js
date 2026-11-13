@@ -6,10 +6,7 @@ sidebar_position: 1
 # router
 
 :::info
-The router solution based on [react-router](https://reactrouter.com/).
-
-This page documents the React Router runtime export (`@modern-js/runtime/router`).  
-If your app uses TanStack Router (`--router tanstack`), use `@modern-js/plugin-tanstack/runtime` and refer to TanStack Router API docs.
+The router solution based on [react-router v7](https://reactrouter.com/).
 
 :::
 
@@ -139,8 +136,10 @@ export default ErrorBoundary;
 ```ts
 declare function Link(props: LinkProps): React.ReactElement;
 
-interface LinkProps
-  extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
+interface LinkProps extends Omit<
+  React.AnchorHTMLAttributes<HTMLAnchorElement>,
+  'href'
+> {
   replace?: boolean;
   state?: any;
   to: To;
@@ -161,12 +160,13 @@ A `<Link>` is an element that lets the user navigate to another page by clicking
 ```ts
 declare function NavLink(props: NavLinkProps): React.ReactElement;
 
-interface NavLinkProps
-  extends Omit<LinkProps, 'className' | 'style' | 'children'> {
+interface NavLinkProps extends Omit<
+  LinkProps,
+  'className' | 'style' | 'children'
+> {
   caseSensitive?: boolean;
   children?:
-    | React.ReactNode
-    | ((props: { isActive: boolean }) => React.ReactNode);
+    React.ReactNode | ((props: { isActive: boolean }) => React.ReactNode);
   className?: string | ((props: { isActive: boolean }) => string | undefined);
   end?: boolean;
   style?:

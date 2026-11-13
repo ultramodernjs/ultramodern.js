@@ -15,6 +15,7 @@ export const loadLocaleTemplate = (lang: string) =>
   import(`./locales/${lang}.js`);
 
 export const loadLocaleConcat = (lang: string) =>
+  // biome-ignore lint/style/useTemplate: the concatenated specifier is the case under test
   import('./locales/' + lang + '.js');
 
 const server = () => {

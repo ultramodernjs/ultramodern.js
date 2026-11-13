@@ -1,90 +1,42 @@
-// @effect-diagnostics nodeBuiltinImport:off strictBooleanExpressions:off unnecessaryArrowBlock:off
+import path from 'path';
 import type { Entrypoint } from '@modern-js/types';
 import { fs } from '@modern-js/utils';
-import path from 'path';
 import { hasApp } from '../../cli/entry';
 import { NESTED_ROUTES_DIR } from './constants';
 
-export const ROUTES_DIR_META_KEY = '__modernRoutesDir';
-export const ROUTES_OWNER_META_KEY = '__modernRoutesOwner';
-export const BUILT_IN_ROUTES_OWNER = '@modern-js/plugin-router';
+export const hasNestedRoutes = (dir: string) =>
+  fs.existsSync(path.join(dir, NESTED_ROUTES_DIR));
 
-export type EntrypointWithRoutesMeta = Entrypoint & {
-  [ROUTES_DIR_META_KEY]?: string;
-  [ROUTES_OWNER_META_KEY]?: string;
-};
-
-export const getEntrypointRoutesDir = (entrypoint: {
-  [ROUTES_DIR_META_KEY]?: string;
-  nestedRoutesEntry?: string;
-}) => {
-  if (entrypoint[ROUTES_DIR_META_KEY]) {
-    return entrypoint[ROUTES_DIR_META_KEY];
-  }
-
-  if (entrypoint.nestedRoutesEntry) {
-    return path.basename(entrypoint.nestedRoutesEntry);
-  }
-
-  return null;
-};
-
-export const getEntrypointRoutesOwner = (entrypoint: {
-  [ROUTES_OWNER_META_KEY]?: string;
-}) => {
-  return entrypoint[ROUTES_OWNER_META_KEY] || null;
-};
-
-export const hasNestedRoutes = (dir: string, routesDir = NESTED_ROUTES_DIR) =>
-  fs.existsSync(path.join(dir, routesDir));
-
-export const isRouteEntry = (dir: string, routesDir = NESTED_ROUTES_DIR) => {
-  if (hasNestedRoutes(dir, routesDir)) {
-    return path.join(dir, routesDir);
+export const isRouteEntry = (dir: string) => {
+  if (hasNestedRoutes(dir)) {
+    return path.join(dir, NESTED_ROUTES_DIR);
   }
   return false;
 };
 
-export const modifyEntrypoints = (
-  entrypoints: Entrypoint[],
-  routesDir = NESTED_ROUTES_DIR,
-  routesOwner?: string,
-) => {
+export const modifyEntrypoints = (entrypoints: Entrypoint[]) => {
   return entrypoints.map(entrypoint => {
-    const entrypointWithMeta = entrypoint as EntrypointWithRoutesMeta;
-
     if (!entrypoint.isAutoMount) {
-      return entrypointWithMeta;
+      return entrypoint;
     }
     if (entrypoint?.isCustomSourceEntry) {
       if (entrypoint.fileSystemRoutes) {
-        entrypointWithMeta.nestedRoutesEntry =
+        entrypoint.nestedRoutesEntry =
           entrypoint.absoluteEntryDir || entrypoint.entry;
-        entrypointWithMeta[ROUTES_DIR_META_KEY] = routesDir;
-        if (routesOwner) {
-          entrypointWithMeta[ROUTES_OWNER_META_KEY] = routesOwner;
-        }
       }
-      return entrypointWithMeta;
+      return entrypoint;
     }
     const isHasApp = hasApp(entrypoint.absoluteEntryDir!);
     if (isHasApp) {
-      return entrypointWithMeta;
+      return entrypoint;
     }
-    const isHasNestedRoutes = hasNestedRoutes(
-      entrypoint.absoluteEntryDir!,
-      routesDir,
-    );
+    const isHasNestedRoutes = hasNestedRoutes(entrypoint.absoluteEntryDir!);
     if (isHasNestedRoutes) {
-      entrypointWithMeta.nestedRoutesEntry = path.join(
+      entrypoint.nestedRoutesEntry = path.join(
         entrypoint.absoluteEntryDir!,
-        routesDir,
+        NESTED_ROUTES_DIR,
       );
-      entrypointWithMeta[ROUTES_DIR_META_KEY] = routesDir;
-      if (routesOwner) {
-        entrypointWithMeta[ROUTES_OWNER_META_KEY] = routesOwner;
-      }
     }
-    return entrypointWithMeta;
+    return entrypoint;
   });
 };

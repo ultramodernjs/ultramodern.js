@@ -1,6 +1,8 @@
-import fs from 'fs-extra';
 import { dirname, join } from 'path';
 import { pathToFileURL } from 'url';
+import fs from 'fs-extra';
+import { moduleResolve } from 'import-meta-resolve';
+import pkgUp from 'pkg-up';
 import { DIST_DIR, PACKAGES_DIR, TASKS } from './constant';
 import type { ParsedTask } from './types';
 
@@ -18,8 +20,7 @@ export function findDepPath(name: string) {
   return entry;
 }
 
-const resolveESMDependency = async (entry: string) => {
-  const { moduleResolve } = await import('import-meta-resolve');
+const resolveESMDependency = (entry: string) => {
   const conditions = new Set(['import', 'module', 'default']);
   try {
     return moduleResolve(
@@ -27,14 +28,13 @@ const resolveESMDependency = async (entry: string) => {
       pathToFileURL(`${__dirname}/`),
       conditions,
       false,
-    ).pathname.replace(/^\/(\w):/, '$1:');
+    ).pathname.replace(/^\/(\w)\:/, '$1:');
   } catch (err) {
     // ignore
   }
 };
 
 export async function parseTasks() {
-  const { findUp } = await import('find-up');
   const result: ParsedTask[] = [];
 
   for (const { packageName, packageDir, dependencies } of TASKS) {
@@ -45,7 +45,7 @@ export async function parseTasks() {
       const distPath = join(packagePath, DIST_DIR, depName);
       const depPath = findDepPath(depName);
       const depEntry = require.resolve(depName);
-      const resolvedEsmEntry = await resolveESMDependency(depName);
+      const resolvedEsmEntry = resolveESMDependency(depName);
 
       let depEsmEntry = '';
       if (resolvedEsmEntry) {
@@ -53,9 +53,7 @@ export async function parseTasks() {
           depEsmEntry = resolvedEsmEntry;
         } else {
           // is esm package?
-          const pkg = await findUp('package.json', {
-            cwd: dirname(resolvedEsmEntry),
-          });
+          const pkg = await pkgUp({ cwd: dirname(resolvedEsmEntry) });
           if (pkg) {
             const pkgJson = await fs.readJSON(pkg);
             if (pkgJson.type === 'module') {

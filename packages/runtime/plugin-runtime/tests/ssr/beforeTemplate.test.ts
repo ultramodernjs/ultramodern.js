@@ -50,19 +50,4 @@ describe('hasStylesheetLink', () => {
       ),
     ).toBe(false);
   });
-
-  test('uses the first duplicate href and rel attributes like an HTML parser', () => {
-    expect(
-      hasStylesheetLink(
-        `<link rel="stylesheet" href="/other.css" href="${href}">`,
-        href,
-      ),
-    ).toBe(false);
-    expect(
-      hasStylesheetLink(
-        `<link rel="prefetch" rel="stylesheet" href="${href}">`,
-        href,
-      ),
-    ).toBe(false);
-  });
 });

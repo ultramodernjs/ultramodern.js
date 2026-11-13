@@ -15,58 +15,47 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.0",
+  "version": "3.11.3",
   "types": "./dist/types/index.d.ts",
   "main": "./dist/cjs/index.js",
   "exports": {
     ".": {
       "types": "./dist/types/index.d.ts",
-      "modern:source": "./src/index.ts",
       "node": {
         "import": "./dist/esm-node/index.mjs",
         "require": "./dist/cjs/index.js"
       },
       "default": "./dist/cjs/index.js"
-    },
-    "./security/cross-project-policy": {
-      "types": "./dist/types/security/crossProjectPolicy.d.ts",
-      "modern:source": "./src/security/crossProjectPolicy.ts",
-      "node": {
-        "import": "./dist/esm-node/security/crossProjectPolicy.mjs",
-        "require": "./dist/cjs/security/crossProjectPolicy.js"
-      },
-      "default": "./dist/esm/security/crossProjectPolicy.mjs"
     }
   },
   "scripts": {
     "prepublishOnly": "only-allow-pnpm",
-    "dev": "rslib build --watch",
-    "build": "rslib build",
+    "dev": "rs lib --watch",
+    "build": "rs lib",
     "test": "rstest --passWithNoTests"
   },
   "dependencies": {
     "@modern-js/utils": "workspace:*",
-    "@swc/helpers": "^0.5.23",
+    "@swc/helpers": "^0.5.17",
     "koa-compose": "^4.1.0",
     "reflect-metadata": "^0.2.2",
-    "type-fest": "5.9.0"
+    "type-fest": "2.19.0"
   },
   "devDependencies": {
-    "@modern-js/bff-runtime": "workspace:*",
     "@modern-js/rslib": "workspace:*",
     "@modern-js/types": "workspace:*",
-    "@rslib/core": "1.0.0",
     "@scripts/rstest-config": "workspace:*",
     "@types/koa-compose": "^3.2.9",
-    "@types/node": "^26.4.1",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "esbuild": "^0.28.2",
+    "@types/node": "^20",
+    "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "zod": "^4.5.4"
+    "typescript": "^5",
+    "zod": "^4.0.0"
   },
   "peerDependencies": {
+    "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "zod": "^4.5.4"
+    "zod": "^3.25.76 || ^4.6.7"
   },
   "peerDependenciesMeta": {
     "zod": {

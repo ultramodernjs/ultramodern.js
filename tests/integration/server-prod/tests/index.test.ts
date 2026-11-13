@@ -1,11 +1,9 @@
-import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
-import puppeteer, { type Browser, type Page } from 'puppeteer';
+import axios from 'axios';
 import {
   getPort,
   killApp,
-  launchOptions,
   modernBuild,
   modernServe,
 } from '../../../utils/modernTestUtils';
@@ -14,20 +12,13 @@ const appPath = path.resolve(__dirname, '../');
 const successStatus = 200;
 let app: any;
 let appPort: number;
-let browser: Browser;
-let page: Page;
 
 beforeAll(async () => {
   await modernBuild(appPath);
   appPort = await getPort();
-  app = await modernServe(appPath, appPort);
-  browser = await puppeteer.launch(launchOptions as any);
-  page = await browser.newPage();
 });
 
 afterAll(async () => {
-  await page?.close();
-  await browser?.close();
   if (app) {
     await killApp(app);
   }
@@ -42,24 +33,29 @@ describe('test basic usage', () => {
     expect(fs.existsSync(favicon1)).toBe(true);
     expect(fs.existsSync(appIcon)).toBe(true);
 
-    for (const route of ['/', '/activity']) {
-      await page.goto(`http://localhost:${appPort}${route}`);
-      await expect(
-        page.$eval('link[rel="icon"]', element => element.getAttribute('href')),
-      ).resolves.toBe('/favicon.ico');
-      await expect(
-        page.$eval('link[rel="apple-touch-icon"]', element => ({
-          href: element.getAttribute('href'),
-          sizes: element.getAttribute('sizes'),
-        })),
-      ).resolves.toEqual({
-        href: '/static/image/icon.png',
-        sizes: '180x180',
-      });
-    }
+    const mainEntry = path.resolve(appPath, './dist/html/index/index.html');
+    const activityEntry = path.resolve(
+      appPath,
+      './dist/html/activity/index.html',
+    );
+    expect(fs.readFileSync(mainEntry, 'utf-8')).toMatch(
+      '<link rel="icon" href="/favicon.ico">',
+    );
+    const mediaPath = `static/image/icon.png`;
+
+    expect(fs.readFileSync(mainEntry, 'utf-8')).toMatch(
+      `<link rel="apple-touch-icon" sizes="180x180" href="/${mediaPath}">`,
+    );
+    expect(fs.readFileSync(activityEntry, 'utf-8')).toMatch(
+      '<link rel="icon" href="/favicon.ico">',
+    );
+    expect(fs.readFileSync(activityEntry, 'utf-8')).toMatch(
+      `<link rel="apple-touch-icon" sizes="180x180" href="/${mediaPath}">`,
+    );
   });
 
   test(`should start successfully`, async () => {
+    app = await modernServe(appPath, appPort);
     expect(app.pid).toBeDefined();
 
     const { status } = await axios.get(`http://localhost:${appPort}`);

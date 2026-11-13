@@ -64,6 +64,26 @@ describe('react compiler (dev)', () => {
   test('should skip re-rendering memoized child on parent update', async () => {
     await expectChildMemoized(page, `http://localhost:${appPort}`);
   });
+
+  test('should reference react compiler runtime in dev bundle', async () => {
+    const html = await (await fetch(`http://localhost:${appPort}`)).text();
+    const scriptSrcs = [...html.matchAll(/src="([^"]+\.js[^"]*)"/g)].map(
+      match => match[1],
+    );
+    expect(scriptSrcs.length).toBeGreaterThan(0);
+
+    const sources = await Promise.all(
+      scriptSrcs.map(async src => {
+        const url = src.startsWith('http')
+          ? src
+          : `http://localhost:${appPort}${src}`;
+        return (await fetch(url)).text();
+      }),
+    );
+    expect(
+      sources.some(source => source.includes('react/compiler-runtime')),
+    ).toBeTruthy();
+  });
 });
 
 describe('react compiler (build)', () => {

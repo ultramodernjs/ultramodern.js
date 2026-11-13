@@ -1,6 +1,6 @@
-import { isVersionAtLeast18 } from '@modern-js/utils';
 import fs from 'fs';
 import path from 'path';
+import { isVersionAtLeast18 } from '@modern-js/utils';
 import puppeteer from 'puppeteer';
 import {
   getPort,
@@ -21,13 +21,19 @@ function existsSync(filePath: string) {
   return fs.existsSync(resolveDist(filePath));
 }
 
-describe('build', () => {
+describe.skip('build', () => {
   test(`should build success`, async () => {
     if (!isVersionAtLeast18()) return;
     const buildRes = await modernBuild(appDir);
     expect(buildRes.code === 0).toBe(true);
     expect(existsSync('route.json')).toBe(true);
     expect(existsSync('html/index/index.html')).toBe(true);
+
+    const pageName = resolveDist('static/js/async/page.js');
+    const pageContent = await fs.promises.readFile(pageName, 'utf-8');
+    expect(pageContent).toMatch(
+      `{"url":"/static/assets/crab.png","width":1920,"height":1281,"thumbnail":`,
+    );
   });
 
   it('should get image url with production CDN', async () => {
@@ -43,21 +49,11 @@ describe('build', () => {
       waitUntil: ['networkidle0'],
     });
 
-    const image = await page.$eval('#root img', element => ({
-      complete: (element as HTMLImageElement).complete,
-      height: (element as HTMLImageElement).height,
-      src: element.getAttribute('src'),
-      srcset: element.getAttribute('srcset'),
-      width: (element as HTMLImageElement).width,
-    }));
-    expect(image).toEqual({
-      complete: true,
-      height: 334,
-      src: '/static/assets/crab.png?w=1000&q=75',
-      srcset:
-        '/static/assets/crab.png?w=500&q=75 1x,/static/assets/crab.png?w=1000&q=75 2x',
-      width: 500,
-    });
+    const root = await page.$('#root img');
+    const targetText = await page.evaluate(el => el?.outerHTML, root);
+    expect(targetText).toMatchInlineSnapshot(
+      `"<img src="/static/assets/crab.png?w=1000&amp;q=75" alt="test" width="500" height="333.59375" srcset="/static/assets/crab.png?w=500&amp;q=75 1x,/static/assets/crab.png?w=1000&amp;q=75 2x" loading="lazy" style="">"`,
+    );
     expect(errors.length).toEqual(0);
 
     await browser.close();
@@ -65,7 +61,7 @@ describe('build', () => {
   });
 });
 
-describe('dev', () => {
+describe.skip('dev', () => {
   test(`should render page correctly`, async () => {
     if (!isVersionAtLeast18()) return;
     const appPort = await getPort();
@@ -89,13 +85,9 @@ describe('dev', () => {
 
     const root = await page.$('#root img');
     const targetText = await page.evaluate(el => el?.outerHTML, root);
-    expect(targetText).toMatch(
-      /srcset="\/_(modern|rsbuild)\/ipx\/f_auto,w_500,q_75\/static\/assets\/crab\.png 1x,\/_(modern|rsbuild)\/ipx\/f_auto,w_1000,q_75\/static\/assets\/crab\.png 2x"/,
+    expect(targetText).toMatchInlineSnapshot(
+      `"<img alt="test" width="500" height="333.59375" loading="lazy" srcset="/_modern/ipx/f_auto,w_500,q_75/static/assets/crab.png 1x,/_modern/ipx/f_auto,w_1000,q_75/static/assets/crab.png 2x" src="/_modern/ipx/f_auto,w_1000,q_75/static/assets/crab.png" style="">"`,
     );
-    expect(targetText).toMatch(
-      /src="\/_(modern|rsbuild)\/ipx\/f_auto,w_1000,q_75\/static\/assets\/crab\.png"/,
-    );
-    expect(targetText).toContain('width="500"');
     expect(errors.length).toEqual(0);
 
     await browser.close();

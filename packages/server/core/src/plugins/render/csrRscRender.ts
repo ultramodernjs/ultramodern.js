@@ -26,8 +26,6 @@ export const csrRscRender = async (req: Request, options: SSRRenderOptions) => {
 
   const loadableStats = serverManifest.loadableStats || {};
   const routeManifest = serverManifest.routeManifest || {};
-  const moduleFederationCssAssets =
-    serverManifest.moduleFederationCssAssets || [];
   const config = createRequestHandlerConfig(options.config);
 
   const requestHandlerOptions: RscPayloadHandlerOptions = {
@@ -35,7 +33,6 @@ export const csrRscRender = async (req: Request, options: SSRRenderOptions) => {
       route: routeInfo,
       loadableStats,
       routeManifest,
-      moduleFederationCssAssets,
       entryName: routeInfo.entryName || MAIN_ENTRY_NAME,
     },
     config,

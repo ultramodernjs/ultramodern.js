@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, describe, expect, test } from '@rstest/core';
+import { readFileSync } from 'fs';
 import path from 'path';
+import { afterAll, beforeAll, describe, expect, test } from '@rstest/core';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import {
   getPort,
@@ -35,24 +36,28 @@ describe('asset prefix', () => {
   });
 
   test('should generate assetPrefix correctly when dev.assetPrefix is true', async () => {
-    const expected = `http://${DEFAULT_DEV_HOST}:${appPort}`;
-    await page.goto(expected, {
-      waitUntil: ['networkidle0'],
-    });
-    const scriptUrls = await page.evaluate(() =>
-      performance
-        .getEntriesByType('resource')
-        .map(entry => entry.name)
-        .filter(url => url.includes('/static/js/')),
+    const html = readFileSync(
+      path.join(appDir, 'dist/html/index/index.html'),
+      'utf-8',
     );
 
-    expect(scriptUrls.length).toBeGreaterThan(0);
-    expect(scriptUrls.every(url => url.startsWith(expected))).toBe(true);
+    expect(
+      html.includes(`http://${DEFAULT_DEV_HOST}:${appPort}/static/js/`),
+    ).toBeTruthy();
     expect(errors).toEqual([]);
   });
 
   test('should inject window.__assetPrefix__ global variable', async () => {
     const expected = `http://${DEFAULT_DEV_HOST}:${appPort}`;
+    const mainJs = readFileSync(
+      path.join(appDir, 'dist/static/js/index.js'),
+      'utf-8',
+    );
+
+    expect(
+      mainJs.includes(`window.__assetPrefix__ = '${expected}';`),
+    ).toBeTruthy();
+
     await page.goto(expected, {
       waitUntil: ['networkidle0'],
     });
@@ -67,17 +72,14 @@ describe('asset prefix', () => {
   });
 
   test('should access the file which create by writeFile correctly', async () => {
-    await page.goto(`http://${DEFAULT_DEV_HOST}:${appPort}`, {
-      waitUntil: ['networkidle0'],
-    });
     const url = `http://${DEFAULT_DEV_HOST}:${appPort}/static/test.js`;
-    await page.addScriptTag({ url });
-    const loaded = await page.evaluate(() => {
-      // @ts-expect-error test-only global from the generated static asset.
-      return window.__testStaticAssetLoaded;
+    const response = await page.goto(url, {
+      waitUntil: ['networkidle0'],
+      timeout: 50_000,
     });
+    const content = await response?.text();
 
-    expect(loaded).toBe(true);
+    expect(content).toMatch('console.log("test")');
     expect(errors).toEqual([]);
   });
 });

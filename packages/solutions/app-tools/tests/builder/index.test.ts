@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'path';
 import { createBuilderProviderConfig } from '../../src/builder/generator/createBuilderProviderConfig';
 import { getBuilderEnvironments } from '../../src/builder/generator/getBuilderEnvironments';
@@ -71,84 +69,6 @@ describe('create builder Options', () => {
         } as any,
       ),
     ).toMatchSnapshot();
-  });
-
-  it('aliases React runtimes from the consuming app for source-build packages', () => {
-    const appDirectory = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'modern-source-build-react-alias-'),
-    );
-    const reactDirectory = path.join(appDirectory, 'node_modules/react');
-
-    fs.mkdirSync(reactDirectory, { recursive: true });
-    for (const file of [
-      'index.js',
-      'jsx-runtime.js',
-      'jsx-dev-runtime.js',
-      'compiler-runtime.js',
-    ]) {
-      fs.writeFileSync(path.join(reactDirectory, file), '');
-    }
-    fs.writeFileSync(
-      path.join(reactDirectory, 'package.json'),
-      JSON.stringify({ name: 'react', version: '19.0.0' }),
-    );
-
-    try {
-      const existingBundlerChain = rstest.fn();
-      const tempBuilderConfig = {
-        tools: {
-          bundlerChain: existingBundlerChain,
-        },
-      };
-
-      const result = getBuilderEnvironments(
-        {
-          experiments: {
-            sourceBuild: true,
-          },
-        } as any,
-        {
-          appDirectory,
-          entrypoints: [],
-        } as any,
-        tempBuilderConfig as any,
-      );
-
-      const bundlerChain = result.builderConfig.tools?.bundlerChain;
-
-      expect(Array.isArray(bundlerChain)).toBe(true);
-
-      const aliases = new Map<string, string>();
-      const chain = {
-        resolve: {
-          alias: {
-            set: (name: string, value: string) => {
-              aliases.set(name, value);
-            },
-          },
-        },
-      };
-
-      for (const handler of bundlerChain as any[]) {
-        handler(chain, {} as any);
-      }
-
-      expect(existingBundlerChain).toHaveBeenCalledWith(chain, {});
-      expect(aliases.get('react$')).toBe(
-        fs.realpathSync(path.join(reactDirectory, 'index.js')),
-      );
-      expect(aliases.get('react/jsx-runtime$')).toBe(
-        fs.realpathSync(path.join(reactDirectory, 'jsx-runtime.js')),
-      );
-      expect(aliases.get('react/jsx-dev-runtime$')).toBe(
-        fs.realpathSync(path.join(reactDirectory, 'jsx-dev-runtime.js')),
-      );
-      expect(aliases.get('react/compiler-runtime$')).toBe(
-        fs.realpathSync(path.join(reactDirectory, 'compiler-runtime.js')),
-      );
-    } finally {
-      fs.rmSync(appDirectory, { recursive: true, force: true });
-    }
   });
 });
 

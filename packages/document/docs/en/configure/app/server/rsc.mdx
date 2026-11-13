@@ -7,20 +7,24 @@ title: rsc
 - **Type:** `boolean`
 - **Default:** `false`
 
-Configure React Server Components (RSC).
+Enable React Server Components (RSC) configuration.
 
-:::warning UltraModern availability
-RSC is experimental, default-off, and unsupported for external consumers; it is not shipped in the current UltraModern company distribution. Release-cohort and clean-room release-acceptance tests verify that RSC runtimes are absent and cannot resolve, and the release cohort has no maintained `@bleedingdev/*` RSC runtime package; when enabled, the framework intentionally fails closed unless an application supplies the complete optional toolchain.
-
-The root-only `react-server-dom-rspack@0.0.3` patch backports Flight decoder security fixes for this repository's RSC tests; it is never copied into generated workspaces or published to consumers, so an app installing the upstream package receives unpatched bytes. [SyMind/react#1](https://github.com/SyMind/react/pull/1) merged on 2026-08-11; [BleedingDev/react#1](https://github.com/BleedingDev/react/pull/1) and [rspack#15144](https://github.com/web-infra-dev/rspack/issues/15144) remain open. npm still reports `react-server-dom-rspack` `latest` as `0.0.3`, with no patched consumer release, so the root-only patch remains necessary for this repository's RSC tests. This boundary is pending final owner ratification.
-:::
+When set to `true`, enables React Server Components support in Modern.js. This allows components to be rendered on the server, providing better performance and developer experience.
 
 ```ts title="modern.config.ts"
 export default defineConfig({
   server: {
-    rsc: false,
+    rsc: true,
   },
 });
 ```
 
-The [React Server Components guide](/guides/basic-features/render/rsc) is retained as reference material for future upstream adoption.
+:::tip Prerequisites
+Before enabling RSC, ensure:
+
+1. React and React DOM are upgraded to version 19 (recommended 19.2.4 or above)
+2. Install the `react-server-dom-rspack@0.0.2` dependency
+
+:::
+
+For more information about using RSC, see the [React Server Components guide](/guides/basic-features/render/rsc).

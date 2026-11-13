@@ -36,7 +36,7 @@ import BFFOperatorCode from '@site-docs/components/bff-operator-code';
 <BFFOperatorCode>
 
 ```typescript title="api/lambda/user.ts"
-import { Api, Post, Query, Data } from '@modern-js/plugin-bff/hono-server';
+import { Api, Post, Query, Data } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -89,7 +89,7 @@ As shown in the example below, you can specify the route and HTTP Method through
 <BFFOperatorCode>
 
 ```typescript title="api/lambda/user.ts"
-import { Api, Get, Query, Data } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Query, Data } from '@modern-js/plugin-bff/server';
 
 // Specify the interface route, Modern.js sets `bff.prefix` to `/api` by default,
 // so the interface route is `/api/user`, and the HTTP Method is GET.
@@ -107,7 +107,7 @@ When the route is not specified, the interface route is defined according to the
 <BFFOperatorCode>
 
 ```typescript title="api/lambda/user.ts"
-import { Api, Get, Query, Data } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Query, Data } from '@modern-js/plugin-bff/server';
 
 // No interface route specified, according to file convention and function name, the interface is api/user, HTTP Method is get.
 export const get = Api(Query(UserSchema), async ({ query }) => query);
@@ -144,7 +144,7 @@ Using the `Query` function, you can define the type of query. After using the `Q
 
 ```typescript title="api/lambda/user.ts"
 // Server-side code
-import { Api, Query } from '@modern-js/plugin-bff/hono-server';
+import { Api, Query } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -176,7 +176,7 @@ URL query parameters are strings by default. If you need numeric types, you need
 <BFFOperatorCode>
 
 ```typescript title="api/lambda/user.ts"
-import { Api, Get, Query } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Query } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const QuerySchema = z.object({
@@ -216,7 +216,7 @@ If you use the Data function, you must follow the HTTP protocol. When the HTTP M
 <BFFOperatorCode>
 
 ```typescript title="api/lambda/user.ts"
-import { Api, Data } from '@modern-js/plugin-bff/hono-server';
+import { Api, Data } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const DataSchema = z.object({
@@ -249,7 +249,7 @@ Route parameters can implement dynamic routes and get parameters from the path. 
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Get, Params } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Params } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -274,7 +274,7 @@ You can define the request headers required by the interface through the `Header
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Headers } from '@modern-js/plugin-bff/hono-server';
+import { Api, Headers } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const headerSchema = z.object({
@@ -336,7 +336,7 @@ The `Middleware` operator can be configured multiple times, and the execution or
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Query, Middleware } from '@modern-js/plugin-bff/hono-server';
+import { Api, Query, Middleware } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -376,7 +376,7 @@ The `Pipe` operator can be configured multiple times. The execution order of fun
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Query, Pipe } from '@modern-js/plugin-bff/hono-server';
+import { Api, Query, Pipe } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -408,7 +408,7 @@ Also,
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Query, Pipe } from '@modern-js/plugin-bff/hono-server';
+import { Api, Query, Pipe } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -443,7 +443,7 @@ If you need to do more custom operations on the response, you can pass a functio
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Query, Pipe } from '@modern-js/plugin-bff/hono-server';
+import { Api, Query, Pipe } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -487,7 +487,7 @@ You can specify the status code returned by the interface through the `HttpCode(
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Query, Data, HttpCode } from '@modern-js/plugin-bff/hono-server';
+import { Api, Query, Data, HttpCode } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -523,7 +523,7 @@ Supports setting response headers through the `SetHeaders(headers: Record<string
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Get, SetHeaders } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, SetHeaders } from '@modern-js/plugin-bff/server';
 
 export default Api(
   Get('/hello'),
@@ -543,7 +543,7 @@ Supports redirecting the interface through `Redirect(url: string)`:
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Get, Redirect } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Redirect } from '@modern-js/plugin-bff/server';
 
 export default Api(
   Get('/hello'),
@@ -556,12 +556,12 @@ export default Api(
 
 ## Request Context
 
-As mentioned above, through operators, you can get `query`, `data`, `params`, etc. in the input parameters of the interface processing function. But sometimes we need to get more request context information. At this time, we can get it through [`useHonoContext`](/apis/app/runtime/bff/use-backend-context):
+As mentioned above, through operators, you can get `query`, `data`, `params`, etc. in the input parameters of the interface processing function. But sometimes we need to get more request context information. At this time, we can get it through [`useHonoContext`](/apis/app/runtime/bff/use-hono-context):
 
 <BFFOperatorCode>
 
 ```typescript title="api/lambda/user.ts"
-import { Api, Get, Query } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Query } from '@modern-js/plugin-bff/server';
 import { useHonoContext } from '@modern-js/server-runtime';
 import { z } from 'zod';
 
@@ -610,7 +610,7 @@ In frontend development, some server interfaces (such as some configuration inte
 <BFFOperatorCode>
 
 ```typescript
-import { Api, SetHeaders } from '@modern-js/plugin-bff/hono-server';
+import { Api, SetHeaders } from '@modern-js/plugin-bff/server';
 
 export const get = Api(
   // Cache will only take effect when using integrated calls or fetch for requests

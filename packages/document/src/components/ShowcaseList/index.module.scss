@@ -63,7 +63,7 @@
   -webkit-text-fill-color: transparent;
 }
 
-[class~='dark'] .type {
+:global(.dark) .type {
   background: -webkit-linear-gradient(
     305deg,
     hsl(166deg, 77%, 53%) 10%,

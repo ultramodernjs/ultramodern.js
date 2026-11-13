@@ -1,6 +1,6 @@
-import { execa, semver } from '@modern-js/utils';
 import fs from 'fs';
 import path from 'path';
+import { execa, semver } from '@modern-js/utils';
 import type { CommitObj } from './types';
 import {
   APP_TOOLS_PACKAGE_NAME,

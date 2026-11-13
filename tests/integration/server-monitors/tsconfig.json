@@ -5,7 +5,6 @@
     "types": ["node", "@rstest/core/globals"],
     "jsx": "preserve",
     "baseUrl": "./",
-    "rootDir": "../..",
     "paths": {
       "@/*": ["./src/*"]
     },

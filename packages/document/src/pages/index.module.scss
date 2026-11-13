@@ -56,7 +56,7 @@
   }
 }
 
-[class~='dark'] .announcement {
+:global(.dark) .announcement {
   background: linear-gradient(
     150.85deg,
     rgba(124, 178, 250, 0.18) 3%,
@@ -93,7 +93,7 @@
   color: rgba(0, 0, 0, 0.75);
 }
 
-[class~='dark'] .announcementText {
+:global(.dark) .announcementText {
   color: rgba(255, 255, 255, 0.85);
 }
 
@@ -107,7 +107,7 @@
   }
 }
 
-[class~='dark'] .announcementArrow {
+:global(.dark) .announcementArrow {
   color: rgba(255, 255, 255, 0.5);
 }
 
@@ -125,7 +125,7 @@
 .mask {
   position: absolute;
   background-image: conic-gradient(
-    from 180deg at 50% 50%,
+    from 180deg at 50%50%,
     var(--edenx-primary-color) 0deg,
     180deg,
     hsl(198deg, 100%, 50%) 0deg
@@ -144,7 +144,7 @@
   pointer-events: none;
 }
 
-[class~='dark'] .mask {
+:global(.dark) .mask {
   opacity: 0.15;
 }
 
@@ -170,10 +170,8 @@
 
 .leftButton,
 .rightButton {
-  min-width: 184px;
-  padding: 0 24px;
+  width: 142px;
   font-weight: bold;
-  white-space: nowrap;
 
   &:hover {
     opacity: 0.7;
@@ -346,6 +344,6 @@
   }
 }
 
-[class~='rspress-logo'] {
+:global(.rspress-logo) {
   width: auto !important;
 }

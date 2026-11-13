@@ -1,7 +1,7 @@
 [
   {
-    "text": "UltraModern 指南",
-    "link": "/guides/get-started/ultramodern",
+    "text": "指南",
+    "link": "/guides/get-started/introduction",
     "activeMatch": "/guides/"
   },
   {
@@ -30,7 +30,7 @@
     "activeMatch": "/community/"
   },
   {
-    "text": "上游 Modern.js 2.x 文档",
+    "text": "Modern.js 2.x 文档",
     "link": "https://modernjs.dev/v2/zh/"
   }
 ]

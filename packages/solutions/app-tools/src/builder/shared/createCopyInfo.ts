@@ -1,5 +1,5 @@
-import { resolvePublicDirPaths } from '@modern-js/server-core';
 import path from 'path';
+import { resolvePublicDirPaths } from '@modern-js/server-core';
 import type { AppNormalizedConfig } from '../../types';
 import type { AppToolsContext } from '../../types/plugin';
 

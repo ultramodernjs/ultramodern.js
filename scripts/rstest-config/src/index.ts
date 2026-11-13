@@ -1,7 +1,7 @@
 import {
+  type RstestConfig,
   defineConfig,
   mergeRstestConfig,
-  type RstestConfig,
 } from '@rstest/core';
 export const testPreset = defineConfig({
   coverage: {

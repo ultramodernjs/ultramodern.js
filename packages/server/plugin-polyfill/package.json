@@ -15,7 +15,7 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.0",
+  "version": "3.11.3",
   "types": "./src/cli.ts",
   "main": "./dist/cjs/cli.js",
   "exports": {
@@ -59,27 +59,27 @@
   },
   "scripts": {
     "prepublishOnly": "only-allow-pnpm",
-    "build": "rslib build",
-    "dev": "rslib build --watch",
+    "build": "rs lib",
+    "dev": "rs lib --watch",
     "test": "rstest --passWithNoTests"
   },
   "dependencies": {
     "@modern-js/polyfill-lib": "^1.0.2",
     "@modern-js/utils": "workspace:*",
-    "@swc/helpers": "^0.5.23",
-    "lru-cache": "^11.5.2",
-    "ua-parser-js": "^2.0.10"
+    "@swc/helpers": "^0.5.17",
+    "lru-cache": "^6.0.0",
+    "ua-parser-js": "^0.7.41"
   },
   "devDependencies": {
     "@modern-js/app-tools": "workspace:*",
     "@modern-js/rslib": "workspace:*",
     "@modern-js/server-core": "workspace:*",
     "@modern-js/types": "workspace:*",
-    "@rslib/core": "1.0.0",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.4.1",
+    "@types/lru-cache": "^5.1.1",
+    "@types/node": "^20",
     "@types/ua-parser-js": "^0.7.39",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2"
+    "typescript": "^5"
   },
   "sideEffects": false,
   "publishConfig": {

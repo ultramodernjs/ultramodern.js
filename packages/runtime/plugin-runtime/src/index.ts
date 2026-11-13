@@ -1,15 +1,15 @@
-import type { RouterConfig } from './router/runtime/types';
+import type { RouterConfig } from './router/internal';
 
-export type { RuntimeConfig, RuntimePlugin } from './common';
+export type { RuntimePlugin } from './core';
+export type { RuntimeConfig } from './common';
 export { isBrowser } from './common';
-export { defineRuntimeConfig } from './core/config';
+
+export type { TRuntimeContext } from './core/context/runtime';
+
 export { getMonitors } from './core/context/monitors';
-export type { TRuntimeContext } from './core/context/public';
-export {
-  RuntimeContext,
-  useRuntimeContext,
-} from './core/context/public';
 export { getRequest } from './core/context/request';
-export { redirect, setHeaders, setStatus } from './core/context/response';
+export { setHeaders, setStatus, redirect } from './core/context/response';
+
+export { RuntimeContext, defineRuntimeConfig, useRuntimeContext } from './core';
 
 export type { RouterConfig };

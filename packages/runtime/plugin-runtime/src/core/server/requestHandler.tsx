@@ -1,4 +1,3 @@
-// @effect-diagnostics asyncFunction:off strictBooleanExpressions:off
 import type {
   RequestHandler,
   RequestHandlerOptions,
@@ -11,29 +10,20 @@ import {
   parseHeaders,
   parseQuery,
 } from '@modern-js/runtime-utils/universal/request';
-import React, { Fragment } from 'react';
+import React from 'react';
+import { Fragment } from 'react';
+import { handleRSCRedirect } from '../../router/runtime/rsc-router';
 import {
+  type TInternalRuntimeContext,
   getGlobalInternalRuntimeContext,
   getGlobalRSCRoot,
-  type TInternalRuntimeContext,
 } from '../context';
 import { getInitialContext } from '../context/runtime';
 import { getServerPayload } from '../context/serverPayload';
 import { createRoot } from '../react';
 import type { SSRServerContext } from '../types';
 import { CHUNK_CSS_PLACEHOLDER } from './constants';
-import {
-  applyRouterSnapshotResult,
-  createLoaderRedirectResponse,
-  finalizeRenderResponse,
-  type RedirectContext,
-  type ResponseProxy,
-} from './requestResponse';
-import {
-  createRouterCleanup,
-  finishWithRouterCleanup,
-  runWithRouterCleanupOnError,
-} from './routerCleanup';
+import { SSRErrors } from './tracer';
 import { getSSRConfigByEntry, getSSRMode } from './utils';
 
 async function handleRSCRequest(
@@ -91,22 +81,37 @@ export type CreateRequestHandler = (
   },
 ) => Promise<RequestHandler>;
 
-const renderRequest = async (
-  request: Request,
-  Root: React.ComponentType,
-  context: TInternalRuntimeContext,
-  options: RequestHandlerOptions,
-  handleRequest: HandleRequest,
-  enableRsc: boolean,
-): Promise<Response> => {
-  if (enableRsc) {
-    return handleRSCRequest(request, Root, context, options, handleRequest);
-  }
+type ResponseProxy = {
+  headers: Record<string, string>;
+  status: number;
+};
 
-  return handleRequest(request, Root, {
-    ...options,
-    runtimeContext: context,
-  });
+type RedirectContext = {
+  enableRsc: boolean;
+  isRSCNavigation: boolean;
+  basename: string;
+};
+
+/**
+ * Check if status code is a redirect (3xx)
+ */
+const isRedirectStatus = (status: number): boolean =>
+  status >= 300 && status <= 399;
+
+/**
+ * Process redirect response based on context
+ * - For RSC navigation: convert to X-Modernjs-Redirect format
+ * - For SSR/CSR: return standard HTTP redirect
+ */
+const processRedirect = (
+  headers: Headers,
+  status: number,
+  ctx: RedirectContext,
+): Response => {
+  if (ctx.enableRsc && ctx.isRSCNavigation) {
+    return handleRSCRedirect(headers, ctx.basename, status);
+  }
+  return new Response(null, { status, headers });
 };
 
 function createSSRContext(
@@ -174,15 +179,7 @@ function createSSRContext(
   }
 
   const loaderFailureMode =
-    typeof ssrConfig === 'object' &&
-    ssrConfig &&
-    'loaderFailureMode' in ssrConfig
-      ? (
-          ssrConfig as {
-            loaderFailureMode?: 'clientRender' | 'errorBoundary';
-          }
-        ).loaderFailureMode
-      : undefined;
+    typeof ssrConfig === 'object' ? ssrConfig.loaderFailureMode : undefined;
 
   return {
     nonce,
@@ -231,6 +228,7 @@ export const createRequestHandler: CreateRequestHandler = async (
       status: -1,
     };
     const activeDeferreds = new Map<string, DeferredData>();
+    const deferredScriptKeys = new Map<string, string[]>();
     return storage.run(
       {
         headers: headersData,
@@ -238,6 +236,7 @@ export const createRequestHandler: CreateRequestHandler = async (
         monitors: options.monitors,
         responseProxy,
         activeDeferreds,
+        deferredScriptKeys,
         serverPayload: undefined,
       },
       async () => {
@@ -280,56 +279,96 @@ export const createRequestHandler: CreateRequestHandler = async (
           basename: ssrContext.baseUrl || '/',
         };
 
-        const routerCleanup = createRouterCleanup(context, options.onError);
-        const beforeRenderResult = await runWithRouterCleanupOnError(
-          routerCleanup,
-          () => runBeforeRender(context),
-        );
+        const beforeRenderResult = await runBeforeRender(context);
 
-        await runWithRouterCleanupOnError(routerCleanup, () => {
-          applyRouterSnapshotResult(context, options.onError);
-        });
-
-        if (typeof Response !== 'undefined') {
-          const redirectResponse = await runWithRouterCleanupOnError(
-            routerCleanup,
-            () => createLoaderRedirectResponse(beforeRenderResult, redirectCtx),
+        // Support data loader to return `new Response` and set status code
+        if (
+          context.routerContext?.statusCode &&
+          context.routerContext?.statusCode !== 200
+        ) {
+          context.ssrContext?.response.status(
+            context.routerContext?.statusCode,
           );
-          if (redirectResponse) {
-            await routerCleanup.run();
-            return redirectResponse;
-          }
         }
 
-        await runWithRouterCleanupOnError(routerCleanup, () => {
-          if (!createRequestOptions?.enableRsc) {
-            const { htmlTemplate } = options.resource;
-            options.resource.htmlTemplate = htmlTemplate.replace(
-              '</head>',
-              `${CHUNK_CSS_PLACEHOLDER}</head>`,
-            );
-          }
-        });
+        // log error by monitors when data loader throw error
+        const errors = Object.values(
+          (context.routerContext?.errors || {}) as Record<string, Error>,
+        );
+        if (errors.length > 0) {
+          options.onError(errors[0], SSRErrors.LOADER_ERROR);
+        }
 
-        const response = await runWithRouterCleanupOnError(routerCleanup, () =>
-          renderRequest(
+        // Handle redirect from loader (beforeRenderResult)
+        if (
+          typeof Response !== 'undefined' &&
+          beforeRenderResult instanceof Response &&
+          isRedirectStatus(beforeRenderResult.status)
+        ) {
+          // Already in RSC format (from plugin.node.tsx), return directly
+          if (beforeRenderResult.headers.has('X-Modernjs-Redirect')) {
+            return beforeRenderResult;
+          }
+          // Convert to appropriate format
+          const redirectUrl = beforeRenderResult.headers.get('Location') || '/';
+          return processRedirect(
+            new Headers({ Location: redirectUrl }),
+            beforeRenderResult.status,
+            redirectCtx,
+          );
+        }
+
+        if (!createRequestOptions?.enableRsc) {
+          const { htmlTemplate } = options.resource;
+          options.resource.htmlTemplate = htmlTemplate.replace(
+            '</head>',
+            `${CHUNK_CSS_PLACEHOLDER}</head>`,
+          );
+        }
+
+        let response: Response;
+
+        if (createRequestOptions?.enableRsc) {
+          response = await handleRSCRequest(
             request,
             Root,
             context,
             options,
             handleRequest,
-            !!createRequestOptions?.enableRsc,
-          ),
-        );
+          );
+        } else {
+          response = await handleRequest(request, Root, {
+            ...options,
+            runtimeContext: context,
+          });
+        }
 
-        return finishWithRouterCleanup(routerCleanup, () =>
-          finalizeRenderResponse(
-            response,
-            responseProxy,
+        // Handle redirect from component render (via responseProxy)
+        if (
+          responseProxy.status !== -1 &&
+          isRedirectStatus(responseProxy.status) &&
+          responseProxy.headers.Location
+        ) {
+          return processRedirect(
+            new Headers(responseProxy.headers),
+            responseProxy.status,
             redirectCtx,
-            routerCleanup,
-          ),
-        );
+          );
+        }
+
+        // Apply non-redirect responseProxy headers/status to response
+        Object.entries(responseProxy.headers).forEach(([key, value]) => {
+          response.headers.set(key, value);
+        });
+
+        if (responseProxy.status !== -1) {
+          return new Response(response.body, {
+            status: responseProxy.status,
+            headers: response.headers,
+          });
+        }
+
+        return response;
       },
     );
   };

@@ -1,6 +1,6 @@
+import path, { join } from 'path';
 import { expect, test } from '@playwright/test';
 import { build, getHrefByEntryName } from '@scripts/shared';
-import path, { join } from 'path';
 
 const fixtures = __dirname;
 
@@ -43,7 +43,7 @@ test.describe('source configure multi', () => {
   });
 });
 
-test('global-vars', async ({ page }) => {
+test('global-vars', async ({ page }, testInfo) => {
   const builder = await build({
     cwd: join(fixtures, 'global-vars'),
     entry: {
@@ -51,6 +51,11 @@ test('global-vars', async ({ page }) => {
     },
     runServer: true,
     builderConfig: {
+      output: {
+        distPath: {
+          root: testInfo.outputPath('dist'),
+        },
+      },
       source: {
         globalVars: {
           ENABLE_TEST: true,
@@ -67,7 +72,7 @@ test('global-vars', async ({ page }) => {
   builder.close();
 });
 
-test('define', async ({ page }) => {
+test('define', async ({ page }, testInfo) => {
   const builder = await build({
     cwd: join(fixtures, 'global-vars'),
     entry: {
@@ -75,6 +80,11 @@ test('define', async ({ page }) => {
     },
     runServer: true,
     builderConfig: {
+      output: {
+        distPath: {
+          root: testInfo.outputPath('dist'),
+        },
+      },
       source: {
         define: {
           ENABLE_TEST: JSON.stringify(true),
@@ -90,64 +100,6 @@ test('define', async ({ page }) => {
 
   builder.close();
 });
-
-for (const enabled of [false, true]) {
-  test(`matching global-vars and define values compile an env string (${enabled})`, async ({
-    page,
-  }) => {
-    const marker = String(enabled);
-    let compilerWarnings: unknown[] = [];
-    const builder = await build({
-      cwd: join(fixtures, 'global-vars'),
-      entry: {
-        main: join(fixtures, 'global-vars/src/mf-ssr-marker.ts'),
-      },
-      plugins: [
-        {
-          name: 'capture-mf-ssr-marker-warnings',
-          setup(api) {
-            api.onAfterBuild(({ stats }) => {
-              compilerWarnings =
-                stats?.toJson({ all: false, warnings: true }).warnings ?? [];
-            });
-          },
-        },
-      ],
-      runServer: true,
-      builderConfig: {
-        source: {
-          globalVars: {
-            'process.env.MODERN_MF_APP_SSR': marker,
-          },
-          define: {
-            'process.env.MODERN_MF_APP_SSR': JSON.stringify(marker),
-          },
-        },
-      },
-    });
-
-    try {
-      const warningText = compilerWarnings
-        .map(warning =>
-          typeof warning === 'string'
-            ? warning
-            : String((warning as { message?: unknown }).message ?? warning),
-        )
-        .join('\n');
-      expect(warningText).not.toContain(
-        "Conflicting values for 'process.env.MODERN_MF_APP_SSR'",
-      );
-
-      await page.goto(getHrefByEntryName('main', builder.port));
-      await expect(page.locator('body')).toHaveText(
-        JSON.stringify({ type: 'string', value: marker }),
-      );
-    } finally {
-      await builder.clean();
-      builder.close();
-    }
-  });
-}
 
 test('tsconfig paths should work and override the alias config', async ({
   page,

@@ -4,9 +4,6 @@ import bff from '@modern-js/plugin-bff';
 // https://modernjs.dev/docs/apis/app/config
 export default defineConfig({
   plugins: [AppToolsPlugin(), bff()],
-  bff: {
-    runtimeFramework: 'hono',
-  },
   performance: {
     buildCache: false,
   },

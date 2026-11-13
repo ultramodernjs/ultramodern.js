@@ -1,1 +1,0 @@
-export { resolveAdapterCrossProjectPolicy } from './node';

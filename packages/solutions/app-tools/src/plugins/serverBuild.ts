@@ -1,12 +1,12 @@
-import { compile } from '@modern-js/server-utils';
-import {
-  getMeta,
-  resolveServerTsconfig,
-  SERVER_DIR,
-  SHARED_DIR,
-} from '@modern-js/utils';
 import fs from 'fs';
 import path from 'path';
+import { compile } from '@modern-js/server-utils';
+import {
+  SERVER_DIR,
+  SHARED_DIR,
+  getMeta,
+  resolveServerTsconfig,
+} from '@modern-js/utils';
 import type { AppTools, CliPlugin } from '../types';
 
 function checkHasCache(appDir: string) {

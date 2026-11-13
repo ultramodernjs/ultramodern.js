@@ -107,9 +107,6 @@ exports[`create builder Options > test create builder environments config 3`] = 
           ],
         },
       },
-      "tools": {
-        "htmlPlugin": false,
-      },
     },
   },
 }

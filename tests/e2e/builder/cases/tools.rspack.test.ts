@@ -1,11 +1,10 @@
-import { expect, test } from '@playwright/test';
 import { join } from 'path';
+import { expect, test } from '@playwright/test';
 import { build, getHrefByEntryName } from '../scripts/shared';
 
 const fixtures = __dirname;
 
-test('tools.rspack', async ({ page }) => {
-  const uniqueDistRoot = `dist-tools-rspack-${process.pid}-${Date.now()}`;
+test('tools.rspack', async ({ page }, testInfo) => {
   const builder = await build({
     cwd: join(fixtures, 'source/global-vars'),
     entry: {
@@ -15,7 +14,7 @@ test('tools.rspack', async ({ page }) => {
     builderConfig: {
       output: {
         distPath: {
-          root: uniqueDistRoot,
+          root: testInfo.outputPath('dist'),
         },
       },
       source: {

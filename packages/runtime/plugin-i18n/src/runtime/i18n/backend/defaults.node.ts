@@ -1,44 +1,8 @@
-import fs from 'node:fs';
-import nodePath from 'node:path';
-
-/**
- * Conventional locales roots, in the same priority order as the CLI plugin's
- * `detectLocalesDirectory` auto-detection (project-root `./locales` first —
- * the upstream convention — then the scaffold's `./config/public/locales`).
- * The fs-backend default must read from the same directory whose existence
- * enabled the backend in the first place.
- */
-const CONVENTIONAL_LOCALES_DIRS = [
-  './locales',
-  './config/public/locales',
-] as const;
-
-const isDirectory = (dirPath: string): boolean => {
-  try {
-    return fs.statSync(dirPath).isDirectory();
-  } catch {
-    return false;
-  }
-};
-
-export const resolveDefaultLocalesDir = (
-  cwd: string = process.cwd(),
-): string => {
-  for (const dir of CONVENTIONAL_LOCALES_DIRS) {
-    if (isDirectory(nodePath.resolve(cwd, dir))) {
-      return dir;
-    }
-  }
-  return CONVENTIONAL_LOCALES_DIRS[0];
-};
+import fs from 'fs';
 
 export const DEFAULT_I18NEXT_BACKEND_OPTIONS = {
-  get loadPath(): string {
-    return `${resolveDefaultLocalesDir()}/{{lng}}/{{ns}}.json`;
-  },
-  get addPath(): string {
-    return `${resolveDefaultLocalesDir()}/{{lng}}/{{ns}}.json`;
-  },
+  loadPath: './locales/{{lng}}/{{ns}}.json',
+  addPath: './locales/{{lng}}/{{ns}}.json',
 };
 
 function convertPath(path: string | undefined): string | undefined {

@@ -15,7 +15,7 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.0",
+  "version": "3.11.3",
   "modern:source": "./src/node.ts",
   "types": "./src/browser.ts",
   "main": "./dist/cjs/node.js",
@@ -27,29 +27,18 @@
     ".": {
       "types": "./dist/types/browser.d.ts",
       "modern:source": "./src/browser.ts",
-      "node": {
-        "import": "./dist/esm-node/node.mjs",
-        "require": "./dist/cjs/node.js"
-      },
-      "import": "./dist/esm/browser.mjs",
-      "require": "./dist/cjs/browser.js",
+      "node": "./dist/esm/node.mjs",
       "default": "./dist/esm/browser.mjs"
     },
     "./client": {
       "types": "./dist/types/browser.d.ts",
       "modern:source": "./src/browser.ts",
-      "import": "./dist/esm/browser.mjs",
-      "require": "./dist/cjs/browser.js",
       "default": "./dist/esm/browser.mjs"
     },
     "./server": {
       "types": "./dist/types/node.d.ts",
       "modern:source": "./src/node.ts",
-      "node": {
-        "import": "./dist/esm-node/node.mjs",
-        "require": "./dist/cjs/node.js"
-      },
-      "default": "./dist/cjs/node.js"
+      "default": "./dist/esm/node.mjs"
     }
   },
   "typesVersions": {
@@ -67,28 +56,26 @@
   },
   "scripts": {
     "prepublishOnly": "only-allow-pnpm",
-    "dev": "rslib build --watch",
-    "build": "rslib build",
+    "dev": "rs lib --watch",
+    "build": "rs lib",
     "test": "rstest --passWithNoTests"
   },
   "dependencies": {
     "@modern-js/runtime-utils": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@swc/helpers": "^0.5.23",
-    "encoding": "^0.1.13",
-    "path-to-regexp": "^8.4.2",
-    "qs": "^6.16.0"
+    "@swc/helpers": "^0.5.17",
+    "encoding": "^0.1.14",
+    "path-to-regexp": "^6.3.0",
+    "qs": "^6.16.1"
   },
   "devDependencies": {
     "@modern-js/rslib": "workspace:*",
     "@modern-js/types": "workspace:*",
-    "@rslib/core": "1.0.0",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.4.1",
+    "@types/node": "^20",
     "@types/qs": "^6.15.1",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "nock": "^14.0.17",
-    "typescript": "^7.0.2"
+    "typescript": "^5"
   },
   "sideEffects": false,
   "publishConfig": {

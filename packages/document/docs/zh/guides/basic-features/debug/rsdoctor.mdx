@@ -1,45 +1,43 @@
+import { PackageManagerTabs } from '@theme';
+
 # 使用 Rsdoctor
 
 Rsdoctor 是一个 Rspack 构建分析工具。在 Modern.js 中，我们推荐使用 Rsdoctor 来对构建过程与构建产物进行诊断和分析。
 
-Modern.js 不会默认启用 Rsdoctor。当你需要在构建中运行 Rsdoctor 时，请配置 `performance.rsdoctor`。
+## 安装依赖
+
+<PackageManagerTabs command="add @rsdoctor/rspack-plugin -D" />
+
+## 注册插件
+
+在 `modern.config.ts` 中，你可以通过 `tools.bundlerChain` 来注册 Rspack 插件，参考：
+
+```ts title="modern.config.ts"
+import { RsdoctorRspackPlugin } from '@rsdoctor/rspack-plugin';
+
+export default {
+  // ...
+  tools: {
+    bundlerChain(chain) {
+      // 仅在 RSDOCTOR 为 true 时注册插件，因为插件会增加构建耗时
+      if (process.env.RSDOCTOR) {
+        chain.plugin('rsdoctor').use(RsdoctorRspackPlugin, [
+          {
+            // 插件选项
+          },
+        ]);
+      }
+    },
+  },
+};
+```
 
 ## 执行构建
 
-```ts title="modern.config.ts"
-export default defineConfig({
-  performance: {
-    rsdoctor: true,
-  },
-});
-```
+你可以在项目内执行 build 命令，在完成构建后，Rsdoctor 会自动打开本次构建的分析页面。
 
 ```bash
-npm run build
-```
-
-## 关闭 Rsdoctor
-
-如果你希望在共享配置中关闭已经启用的 Rsdoctor：
-
-```ts title="modern.config.ts"
-export default defineConfig({
-  performance: {
-    rsdoctor: false,
-  },
-});
-```
-
-你也可以使用对象形式：
-
-```ts title="modern.config.ts"
-export default defineConfig({
-  performance: {
-    rsdoctor: {
-      enabled: true,
-    },
-  },
-});
+RSDOCTOR=true npm run build
 ```
 
 ## 相关文档

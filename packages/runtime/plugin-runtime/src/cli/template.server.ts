@@ -1,4 +1,3 @@
-// @effect-diagnostics strictBooleanExpressions:off unnecessaryArrowBlock:off
 import { formatImportPath } from '@modern-js/utils';
 
 const SERVER_ENTRY = `
@@ -27,7 +26,7 @@ import {
   createRequestHandler,
 } from '@#metaName/runtime/ssr/server';
 import { RSCServerSlot } from '@#metaName/runtime/rsc/client';
-import { renderCSRWithRSC, renderRsc } from '@#metaName/runtime/rsc/server';
+import { renderRsc } from '@#metaName/runtime/rsc/server';
 export { handleAction } from '@#metaName/runtime/rsc/server';
 
 const handleRequest = async (request, ServerRoot, options) => {
@@ -38,7 +37,6 @@ const handleRequest = async (request, ServerRoot, options) => {
     </ServerRoot>,
     {
       ...options,
-      rscManifest: __rspack_rsc_manifest__,
       rscRoot: options.rscRoot,
     },
   );
@@ -51,17 +49,6 @@ const handleRequest = async (request, ServerRoot, options) => {
 };
 
 export const requestHandler = createRequestHandler(handleRequest, {
-  enableRsc: true
-});
-
-const handleCSRRender = async (request, ServerRoot, options) => {
-  return renderCSRWithRSC({
-    html: options.html,
-    rscRoot: options.rscRoot,
-  });
-}
-
-export const renderRscStreamHandler = createRequestHandler(handleCSRRender, {
   enableRsc: true
 });
 

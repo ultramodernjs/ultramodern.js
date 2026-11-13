@@ -3,12 +3,11 @@
   "name": "integration-copy-assets",
   "version": "2.66.0",
   "dependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@modern-js/app-tools": "workspace:*",
-    "@types/jest": "^30.0.0",
-    "@types/node": "^26.4.1"
+    "@types/node": "^20"
   }
 }

@@ -1,10 +1,10 @@
-import { expect } from '@rstest/core';
 import { Console } from 'console';
 import { readFileSync } from 'fs';
 import Module, { register } from 'module';
 import path from 'path';
-import { createSnapshotSerializer } from 'path-serializer';
 import { pathToFileURL } from 'url';
+import { expect } from '@rstest/core';
+import { createSnapshotSerializer } from 'path-serializer';
 
 global.console.Console = Console;
 
@@ -48,13 +48,6 @@ process.env.FORCE_COLOR = '0';
 expect.addSnapshotSerializer(
   createSnapshotSerializer({
     workspace: path.join(__dirname, '..', '..'),
-    afterSerialize: serialized =>
-      serialized
-        .replace(
-          /(?<=\.modern-js\/tsgo\/tsconfig\.)[a-f0-9]{10}(?=\.json)/gu,
-          '<hash>',
-        )
-        .replaceAll('<PNPM_INNER>', '<WORKSPACE>/node_modules/<PNPM_INNER>'),
     replace: [
       {
         mark: 'fragment',

@@ -1,13 +1,11 @@
-// @effect-diagnostics asyncFunction:off processEnv:off strictBooleanExpressions:off unnecessaryArrowBlock:off
 import { type Chunk, ChunkExtractor } from '@loadable/server';
 import type { ReactElement } from 'react';
-import type { TInternalRuntimeContext } from '../../context';
-import { createFederatedCssLinks } from '../federatedCss';
 import {
-  getMatchedRouteChunks,
-  orderHydrationScriptChunks,
-} from '../scriptOrder';
-import { attributesToString, checkIsNode, hasStylesheetLink } from '../utils';
+  attributesToString,
+  checkIsNode,
+  hasStylesheetLink,
+  readAssetWithCache,
+} from '../utils';
 import type { ChunkSet, Collector } from './types';
 
 declare module '@loadable/server' {
@@ -30,16 +28,6 @@ const generateChunks = (chunks: Chunk[], ext: string) =>
     .filter(chunk => Boolean(chunk.url))
     .filter(chunk => extname(chunk.url).slice(1) === ext);
 
-const routeAssetToChunk = (asset: string): Chunk => ({
-  chunk: asset,
-  filename: asset.replace(/^\//, ''),
-  linkType: 'preload',
-  path: asset,
-  scriptType: asset.endsWith('.css') ? 'style' : 'script',
-  type: 'routeAsset',
-  url: asset,
-});
-
 const checkIsInline = (
   chunk: Chunk,
   enableInline: boolean | RegExp | undefined,
@@ -58,24 +46,21 @@ const checkIsInline = (
 
 const readAsset = async (chunk: Chunk) => {
   // working node env
-  const fs = await import('fs/promises');
   const path = await import('path');
 
   // only working in 'production' env
   // we need ensure the assetsDir is same as ssr bundles.
   const filepath = path.resolve(__dirname, chunk.filename);
 
-  return fs.readFile(filepath, 'utf-8');
+  return readAssetWithCache(filepath);
 };
 
 export interface LoadableCollectorOptions {
   nonce?: string;
   stats?: Record<string, any>;
   routeManifest?: Record<string, any>;
-  runtimeContext: TInternalRuntimeContext;
   template: string;
   entryName: string;
-  moduleFederationCssAssets?: string[];
   chunkSet: ChunkSet;
   config: LoadableCollectorConfig;
 }
@@ -118,10 +103,13 @@ export class LoadableCollector implements Collector {
   }
 
   async effect() {
+    if (!this.extractor) {
+      return;
+    }
     const { extractor, options } = this;
     const { entryName, config } = options;
-    const asyncChunks: Chunk[] = [];
-    if (extractor && config.enableAsyncEntry) {
+    const asyncChunks = [];
+    if (config.enableAsyncEntry) {
       try {
         asyncChunks.push(...extractor.getChunkAssets([`async-${entryName}`]));
       } catch (e) {
@@ -129,31 +117,14 @@ export class LoadableCollector implements Collector {
       }
     }
 
-    const collectedChunks = extractor
-      ? extractor.getChunkAssets(extractor.chunks)
-      : [];
-    const matchedRouteChunks = getMatchedRouteChunks(
-      options.runtimeContext,
-      options.routeManifest,
-      routeAssetToChunk,
-    );
-    const orderedScriptChunks = orderHydrationScriptChunks({
-      asyncEntryChunks: asyncChunks,
-      collectedChunks,
-      matchedRouteChunks,
-      entryName,
-    });
     const chunks = ([] as Chunk[])
       .concat(asyncChunks)
-      .concat(collectedChunks)
-      .concat(matchedRouteChunks);
-    const scriptChunks = generateChunks(orderedScriptChunks, 'js');
+      .concat(extractor.getChunkAssets(extractor.chunks));
+    const scriptChunks = generateChunks(chunks, 'js');
     const styleChunks = generateChunks(chunks, 'css');
 
-    if (extractor) {
-      this.emitLoadableScripts(extractor);
-      await this.emitScriptAssets(scriptChunks);
-    }
+    this.emitLoadableScripts(extractor);
+    await this.emitScriptAssets(scriptChunks);
     await this.emitStyleAssets(styleChunks);
   }
 
@@ -236,48 +207,42 @@ export class LoadableCollector implements Collector {
   }
 
   private async emitStyleAssets(chunks: Chunk[]) {
-    const { template, chunkSet, config, moduleFederationCssAssets } =
-      this.options;
+    const { template, chunkSet, config, entryName } = this.options;
 
     const { inlineStyles } = config;
 
     const atrributes = attributesToString(this.generateAttributes());
 
-    const emittedAssetUrls = new Set<string>();
-    const emittedChunks = chunks.filter(chunk => {
-      const shouldEmit =
-        !hasStylesheetLink(template, chunk.url) &&
-        !this.existsAssets?.includes(chunk.path) &&
-        !emittedAssetUrls.has(chunk.url);
-      if (shouldEmit) emittedAssetUrls.add(chunk.url);
-      return shouldEmit;
-    });
-
     const css = await Promise.all(
-      emittedChunks.map(async chunk => {
-        const link = `<link${atrributes} href="${chunk.url}" rel="stylesheet" />`;
+      chunks
+        .filter(chunk => {
+          // Only an existing `<link rel="stylesheet">` should dedupe the route
+          // stylesheet we are about to inject. A `<link rel="prefetch">` for the
+          // same css URL (e.g. from `performance.prefetch`) must not block it.
+          return (
+            !hasStylesheetLink(template, chunk.url) &&
+            !this.existsAssets?.includes(chunk.path)
+          );
+        })
+        .map(async chunk => {
+          const link = `<link${atrributes} href="${chunk.url}" rel="stylesheet" />`;
 
-        // only in node read asserts
-        if (checkIsNode() && checkIsInline(chunk, inlineStyles)) {
-          return readAsset(chunk)
-            .then(content => `<style>${content}</style>`)
-            .catch(_ => {
-              // if read file occur error, we should return link to import css assets.
-              return link;
-            });
-        } else {
-          return link;
-        }
-      }),
+          // only in node read asserts
+          if (checkIsNode() && checkIsInline(chunk, inlineStyles)) {
+            return readAsset(chunk)
+              .then(content => `<style>${content}</style>`)
+              .catch(_ => {
+                // if read file occur error, we should return link to import css assets.
+                return link;
+              });
+          } else {
+            return link;
+          }
+        }),
     );
 
     // filter empty string;
     chunkSet.cssChunk += css.filter(css => Boolean(css)).join('');
-    chunkSet.cssChunk += createFederatedCssLinks(moduleFederationCssAssets, {
-      template,
-      attributes: this.generateAttributes(),
-      existingAssets: emittedChunks.map(chunk => chunk.url),
-    });
   }
 
   private generateAttributes(

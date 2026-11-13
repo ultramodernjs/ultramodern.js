@@ -1,6 +1,5 @@
 import type { ServerRoute } from '@modern-js/types';
 import { MAIN_ENTRY_NAME } from '@modern-js/utils/universal/constants';
-import { run } from '../../context';
 import type { SSRRenderOptions } from './ssrRender';
 
 export const dataHandler = async (
@@ -13,8 +12,6 @@ export const dataHandler = async (
     onTiming,
     serverManifest,
     loaderContext,
-    serverContext,
-    reporter,
   }: SSRRenderOptions & {
     serverRoutes: ServerRoute[];
   },
@@ -27,24 +24,17 @@ export const dataHandler = async (
   }
 
   const { routes, handleRequest } = serverLoaderModule;
-  const response = (await (serverContext
-    ? run(serverContext, execute)
-    : execute())) as Response | void;
+  const response = (await handleRequest({
+    request,
+    serverRoutes,
+    context: {
+      monitors,
+      loaderContext,
+    },
+    onTiming,
+    onError,
+    routes,
+  })) as Response | void;
 
   return response;
-
-  function execute() {
-    return handleRequest({
-      request,
-      serverRoutes,
-      context: {
-        monitors,
-        loaderContext,
-        reporter,
-      },
-      onTiming,
-      onError,
-      routes,
-    });
-  }
 };

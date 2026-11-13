@@ -1,8 +1,9 @@
 import dns from 'node:dns';
-import { fs as fse } from '@modern-js/utils';
 import path from 'path';
+import { fs as fse } from '@modern-js/utils';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import {
+  createIsolatedTestApp,
   getPort,
   killApp,
   launchApp,
@@ -12,43 +13,15 @@ import {
   sleep,
 } from '../../../utils/modernTestUtils';
 
-rstest.setConfig({ testTimeout: 1000 * 60 * 5, hookTimeout: 1000 * 60 * 5 });
+rstest.setConfig({ testTimeout: 1000 * 60 * 2, hookTimeout: 1000 * 60 * 2 });
 
 const sourceAppDir = path.resolve(__dirname, '../');
-const ensureWorkspacePackages = [
-  '@modern-js/app-tools',
-  '@modern-js/plugin-bff',
-  '@modern-js/server-utils',
-];
-const buildDoneMarker = /(?:^|\n)File \((?:client|server)\)\s+/i;
 dns.setDefaultResultOrder('ipv4first');
 
-async function createIsolatedAppDir(prefix: string) {
-  const appDir = await fse.mkdtemp(
-    path.join(path.dirname(sourceAppDir), prefix),
-  );
-
-  await fse.copy(sourceAppDir, appDir, {
-    filter: src => {
-      const relative = path.relative(sourceAppDir, src);
-      if (!relative) {
-        return true;
-      }
-      const [firstSegment] = relative.split(path.sep);
-      return ![
-        'node_modules',
-        'dist',
-        'dist-deploy',
-        '.output',
-        'tests',
-      ].includes(firstSegment);
-    },
+async function createIsolatedAppDir() {
+  const { appDir } = await createIsolatedTestApp(sourceAppDir, {
+    prefix: '.pure-esm-index-',
   });
-  await fse.ensureSymlink(
-    path.join(sourceAppDir, 'node_modules'),
-    path.join(appDir, 'node_modules'),
-    'dir',
-  );
 
   return appDir;
 }
@@ -143,11 +116,9 @@ describe('pure-esm-project in dev', () => {
   let appDir: string;
 
   beforeAll(async () => {
-    appDir = await createIsolatedAppDir('.pure-esm-index-');
+    appDir = await createIsolatedAppDir();
     port = await getPort();
-    app = await launchApp(appDir, port, {
-      ensureWorkspacePackages,
-    });
+    app = await launchApp(appDir, port);
     browser = await puppeteer.launch(launchOptions as any);
     page = await browser.newPage();
     await waitForApiInfoReady(host, port);
@@ -189,15 +160,10 @@ describe('pure-esm-project in prod', () => {
   let appDir: string;
 
   beforeAll(async () => {
-    appDir = await createIsolatedAppDir('.pure-esm-index-');
+    appDir = await createIsolatedAppDir();
     port = await getPort();
 
-    await modernBuild(appDir, [], {
-      stdout: false,
-      stderr: false,
-      marker: buildDoneMarker,
-      ensureWorkspacePackages,
-    });
+    await modernBuild(appDir, [], {});
 
     app = await modernServe(appDir, port, {});
     browser = await puppeteer.launch(launchOptions as any);

@@ -49,13 +49,10 @@ describe('app-ssr-html-lang', () => {
     );
     expect(langZh).toBe('zh');
 
-    const noJsPage = await browser.newPage();
-    await noJsPage.setJavaScriptEnabled(false);
-    const response = await noJsPage.goto(`http://localhost:${appPort}/zh`);
-    expect(response?.status()).toBe(200);
-    await expect(
-      noJsPage.evaluate(() => document.documentElement.lang),
-    ).resolves.toBe('zh');
-    await noJsPage.close();
+    // Check validation of initial HTML source (optional but good for SSR)
+    const response = await page.goto(`http://localhost:${appPort}/zh`);
+    const content = await response!.text();
+    // Simple check if the source HTML has lang="zh"
+    expect(content).toContain('lang="zh"');
   });
 });

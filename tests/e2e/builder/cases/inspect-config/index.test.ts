@@ -1,7 +1,7 @@
+import path from 'path';
 import { fs } from '@modern-js/utils';
 import { expect, test } from '@playwright/test';
 import { createBuilder } from '@scripts/shared';
-import path from 'path';
 
 const builderConfig = path.resolve(
   __dirname,

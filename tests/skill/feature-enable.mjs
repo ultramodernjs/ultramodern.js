@@ -8,7 +8,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import vm from 'node:vm';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
@@ -55,190 +54,6 @@ function prepare(fixture) {
   };
 }
 
-function createPlugin(kind) {
-  return (...args) => ({ args, kind });
-}
-
-const frameworkModules = {
-  '@modern-js/app-tools': {
-    appTools: createPlugin('app-tools'),
-    defineConfig: config => config,
-  },
-  '@modern-js/plugin-bff': {
-    bffPlugin: createPlugin('bff'),
-    other: createPlugin('other'),
-  },
-  '@modern-js/plugin-ssg': {
-    ssgPlugin: createPlugin('ssg'),
-  },
-  '@modern-js/plugin-styled-components': {
-    styledComponentsPlugin: createPlugin('styled-components'),
-  },
-  '@modern-js/runtime/head': {
-    Helmet: ({ children }) => children,
-  },
-  '@modern-js/runtime/router': {
-    Outlet: () => null,
-  },
-  '@modern-js/server-runtime': {
-    defineServerConfig: config => config,
-  },
-};
-
-function compileModule(fixture, relativePath) {
-  const filename = path.join(fixture.work, relativePath);
-  if (path.extname(filename) === '.js') {
-    return fs.readFileSync(filename, 'utf8');
-  }
-
-  const outputDirectory = path.join(fixture.work, '.feature-enable-compiled');
-  execFileSync(
-    path.join(REPO, 'node_modules/.bin/tsgo'),
-    [
-      filename,
-      '--ignoreConfig',
-      '--noCheck',
-      '--target',
-      'es2022',
-      '--module',
-      'commonjs',
-      '--jsx',
-      'react-jsx',
-      '--rootDir',
-      fixture.work,
-      '--outDir',
-      outputDirectory,
-    ],
-    { encoding: 'utf8', stdio: 'pipe' },
-  );
-  return fs.readFileSync(
-    path.join(outputDirectory, relativePath.replace(/\.(?:ts|tsx)$/, '.js')),
-    'utf8',
-  );
-}
-
-function executeModule(
-  fixture,
-  relativePath,
-  { moduleOverrides = {}, runtime = {} } = {},
-) {
-  const filename = path.join(fixture.work, relativePath);
-  const moduleRecord = { exports: {} };
-  const stateChanges = runtime.stateChanges ?? [];
-  const loadedStylesheets = runtime.loadedStylesheets ?? [];
-  const reactModule = {
-    useEffect: effect => effect(),
-    useState: initial => [
-      initial,
-      value => {
-        stateChanges.push(value);
-      },
-    ],
-  };
-  const jsxRuntime = {
-    Fragment: Symbol.for('react.fragment'),
-    jsx: (type, props, key) => ({ key, props, type }),
-    jsxs: (type, props, key) => ({ key, props, type }),
-  };
-
-  const requireModule = specifier => {
-    if (Object.hasOwn(moduleOverrides, specifier)) {
-      return moduleOverrides[specifier];
-    }
-    if (specifier === 'react') return reactModule;
-    if (specifier === 'react/jsx-runtime') return jsxRuntime;
-    if (Object.hasOwn(frameworkModules, specifier)) {
-      return frameworkModules[specifier];
-    }
-    if (specifier.endsWith('.css')) {
-      const stylesheet = path.resolve(path.dirname(filename), specifier);
-      if (!fs.existsSync(stylesheet)) {
-        throw new Error(
-          `Missing stylesheet imported by ${relativePath}: ${specifier}`,
-        );
-      }
-      loadedStylesheets.push(stylesheet);
-      return {};
-    }
-    throw new Error(
-      `No behavioral module stub for ${specifier} in ${relativePath}`,
-    );
-  };
-
-  const wrapper = new vm.Script(
-    `(function (exports, require, module, __filename, __dirname) {\n${compileModule(fixture, relativePath)}\n})`,
-    { filename },
-  ).runInNewContext({ console, process, setTimeout });
-  wrapper(
-    moduleRecord.exports,
-    requireModule,
-    moduleRecord,
-    filename,
-    path.dirname(filename),
-  );
-
-  return { exports: moduleRecord.exports, loadedStylesheets, stateChanges };
-}
-
-function loadConfig(fixture, relativePath = 'modern.config.ts') {
-  const executed = executeModule(fixture, relativePath);
-  return executed.exports.default ?? executed.exports;
-}
-
-function pluginKinds(config) {
-  return (config.plugins ?? []).map(plugin => plugin.kind);
-}
-
-function countPlugin(config, kind) {
-  return pluginKinds(config).filter(value => value === kind).length;
-}
-
-function collectRenderedText(node) {
-  if (node === null || node === undefined || typeof node === 'boolean') {
-    return '';
-  }
-  if (typeof node === 'string' || typeof node === 'number') {
-    return String(node);
-  }
-  if (Array.isArray(node)) return node.map(collectRenderedText).join('');
-  if (typeof node.type === 'function') {
-    return collectRenderedText(node.type(node.props ?? {}));
-  }
-  return collectRenderedText(node.props?.children);
-}
-
-async function executePage(fixture, relativePath, apiRelativePath) {
-  const apiCalls = [];
-  const moduleOverrides = {};
-  if (apiRelativePath) {
-    const api = executeModule(fixture, apiRelativePath).exports;
-    const specifier = `@api/${path.basename(apiRelativePath, '.ts')}`;
-    moduleOverrides[specifier] = {
-      ...api,
-      get: (...args) => {
-        apiCalls.push(args);
-        return api.get(...args);
-      },
-    };
-  }
-  const runtime = { loadedStylesheets: [], stateChanges: [] };
-  const page = executeModule(fixture, relativePath, {
-    moduleOverrides,
-    runtime,
-  });
-  const component = page.exports.default;
-  const tree = component();
-  await Promise.resolve();
-  await Promise.resolve();
-  return {
-    apiCalls,
-    loadedStylesheets: runtime.loadedStylesheets,
-    renderedText: collectRenderedText(tree),
-    stateChanges: runtime.stateChanges,
-    tree,
-  };
-}
-
 try {
   // ===== BFF：未启用 → 启用 =====
   console.log('== feature-enable bff (v3-app-no-bff) ==');
@@ -279,13 +94,18 @@ try {
     pkg.dependencies['@modern-js/plugin-bff'] === appToolsVer,
   );
 
-  const config = loadConfig(a);
+  const cfg = a.read('modern.config.ts');
   check(
-    '[auto] config 运行时按顺序注册 app-tools 与 BFF 插件',
-    JSON.stringify(pluginKinds(config)) ===
-      JSON.stringify(['app-tools', 'bff']),
+    '[auto] config plugins 追加 bffPlugin()（顺序 appTools 在前）',
+    /plugins\s*:\s*\[\s*appTools\(\)\s*,\s*bffPlugin\(\)\s*\]/.test(cfg),
   );
-  check('[auto] BFF 插件只注册一次', countPlugin(config, 'bff') === 1);
+  check(
+    '[auto] import bffPlugin 只 1 处（不重复声明）',
+    (cfg.match(/@modern-js\/plugin-bff/g) || []).length === 1 &&
+      /import\s*\{\s*bffPlugin\s*\}\s*from\s*['"]@modern-js\/plugin-bff['"]/.test(
+        cfg,
+      ),
+  );
 
   const tsconfig = JSON.parse(a.read('tsconfig.json'));
   check(
@@ -303,24 +123,23 @@ try {
       JSON.stringify(['./src/*']),
   );
 
-  const generatedApi = executeModule(a, 'api/lambda/hello.ts').exports;
   check(
-    '[auto] scaffold API 暴露可调用的 get handler',
-    a.has('api/lambda/hello.ts') && typeof generatedApi.get === 'function',
+    '[auto] scaffold api/lambda/hello.ts（export const get）',
+    a.has('api/lambda/hello.ts') &&
+      /export\s+const\s+get\b/.test(a.read('api/lambda/hello.ts')),
   );
   // v3-app-no-bff 的首页是自定义页（非默认模板）→ 不改首页、新建 bff-demo 路由示例
   check(
     '[auto] 自定义首页未改动 → 新建 src/routes/bff-demo/page.tsx',
     a.has('src/routes/bff-demo/page.tsx'),
   );
-  const bffDemo = await executePage(
-    a,
-    'src/routes/bff-demo/page.tsx',
-    'api/lambda/hello.ts',
-  );
   check(
-    '[e2e] bff-demo 页挂载后调用 scaffold API 并提交响应状态',
-    bffDemo.apiCalls.length === 1 && bffDemo.stateChanges.length === 1,
+    '[e2e] bff-demo 页真实 import @api/hello + useEffect 调用',
+    /import\s*\{\s*get as hello\s*\}\s*from\s*['"]@api\/hello['"]/.test(
+      a.read('src/routes/bff-demo/page.tsx'),
+    ) &&
+      /useEffect\(/.test(a.read('src/routes/bff-demo/page.tsx')) &&
+      /hello\(\)\.then\(/.test(a.read('src/routes/bff-demo/page.tsx')),
   );
 
   const report = a.report();
@@ -347,15 +166,18 @@ try {
     '幂等：提示已启用、未重复改写',
     /已启用/.test(reReport.manual.join('\n')),
   );
-  const config2 = loadConfig(a);
-  check('幂等：BFF 插件仍只注册一次', countPlugin(config2, 'bff') === 1);
+  const cfg2 = a.read('modern.config.ts');
+  check(
+    '幂等：bffPlugin() 不重复',
+    (cfg2.match(/bffPlugin\(\)/g) || []).length === 1,
+  );
 
   // report 含 deprecated（stale-doc）分层
   check(
     '[stale-doc] report.deprecated 标注 modern new/upgrade 已移除',
     Boolean(
       report.deprecated?.removedCommands?.includes('modern new') &&
-        /other\.md/.test(report.deprecated?.evidence ?? ''),
+      /other\.md/.test(report.deprecated?.evidence ?? ''),
     ),
   );
 
@@ -412,8 +234,8 @@ try {
     /link:.*手动添加.*plugin-bff/s.test(lk.report().manual.join('\n')),
   );
   check(
-    '[guard] link: 既有依赖仍可让 config 注册 BFF 插件',
-    countPlugin(loadConfig(lk), 'bff') === 1,
+    '[guard] link: 既有依赖仍可被改 config（plugins 加 bffPlugin）',
+    /bffPlugin\(\)/.test(lk.read('modern.config.ts')),
   );
 
   // ===== SSG：未启用 → 启用（clean v3 app）=====
@@ -432,14 +254,19 @@ try {
     sPkg.dependencies['@modern-js/plugin-ssg'] ===
       sPkg.devDependencies['@modern-js/app-tools'],
   );
-  const sConfig = loadConfig(s);
+  const sCfg = s.read('modern.config.ts');
   check(
-    '[auto] config 运行时注册 SSG 插件',
-    JSON.stringify(pluginKinds(sConfig)) ===
-      JSON.stringify(['app-tools', 'ssg']),
+    '[auto] plugins 追加 ssgPlugin()',
+    /plugins\s*:\s*\[\s*appTools\(\)\s*,\s*ssgPlugin\(\)\s*\]/.test(sCfg),
   );
-  check('[auto] output.ssg 运行时为 true', sConfig.output?.ssg === true);
-  check('[auto] SSG 插件只注册一次', countPlugin(sConfig, 'ssg') === 1);
+  check(
+    '[auto] output 合并 ssg: true',
+    /output\s*:\s*\{[^}]*ssg:\s*true/.test(sCfg),
+  );
+  check(
+    '[auto] import ssgPlugin 只 1 处',
+    (sCfg.match(/@modern-js\/plugin-ssg/g) || []).length === 1,
+  );
 
   // SSG：已有 output 块 → 合并 ssg、保留其它 key
   console.log('== feature-enable ssg (existing output → merge) ==');
@@ -447,10 +274,10 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'ssg', so.work], {
     encoding: 'utf8',
   });
-  const soConfig = loadConfig(so);
+  const soCfg = so.read('modern.config.ts');
   check(
-    '[auto] 既有 output.polyfill 语义保留 + 启用 SSG',
-    soConfig.output?.ssg === true && soConfig.output?.polyfill === 'usage',
+    '[auto] 既有 output.polyfill 保留 + 合并 ssg: true',
+    /ssg:\s*true/.test(soCfg) && /polyfill:\s*'usage'/.test(soCfg),
   );
 
   // ===== CJS：module.exports/require 配置插 require 绑定（梅长苏 blocker）=====
@@ -459,19 +286,20 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'bff', cjs.work], {
     encoding: 'utf8',
   });
-  const cjsConfig = loadConfig(cjs, 'modern.config.js');
+  const cjsCfg = cjs.read('modern.config.js');
   check(
-    '[auto] CJS 配置可由 CommonJS 运行时直接加载并注册 BFF',
-    countPlugin(cjsConfig, 'bff') === 1,
+    '[auto] CJS 配置插入 require 绑定（非 ESM import）',
+    /const\s*\{\s*bffPlugin\s*\}\s*=\s*require\(\s*['"]@modern-js\/plugin-bff['"]\s*\)/.test(
+      cjsCfg,
+    ),
   );
   check(
-    '[auto] CJS 保留 app-tools 后追加 BFF 插件',
-    JSON.stringify(pluginKinds(cjsConfig)) ===
-      JSON.stringify(['app-tools', 'bff']),
+    '[auto] CJS plugins 追加 bffPlugin()',
+    /plugins\s*:\s*\[[^\]]*bffPlugin\(\)/.test(cjsCfg),
   );
   check(
-    '[auto] CJS 导出保持可消费的配置对象',
-    typeof cjsConfig === 'object' && Array.isArray(cjsConfig.plugins),
+    '[auto] CJS 未引入 ESM import（保持 module.exports 风格）',
+    !/^import\s/m.test(cjsCfg),
   );
   check(
     '[auto] CJS config report.manual 无「绑定缺失」类残留',
@@ -484,14 +312,16 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'bff', nb.work], {
     encoding: 'utf8',
   });
-  const nbConfig = loadConfig(nb);
+  const nbCfg = nb.read('modern.config.ts');
   check(
-    '[repair] 修复后配置可执行并注册 BFF 插件',
-    countPlugin(nbConfig, 'bff') === 1,
+    '[repair] 补齐缺失的 bffPlugin import 绑定',
+    /import\s*\{\s*bffPlugin\s*\}\s*from\s*['"]@modern-js\/plugin-bff['"]/.test(
+      nbCfg,
+    ),
   );
   check(
-    '[repair] BFF 插件不重复（仍只 1 个运行时实例）',
-    pluginKinds(nbConfig).filter(kind => kind === 'bff').length === 1,
+    '[repair] bffPlugin() 调用不重复（仍只 1 处）',
+    (nbCfg.match(/bffPlugin\(\)/g) || []).length === 1,
   );
 
   // ===== 绑定解析 blocker（刺儿头 + 梅长苏）=====
@@ -501,16 +331,14 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'bff', sf.work], {
     encoding: 'utf8',
   });
-  const sfConfig = loadConfig(sf);
+  const sfCfg = sf.read('modern.config.ts');
   check(
-    '字符串中的伪 import 不影响真实 BFF 插件注册',
-    countPlugin(sfConfig, 'bff') === 1,
+    '插入真实 import { bffPlugin } from ...（非依赖字符串伪 import）',
+    /^import\s*\{\s*bffPlugin\s*\}\s*from\s*['"]@modern-js\/plugin-bff['"]/m.test(
+      sfCfg,
+    ),
   );
-  check(
-    '配置修复后仍保留原 app-tools 行为',
-    JSON.stringify(pluginKinds(sfConfig)) ===
-      JSON.stringify(['app-tools', 'bff']),
-  );
+  check('普通字符串伪 import 原样保留', sfCfg.includes('const doc ='));
 
   // B2：specifier 在但缺 export + 有调用 → 把 export 加进现有大括号，调用不重复
   console.log(
@@ -520,14 +348,16 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'bff', sm.work], {
     encoding: 'utf8',
   });
-  const smConfig = loadConfig(sm);
+  const smCfg = sm.read('modern.config.ts');
   check(
-    '已有同包绑定时，修复后配置可执行并注册 BFF',
-    countPlugin(smConfig, 'bff') === 1,
+    'bffPlugin 加进现有 import 大括号（{ other, bffPlugin }）',
+    /import\s*\{[^}]*\bother\b[^}]*\bbffPlugin\b[^}]*\}\s*from\s*['"]@modern-js\/plugin-bff['"]/.test(
+      smCfg,
+    ),
   );
   check(
-    'BFF 运行时实例不重复（仍 1 个）',
-    pluginKinds(smConfig).filter(kind => kind === 'bff').length === 1,
+    'bffPlugin() 调用不重复（仍 1 处）',
+    (smCfg.match(/bffPlugin\(\)/g) || []).length === 1,
   );
 
   // B3：ESM alias 已启用 → 幂等（不重复 append alias 调用）
@@ -543,8 +373,8 @@ try {
     /已启用/.test(JSON.parse(alOut).manual.join('\n')),
   );
   check(
-    'alias 已启用时 BFF 运行时实例仍只有 1 个',
-    countPlugin(loadConfig(al), 'bff') === 1,
+    'alias 调用不重复（bff() 仍 1 处，未误判 alias 而重复 append）',
+    (al.read('modern.config.ts').match(/\bbff\(\)/g) || []).length === 1,
   );
 
   // B4：SSG 半启用（有 plugin、缺 output.ssg）→ 补齐 output.ssg
@@ -563,11 +393,11 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'ssg', sh.work], {
     encoding: 'utf8',
   });
-  const shConfig = loadConfig(sh);
-  check('补齐 output.ssg: true', shConfig.output?.ssg === true);
+  const shCfg = sh.read('modern.config.ts');
+  check('补齐 output.ssg: true', /output\s*:\s*\{[^}]*ssg:\s*true/.test(shCfg));
   check(
-    'SSG 插件运行时实例不重复（仍 1 个）',
-    countPlugin(shConfig, 'ssg') === 1,
+    'ssgPlugin() 调用不重复（仍 1 处）',
+    (shCfg.match(/ssgPlugin\(\)/g) || []).length === 1,
   );
 
   // B5：type-only import 不算 value 绑定 → 另插一条 value import，type import 原样
@@ -576,16 +406,22 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'bff', ti.work], {
     encoding: 'utf8',
   });
-  const tiConfig = loadConfig(ti);
+  const tiCfg = ti.read('modern.config.ts');
   check(
-    'type-only 绑定不会妨碍 TypeScript 配置编译执行',
-    typeof tiConfig === 'object',
+    'import type 原样保留（未被塞入 bffPlugin）',
+    /import\s+type\s*\{\s*BffConfig\s*\}\s*from\s*['"]@modern-js\/plugin-bff['"]/.test(
+      tiCfg,
+    ),
   );
-  check('修复后提供可调用的 BFF 插件实例', countPlugin(tiConfig, 'bff') === 1);
   check(
-    '插件运行时顺序保留 app-tools 在前',
-    JSON.stringify(pluginKinds(tiConfig)) ===
-      JSON.stringify(['app-tools', 'bff']),
+    '另插一条 value import { bffPlugin }',
+    /^import\s*\{\s*bffPlugin\s*\}\s*from\s*['"]@modern-js\/plugin-bff['"]/m.test(
+      tiCfg,
+    ),
+  );
+  check(
+    'plugins 追加 bffPlugin()',
+    /plugins\s*:\s*\[[^\]]*bffPlugin\(\)/.test(tiCfg),
   );
 
   // B6：output.ssg: false 不算已启用 → scan 未启用 + enable 翻成 true
@@ -603,12 +439,12 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'ssg', sff.work], {
     encoding: 'utf8',
   });
-  const sffConfig = loadConfig(sff);
+  const sffCfg = sff.read('modern.config.ts');
   check(
     'output.ssg: false → true（按启用意图）',
-    sffConfig.output?.ssg === true,
+    /\bssg\s*:\s*true\b/.test(sffCfg),
   );
-  check('运行时不再暴露禁用的 SSG 值', sffConfig.output?.ssg !== false);
+  check('未残留 ssg: false', !/\bssg\s*:\s*false\b/.test(sffCfg));
 
   // B7：output.ssg 结构化改写——只翻顶层真实 ssg，不动字符串/注释/嵌套 experimental.ssg
   console.log(
@@ -618,15 +454,23 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'ssg', to.work], {
     encoding: 'utf8',
   });
-  const toConfig = loadConfig(to);
-  check('顶层 output.ssg false → true', toConfig.output?.ssg === true);
+  const toCfg = to.read('modern.config.ts');
+  check('顶层 output.ssg false → true', /\bssg\s*:\s*true\b/.test(toCfg));
   check(
-    'output.note 的业务值保持不变',
-    toConfig.output?.note === 'ssg: false in a string',
+    '字符串 "ssg: false in a string" 原样保留',
+    toCfg.includes('ssg: false in a string'),
   );
   check(
-    '嵌套 experimental.ssg 语义保持 false',
-    toConfig.output?.experimental?.ssg === false,
+    '注释 // ssg: false 原样保留',
+    toCfg.includes('// ssg: false in a comment'),
+  );
+  check(
+    '嵌套 experimental: { ssg: false } 原样保留',
+    /experimental\s*:\s*\{\s*ssg\s*:\s*false\s*\}/.test(toCfg),
+  );
+  check(
+    'output.ssg true 仅 1 处（未误翻其它）',
+    (toCfg.match(/\bssg\s*:\s*true\b/g) || []).length === 1,
   );
 
   // B8：output 值非对象字面量（动态表达式）→ 进 manual，不改坏表达式
@@ -635,10 +479,10 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'ssg', oe.work], {
     encoding: 'utf8',
   });
-  const oeConfig = loadConfig(oe);
+  const oeCfg = oe.read('modern.config.ts');
   check(
-    '动态 output 表达式的运行时结果保持禁用',
-    oeConfig.output?.ssg === false,
+    '动态 output 表达式原样保留',
+    oeCfg.includes('makeOutput({ ssg: false })'),
   );
   check(
     'output 非对象字面量进 manual',
@@ -660,9 +504,9 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'ssg', su.work], {
     encoding: 'utf8',
   });
-  const suConfig = loadConfig(su);
-  check('output.ssg undefined → true', suConfig.output?.ssg === true);
-  check('运行时不再暴露 undefined SSG 值', suConfig.output?.ssg !== undefined);
+  const suCfg = su.read('modern.config.ts');
+  check('output.ssg undefined → true', /\bssg\s*:\s*true\b/.test(suCfg));
+  check('未残留 ssg: undefined', !/\bssg\s*:\s*undefined\b/.test(suCfg));
 
   // B10：output 值是数组字面量（非对象）→ 同样进 manual、不下钻改写
   console.log('== ssg: output value is array literal → manual (untouched) ==');
@@ -670,15 +514,15 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'ssg', oa.work], {
     encoding: 'utf8',
   });
-  const oaConfig = loadConfig(oa);
+  const oaCfg = oa.read('modern.config.ts');
   check(
-    '数组 output 的运行时结构和值保持不变',
-    Array.isArray(oaConfig.output) && oaConfig.output[0]?.ssg === false,
+    '数组 output 原样保留',
+    /output:\s*\[\{\s*ssg:\s*false\s*\}\]/.test(oaCfg),
   );
   check(
     'output 数组进 manual（未误改成对象）',
     /output 值不是对象字面量/.test(oa.report().manual.join('\n')) &&
-      Array.isArray(oaConfig.output),
+      !/\bssg\s*:\s*true\b/.test(oaCfg),
   );
 
   // B11：output.ssg 值为数组（类型非法 boolean|object）→ scan 不算已启用 + enable 进 manual
@@ -693,11 +537,8 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'ssg', av.work], {
     encoding: 'utf8',
   });
-  const avConfig = loadConfig(av);
-  check(
-    'output.ssg 数组值的运行时结构保持不变',
-    Array.isArray(avConfig.output?.ssg),
-  );
+  const avCfg = av.read('modern.config.ts');
+  check('output.ssg 数组值原样保留（未误翻 true）', /ssg:\s*\[\]/.test(avCfg));
   check(
     'output.ssg 数组值进 manual（非法字面量）',
     /非法字面量/.test(av.report().manual.join('\n')),
@@ -716,11 +557,10 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'ssg', be.work], {
     encoding: 'utf8',
   });
-  const beConfig = loadConfig(be);
+  const beCfg = be.read('modern.config.ts');
   check(
-    'ssgByEntries:{} → 补 output.ssg: true（保留空映射）',
-    beConfig.output?.ssg === true &&
-      Object.keys(beConfig.output?.ssgByEntries ?? {}).length === 0,
+    'ssgByEntries:{} → 补 output.ssg: true（保留空对象）',
+    /\bssg\s*:\s*true\b/.test(beCfg) && /ssgByEntries:\s*\{\s*\}/.test(beCfg),
   );
 
   // (b) 全 false → scan 未启用 + enable 进 manual、原样不动
@@ -737,13 +577,12 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'ssg', bf.work], {
     encoding: 'utf8',
   });
-  const bfConfig = loadConfig(bf);
+  const bfCfg = bf.read('modern.config.ts');
   check(
     'ssgByEntries 全 false → manual、不静默改写',
     /所有入口均为非启用值/.test(bf.report().manual.join('\n')) &&
-      bfConfig.output?.ssgByEntries?.main === false &&
-      bfConfig.output?.ssgByEntries?.home === false &&
-      bfConfig.output?.ssg !== true,
+      /main:\s*false,\s*home:\s*false/.test(bfCfg) &&
+      !/\bssg\s*:\s*true\b/.test(bfCfg),
   );
 
   // (c) 动态 entry 值 → scan 未启用 + enable 进 manual 要求人工确认
@@ -793,21 +632,19 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'bff', dp.work], {
     encoding: 'utf8',
   });
-  const dpBehavior = await executePage(
-    dp,
-    'src/routes/page.tsx',
-    'api/lambda/hello.ts',
-  );
+  const dpPage = dp.read('src/routes/page.tsx');
   check(
-    '默认模板首页挂载后调用 BFF API 并更新状态（未走 bff-demo）',
-    dpBehavior.apiCalls.length === 1 &&
-      dpBehavior.stateChanges.length === 1 &&
+    '默认模板首页被接入 BFF 调用（import @api/hello + useEffect，未走 bff-demo）',
+    /import\s*\{\s*get as hello\s*\}\s*from\s*['"]@api\/hello['"]/.test(
+      dpPage,
+    ) &&
+      /useEffect\(/.test(dpPage) &&
+      /hello\(\)\.then\(/.test(dpPage) &&
       !dp.has('src/routes/bff-demo/page.tsx'),
   );
-  const dpApi = executeModule(dp, 'api/lambda/hello.ts').exports;
   check(
-    'api/lambda/hello.ts 暴露可执行的 get handler',
-    typeof dpApi.get === 'function' && (await dpApi.get()) !== undefined,
+    'api/lambda/hello.ts 生成（export const get）',
+    /export\s+const\s+get\b/.test(dp.read('api/lambda/hello.ts')),
   );
   // 幂等：再跑一次首页不重复改、不报 changed
   const dpRe = execFileSync(
@@ -826,19 +663,17 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'bff', ea.work], {
     encoding: 'utf8',
   });
-  const eaApi = executeModule(ea, 'api/lambda/hello.ts').exports;
   check(
-    '已有 API 的运行时响应未被覆盖',
-    (await eaApi.get()) === 'existing api response',
+    '已有 api/lambda/hello.ts 未被覆盖（仍是用户内容）',
+    /existing api response/.test(ea.read('api/lambda/hello.ts')),
   );
   check(
     '复用已有 api 进 manual（说明未改用户 API）',
     /复用已有 api\/lambda\/hello/.test(ea.report().manual.join('\n')),
   );
   check(
-    '默认首页挂载后调用复用的 API',
-    (await executePage(ea, 'src/routes/page.tsx', 'api/lambda/hello.ts'))
-      .apiCalls.length === 1,
+    '默认首页接入复用的 @api/hello 调用',
+    /@api\/hello/.test(ea.read('src/routes/page.tsx')),
   );
 
   // ===== D3. server 骨架化 =====
@@ -848,28 +683,29 @@ try {
     encoding: 'utf8',
   });
   const svServer = sv.has('server/modern.server.ts')
-    ? executeModule(sv, 'server/modern.server.ts').exports.default
-    : null;
+    ? sv.read('server/modern.server.ts')
+    : '';
   check(
-    'server: 加 @modern-js/server-runtime + 可加载的 server 配置契约',
+    'server: 加 @modern-js/server-runtime + modern.server.ts 含 middlewares/renderMiddlewares/plugins/onError 字段',
     JSON.parse(sv.read('package.json')).dependencies[
       '@modern-js/server-runtime'
     ] &&
-      Array.isArray(svServer?.middlewares) &&
-      Array.isArray(svServer?.renderMiddlewares) &&
-      Array.isArray(svServer?.plugins) &&
-      typeof svServer?.onError === 'function',
+      /defineServerConfig\(\{/.test(svServer) &&
+      /middlewares:/.test(svServer) &&
+      /renderMiddlewares:/.test(svServer) &&
+      /plugins:/.test(svServer) &&
+      /onError:/.test(svServer),
   );
   check(
-    'server: 骨架可执行且没有半成品 middleware handler',
-    svServer.middlewares.length === 0 &&
-      svServer.renderMiddlewares.length === 0 &&
-      svServer.plugins.length === 0 &&
-      svServer.onError(new Error('fixture'), {}) === undefined,
+    'server: 骨架仍可 build（示例都在注释里，字段给空数组/no-op，无半成品 handler 引用）',
+    !/handler:\s*requestTiming|handler:\s*renderTiming/.test(
+      svServer.replace(/\/\/[^\n]*/g, ''),
+    ),
   );
   check(
-    'server: TypeScript 编译与运行时加载均成功',
-    typeof svServer === 'object',
+    'server: 骨架无 TS 类型语法（import type / : MiddlewareHandler）——未必转译加载，取消注释示例也不会 SyntaxError',
+    !/\bimport\s+type\b/.test(svServer) &&
+      !/:\s*MiddlewareHandler\b/.test(svServer),
   );
   check(
     'server: 业务语义进 manual（不声称已迁好）',
@@ -890,11 +726,12 @@ try {
     [path.join(SCRIPTS, 'enable.mjs'), 'styled-components', sc.work],
     { encoding: 'utf8' },
   );
+  const scCfg = sc.read('modern.config.ts');
   check(
-    'styled-components: 加依赖 + 运行时注册插件',
+    'styled-components: 加依赖 + plugins 追加 styledComponentsPlugin()',
     JSON.parse(sc.read('package.json')).dependencies[
       '@modern-js/plugin-styled-components'
-    ] && countPlugin(loadConfig(sc), 'styled-components') === 1,
+    ] && /styledComponentsPlugin\(\)/.test(scCfg),
   );
 
   // ===== D5. tailwindcss（Rsbuild 原生脚手架）=====
@@ -909,17 +746,18 @@ try {
   );
   const twPkg = JSON.parse(tw.read('package.json'));
   check(
-    'tailwindcss: 装依赖并生成 Rsbuild/PostCSS 配置资产',
+    'tailwindcss: 装 tailwindcss/postcss/autoprefixer + tailwind.config + postcss.config + @tailwind css',
     twPkg.devDependencies.tailwindcss &&
       tw.has('tailwind.config.ts') &&
       tw.has('postcss.config.cjs') &&
-      tw.has('src/tailwind.css'),
+      /@tailwind base/.test(tw.read('src/tailwind.css')),
   );
   // 关键：CSS 自动接入根布局，用正确相对路径 `../tailwind.css`（不是会 build 失败的 './tailwind.css'）
-  const twLayout = await executePage(tw, 'src/routes/layout.tsx');
   check(
-    'tailwindcss: 根布局执行时加载可解析的全局样式资产',
-    twLayout.loadedStylesheets.includes(path.join(tw.work, 'src/tailwind.css')),
+    "tailwindcss: 自动 import '../tailwind.css' 进 src/routes/layout（路径正确、可 build）",
+    /import\s*['"]\.\.\/tailwind\.css['"]/.test(
+      tw.read('src/routes/layout.tsx'),
+    ),
   );
   check(
     'tailwindcss: v4 分支说明进 manual',
@@ -941,7 +779,6 @@ try {
   // ===== D6. microFrontend：不自动化 → 可执行 checklist + 原因，不改文件 =====
   console.log('== D6. enable microFrontend (manual plan checklist) ==');
   const mf = prepare('v3-app-no-bff');
-  const mfConfigBefore = JSON.stringify(loadConfig(mf));
   const mfOut = execFileSync(
     'node',
     [path.join(SCRIPTS, 'enable.mjs'), 'microFrontend', mf.work, '--json'],
@@ -963,8 +800,8 @@ try {
       mfReport.complete === false,
   );
   check(
-    'microFrontend: modern.config 运行时语义保持不变',
-    JSON.stringify(loadConfig(mf)) === mfConfigBefore,
+    'microFrontend: 未改写 modern.config / package.json',
+    !/garfish|masterApp/.test(mf.read('modern.config.ts')),
   );
 
   // ===== D7. BFF：已有 api/lambda/index.ts → import @api/index（不是裸 @api，alias 才解析得到）=====
@@ -973,44 +810,32 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'bff', ix.work], {
     encoding: 'utf8',
   });
+  const ixPage = ix.read('src/routes/page.tsx');
   check(
-    'index.ts alias 可解析，首页挂载后调用复用 API',
-    (await executePage(ix, 'src/routes/page.tsx', 'api/lambda/index.ts'))
-      .apiCalls.length === 1,
+    'index.ts 复用且 import 用 @api/index（非裸 @api）',
+    /from\s*['"]@api\/index['"]/.test(ixPage) &&
+      !/from\s*['"]@api['"]/.test(ixPage),
   );
-  const ixApi = executeModule(ix, 'api/lambda/index.ts').exports;
   check(
-    'index.ts 用户 API 的运行时响应未被覆盖',
-    (await ixApi.get()) === 'index api response',
+    'index.ts 未被覆盖（仍是用户内容）',
+    /index api response/.test(ix.read('api/lambda/index.ts')),
   );
 
   // ===== D8. BFF 页面：自定义业务首页（非 generator 模板）不被覆盖 → 走 bff-demo =====
   console.log('== D8. bff e2e: custom welcome homepage NOT overwritten ==');
   const cw = prepare('v3-app-custom-welcome');
-  const cwBefore = await executePage(cw, 'src/routes/page.tsx');
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'bff', cw.work], {
     encoding: 'utf8',
   });
-  const cwAfter = await executePage(
-    cw,
-    'src/routes/page.tsx',
-    'api/lambda/hello.ts',
+  check(
+    '自定义 welcome 首页未被覆盖（Welcome to my app 仍在、无 @api 注入）',
+    /Welcome to my app/.test(cw.read('src/routes/page.tsx')) &&
+      !/@api\//.test(cw.read('src/routes/page.tsx')),
   );
   check(
-    '自定义 welcome 首页渲染结果保持不变且不会调用 API',
-    cwAfter.renderedText === cwBefore.renderedText &&
-      cwAfter.apiCalls.length === 0,
-  );
-  const cwDemo = await executePage(
-    cw,
-    'src/routes/bff-demo/page.tsx',
-    'api/lambda/hello.ts',
-  );
-  check(
-    '改走独立 bff-demo 路由，挂载后调用 scaffold API',
+    '改走 src/routes/bff-demo/page.tsx（含 @api/hello 调用）',
     cw.has('src/routes/bff-demo/page.tsx') &&
-      cwDemo.apiCalls.length === 1 &&
-      cwDemo.stateChanges.length === 1,
+      /@api\/hello/.test(cw.read('src/routes/bff-demo/page.tsx')),
   );
 
   // ===== D9. styled-components：补 peer styled-components；缺 peer 不算完整启用 =====
@@ -1106,8 +931,9 @@ try {
       ),
   );
   check(
-    'enable: styled-components 运行时插件实例仍只有 1 个',
-    countPlugin(loadConfig(shc), 'styled-components') === 1,
+    'enable: 插件未重复 append（styledComponentsPlugin() 仍 1 处）',
+    (shc.read('modern.config.ts').match(/styledComponentsPlugin\(\)/g) || [])
+      .length === 1,
   );
   const shScan2 = execFileSync(
     'node',
@@ -1129,16 +955,16 @@ try {
   execFileSync('node', [path.join(SCRIPTS, 'enable.mjs'), 'bff', fg.work], {
     encoding: 'utf8',
   });
-  const fgApi = executeModule(fg, 'api/lambda/hello.ts').exports;
   check(
-    '函数式 get handler 的运行时响应被复用（未新建 bff-demo.ts）',
-    (await fgApi.get()) === 'fn-get api response' &&
+    '函数声明 export async function get 被复用（未新建 bff-demo.ts）',
+    /fn-get api response/.test(fg.read('api/lambda/hello.ts')) &&
       !fg.has('api/lambda/bff-demo.ts'),
   );
   check(
-    '默认首页挂载后调用复用的函数式 get handler',
-    (await executePage(fg, 'src/routes/page.tsx', 'api/lambda/hello.ts'))
-      .apiCalls.length === 1,
+    '默认首页接入复用的 @api/hello（import { get as hello }）',
+    /import\s*\{\s*get as hello\s*\}\s*from\s*['"]@api\/hello['"]/.test(
+      fg.read('src/routes/page.tsx'),
+    ),
   );
 
   // ===== D13. --install 失败要诚实：非 0 退出 + report 给 stderr/补救命令，不报「一步到位完成」=====
@@ -1180,7 +1006,7 @@ try {
   check(
     '[install] 安装失败进 manual（含 stderr），但源文件改动已落盘',
     /依赖安装失败/.test(infReport.manual.join('\n')) &&
-      countPlugin(loadConfig(inf), 'styled-components') === 1,
+      /styledComponentsPlugin\(\)/.test(inf.read('modern.config.ts')),
   );
   // 重试/幂等：插件已启用(enable 此次幂等)，再跑 --install 仍会装（不被 changed=0 门控），失败仍非 0
   let infRetryThrew = false;

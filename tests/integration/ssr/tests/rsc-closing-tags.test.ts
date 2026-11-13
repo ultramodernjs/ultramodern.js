@@ -1,5 +1,5 @@
-import { isVersionAtLeast18 } from '@modern-js/utils';
 import path, { join } from 'path';
+import { isVersionAtLeast18 } from '@modern-js/utils';
 import {
   getPort,
   killApp,

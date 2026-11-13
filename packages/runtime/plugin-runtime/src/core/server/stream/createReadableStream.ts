@@ -1,34 +1,23 @@
-// @effect-diagnostics asyncFunction:off newPromise:off processEnv:off strictBooleanExpressions:off
-import * as rendererHead from '@modern-js/runtime-extensions/node';
+import { PassThrough, Readable, Transform } from 'stream';
+import { StringDecoder } from 'string_decoder';
 import { storage } from '@modern-js/runtime-utils/node';
 import { SSR_HYDRATION_ID_PREFIX } from '@modern-js/utils/universal/constants';
 import type { ReactElement } from 'react';
-import { PassThrough, Readable, Transform } from 'stream';
-import { ESCAPED_SHELL_STREAM_END_MARK } from '../../../common';
 import { RenderLevel } from '../../constants';
 import { getGlobalInternalRuntimeContext } from '../../context';
 import { getMonitors } from '../../context/monitors';
-import { createReplaceHelemt, getHelmetData } from '../helmet';
-import { enqueueFromEntries } from './deferredScript';
+import { enqueueFromEntries, hasDeferredResolvers } from './deferredScript';
+import { DeferredScriptOutputCoordinator } from './deferredScriptOutputCoordinator';
 import {
   type CreateReadableStreamFromElement,
+  ShellChunkStatus,
+  createShellEndMarkSplitter,
   getReadableStreamFromString,
   resolveStreamingMode,
-  ShellChunkStatus,
 } from './shared';
 import { getTemplates } from './template';
 
-type StreamSSRExtender = {
-  init?: (options: {
-    rootElement: ReactElement;
-    forceStream2String: boolean;
-  }) => void;
-  modifyRootElement?: (rootElement: ReactElement) => ReactElement;
-  getStyleTags?: () => string;
-  processStream?: (stream: NodeJS.ReadWriteStream) => NodeJS.ReadWriteStream;
-};
-
-const defaultExtender: StreamSSRExtender = {
+const defaultExtender = {
   modifyRootElement: (rootElement: ReactElement) => rootElement,
   getStyleTags: () => '',
   processStream: (stream: NodeJS.ReadWriteStream) => stream,
@@ -37,14 +26,8 @@ const defaultExtender: StreamSSRExtender = {
 export const createReadableStreamFromElement: CreateReadableStreamFromElement =
   async (request, rootElement, options) => {
     const { renderToPipeableStream } = await import('react-dom/server');
-    const {
-      runtimeContext,
-      htmlTemplate,
-      config,
-      ssrConfig,
-      entryName,
-      moduleFederationCssAssets,
-    } = options;
+    const { runtimeContext, htmlTemplate, config, ssrConfig, entryName } =
+      options;
     let shellChunkStatus = ShellChunkStatus.START;
 
     let renderLevel = RenderLevel.SERVER_RENDER;
@@ -57,7 +40,7 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
     const internalRuntimeContext = getGlobalInternalRuntimeContext();
     const hooks = internalRuntimeContext.hooks;
 
-    const extenders: StreamSSRExtender[] = hooks.extendStreamSSR.call() || [];
+    const extenders = hooks.extendStreamSSR.call() || [];
 
     if (extenders.length === 0) {
       extenders.push(defaultExtender);
@@ -79,10 +62,7 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
       }
     });
 
-    const chunkVec: Buffer[] = [];
-    let hasStartedPipe = false;
-    rendererHead.beginHeadRender(runtimeContext);
-    const reportError = rendererHead.createOnceErrorReporter(options.onError);
+    const splitAtShellEndMark = createShellEndMarkSplitter();
 
     return new Promise(resolve => {
       const { pipe: reactStreamingPipe } = renderToPipeableStream(
@@ -91,11 +71,6 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
           nonce: config.nonce,
           identifierPrefix: SSR_HYDRATION_ID_PREFIX,
           [onReady]() {
-            if (hasStartedPipe) {
-              return;
-            }
-            hasStartedPipe = true;
-
             let styledComponentsStyleTags = '';
             extenders.forEach(extender => {
               if (extender.getStyleTags) {
@@ -112,17 +87,26 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
               runtimeContext,
               config,
               entryName,
-              moduleFederationCssAssets,
               styledComponentsStyleTags,
             }).then(({ shellAfter, shellBefore }) => {
+              const decoder = new StringDecoder('utf8');
               const pendingScripts: string[] = [];
+              const outputState: {
+                coordinator?: DeferredScriptOutputCoordinator;
+              } = {};
+              let deferredResolversComplete = Promise.resolve();
+
+              const writeReact = (content: string) => {
+                if (!outputState.coordinator) {
+                  throw new Error('Deferred script coordinator is not ready');
+                }
+                outputState.coordinator.writeReact(content);
+              };
+
               const body = new Transform({
                 transform(chunk, _encoding, callback) {
                   try {
                     if (shellChunkStatus !== ShellChunkStatus.FINISH) {
-                      chunkVec.push(
-                        Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
-                      );
                       /**
                        * The shell content of App may be splitted by multiple chunks to transform,
                        * when any node value's size is larger than the React limitation, refer to:
@@ -131,44 +115,41 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
                        *
                        * The marker can also land in the middle of a chunk that already carries
                        * suspense-boundary content emitted right after the shell (React's chunk
-                       * boundaries are byte-driven, not render-phase-driven). Concat first so
-                       * we also catch markers that straddle two chunks, then split the buffered
+                       * boundaries are byte-driven, not render-phase-driven). The splitter also
+                       * catches markers that straddle two chunks, then splits the buffered
                        * content at the marker: everything before goes between shellBefore and
                        * shellAfter; everything after goes out as-is so it lands past the
                        * closing `</html>` instead of being swallowed inside it.
                        */
-                      const concatedChunk = Buffer.concat(
-                        chunkVec as any,
-                      ).toString('utf-8');
-                      const markerIndex = concatedChunk.indexOf(
-                        ESCAPED_SHELL_STREAM_END_MARK,
+                      const shell = splitAtShellEndMark(
+                        decoder.write(
+                          Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
+                        ),
                       );
-                      if (markerIndex !== -1) {
-                        const beforeMark = concatedChunk.slice(0, markerIndex);
-                        const afterMark = concatedChunk.slice(
-                          markerIndex + ESCAPED_SHELL_STREAM_END_MARK.length,
-                        );
-                        rendererHead.publishHeadRender(runtimeContext);
-                        const completedShellBefore = createReplaceHelemt(
-                          getHelmetData(runtimeContext),
-                        )(shellBefore);
+                      if (shell) {
+                        const { beforeMark, afterMark } = shell;
 
                         shellChunkStatus = ShellChunkStatus.FINISH;
-                        this.push(
-                          `${completedShellBefore}${beforeMark}${shellAfter}`,
-                        );
+                        writeReact(`${shellBefore}${beforeMark}${shellAfter}`);
                         if (afterMark) {
-                          this.push(afterMark);
+                          writeReact(afterMark);
                         }
-                        // Flush any pending <script> collected before shell finished
-                        if (pendingScripts.length > 0) {
-                          for (const s of pendingScripts) {
-                            this.push(s);
+                        // FINISH retains its shell lifecycle meaning. The coordinator
+                        // becomes eligible only after this marker chunk's afterMark
+                        // bytes have been observed, preserving their original order.
+                        if (outputState.coordinator) {
+                          outputState.coordinator.markShellFinished();
+                          for (const script of pendingScripts) {
+                            outputState.coordinator.enqueueResolver(script);
                           }
+                          pendingScripts.length = 0;
                         }
                       }
                     } else {
-                      this.push(chunk);
+                      const decodedChunk = decoder.write(
+                        Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
+                      );
+                      writeReact(decodedChunk);
                     }
                     callback();
                   } catch (e) {
@@ -181,6 +162,52 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
                     }
                   }
                 },
+                flush(callback) {
+                  try {
+                    writeReact(decoder.end());
+                  } catch (error) {
+                    callback(
+                      error instanceof Error
+                        ? error
+                        : new Error('Received unknown error when streaming'),
+                    );
+                    return;
+                  }
+
+                  deferredResolversComplete.then(
+                    () => {
+                      try {
+                        outputState.coordinator?.finish();
+                        callback();
+                      } catch (error) {
+                        callback(
+                          error instanceof Error
+                            ? error
+                            : new Error(
+                                'Received unknown error when streaming',
+                              ),
+                        );
+                      }
+                    },
+                    error => {
+                      callback(
+                        error instanceof Error
+                          ? error
+                          : new Error('Received unknown error when streaming'),
+                      );
+                    },
+                  );
+                },
+              });
+
+              const coordinator = new DeferredScriptOutputCoordinator(
+                content => {
+                  body.push(content);
+                },
+              );
+              outputState.coordinator = coordinator;
+              body.once('close', () => {
+                coordinator.abort();
               });
 
               const passThrough = new PassThrough();
@@ -196,19 +223,12 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
                   processedStream = extender.processStream(processedStream);
                 }
               });
-              rendererHead.pipeNodeHeadStream({
-                source: processedStream,
-                destination: body,
-                context: runtimeContext,
-                terminalMarker: ESCAPED_SHELL_STREAM_END_MARK,
-                onError: reportError,
-              });
-              reactStreamingPipe(passThrough);
 
               // Inject router data scripts, enqueue until shell finished
               try {
                 const storageContext = storage.useContext?.();
                 const activeDeferreds = storageContext?.activeDeferreds;
+                const deferredScriptKeys = storageContext?.deferredScriptKeys;
 
                 /**
                  * activeDeferreds is injected into storageContext by @modern-js/runtime.
@@ -219,28 +239,41 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
                     ? Array.from(activeDeferreds.entries())
                     : [];
 
-                if (entries.length > 0) {
+                if (hasDeferredResolvers(entries, deferredScriptKeys)) {
                   const enqueueScript = (s: string) => {
+                    if (!outputState.coordinator) {
+                      throw new Error(
+                        'Deferred script coordinator is not ready',
+                      );
+                    }
                     if (shellChunkStatus === ShellChunkStatus.FINISH) {
-                      body.write(s);
+                      outputState.coordinator.enqueueResolver(s);
                     } else {
                       pendingScripts.push(s);
                     }
                   };
 
-                  enqueueFromEntries(entries, config.nonce, (s: string) =>
-                    enqueueScript(s),
+                  deferredResolversComplete = enqueueFromEntries(
+                    entries,
+                    deferredScriptKeys,
+                    config.nonce,
+                    enqueueScript,
                   );
+                } else {
+                  coordinator.markNoResolvers();
                 }
               } catch (err) {
                 const monitors = getMonitors();
                 monitors.error('cannot inject router data script', err);
               }
+
+              reactStreamingPipe(passThrough);
+
+              processedStream.pipe(body);
             });
           },
 
           onShellError(error: unknown) {
-            rendererHead.abortHeadRender(runtimeContext);
             renderLevel = RenderLevel.CLIENT_RENDER;
             getTemplates(htmlTemplate, {
               request,
@@ -249,7 +282,6 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
               runtimeContext,
               entryName,
               config,
-              moduleFederationCssAssets,
             }).then(({ shellAfter, shellBefore }) => {
               const fallbackHtml = `${shellBefore}${shellAfter}`;
 
@@ -261,7 +293,7 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
           onError(error: unknown) {
             renderLevel = RenderLevel.CLIENT_RENDER;
 
-            reportError(error);
+            options?.onError?.(error);
           },
         },
       );

@@ -9,8 +9,7 @@
     "resolveJsonModule": true,
     "moduleResolution": "bundler",
     "useDefineForClassFields": true,
-    "allowImportingTsExtensions": true,
-    "rootDir": "./src"
+    "allowImportingTsExtensions": true
   },
   "include": ["src"]
 }

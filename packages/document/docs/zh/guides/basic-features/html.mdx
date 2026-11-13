@@ -20,9 +20,8 @@ Modern.js 约定，在 `src/` 或入口目录下，可以创建 `Document.tsx` �
     ├── entry-a
     │   ├── Document.tsx
     │   └── routes
-    ├── entry-b
-    │    └── routes
-    └── modern-app-env.d.ts
+    └── entry-b
+         └── routes
 ```
 
 `entry-a` 会优先使用当前入口下的 `Document.tsx` 文件。如果当前入口没有 `Document.tsx` 文件，例如 `entry-b`，则会查找根目录下的 `Document.tsx` 文件。
@@ -114,16 +113,7 @@ export default function Document(): React.ReactElement {
 <html>
   <head>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, shrink-to-fit=no, viewport-fit=cover, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
-    <meta http-equiv="x-ua-compatible" content="ie=edge" />
-    <meta name="renderer" content="webkit" />
-    <meta name="layoutmode" content="standard" />
-    <meta name="imagemode" content="force" />
-    <meta name="wap-font-scale" content="no" />
-    <meta name="format-detection" content="telephone=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="/a.icon" />
     <script defer src="/static/js/builder-runtime.js"></script>
     <script defer src="/static/js/lib-react.js"></script>

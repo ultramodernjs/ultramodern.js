@@ -1,5 +1,5 @@
-import { fs } from '@modern-js/utils';
 import path from 'path';
+import { fs } from '@modern-js/utils';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import {
   getPort,
@@ -10,27 +10,9 @@ import {
   modernServe,
   sleep,
 } from '../../../../utils/modernTestUtils';
-import { acquireTestLock, conditionalTest } from '../../test-utils';
-
-rstest.setConfig({ testTimeout: 1000 * 60 * 3, hookTimeout: 1000 * 60 * 3 });
+import { conditionalTest } from '../../test-utils';
 
 const projectDir = path.resolve(__dirname, '..');
-
-// The ssg suite (ssg.test.ts) builds the SAME fixture directory and rewrites
-// node_modules/.modern-js/*/routes.js, which makes the dev server trigger HMR
-// full reloads mid-test (and races the prod build/serve suite below).
-// Serialize this file against it.
-let releaseFixtureLock: (() => Promise<void>) | undefined;
-beforeAll(async () => {
-  releaseFixtureLock = await acquireTestLock('i18n-app-ssr-fixture', {
-    timeoutMs: 240_000,
-  });
-});
-afterAll(async () => {
-  if (releaseFixtureLock) {
-    await releaseFixtureLock();
-  }
-});
 
 // Helper function to wait for element text content
 async function waitForElementText(

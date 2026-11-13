@@ -4,9 +4,9 @@
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "declaration": false,
     "jsx": "preserve",
+    "baseUrl": "./",
     "esModuleInterop": true,
-    "paths": {},
-    "rootDir": "./src"
+    "paths": {}
   },
   "include": ["src"]
 }

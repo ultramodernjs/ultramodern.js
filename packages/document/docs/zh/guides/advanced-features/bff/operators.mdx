@@ -36,7 +36,7 @@ import BFFOperatorCode from '@site-docs/components/bff-operator-code';
 <BFFOperatorCode>
 
 ```typescript title="api/lambda/user.ts"
-import { Api, Post, Query, Data } from '@modern-js/plugin-bff/hono-server';
+import { Api, Post, Query, Data } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -89,7 +89,7 @@ addUser({
 <BFFOperatorCode>
 
 ```typescript title="api/lambda/user.ts"
-import { Api, Get, Query, Data } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Query, Data } from '@modern-js/plugin-bff/server';
 
 // 指定接口路由，Modern.js 默认设置 `bff.prefix` 为 `/api`，
 // 因此该接口路由为 `/api/user`，Http Method 为 GET。
@@ -107,7 +107,7 @@ export const getHello = Api(
 <BFFOperatorCode>
 
 ```typescript title="api/lambda/user.ts"
-import { Api, Get, Query, Data } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Query, Data } from '@modern-js/plugin-bff/server';
 
 // 未指定接口路由，根据文件约定和函数名，该接口为 api/user，Http Method 为 get。
 export const get = Api(Query(UserSchema), async ({ query }) => query);
@@ -144,7 +144,7 @@ Modern.js 推荐基于文件约定去定义接口，保持项目中路由清晰�
 
 ```typescript title="api/lambda/user.ts"
 // 服务端代码
-import { Api, Query } from '@modern-js/plugin-bff/hono-server';
+import { Api, Query } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -176,7 +176,7 @@ URL query 参数默认是字符串类型，如果需要数字类型，需要使�
 <BFFOperatorCode>
 
 ```typescript title="api/lambda/user.ts"
-import { Api, Get, Query } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Query } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const QuerySchema = z.object({
@@ -216,7 +216,7 @@ URL query 参数都是字符串类型，如果需要数字类型，需要使用 
 <BFFOperatorCode>
 
 ```typescript title="api/lambda/user.ts"
-import { Api, Data } from '@modern-js/plugin-bff/hono-server';
+import { Api, Data } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const DataSchema = z.object({
@@ -249,7 +249,7 @@ post({
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Get, Params } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Params } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -274,7 +274,7 @@ export const queryUser = Api(
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Headers } from '@modern-js/plugin-bff/hono-server';
+import { Api, Headers } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const headerSchema = z.object({
@@ -336,7 +336,7 @@ try {
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Query, Middleware } from '@modern-js/plugin-bff/hono-server';
+import { Api, Query, Middleware } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -376,7 +376,7 @@ export const get = Api(
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Query, Pipe } from '@modern-js/plugin-bff/hono-server';
+import { Api, Query, Pipe } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -408,7 +408,7 @@ export const get = Api(
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Query, Pipe } from '@modern-js/plugin-bff/hono-server';
+import { Api, Query, Pipe } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -443,7 +443,7 @@ export const get = Api(
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Query, Pipe } from '@modern-js/plugin-bff/hono-server';
+import { Api, Query, Pipe } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -487,7 +487,7 @@ export const get = Api(
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Query, Data, HttpCode } from '@modern-js/plugin-bff/hono-server';
+import { Api, Query, Data, HttpCode } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -523,7 +523,7 @@ export const post = Api(
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Get, SetHeaders } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, SetHeaders } from '@modern-js/plugin-bff/server';
 
 export default Api(
   Get('/hello'),
@@ -543,7 +543,7 @@ export default Api(
 <BFFOperatorCode>
 
 ```typescript
-import { Api, Get, Redirect } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Redirect } from '@modern-js/plugin-bff/server';
 
 export default Api(
   Get('/hello'),
@@ -556,12 +556,12 @@ export default Api(
 
 ## 请求上下文
 
-如上面所述，通过操作符可以执行接口处理函数的入参，获得 `query`，`data`，`params` 等。但有时我们需要获得更多请求上下文的信息，此时可以通过 [`useHonoContext`](/apis/app/runtime/bff/use-backend-context) 获取：
+如上面所述，通过操作符可以执行接口处理函数的入参，获得 `query`，`data`，`params` 等。但有时我们需要获得更多请求上下文的信息，此时可以通过 [`useHonoContext`](/apis/app/runtime/bff/use-hono-context) 获取：
 
 <BFFOperatorCode>
 
 ```typescript title="api/lambda/user.ts"
-import { Api, Get, Query } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Query } from '@modern-js/plugin-bff/server';
 import { useHonoContext } from '@modern-js/server-runtime';
 import { z } from 'zod';
 
@@ -610,7 +610,7 @@ export const queryUser = Api(
 <BFFOperatorCode>
 
 ```typescript
-import { Api, SetHeaders } from '@modern-js/plugin-bff/hono-server';
+import { Api, SetHeaders } from '@modern-js/plugin-bff/server';
 
 export const get = Api(
   // 缓存使用一体化调用或者 fetch 进行请求才会生效

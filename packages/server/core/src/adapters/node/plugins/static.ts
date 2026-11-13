@@ -1,5 +1,8 @@
-import type { ServerRoute } from '@modern-js/types';
 import path from 'path';
+import { fileReader } from '@modern-js/runtime-utils/fileReader';
+import type { ServerRoute } from '@modern-js/types';
+import { fs } from '@modern-js/utils';
+import { getMimeType } from 'hono/utils/mime';
 import type {
   HonoRequest,
   HtmlNormalizedConfig,
@@ -11,10 +14,11 @@ import type {
 import { sortRoutes } from '../../../utils';
 import { getPublicDirPatterns } from '../../../utils/publicDir';
 import {
-  createModuleFederationStaticServing,
-  servePreCompressedPublicRouteAsset,
-  servePublicDirectoryAsset,
-} from './staticServing';
+  type ResolvedStaticCacheControl,
+  createHashedAssetMatcher,
+  resolveStaticCacheControl,
+  setStaticFileHeaders,
+} from './staticCache';
 
 export const serverStaticPlugin = (): ServerPlugin => ({
   name: '@modern-js/plugin-server-static',
@@ -46,45 +50,68 @@ export const serverStaticPlugin = (): ServerPlugin => ({
   },
 });
 
-export type PublicMiddlwareOptions = {
+export type PublicMiddlewareOptions = {
   pwd: string;
   routes: ServerRoute[];
+  cacheControl?: ResolvedStaticCacheControl;
 };
 
 export function createPublicMiddleware({
   pwd,
   routes,
-}: PublicMiddlwareOptions): Middleware {
+  cacheControl,
+}: PublicMiddlewareOptions): Middleware {
+  // Filter and sort a copy once, the routes array is shared with other plugins.
+  const publicRoutes = routes
+    .filter(route => !route.isSSR && route.entryPath?.startsWith('public'))
+    .sort(sortRoutes);
+
   return async (c, next) => {
-    const route = matchPublicRoute(c.req, routes);
+    const route = matchPublicRoute(c.req, publicRoutes);
 
     if (route) {
-      const response = await servePreCompressedPublicRouteAsset(c, pwd, route);
-      if (response !== null) {
-        return response;
-      }
-    }
+      const { entryPath } = route;
+      const filename = path.join(pwd, entryPath);
+      // In development, `fileReader` may read from the compiler's in-memory
+      // filesystem, so the file isn't stat-ed on disk.
+      const data = await fileReader.readFile(filename, 'buffer');
+      const mimeType = getMimeType(filename);
 
-    const generatedPublicAsset = await servePublicDirectoryAsset(c, pwd);
-    if (generatedPublicAsset !== null) {
-      return generatedPublicAsset;
+      if (data !== null) {
+        if (mimeType) {
+          c.header('Content-Type', mimeType);
+        }
+        // Applied first, so that the route's own `Cache-Control` and `ETag`
+        // are kept and its `ETag` is used for revalidation.
+        Object.entries(route.responseHeaders || {}).forEach(([k, v]) => {
+          c.header(k, v as string);
+        });
+        const notModified = setStaticFileHeaders(
+          c,
+          data,
+          cacheControl?.unhashed,
+        );
+        // Hono's `Data` type does not accept Node.js `Buffer<ArrayBufferLike>` directly.
+        // Convert Buffer to `Uint8Array<ArrayBuffer>` without copying.
+        const body = new Uint8Array(
+          data.buffer as ArrayBuffer,
+          data.byteOffset,
+          data.byteLength,
+        );
+
+        if (notModified) {
+          return c.body(null, 304);
+        }
+        return c.body(body, 200);
+      }
     }
 
     return await next();
   };
 }
 
-function matchPublicRoute(req: HonoRequest, routes: ServerRoute[]) {
-  for (const route of routes.sort(sortRoutes)) {
-    if (
-      !route.isSSR &&
-      route.entryPath.startsWith('public') &&
-      req.path.startsWith(route.urlPath)
-    ) {
-      return route;
-    }
-  }
-  return undefined;
+function matchPublicRoute(req: HonoRequest, publicRoutes: ServerRoute[]) {
+  return publicRoutes.find(route => req.path.startsWith(route.urlPath));
 }
 
 // Check whether `target` is located inside `root` (or is `root` itself),
@@ -138,6 +165,9 @@ export function createStaticMiddleware(
   options: ServerStaticOptions,
 ): Middleware {
   const { pwd, routes } = options;
+  const cacheControl = resolveStaticCacheControl(
+    options.server.staticCacheControl,
+  );
   const prefix = options.output.assetPrefix || '/';
   const pathPrefix = extractPathname(prefix);
 
@@ -152,6 +182,12 @@ export function createStaticMiddleware(
   // Convert publicDir paths to regex patterns for matching
   // e.g., './locales' or 'locales' -> 'locales/'
   const publicDirPatterns = getPublicDirPatterns(publicDir);
+  // `config/public` and `config/upload` are copied to `public/` and `upload/`.
+  const isHashedAsset = createHashedAssetMatcher(staticFiles as string[], [
+    'public/',
+    'upload/',
+    ...publicDirPatterns,
+  ]);
 
   // TODO: If possible, we should not use `...staticFiles` here, file should only be read in static and upload dir.
   const staticReg = [
@@ -166,13 +202,11 @@ export function createStaticMiddleware(
   const staticPathRegExp = new RegExp(
     `^${regPrefix}(${[...staticReg, ...iconReg].join('|')})`,
   );
+
   const publicMiddleware = createPublicMiddleware({
     pwd,
     routes: routes || [],
-  });
-  const moduleFederationStaticServing = createModuleFederationStaticServing({
-    pwd,
-    pathPrefix,
+    cacheControl,
   });
 
   /**
@@ -192,41 +226,62 @@ export function createStaticMiddleware(
 
     // Check if path matches static resource pattern
     const hit = staticPathRegExp.test(pathname);
-    const staticServingRequest =
-      await moduleFederationStaticServing.resolveRequest(pathname);
-
-    if (staticServingRequest === null) {
-      return next();
-    }
 
     // FIXME: shoudn't hit, when cssPath, jsPath, mediaPath as '.'
     if (hit) {
-      const response = await moduleFederationStaticServing.serveStaticHit(
-        c,
-        staticServingRequest,
-      );
-      if (response !== null) {
-        return response;
+      const relativePath = pathname
+        .replace(pathPrefix, () => '')
+        .replace(/^\/+/, '');
+      const filepath = path.join(pwd, relativePath);
+      // Prevent path traversal: `pathname` is user-controlled and may contain
+      // `../` sequences (Hono decodes `%2e%2e` in `c.req.path`), which
+      // `path.join` resolves. Reject any resolved path that escapes `pwd`.
+      if (!isPathInside(filepath, pwd)) {
+        return next();
       }
+      // `stat` follows symlinks, a single call checks that the file exists and is not a directory.
+      const stat = await fs.stat(filepath).catch(() => null);
+      if (!stat?.isFile()) {
+        // FIXME: we shoud return a response with status is 404, if we can't found static asset
+        // return c.html(createErrorHtml(404), 404);
 
-      // FIXME: we shoud return a response with status is 404, if we can't found static asset
-      // return c.html(createErrorHtml(404), 404);
-
-      // In some case, page route would hit the staticPathRegExp.
-      // So we call next().
-      return next();
-    }
-
-    const moduleFederationResponse =
-      await moduleFederationStaticServing.serveModuleFederationAsset(
+        // In some case, page route would hit the staticPathRegExp.
+        // So we call next().
+        return next();
+      }
+      // serve static middleware always read file from real filesystem.
+      const chunk = await fileReader.readFileFromSystem(filepath, 'buffer');
+      if (chunk === null) {
+        return next();
+      }
+      const notModified = setStaticFileHeaders(
         c,
-        staticServingRequest,
+        chunk,
+        cacheControl &&
+          (isHashedAsset(relativePath)
+            ? cacheControl.hashed
+            : cacheControl.unhashed),
       );
-    if (moduleFederationResponse !== null) {
-      return moduleFederationResponse;
+      if (notModified) {
+        return c.body(null, 304);
+      }
+      const mimeType = getMimeType(filepath);
+      if (mimeType) {
+        c.header('Content-Type', mimeType);
+      }
+      // TODO: handle http range
+      // Use the size of the (possibly cached) content, so it always matches the body.
+      c.header('Content-Length', String(chunk.byteLength));
+      // See comment above: convert Buffer<ArrayBufferLike> to Uint8Array<ArrayBuffer>.
+      const body = new Uint8Array(
+        chunk.buffer as ArrayBuffer,
+        chunk.byteOffset,
+        chunk.byteLength,
+      );
+      return c.body(body, 200);
+    } else {
+      return publicMiddleware(c, next);
     }
-
-    return publicMiddleware(c, next);
   };
 }
 

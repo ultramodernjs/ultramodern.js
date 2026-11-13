@@ -1,12 +1,10 @@
-import type { Http2ServerRequest } from 'node:http2';
 import type { IncomingMessage, ServerResponse } from 'http';
+import type { Http2ServerRequest } from 'node:http2';
+import type {
+  Filter as ProxyFilter,
+  Options as ProxyOptions,
+} from 'http-proxy-middleware';
 import type { NodeRequest } from './server';
-
-export type ProxyFilter =
-  | string
-  | string[]
-  | ((pathname: string, req: IncomingMessage) => boolean);
-export type ProxyOptions = Record<string, any>;
 export interface Metrics {
   emitCounter: (
     name: string,

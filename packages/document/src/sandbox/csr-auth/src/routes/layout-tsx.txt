@@ -1,4 +1,4 @@
-import { Link, Outlet } from '@modern-js/plugin-tanstack/runtime';
+import { Link, Outlet } from '@modern-js/runtime/router';
 import { AuthProvider, AuthStatus } from './Auth';
 
 export default function Layout() {
@@ -8,10 +8,10 @@ export default function Layout() {
 
       <ul>
         <li>
-          <Link prefetch="render" to="/">Public Page</Link>
+          <Link to="/">Public Page</Link>
         </li>
         <li>
-          <Link prefetch="render" to="/protected">Protected Page</Link>
+          <Link to="/protected">Protected Page</Link>
         </li>
       </ul>
 

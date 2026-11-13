@@ -1,14 +1,13 @@
-// @effect-diagnostics asyncFunction:off nodeBuiltinImport:off strictBooleanExpressions:off
 /// <reference types="node" />
 
+import path from 'path';
 import type {
   AppToolsContext,
   AppToolsFeatureHooks,
   AppToolsNormalizedConfig,
 } from '@modern-js/app-tools';
 import type { Entrypoint } from '@modern-js/types';
-import { formatImportPath, fs } from '@modern-js/utils';
-import path from 'path';
+import { fs, formatImportPath } from '@modern-js/utils';
 import {
   ENTRY_BOOTSTRAP_FILE_NAME,
   ENTRY_POINT_FILE_NAME,
@@ -174,9 +173,7 @@ export const generateCode = async (
             // bootstrap.server.jsx
             await fs.outputFile(
               bootstrapServerFile,
-              `export const requestHandler = import('./${SERVER_ENTRY_POINT_FILE_NAME}').then((m) => m.requestHandler);
-// The renderer awaits this promise later; retain its rejection without an early unhandled rejection.
-requestHandler.catch(() => {});`,
+              `export const requestHandler = import('./${SERVER_ENTRY_POINT_FILE_NAME}').then((m) => m.requestHandler)`,
               'utf8',
             );
           }

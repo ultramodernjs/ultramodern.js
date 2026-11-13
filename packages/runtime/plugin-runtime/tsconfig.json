@@ -4,9 +4,9 @@
     "declaration": false,
     "lib": ["DOM", "ESNext", "dom.iterable"],
     "jsx": "preserve",
+    "baseUrl": "./",
     "isolatedModules": true,
-    "paths": {},
-    "rootDir": "./src"
+    "paths": {}
   },
   "include": ["src", "types"]
 }

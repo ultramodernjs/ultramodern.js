@@ -1,5 +1,288 @@
 # @modern-js/app-tools
 
+## 3.11.3
+
+### Patch Changes
+
+- 67d0de9: fix(app-tools): use a regular expression for watch ignores so node_modules and .git are ignored while generated files remain watched.
+
+  fix(app-tools)：将文件监听的忽略规则改为正则表达式，正确忽略 node_modules 和 .git，同时保留对生成文件的监听。
+
+- 4d498bb: Upgrade @rsbuild/core to 2.3.2, which includes Rspack 2.3.2.
+
+  将 @rsbuild/core 升级至 2.3.2，其中包含 Rspack 2.3.2。
+
+- 3d9233b: fix(app-tools): keep watching a custom output.tempDir inside node_modules and keep the watch ignore in array form so Module Federation does not replace it.
+
+  fix(app-tools): 自定义的 output.tempDir 在 node_modules 下时也保持监听，监听忽略规则保持数组形式，避免被 Module Federation 插件替换。
+
+- Updated dependencies [4d498bb]
+  - @modern-js/builder@3.11.3
+  - @modern-js/plugin@3.11.3
+  - @modern-js/server@3.11.3
+  - @modern-js/server-core@3.11.3
+  - @modern-js/plugin-data-loader@3.11.3
+  - @modern-js/prod-server@3.11.3
+  - @modern-js/server-utils@3.11.3
+  - @modern-js/i18n-utils@3.11.3
+  - @modern-js/types@3.11.3
+  - @modern-js/utils@3.11.3
+
+## 3.11.2
+
+### Patch Changes
+
+- 90174a9: chore(app-tools): release version
+
+  chore(app-tools): 发布版本
+
+  - @modern-js/builder@3.11.2
+  - @modern-js/plugin-data-loader@3.11.2
+  - @modern-js/server-core@3.11.2
+  - @modern-js/prod-server@3.11.2
+  - @modern-js/server@3.11.2
+  - @modern-js/server-utils@3.11.2
+  - @modern-js/i18n-utils@3.11.2
+  - @modern-js/plugin@3.11.2
+  - @modern-js/types@3.11.2
+  - @modern-js/utils@3.11.2
+
+## 3.11.1
+
+### Patch Changes
+
+- fc6ee73: Upgrade @rsbuild/core to 2.3.1.
+
+  将 @rsbuild/core 升级至 2.3.1。
+
+- Updated dependencies [fc6ee73]
+- Updated dependencies [b7eaa44]
+- Updated dependencies [b11c3cd]
+- Updated dependencies [f74d24d]
+- Updated dependencies [1391159]
+  - @modern-js/builder@3.11.1
+  - @modern-js/plugin@3.11.1
+  - @modern-js/server@3.11.1
+  - @modern-js/server-core@3.11.1
+  - @modern-js/types@3.11.1
+  - @modern-js/plugin-data-loader@3.11.1
+  - @modern-js/prod-server@3.11.1
+  - @modern-js/server-utils@3.11.1
+  - @modern-js/utils@3.11.1
+  - @modern-js/i18n-utils@3.11.1
+
+## 3.11.0
+
+### Patch Changes
+
+- @modern-js/plugin-data-loader@3.11.0
+- @modern-js/server-core@3.11.0
+- @modern-js/prod-server@3.11.0
+- @modern-js/server@3.11.0
+- @modern-js/plugin@3.11.0
+- @modern-js/server-utils@3.11.0
+- @modern-js/builder@3.11.0
+- @modern-js/i18n-utils@3.11.0
+- @modern-js/types@3.11.0
+- @modern-js/utils@3.11.0
+
+## 3.10.4
+
+### Patch Changes
+
+- 9c94a22: fix(app-tools): recognize `-e` as an alias of `--entry` when selecting dev entries
+
+  fix(app-tools): 选择开发入口时，将 `-e` 识别为 `--entry` 的别名
+
+- ea77774: fix: compile server TypeScript files to CommonJS with swc when ts-node is not installed, so the dev server can reload them and syntax like enum and decorators works on every Node.js version
+
+  fix: 未安装 ts-node 时用 swc 把服务端 TypeScript 文件编译为 CommonJS，使 dev server 能热更新这些文件，并在所有 Node.js 版本下支持 enum、装饰器等语法
+
+  - @modern-js/builder@3.10.4
+  - @modern-js/plugin-data-loader@3.10.4
+  - @modern-js/server-core@3.10.4
+  - @modern-js/prod-server@3.10.4
+  - @modern-js/server@3.10.4
+  - @modern-js/server-utils@3.10.4
+  - @modern-js/i18n-utils@3.10.4
+  - @modern-js/plugin@3.10.4
+  - @modern-js/types@3.10.4
+  - @modern-js/utils@3.10.4
+
+## 3.10.3
+
+### Patch Changes
+
+- Updated dependencies [52b4a4e]
+  - @modern-js/server-core@3.10.3
+  - @modern-js/plugin-data-loader@3.10.3
+  - @modern-js/prod-server@3.10.3
+  - @modern-js/server@3.10.3
+  - @modern-js/server-utils@3.10.3
+  - @modern-js/builder@3.10.3
+  - @modern-js/i18n-utils@3.10.3
+  - @modern-js/plugin@3.10.3
+  - @modern-js/types@3.10.3
+  - @modern-js/utils@3.10.3
+
+## 3.10.2
+
+### Patch Changes
+
+- 031e081: perf: load `ndepe` lazily in deploy presets so CLI startup no longer pays for it on every command
+
+  perf: 部署预设中按需加载 `ndepe`，避免每个 CLI 命令启动时都加载它
+
+- 8304ce7: perf: collect public folder routes in linear time without a stat call per file
+
+  perf: 以线性时间收集 public 目录路由，不再对每个文件调用 stat
+
+- a04362d: fix(app-tools): scope streaming HTML script rewriting to each entry so CSR and string SSR pages retain their script order and injection settings in mixed applications.
+
+  fix(app-tools): 按入口处理流式 HTML 脚本改写，避免混用应用中的 CSR 和字符串 SSR 页面丢失脚本执行顺序或插入位置配置。
+
+- Updated dependencies [0c7dad2]
+- Updated dependencies [76c675d]
+- Updated dependencies [2f314e5]
+- Updated dependencies [23587d0]
+- Updated dependencies [3b42ce4]
+- Updated dependencies [6a891f0]
+  - @modern-js/builder@3.10.2
+  - @modern-js/plugin-data-loader@3.10.2
+  - @modern-js/server-core@3.10.2
+  - @modern-js/server@3.10.2
+  - @modern-js/plugin@3.10.2
+  - @modern-js/prod-server@3.10.2
+  - @modern-js/server-utils@3.10.2
+  - @modern-js/i18n-utils@3.10.2
+  - @modern-js/types@3.10.2
+  - @modern-js/utils@3.10.2
+
+## 3.10.1
+
+### Patch Changes
+
+- Updated dependencies [e046a11]
+  - @modern-js/server-core@3.10.1
+  - @modern-js/server@3.10.1
+  - @modern-js/plugin-data-loader@3.10.1
+  - @modern-js/prod-server@3.10.1
+  - @modern-js/server-utils@3.10.1
+  - @modern-js/builder@3.10.1
+  - @modern-js/i18n-utils@3.10.1
+  - @modern-js/plugin@3.10.1
+  - @modern-js/types@3.10.1
+  - @modern-js/utils@3.10.1
+
+## 3.10.0
+
+### Patch Changes
+
+- da0fe78: chore: upgrade Rsbuild to v2.2.13
+
+  chore: 升级 Rsbuild 至 v2.2.13
+
+- 430b31e: Move the runtime script to the body before production inlining so streaming SSR hydration waits for initial router data. When runtime extraction is disabled, move the entry containing the runtime to the body and preload it from the head to preserve early downloading.
+- 14c23d0: chore: remove obsolete Jest test plugin hooks, configuration types, and the unused `testing` and `tools.jest` configuration options.
+
+  chore: 移除已废弃的 Jest 测试插件钩子、配置类型以及无用的 `testing` 和 `tools.jest` 配置项。
+
+- 7d9f0bb: chore(deps): upgrade Rsbuild to v2.2.12.
+
+  chore(deps): 升级 Rsbuild 到 v2.2.12。
+
+- Updated dependencies [da0fe78]
+- Updated dependencies [b5f56d5]
+- Updated dependencies [14c23d0]
+- Updated dependencies [9a766ec]
+- Updated dependencies [1d7a38e]
+- Updated dependencies [7d9f0bb]
+  - @modern-js/plugin-data-loader@3.10.0
+  - @modern-js/plugin@3.10.0
+  - @modern-js/builder@3.10.0
+  - @modern-js/server-core@3.10.0
+  - @modern-js/types@3.10.0
+  - @modern-js/server@3.10.0
+  - @modern-js/prod-server@3.10.0
+  - @modern-js/server-utils@3.10.0
+  - @modern-js/utils@3.10.0
+  - @modern-js/i18n-utils@3.10.0
+
+## 3.9.3
+
+### Patch Changes
+
+- 9f475f6: chore: upgrade Rsbuild to v2.2.9
+
+  chore: 升级 Rsbuild 至 v2.2.9
+
+- b721140: Remove the programmatic `build` and `deploy` exports and restore CLI-owned
+  build and deploy lifecycles. Programmatic dev and start calls no longer change
+  CLI-only initialization behavior, and completed non-watch builds are no longer
+  closed automatically. Keep the public `closeServer` API and `DeployOptions`
+  type.
+- Updated dependencies [9f475f6]
+- Updated dependencies [1dcb43c]
+- Updated dependencies [283dc5a]
+- Updated dependencies [a851cf4]
+  - @modern-js/plugin-data-loader@3.9.3
+  - @modern-js/plugin@3.9.3
+  - @modern-js/builder@3.9.3
+  - @modern-js/server-core@3.9.3
+  - @modern-js/server@3.9.3
+  - @modern-js/prod-server@3.9.3
+  - @modern-js/server-utils@3.9.3
+  - @modern-js/i18n-utils@3.9.3
+  - @modern-js/types@3.9.3
+  - @modern-js/utils@3.9.3
+
+## 3.9.2
+
+### Patch Changes
+
+- b4dec57: chore: upgrade Rsbuild to v2.2.6
+
+  chore: 升级 Rsbuild 至 v2.2.6
+
+- e2bbad2: chore: upgrade Rsbuild to v2.2.7
+
+  chore: 升级 Rsbuild 至 v2.2.7
+
+- 6a50153: fix(app-tools): remove `@modern-js/server-runtime` from the SSR bundle externals
+- Updated dependencies [b4dec57]
+- Updated dependencies [e2bbad2]
+  - @modern-js/plugin-data-loader@3.9.2
+  - @modern-js/plugin@3.9.2
+  - @modern-js/builder@3.9.2
+  - @modern-js/server-core@3.9.2
+  - @modern-js/server@3.9.2
+  - @modern-js/prod-server@3.9.2
+  - @modern-js/server-utils@3.9.2
+  - @modern-js/i18n-utils@3.9.2
+  - @modern-js/types@3.9.2
+  - @modern-js/utils@3.9.2
+
+## 3.9.1
+
+### Patch Changes
+
+- 4af5bf0: Upgrade Rsbuild to 2.2.4 and support its stricter bundler chain types, preserving service worker library options and handling non-string public paths in asset prefix templates.
+
+  升级 Rsbuild 至 2.2.4，兼容更严格的 bundler chain 类型，保留 service worker 的 library 配置，并在 assetPrefix 模板中处理非字符串 publicPath。
+
+- Updated dependencies [bc59ee1]
+- Updated dependencies [4af5bf0]
+  - @modern-js/server-utils@3.9.1
+  - @modern-js/builder@3.9.1
+  - @modern-js/plugin-data-loader@3.9.1
+  - @modern-js/plugin@3.9.1
+  - @modern-js/server@3.9.1
+  - @modern-js/server-core@3.9.1
+  - @modern-js/prod-server@3.9.1
+  - @modern-js/i18n-utils@3.9.1
+  - @modern-js/types@3.9.1
+  - @modern-js/utils@3.9.1
+
 ## 3.9.0
 
 ### Minor Changes
@@ -203,15 +486,6 @@
 ## 3.4.0
 
 ### Patch Changes
-
-- BleedingDev `3.4.0-ultramodern.15`: Cloudflare Worker SSR now resolves
-  federated remote CSS assets against the remote manifest URL when a remote
-  publishes a relative `metaData.publicPath` such as `/`, preventing deployed
-  shell Workers from throwing `TypeError: Invalid URL string` while injecting
-  rendered Module Federation CSS links.
-  BleedingDev `3.4.0-ultramodern.19` carries this runtime fix forward and pairs
-  it with the `@modern-js/create` Cloudflare proof and generated remote asset
-  prefix updates.
 
 - 4c7f658: fix(runtime,app-tools): inject CSS of React.lazy descendants into streaming SSR shell to prevent FOUC; slim inline route manifest to only `chunkIds` when RSC is disabled
 

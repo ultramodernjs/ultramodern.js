@@ -1,20 +1,20 @@
-import type { ReactI18nextIntegration } from '../reactI18next';
-
-type ReactI18nextModule = typeof import('react-i18next');
-
-async function tryImportReactI18next(): Promise<ReactI18nextModule | null> {
+// Kept in its own module so the CLI plugin can bundle only react-i18next
+// eagerly. instance.ts also imports i18next dynamically as a fallback, which
+// must stay lazy for apps that pass their own i18n instance.
+export async function getInitReactI18next() {
   try {
-    return (await import('react-i18next')) as ReactI18nextModule;
+    const { initReactI18next } = await import('react-i18next');
+    return initReactI18next;
   } catch (error) {
     return null;
   }
 }
 
-export async function getReactI18nextIntegration(): Promise<ReactI18nextIntegration> {
-  const reactI18nextModule = await tryImportReactI18next();
-
-  return {
-    I18nextProvider: reactI18nextModule?.I18nextProvider ?? null,
-    initReactI18next: reactI18nextModule?.initReactI18next ?? null,
-  };
+export async function getI18nextProvider() {
+  try {
+    const { I18nextProvider } = await import('react-i18next');
+    return I18nextProvider;
+  } catch (error) {
+    return null;
+  }
 }

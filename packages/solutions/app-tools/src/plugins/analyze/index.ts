@@ -1,26 +1,23 @@
 import { isPromise } from 'node:util/types';
+import * as path from 'path';
+import type { RsbuildPlugin, RsbuildPlugins } from '@modern-js/builder';
 import type { ServerRoute } from '@modern-js/types';
 import {
-  createDebugger,
   fs,
+  createDebugger,
   getArgv,
-  getMeta,
   isApiOnly,
   isDevCommand,
-  minimist,
 } from '@modern-js/utils';
-import type { RsbuildPlugin } from '@rsbuild/core';
-import * as path from 'path';
+import { getMeta } from '@modern-js/utils';
 import { createBuilderGenerator } from '../../builder';
 import { initialNormalizedConfig } from '../../config';
-import type {
-  AppNormalizedConfig,
-  AppTools,
-  AppToolsBuilderPlugins,
-  CliPlugin,
-} from '../../types';
+import type { AppNormalizedConfig, AppTools, CliPlugin } from '../../types';
 import { emitResolvedConfig } from '../../utils/config';
-import { getSelectedEntries } from '../../utils/getSelectedEntries';
+import {
+  getSelectedEntries,
+  parseEntryOption,
+} from '../../utils/getSelectedEntries';
 import { printInstructions } from '../../utils/printInstructions';
 import { generateRoutes } from '../../utils/routes';
 import { checkIsBuildCommands, checkIsServeCommand } from './utils';
@@ -41,7 +38,7 @@ export default (): CliPlugin<AppTools> => ({
       const hooks = api.getHooks();
 
       try {
-        if (checkIsBuildCommands(appContext.command)) {
+        if (checkIsBuildCommands()) {
           fs.emptydirSync(appContext.internalDirectory);
         }
       } catch {
@@ -54,7 +51,7 @@ export default (): CliPlugin<AppTools> => ({
         appContext.apiDirectory,
       );
 
-      const [{ getProdEntrypoints, getProdServerRoutes }] = await Promise.all([
+      const [{ getProdServerRoutes }] = await Promise.all([
         import('./getServerRoutes.js'),
       ]);
 
@@ -79,22 +76,6 @@ export default (): CliPlugin<AppTools> => ({
         return;
       }
 
-      if (checkIsServeCommand()) {
-        const routes = getProdServerRoutes(appContext.distDirectory);
-        const entrypoints = getProdEntrypoints(
-          appContext.distDirectory,
-          routes,
-          resolvedConfig.source.mainEntryName,
-        );
-        api.updateAppContext({
-          apiOnly,
-          checkedEntries: entrypoints.map(entrypoint => entrypoint.entryName),
-          entrypoints,
-          serverRoutes: routes,
-        });
-        return;
-      }
-
       const [{ getBundleEntry }, { getServerRoutes }, { getHtmlTemplate }] =
         await Promise.all([
           import('./getBundleEntry.js'),
@@ -110,15 +91,19 @@ export default (): CliPlugin<AppTools> => ({
       debug(`entrypoints: %o`, entrypoints);
 
       const routes: ServerRoute[] = [];
-      const initialRoutes = getServerRoutes(entrypoints, {
-        appContext,
-        config: resolvedConfig,
-      });
+      if (checkIsServeCommand()) {
+        routes.push(...getProdServerRoutes(appContext.distDirectory));
+      } else {
+        const initialRoutes = getServerRoutes(entrypoints, {
+          appContext,
+          config: resolvedConfig,
+        });
 
-      const { routes: modifiedRoutes } = await hooks.modifyServerRoutes.call({
-        routes: initialRoutes,
-      });
-      routes.push(...modifiedRoutes);
+        const { routes: modifiedRoutes } = await hooks.modifyServerRoutes.call({
+          routes: initialRoutes,
+        });
+        routes.push(...modifiedRoutes);
+      }
 
       debug(`server routes: %o`, routes);
 
@@ -185,9 +170,8 @@ export default (): CliPlugin<AppTools> => ({
 
       let checkedEntries = entrypoints.map(point => point.entryName);
       if (isDevCommand()) {
-        const { entry } = minimist(getArgv());
         checkedEntries = await getSelectedEntries(
-          typeof entry === 'string' ? entry.split(',') : entry,
+          parseEntryOption(getArgv()),
           entrypoints,
         );
       }
@@ -203,7 +187,7 @@ export default (): CliPlugin<AppTools> => ({
 
       api.updateAppContext(appContext);
 
-      if (checkIsBuildCommands(appContext.command)) {
+      if (checkIsBuildCommands()) {
         await hooks.generateEntryCode.call({ entrypoints });
 
         const normalizedConfig =
@@ -285,15 +269,13 @@ export default (): CliPlugin<AppTools> => ({
           await hooks.onAfterDev.call({ port });
         });
 
-        const getFlattenedPlugins = async (
-          pluginOptions: AppToolsBuilderPlugins,
-        ) => {
+        const getFlattenedPlugins = async (pluginOptions: RsbuildPlugins) => {
           let plugins = pluginOptions;
           do {
             plugins = (await Promise.all(plugins)).flat(
               Number.POSITIVE_INFINITY as 1,
             );
-          } while (plugins.some((value: unknown) => isPromise(value)));
+          } while (plugins.some(v => isPromise(v)));
 
           return plugins as RsbuildPlugin[];
         };

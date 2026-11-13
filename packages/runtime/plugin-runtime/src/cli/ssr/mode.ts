@@ -1,9 +1,4 @@
-// @effect-diagnostics strictBooleanExpressions:off
-import type {
-  AppNormalizedConfig,
-  AppToolsNormalizedConfig,
-} from '@modern-js/app-tools';
-import { isReact18, isUseRsc } from '@modern-js/utils';
+import type { AppToolsNormalizedConfig } from '@modern-js/app-tools';
 
 export type SSRMode = 'string' | 'stream' | false;
 

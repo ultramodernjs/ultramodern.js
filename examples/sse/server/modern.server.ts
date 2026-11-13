@@ -1,6 +1,6 @@
 import {
-  defineServerConfig,
   type MiddlewareHandler,
+  defineServerConfig,
 } from '@modern-js/server-runtime';
 
 const sseHandler: MiddlewareHandler = async c => {

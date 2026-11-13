@@ -15,12 +15,17 @@ export default {
     withTestPreset({
       name: 'runtime-utils-client',
       root: __dirname,
-      testEnvironment: 'happy-dom',
+      testEnvironment: 'jsdom',
       include: [
         'tests/universal/cache-client.test.ts',
         'tests/browser/**/*.{test,spec}.{js,cjs,mjs,ts,tsx}',
       ],
       globals: true,
+      tools: {
+        swc: {
+          jsc: { transform: { react: { runtime: 'automatic' } } },
+        },
+      },
     }),
   ],
 };

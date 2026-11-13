@@ -1,14 +1,13 @@
-// @effect-diagnostics strictBooleanExpressions:off
 import React, { useContext } from 'react';
+import { DocumentStructureContext } from './DocumentStructureContext';
+import { Links } from './Links';
+import { Scripts } from './Scripts';
+import { Title } from './Title';
 import {
   DOCUMENT_META_PLACEHOLDER,
   HEAD_PARTICALS_SEPARATOR,
   TOP_PARTICALS_SEPARATOR,
 } from './constants';
-import { DocumentStructureContext } from './DocumentStructureContext';
-import { Links } from './Links';
-import { Scripts } from './Scripts';
-import { Title } from './Title';
 
 export function Head(props: { children?: any }) {
   const { hasSetScripts, hasSetLinks, hasSetTitle } = useContext(

@@ -1,5 +1,6 @@
+import type { ServerRoute as ModernRoute } from '@modern-js/types';
+
 import type {
-  ServerRoute as ModernRoute,
   SSGConfig,
   SSGMultiEntryOptions,
   SSGRouteOptions,
@@ -8,8 +9,8 @@ import type {
 
 export type {
   SSGConfig,
-  SSGMultiEntryOptions,
   SSGRouteOptions,
+  SSGMultiEntryOptions,
   SSGSingleEntryOptions,
 };
 

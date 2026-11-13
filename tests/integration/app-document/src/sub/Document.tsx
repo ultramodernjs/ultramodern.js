@@ -10,6 +10,7 @@ import {
   Script,
   Style,
 } from '@modern-js/runtime/document';
+// biome-ignore lint/style/useImportType: <explanation>
 import React, { useContext } from 'react';
 
 export default function Document(): React.ReactElement {

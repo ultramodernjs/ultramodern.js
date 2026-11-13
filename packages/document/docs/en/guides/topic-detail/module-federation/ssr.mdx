@@ -21,72 +21,13 @@ export default defineConfig({
 For better performance, we only support using this capability combination in Streaming SSR scenarios.
 
 :::warning
-Application-level modules (modules using `createBridgeComponent` and `createRemoteAppComponent`) use a **staged stability contract** for SSR.
-
-Enable it explicitly in both host and remote apps:
-
-```ts title="modern.config.ts"
-export default defineConfig({
-  server: {
-    ssr: {
-      mode: 'stream',
-      moduleFederationAppSSR: true,
-    },
-  },
-});
-```
-
-For production rollout, keep fallback boundaries for remote load failures and monitor fallback markers in logs/telemetry.
-
-`moduleFederationAppSSR` enables SSR-compatible Module Federation bundling and runtime behavior. It does not guarantee that every remote component renders its final HTML in the host server response. Some router/runtime combinations, including the TanStack Router fixture, intentionally use typed SSR fallback metadata in the shell and let client hydration replace remote placeholders.
+Application-level modules (modules using `createBridgeComponent` and `createRemoteAppComponent`) do not support server-side rendering (SSR). If you need to use SSR functionality, please use component-level module export methods instead.
 :::
-
-## Node SSR Bundle Compatibility
-
-When Module Federation is enabled together with `server.ssr`, use the framework
-SSR and Module Federation configuration surfaces instead of forcing bundler
-output by hand. Module Federation application bundles are not a safe place to
-opt into `output.module`; keep MF remotes and hosts on the framework-generated
-MF output mode unless your app has a verified custom runtime contract.
-
-UltraModern generated workspaces keep the root workspace and shared packages as
-ESM, but generated MF app packages intentionally do not add app-level
-`"type": "module"`. Older repos should migrate by upgrading the framework
-cohort and running the generated workspace validation, not by adding app-level
-package mode changes, custom navigation/server wrappers, or Module Federation
-output shims.
-
-For Cloudflare SSR deploys, the outer Worker entry is an ESM module worker while
-copied Modern.js SSR worker bundles stay in a nested CommonJS package scope so
-the module Worker can import the emitted worker bundles consistently.
-
-## Battle-Tested Rollout Checklist
-
-Before enabling this for broad production traffic, verify the following scenarios:
-
-1. Host and all remotes use `server.ssr.mode: 'stream'` and the same MF SSR contract flag.
-2. Happy-path SSR works in `dev`, `build`, and `serve` modes, either as server-rendered remote HTML or as an explicit typed fallback contract.
-3. Remote unavailable path is covered by explicit fallback boundaries (no server crash).
-4. Data-fetch timeout and contract-error cases return deterministic fallback UI.
-5. Trace and telemetry markers are present across host/remote boundaries.
-6. Canary rollout with progressive traffic increase has clear rollback criteria.
-
-## Example Rollout Scenarios
-
-1. Baseline enablement (host + remote):
-  - Configure both sides with `server.ssr.mode: 'stream'` and `moduleFederationAppSSR: true`.
-  - Verify SSR HTML contains either remote shell markers or an explicit typed fallback contract that names the client-hydrated remotes.
-2. Remote unavailable fallback:
-  - Keep host flag enabled, stop one remote service, request a remote route.
-  - Verify response is still `200`, fallback boundary renders, and server does not crash.
-3. Timeout and contract-error drill:
-  - Inject a delayed remote/data response and a malformed payload in CI.
-  - Verify deterministic fallback UI and matching telemetry reason codes.
 
 ## Data Fetching
 
 :::tip
-This capability is still in staged rollout. Keep fallback boundaries and run the checklist above in CI before widening traffic.
+Currently, this feature is experimental and has not been fully practiced. Please use it with caution.
 :::
 
 Module Federation now supports [data fetching](https://module-federation.io/zh/guide/basic/data-fetch/index.html#%E7%AE%80%E4%BB%8B) capabilities. Each producer file can have a corresponding data fetching file, with the file name format of `[name].data.ts`.

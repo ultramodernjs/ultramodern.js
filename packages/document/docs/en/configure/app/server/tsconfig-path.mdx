@@ -13,7 +13,7 @@ This option affects:
 
 - BFF / API compilation (`@modern-js/plugin-bff`)
 - Custom server compilation (`*.ts` files under `server/`)
-- Runtime Node-native TypeScript registration, such as SSR, `modern.config.ts`, and `.ts` files under `config/`
+- Runtime ts-node registration, such as SSR, `modern.config.ts`, and `.ts` files under `config/`
 
 When this option is not set, `<appDirectory>/tsconfig.json` is used by default.
 
@@ -40,9 +40,9 @@ Add `<appDirectory>/tsconfig.server.json`:
     "types": ["node"],
     "esModuleInterop": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "emitDecoratorMetadata": true,
   },
-  "include": ["api", "shared", "server", "config", "modern.config.ts"]
+  "include": ["api", "shared", "server", "config", "modern.config.ts"],
 }
 ```
 
@@ -60,4 +60,4 @@ export default defineConfig({
 
 - `tsconfigPath` is resolved relative to `appDirectory`. Absolute paths are also supported.
 - It is recommended to inherit shared options such as `paths` from the root tsconfig through `extends`, instead of maintaining them in multiple files.
-- If the configured file does not exist, the runtime TypeScript setup will throw an error at startup.
+- If the configured file does not exist, TypeScript / ts-node will throw an error at startup.

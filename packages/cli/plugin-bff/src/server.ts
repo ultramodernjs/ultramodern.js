@@ -1,85 +1,23 @@
-// @effect-diagnostics asyncFunction:off nodeBuiltinImport:off strictBooleanExpressions:off
-import { ApiRouter } from '@modern-js/bff-core';
-import type {
-  APIServerStartInput,
-  BffUserConfig,
-  MiddlewareHandler,
-  ServerPlugin,
-  ServerPluginAPI,
-} from '@modern-js/server-core';
-import type { ServerNodeMiddleware } from '@modern-js/server-core/node';
-import { API_DIR, isFunction, isWebOnly } from '@modern-js/utils';
 import path from 'path';
+import { ApiRouter } from '@modern-js/bff-core';
+import type { MiddlewareHandler, ServerPlugin } from '@modern-js/server-core';
+import type { ServerNodeMiddleware } from '@modern-js/server-core/node';
+import { API_DIR, isWebOnly } from '@modern-js/utils';
+import { isFunction } from '@modern-js/utils';
 import { HonoAdapter } from './runtime/hono/adapter';
 
-type ApiMiddlewareRegistration = unknown;
-type RuntimeFramework = NonNullable<BffUserConfig['runtimeFramework']>;
-
-type RuntimeAdapterOptions = {
-  prefix: string | readonly string[];
-  enableHandleWeb?: boolean;
-};
-
-type RuntimeAdapter = {
-  registerMiddleware: (options: RuntimeAdapterOptions) => Promise<void>;
-};
-
-type RuntimeAdapterLoader = (api: ServerPluginAPI) => Promise<RuntimeAdapter[]>;
-
-// FORK: the Effect adapter is loaded through a DYNAMIC import so that `effect`
-// and `@effect/opentelemetry` remain optional peers. Do not
-// collapse this back to a static import on a sync merge.
-// Guard: tests/regression.test.ts ("server entry does not eagerly load Effect").
-
-const RUNTIME_ADAPTER_LOADERS: Record<RuntimeFramework, RuntimeAdapterLoader> =
-  {
-    hono: async api => [new HonoAdapter(api)],
-    effect: async api => {
-      const { EffectAdapter } = await import(
-        '@modern-js/plugin-bff-extensions/effect-adapter'
-      );
-      return [new EffectAdapter(api)];
-    },
-  };
-
-const normalizePrefixList = (prefix: string | string[] | undefined) => {
-  if (Array.isArray(prefix)) {
-    return prefix.filter(Boolean);
-  }
-  return [prefix || '/api'];
-};
-
-const getPrimaryPrefix = (prefix: string | string[] | undefined) =>
-  normalizePrefixList(prefix)[0] || '/api';
-
-function resolveRuntimeFramework(
-  runtimeFramework: BffUserConfig['runtimeFramework'],
-): RuntimeFramework {
-  return runtimeFramework === 'hono' ? 'hono' : 'effect';
-}
-
-type PrepareApiServerNext = (
-  input: APIServerStartInput,
-) => Promise<ServerNodeMiddleware>;
-type PrepareApiServerTap = (
-  input: APIServerStartInput,
-  next: PrepareApiServerNext,
-) => Promise<ServerNodeMiddleware>;
-
+type SF = (args: any) => void;
 class Storage {
-  public middlewares: ApiMiddlewareRegistration[] = [];
+  public middlewares: SF[] = [];
 }
 
 export default (): ServerPlugin => ({
   name: '@modern-js/plugin-bff',
   setup: api => {
     const storage = new Storage();
-    let apiRouter: ApiRouter | null = null;
+    let apiRouter: ApiRouter;
 
-    const appContext = api.getServerContext();
-    const runtimeFramework = resolveRuntimeFramework(
-      appContext.bffRuntimeFramework,
-    );
+    const honoAdapter = new HonoAdapter(api);
 
     api.onPrepare(async () => {
       const appContext = api.getServerContext();
@@ -93,8 +31,7 @@ export default (): ServerPlugin => ({
 
       /** bind api server */
       const config = api.getServerConfig();
-      const prefixList = normalizePrefixList(config?.bff?.prefix);
-      const prefix = getPrimaryPrefix(config?.bff?.prefix);
+      const prefix = config?.bff?.prefix || '/api';
       const enableHandleWeb = config?.bff?.enableHandleWeb;
       const httpMethodDecider = config?.bff?.httpMethodDecider;
 
@@ -103,57 +40,42 @@ export default (): ServerPlugin => ({
 
       const webOnly = await isWebOnly();
 
-      if (runtimeFramework === 'hono') {
-        let handler: ServerNodeMiddleware;
+      let handler: ServerNodeMiddleware;
 
-        if (webOnly) {
-          handler = async (c, next) => {
-            c.body('');
-            await next();
-          };
-        } else {
-          const runner = api.getHooks();
-          const renderHandler = enableHandleWeb ? render : null;
-          handler = await runner.prepareApiServer.call({
-            pwd: pwd!,
-            prefix,
-            render: renderHandler,
-            httpMethodDecider,
-          });
-        }
-
-        if (handler && isFunction(handler)) {
-          globalMiddlewares.push({
-            name: 'bind-bff',
-            handler: ((c, next) => {
-              if (
-                !prefixList.some(item => c.req.path.startsWith(item)) &&
-                !enableHandleWeb
-              ) {
-                return next();
-              }
-              return handler(c, next);
-            }) as MiddlewareHandler,
-            order: 'post',
-            before: [
-              'custom-server-hook',
-              'custom-server-middleware',
-              'render',
-            ],
-          });
-        }
+      if (webOnly) {
+        handler = async (c, next) => {
+          c.body('');
+          await next();
+        };
+      } else {
+        const runner = api.getHooks();
+        const renderHandler = enableHandleWeb ? render : null;
+        handler = await runner.prepareApiServer.call({
+          pwd: pwd!,
+          prefix,
+          render: renderHandler,
+          httpMethodDecider,
+        });
       }
 
-      const runtimeAdapters =
-        await RUNTIME_ADAPTER_LOADERS[runtimeFramework](api);
-      await Promise.all(
-        runtimeAdapters.map(adapter =>
-          adapter.registerMiddleware({
-            prefix: runtimeFramework === 'effect' ? prefixList : prefix,
-            enableHandleWeb,
-          }),
-        ),
-      );
+      if (handler && isFunction(handler)) {
+        globalMiddlewares.push({
+          name: 'bind-bff',
+          handler: ((c, next) => {
+            if (!c.req.path.startsWith(prefix) && !enableHandleWeb) {
+              return next();
+            } else {
+              return handler(c, next);
+            }
+          }) as MiddlewareHandler,
+          order: 'post',
+          before: ['custom-server-hook', 'custom-server-middleware', 'render'],
+        });
+      }
+
+      // Await: this is the sole BFF Hono registration entry, and onPrepare must
+      // finish pushing routes before ServerBase#applyMiddlewares runs.
+      await honoAdapter.registerMiddleware();
     });
     // This plugin's own routes are re-registered from scratch on every unified
     // runtime reload, so no BFF-local route rebuild is needed here. But the
@@ -173,26 +95,15 @@ export default (): ServerPlugin => ({
         });
       }
     });
-    const prepareApiServer: PrepareApiServerTap = async (input, next) => {
-      if (runtimeFramework !== 'hono') {
-        return next(input);
-      }
+    api.prepareApiServer((async (input: any, next: any) => {
       const { pwd, prefix, httpMethodDecider } = input;
-      const defaultApiDirectory = path.resolve(pwd, API_DIR);
+      const apiDir = path.resolve(pwd, API_DIR);
       const appContext = api.getServerContext();
-      const apiDirectory =
-        typeof appContext.apiDirectory === 'string'
-          ? appContext.apiDirectory
-          : defaultApiDirectory;
-      const lambdaDirectory =
-        typeof appContext.lambdaDirectory === 'string'
-          ? appContext.lambdaDirectory
-          : undefined;
-
+      const { apiDirectory, lambdaDirectory } = appContext;
       apiRouter = new ApiRouter({
         appDir: pwd,
-        apiDir: apiDirectory,
-        lambdaDir: lambdaDirectory,
+        apiDir: (apiDirectory as string) || apiDir,
+        lambdaDir: lambdaDirectory as string,
         prefix,
         httpMethodDecider,
       });
@@ -203,9 +114,6 @@ export default (): ServerPlugin => ({
         apiHandlerInfos,
       });
       return next(input);
-    };
-    api.prepareApiServer(
-      prepareApiServer as unknown as Parameters<typeof api.prepareApiServer>[0],
-    );
+    }) as any);
   },
 });

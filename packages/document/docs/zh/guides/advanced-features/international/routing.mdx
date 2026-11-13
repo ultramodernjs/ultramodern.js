@@ -26,56 +26,13 @@ i18nPlugin({
 
 **效果：**
 
-| 访问路径 | 结果 |
-| --- | --- |
-| `/about` | 重定向到 `/en/about` |
+| 访问路径    | 结果                  |
+| ----------- | --------------------- |
+| `/about`    | 重定向到 `/en/about`  |
 | `/en/about` | 正常访问，语言为 `en` |
 | `/zh/about` | 正常访问，语言为 `zh` |
 
-API 和 BFF 前缀会自动跳过，包括服务端 API 路由、启用 BFF 但未配置前缀时的默认 `/api` 前缀，以及自定义 `bff.prefix`。这些路由不需要语言前缀，也不需要配置 `localisedUrls`。如果还有其他业务路径不应该重定向，可以使用 `ignoreRedirectRoutes`，详见[语言检测 → ignoreRedirectRoutes](./locale-detection.md#ignoreredirectroutes)。
-
-## 本地化 URL 路径
-
-默认情况下，`localePathRedirect` 只会添加和识别语言前缀，例如 `/en/about`。翻译路径片段需要显式开启：只有提供非空 `localisedUrls` 映射时才会启用。省略 `localisedUrls`、设置为 `true`、设置为 `false` 或传入空对象时，都会保持仅语言前缀的行为。
-
-配置非空 `localisedUrls` 映射后，每个可本地化的路由路径都必须为所有已配置语言提供 URL。如果向 `languages` 中新增语言，Modern.js 会在路由生成阶段失败，直到每个 `localisedUrls` 条目都补齐该语言。
-
-`localisedUrls` 同时适用于 React Router 和 TanStack Router 项目的约定式路由。不要为 API 路由、BFF 前缀或配置的 `bff.prefix` 添加本地化 URL 条目；这些路径会自动排除在语言重定向之外。
-
-```ts
-// modern.config.ts
-i18nPlugin({
-  localeDetection: {
-    localePathRedirect: true,
-    languages: ['en', 'cs'],
-    fallbackLanguage: 'en',
-    localisedUrls: {
-      '/terms-of-service': {
-        en: '/terms-of-service',
-        cs: '/podminky-pouzivani',
-      },
-      '/products': {
-        en: '/products',
-        cs: '/produkty',
-      },
-      '/products/:slug': {
-        en: '/products/:slug',
-        cs: '/produkty/:slug',
-      },
-    },
-  },
-});
-```
-
-**效果：**
-
-| 访问路径 | 结果 |
-| --- | --- |
-| `/terms-of-service` | 重定向到 `/en/terms-of-service` |
-| `/cs/terms-of-service` | 重定向到 `/cs/podminky-pouzivani` |
-| `/cs/podminky-pouzivani` | 正常访问，语言为 `cs` |
-
-当 preset、共享配置或生成的元数据本来会提供映射，但当前入口只希望保留语言前缀、不翻译路径片段时，可以设置 `localisedUrls: false` 作为逃生口。
+某些路径（如 API 路由、静态资源）不需要语言前缀，可以通过 `ignoreRedirectRoutes` 跳过重定向，详见[语言检测 → ignoreRedirectRoutes](./locale-detection.md#ignoreredirectroutes)。
 
 ## 路由配置
 
@@ -151,7 +108,9 @@ function Navigation() {
     <nav>
       <I18nLink to="/">首页</I18nLink>
       <I18nLink to="/about">关于</I18nLink>
-      <I18nLink to="/contact" replace>联系</I18nLink>
+      <I18nLink to="/contact" replace>
+        联系
+      </I18nLink>
     </nav>
   );
 }
@@ -174,4 +133,4 @@ function Navigation() {
 <I18nLink to="/en/about">关于</I18nLink>
 ```
 
-`I18nLink` 会使用当前启用的 Modern.js 路由。在 React Router 项目中渲染 React Router 的 `Link`；在 TanStack Router 项目中通过 TanStack Router 导航。完整 Props 类型见 [API 参考](./api.md#i18nlink-组件)。
+`I18nLink` 继承自 `@modern-js/runtime/router` 的 `Link` 组件，支持 `replace`、`state`、`className` 等所有标准 Link props，完整 Props 类型见 [API 参考](./api.md#i18nlink-组件)。

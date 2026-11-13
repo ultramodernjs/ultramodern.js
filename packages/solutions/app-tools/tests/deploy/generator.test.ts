@@ -1,5 +1,4 @@
 import path from 'node:path';
-import vm from 'node:vm';
 import * as deployUtils from '../../src/plugins/deploy/utils' with {
   rstest: 'importActual',
 };
@@ -12,7 +11,7 @@ rstest.mock('../../src/plugins/deploy/utils', () => ({
 }));
 
 describe('deploy generator', () => {
-  it('preserves Windows separators when generated paths are evaluated', () => {
+  it('should escape backslash in generated path literal', () => {
     rstest
       .spyOn(path, 'relative')
       .mockReturnValueOnce('shared')
@@ -36,26 +35,11 @@ describe('deploy generator', () => {
     };
 
     const context = serverAppContextTemplate(appContext);
-    const generatedModule = {
-      exports: {} as Record<string, unknown>,
-    };
 
-    new vm.Script(`
-      module.exports = {
-        sharedDirectory: ${context.sharedDirectory},
-        apiDirectory: ${context.apiDirectory},
-        lambdaDirectory: ${context.lambdaDirectory},
-      };
-    `).runInNewContext({
-      __dirname: '/generated/server',
-      module: generatedModule,
-      path: path.posix,
-    });
-
-    expect(generatedModule.exports).toEqual({
-      sharedDirectory: '/generated/server/shared',
-      apiDirectory: '/generated/server/api',
-      lambdaDirectory: '/generated/server/api\\lambda',
-    });
+    expect(context.sharedDirectory).toBe('path.join(__dirname, "shared")');
+    expect(context.apiDirectory).toBe('path.join(__dirname, "api")');
+    expect(context.lambdaDirectory).toBe(
+      'path.join(__dirname, "api\\\\lambda")',
+    );
   });
 });

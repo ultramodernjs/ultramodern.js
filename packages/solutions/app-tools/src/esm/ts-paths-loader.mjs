@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { findMatchedSourcePath, findSourceEntry } from '@modern-js/utils';
 import { createMatchPath as oCreateMatchPath } from '@modern-js/utils/tsconfig-paths';
-import { fileURLToPath, pathToFileURL } from 'url';
 
 let matchPath;
 let appDir;

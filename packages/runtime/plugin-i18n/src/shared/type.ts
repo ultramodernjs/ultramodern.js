@@ -1,4 +1,3 @@
-import type { LocalisedUrlsOption } from '@modern-js/i18n-runtime-extensions';
 import type {
   LanguageDetectorOptions,
   Resources,
@@ -11,19 +10,6 @@ export interface BaseLocaleDetectionOptions {
   fallbackLanguage?: string;
   detection?: LanguageDetectorOptions;
   ignoreRedirectRoutes?: string[] | ((pathname: string) => boolean);
-  /**
-   * Enables localised pathnames in addition to the locale prefix.
-   *
-   * - non-empty object: map canonical route paths to every configured
-   *   language; route generation then validates that every localisable route
-   *   path has entries for all configured languages.
-   * - absent / `false` / `true` / empty object: keep only locale-prefix
-   *   behavior (`/en/about`).
-   *
-   * Strictly opt-in: without a map, `localePathRedirect` + `languages` behave
-   * exactly like upstream Modern.js.
-   */
-  localisedUrls?: LocalisedUrlsOption;
 }
 
 export interface LocaleDetectionOptions extends BaseLocaleDetectionOptions {

@@ -1,6 +1,6 @@
 import {
-  defineServerConfig,
   type MiddlewareHandler,
+  defineServerConfig,
   useHonoContext,
 } from '@modern-js/server-runtime';
 

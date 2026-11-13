@@ -8,8 +8,8 @@
     "start": "tsx ./src/index.ts"
   },
   "devDependencies": {
-    "@types/node": "^26.4.1",
-    "tsx": "^4.23.13",
-    "typescript": "^7.0.2"
+    "@types/node": "^20",
+    "tsx": "^3.14.0",
+    "typescript": "^5"
   }
 }

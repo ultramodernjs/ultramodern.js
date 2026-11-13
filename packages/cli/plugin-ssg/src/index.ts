@@ -1,3 +1,4 @@
+import path from 'path';
 import type { AppTools, CliPlugin } from '@modern-js/app-tools';
 import type {
   NestedRouteForCli,
@@ -5,7 +6,6 @@ import type {
   SSGSingleEntryOptions,
 } from '@modern-js/types';
 import { filterRoutesForServer, logger } from '@modern-js/utils';
-import path from 'path';
 import { makeRoute } from './libs/make';
 import { writeHtmlFile } from './libs/output';
 import { replaceRoute } from './libs/replace';
@@ -184,7 +184,10 @@ export const ssgPlugin = (): CliPlugin<AppTools> => ({
       writeHtmlFile(htmlAry, ssgRoutes, buildDir);
 
       // format route info, side effect
-      replaceRoute(ssgRoutes, pageRoutes);
+      replaceRoute(
+        ssgRoutes.filter((_, index) => htmlAry[index] !== undefined),
+        pageRoutes,
+      );
 
       // write routes to spec file
       writeJSONSpec(buildDir, pageRoutes.concat(apiRoutes));

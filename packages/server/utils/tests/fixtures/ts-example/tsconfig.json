@@ -3,16 +3,13 @@
   "compilerOptions": {
     "declaration": false,
     "jsx": "preserve",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
     "baseUrl": "./",
     "paths": {
       "@/*": ["./src/*"],
       "@shared/*": ["./shared/*"],
       "@api/*": ["./api/*"],
       "@server/*": ["./server/*"]
-    },
-    "rootDir": "./src"
+    }
   },
   "include": ["src", "shared", "server", "config", "api", "modern-app-env.d.ts"]
 }

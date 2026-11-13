@@ -15,8 +15,7 @@ import type {
 import type { ServerPluginExtends } from '../types/server/plugin';
 import type { DeepPartial } from '../types/utils';
 
-export const debug: ReturnType<typeof createDebugger> =
-  createDebugger('plugin-server-v2');
+export const debug = createDebugger('plugin-server-v2');
 
 export function initPluginAPI<Extends extends ServerPluginExtends>({
   context,

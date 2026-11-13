@@ -1,5 +1,5 @@
-import { compatibleRequire, globby } from '@modern-js/utils';
 import path from 'path';
+import { compatibleRequire, globby } from '@modern-js/utils';
 import { INDEX_SUFFIX } from './constants';
 import type { APIHandlerInfo } from './types';
 

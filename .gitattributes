@@ -1,2 +1,1 @@
 pnpm-lock.yaml               merge=ours
-*.patch                      whitespace=-space-before-tab

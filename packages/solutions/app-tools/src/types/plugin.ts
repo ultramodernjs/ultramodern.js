@@ -19,8 +19,8 @@ import type {
 } from '@modern-js/types';
 import type { EagerRouteComponentFilesByEntry } from '@modern-js/utils';
 import type { EnvironmentConfig } from '@rsbuild/core';
-import type { getHookRunners } from '../compat/hooks';
 import type { AppTools } from '.';
+import type { getHookRunners } from '../compat/hooks';
 import type { AppToolsNormalizedConfig, AppToolsUserConfig } from './config';
 
 export type AfterPrepareFn = () => Promise<void> | void;
@@ -84,8 +84,10 @@ export interface AppToolsExtendAPI {
   useHookRunners: () => ReturnType<typeof getHookRunners>;
 }
 
-export interface AppToolsExtendHooks
-  extends Record<string, PluginHook<(...args: any[]) => any>> {
+export interface AppToolsExtendHooks extends Record<
+  string,
+  PluginHook<(...args: any[]) => any>
+> {
   onAfterPrepare: AsyncHook<AfterPrepareFn>;
   deploy: AsyncHook<DeplpoyFn>;
   checkEntryPoint: AsyncHook<CheckEntryPointFn>;
@@ -138,7 +140,7 @@ export interface AppToolsExtendContext {
    * Identification for bff runtime framework
    * @private
    */
-  bffRuntimeFramework?: 'hono' | 'effect';
+  bffRuntimeFramework?: string;
   /**
    * Route component files collected from the FINAL file-system routes (after all
    * `modifyFileSystemRoutes` consumers ran), keyed by entry name. Populated by

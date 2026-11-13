@@ -1,84 +1,35 @@
-// @effect-diagnostics asyncFunction:off nodeBuiltinImport:off strictBooleanExpressions:off
+import path from 'path';
 import type { AppNormalizedConfig, AppTools } from '@modern-js/app-tools';
 import type { CLIPluginAPI } from '@modern-js/plugin';
-import type {
-  Entrypoint,
-  NestedRouteForCli,
-  PageRoute,
-} from '@modern-js/types';
+import type { Entrypoint } from '@modern-js/types';
 import { getMeta } from '@modern-js/utils';
 import { cloneDeep } from '@modern-js/utils/lodash';
-import path from 'path';
 import * as templates from './code/templates';
 import { isPageComponentFile } from './code/utils';
 import { modifyEntrypoints } from './entry';
 
-type GeneratedRoutesByEntry = Record<string, (NestedRouteForCli | PageRoute)[]>;
+let originEntrypoints: any[] = [];
 
-type RegenerateRoutesFn = (params: {
-  api: CLIPluginAPI<AppTools>;
-  appContext: ReturnType<CLIPluginAPI<AppTools>['getAppContext']>;
-  resolvedConfig: AppNormalizedConfig;
-  entrypoints: Entrypoint[];
-}) => Promise<void>;
-
-type HandleGeneratorEntryCodeOptions = {
-  entrypointsKey?: string;
-  hydrateRscClientRoutes?: boolean;
-  includeRouteServerLoadersInSsrEntry?: boolean;
-  isolateRouteDataInRscLayer?: boolean;
-  serverRoutesFileName?: string;
-};
-
-type HandleFileChangeOptions = {
-  includeEntry?: (entrypoint: Entrypoint) => boolean;
-  regenerate?: RegenerateRoutesFn;
-  entrypointsKey?: string;
-};
-
-type HandleModifyEntrypointsOptions = {
-  routesOwner?: string;
-};
-
-const DEFAULT_ENTRYPOINTS_KEY = '__default_router_entries__';
-const originEntrypointsByKey = new Map<string, Entrypoint[]>();
-
-export async function handleModifyEntrypoints(
-  entrypoints: Entrypoint[],
-  routesDir?: string,
-  options: HandleModifyEntrypointsOptions = {},
-) {
-  return modifyEntrypoints(entrypoints, routesDir, options.routesOwner);
+export async function handleModifyEntrypoints(entrypoints: Entrypoint[]) {
+  return modifyEntrypoints(entrypoints);
 }
 
 export async function handleGeneratorEntryCode(
   api: CLIPluginAPI<AppTools>,
   entrypoints: Entrypoint[],
-  options: HandleGeneratorEntryCodeOptions | string = {},
-): Promise<GeneratedRoutesByEntry> {
-  const normalizedOptions =
-    typeof options === 'string' ? { entrypointsKey: options } : options;
-  const entrypointsKey =
-    normalizedOptions.entrypointsKey || DEFAULT_ENTRYPOINTS_KEY;
+) {
   const appContext = api.getAppContext();
   const { internalDirectory } = appContext;
   const resolvedConfig = api.getNormalizedConfig();
   const { generatorRegisterCode, generateCode, generatorServerRegisterCode } =
     await import('./code');
-  originEntrypointsByKey.set(entrypointsKey, cloneDeep(entrypoints));
+  originEntrypoints = cloneDeep(entrypoints);
   const enableRsc = resolvedConfig?.server?.rsc;
-  const routesByEntry = await generateCode(
+  await generateCode(
     appContext,
     resolvedConfig as AppNormalizedConfig,
     entrypoints,
     api,
-    {
-      hydrateRscClientRoutes: normalizedOptions.hydrateRscClientRoutes,
-      includeRouteServerLoadersInSsrEntry:
-        normalizedOptions.includeRouteServerLoadersInSsrEntry,
-      isolateRouteDataInRscLayer: normalizedOptions.isolateRouteDataInRscLayer,
-      serverRoutesFileName: normalizedOptions.serverRoutesFileName,
-    },
   );
   await Promise.all(
     entrypoints.map(async entrypoint => {
@@ -113,9 +64,6 @@ export async function handleGeneratorEntryCode(
               internalSrcAlias: appContext.internalSrcAlias,
               globalApp: entrypoint.fileSystemRoutes?.globalApp,
               rscType: 'server',
-              routesImportPath: normalizedOptions.serverRoutesFileName
-                ? `./${normalizedOptions.serverRoutesFileName.replace(/\.js$/, '')}`
-                : undefined,
               basename,
             }),
           );
@@ -123,38 +71,21 @@ export async function handleGeneratorEntryCode(
       }
     }),
   );
-  return routesByEntry;
+  return entrypoints;
 }
 
-export async function handleFileChange(
-  api: CLIPluginAPI<AppTools>,
-  e: any,
-  options: HandleFileChangeOptions = {},
-) {
-  const {
-    includeEntry,
-    regenerate,
-    entrypointsKey = DEFAULT_ENTRYPOINTS_KEY,
-  } = options;
+export async function handleFileChange(api: CLIPluginAPI<AppTools>, e: any) {
   const appContext = api.getAppContext();
   const { appDirectory, entrypoints } = appContext;
-  const activeEntrypoints = includeEntry
-    ? entrypoints.filter(includeEntry)
-    : entrypoints;
   const { filename, eventType } = e;
-  const nestedRouteEntries = activeEntrypoints
+  const nestedRouteEntries = entrypoints
     .map(point => point.nestedRoutesEntry)
     .filter(Boolean) as string[];
-  const pagesDir = activeEntrypoints
+  const pagesDir = entrypoints
     .map(point => point.entry)
     // should only watch file-based routes
     .filter(entry => entry && !path.extname(entry))
     .concat(nestedRouteEntries);
-
-  if (pagesDir.length === 0) {
-    return;
-  }
-
   const isPageFile = (name: string) =>
     pagesDir.some(pageDir => name.includes(pageDir));
 
@@ -174,24 +105,14 @@ export async function handleFileChange(
     (isConfigRoutesFile &&
       (eventType === 'change' || eventType === 'add' || eventType === 'unlink'))
   ) {
-    const resolvedConfig = api.getNormalizedConfig() as AppNormalizedConfig;
-    const cachedEntrypoints =
-      originEntrypointsByKey.get(entrypointsKey) || activeEntrypoints;
-    const entrypoints = cloneDeep(cachedEntrypoints).filter(entrypoint =>
-      includeEntry ? includeEntry(entrypoint) : true,
-    );
-
-    if (regenerate) {
-      await regenerate({
-        api,
-        appContext,
-        resolvedConfig,
-        entrypoints,
-      });
-      return;
-    }
-
+    const resolvedConfig = api.getNormalizedConfig();
     const { generateCode } = await import('./code');
-    await generateCode(appContext, resolvedConfig, entrypoints, api);
+    const entrypoints = cloneDeep(originEntrypoints);
+    await generateCode(
+      appContext,
+      resolvedConfig as AppNormalizedConfig,
+      entrypoints,
+      api,
+    );
   }
 }

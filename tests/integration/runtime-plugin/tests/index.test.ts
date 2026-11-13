@@ -1,7 +1,7 @@
 import path from 'path';
+import getPort from 'get-port';
 import puppeteer from 'puppeteer';
 import {
-  getPort,
   killApp,
   launchApp,
   launchOptions,

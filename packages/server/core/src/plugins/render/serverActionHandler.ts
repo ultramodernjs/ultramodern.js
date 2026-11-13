@@ -5,13 +5,6 @@ export const serverActionHandler = async (
   req: Request,
   { serverManifest, routeInfo, rscClientManifest }: SSRRenderOptions,
 ) => {
-  if (req.method !== 'POST') {
-    return new Response('Method not allowed', {
-      status: 405,
-      headers: { Allow: 'POST' },
-    });
-  }
-
   const serverBundle =
     serverManifest?.renderBundles?.[routeInfo.entryName || MAIN_ENTRY_NAME];
 

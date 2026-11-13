@@ -1,7 +1,7 @@
-import type { NodeRequest, NodeResponse } from '@modern-js/types';
 import EventEmitter from 'events';
-import httpMocks from 'node-mocks-http';
 import { Readable } from 'stream';
+import type { NodeRequest, NodeResponse } from '@modern-js/types';
+import httpMocks from 'node-mocks-http';
 
 export type Options = {
   url: string;
@@ -12,13 +12,6 @@ export type Options = {
   [propName: string]: any;
 };
 
-type MockHttpResponse = ReturnType<typeof httpMocks.createResponse> & {
-  on: (event: 'finish' | 'error', listener: (...args: any[]) => void) => void;
-  statusCode: number;
-  statusMessage?: string;
-  _getData: () => string;
-};
-
 export const compile =
   (requestHandler: (req: NodeRequest, res: NodeResponse) => void) =>
   (options: Options, extend = {}): Promise<string> =>
@@ -27,9 +20,7 @@ export const compile =
         ...options,
         eventEmitter: Readable,
       });
-      const res = httpMocks.createResponse({
-        eventEmitter: EventEmitter,
-      }) as MockHttpResponse;
+      const res = httpMocks.createResponse({ eventEmitter: EventEmitter });
 
       Object.assign(req, extend);
       const proxyRes = new Proxy(res, {
@@ -43,7 +34,7 @@ export const compile =
 
       res.on('finish', () => {
         if (res.statusCode !== 200) {
-          reject(new Error(res.statusMessage || 'Prerender failed'));
+          reject(new Error(res.statusMessage));
         } else {
           resolve(res._getData());
         }

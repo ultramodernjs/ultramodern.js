@@ -1,10 +1,10 @@
-import {
-  chokidar,
-  type FSWatcher,
-  fs,
-  type WatchOptions,
-} from '@modern-js/utils';
 import path from 'path';
+import {
+  fs,
+  type FSWatcher,
+  type WatchOptions,
+  chokidar,
+} from '@modern-js/utils';
 import { DependencyTree } from './dependencyTree';
 import { StatsCache } from './statsCache';
 
@@ -20,11 +20,7 @@ export const getWatchedFiles = (watcher: FSWatcher) => {
   const watched = watcher.getWatched();
   const files: string[] = [];
   Object.keys(watched).forEach(dir => {
-    const dirFiles = watched[dir];
-    if (!dirFiles) {
-      return;
-    }
-    dirFiles.forEach((fileName: string) => {
+    watched[dir].forEach((fileName: string) => {
       files.push(path.join(dir, fileName));
     });
   });

@@ -1,6 +1,7 @@
-import { execa, fs as fse } from '@modern-js/utils';
 import path from 'path';
+import { execa, fs as fse } from '@modern-js/utils';
 import {
+  createIsolatedTestApp,
   getPort,
   killApp,
   modernBuild,
@@ -8,41 +9,6 @@ import {
 } from '../../../utils/modernTestUtils';
 
 const sourceAppDir = path.resolve(__dirname, '../');
-const ensureWorkspacePackages = [
-  '@modern-js/app-tools',
-  '@modern-js/plugin-bff',
-  '@modern-js/server-utils',
-];
-
-async function createIsolatedAppDir() {
-  const appDir = await fse.mkdtemp(
-    path.join(path.dirname(sourceAppDir), '.pure-esm-deploy-'),
-  );
-
-  await fse.copy(sourceAppDir, appDir, {
-    filter: src => {
-      const relative = path.relative(sourceAppDir, src);
-      if (!relative) {
-        return true;
-      }
-      const [firstSegment] = relative.split(path.sep);
-      return ![
-        'node_modules',
-        'dist',
-        'dist-deploy',
-        '.output',
-        'tests',
-      ].includes(firstSegment);
-    },
-  });
-  await fse.ensureSymlink(
-    path.join(sourceAppDir, 'node_modules'),
-    path.join(appDir, 'node_modules'),
-    'dir',
-  );
-
-  return appDir;
-}
 
 async function checkAppRun(host: string) {
   // Page render
@@ -74,14 +40,17 @@ describe('deploy', () => {
   let appDir: string;
 
   beforeAll(async () => {
-    appDir = await createIsolatedAppDir();
+    appDir = (
+      await createIsolatedTestApp(sourceAppDir, {
+        prefix: '.pure-esm-deploy-',
+      })
+    ).appDir;
 
     await modernBuild(appDir, [], {
       env: {
         TEST_DIST: 'dist-deploy',
         TEST_BUNDLE_SERVER: 'false',
       },
-      ensureWorkspacePackages,
     });
   });
 
@@ -105,14 +74,31 @@ describe('deploy', () => {
     const staticDirectory = path.join(outputDirectory, 'static');
     const htmlDirectory = path.join(outputDirectory, 'html');
     const apiFile = path.join(outputDirectory, 'api/lambda/index.js');
-    const apiInfoFile = path.join(outputDirectory, 'api/lambda/info.js');
     const bootstrapPath = path.join(outputDirectory, 'index.js');
 
     expect(await fse.pathExists(staticDirectory)).toBe(true);
     expect(await fse.pathExists(htmlDirectory)).toBe(true);
     expect(await fse.pathExists(apiFile)).toBe(true);
-    expect(await fse.pathExists(apiInfoFile)).toBe(true);
     expect(await fse.pathExists(bootstrapPath)).toBe(true);
+
+    // `@modern-js/server-runtime` used to be externalized in the SSR bundle,
+    // leaving a bare require on a transitive dependency that the application
+    // cannot resolve. It must now be bundled: no output file may require it.
+    const outputScripts = (
+      await fse.readdir(outputDirectory, { recursive: true })
+    )
+      .map(file => path.join(outputDirectory, String(file)))
+      .filter(
+        file =>
+          /\.(c?js|mjs)$/.test(file) &&
+          !file.split(path.sep).includes('node_modules'),
+      );
+    for (const file of outputScripts) {
+      const content = await fse.readFile(file, 'utf-8');
+      expect(content).not.toContain('require("@modern-js/server-runtime")');
+      expect(content).not.toContain("require('@modern-js/server-runtime')");
+    }
+
     // check server run
     const port = await getPort();
     const app = await runContinuousTask(['.output/index.js'], undefined, {

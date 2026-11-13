@@ -1,5 +1,5 @@
-import { dotenv, dotenvExpand, fs } from '@modern-js/utils';
 import path from 'path';
+import { fs, dotenv, dotenvExpand } from '@modern-js/utils';
 import type { ServerBaseOptions } from '../../../serverBase';
 
 /** 读取 .env.{process.env.MODERN_ENV} 文件，加载环境变量 */

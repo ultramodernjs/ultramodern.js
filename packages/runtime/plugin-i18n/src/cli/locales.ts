@@ -1,5 +1,5 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from 'fs';
+import path from 'path';
 import {
   getPublicDirRoutePrefixes,
   normalizePublicDir,
@@ -13,7 +13,7 @@ interface NormalizedConfigForLocales {
   };
 }
 
-interface DetectedLocalesDirectory {
+export interface DetectedLocalesDirectory {
   loadPath: string;
   addPath: string;
   serverLoadPath: string;

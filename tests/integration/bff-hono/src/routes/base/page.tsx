@@ -1,4 +1,4 @@
-import hello, { getHello, getImage, post, postHello } from '@api/lambda/index';
+import hello, { post, postHello, getHello, getImage } from '@api/lambda/index';
 import { useEffect, useState } from 'react';
 
 const Page = () => {
@@ -16,10 +16,11 @@ const Page = () => {
   useEffect(() => {
     const fetchData = async () => {
       const res = await hello();
+      await new Promise(resolve => setTimeout(resolve, 50));
       setMessage(res.message);
     };
 
-    fetchData().catch(() => undefined);
+    fetchData();
     postHello({
       params: {
         id: '1111',
@@ -38,14 +39,14 @@ const Page = () => {
       headers: {
         'x-header': '3333',
       },
-    }).catch(() => undefined);
+    });
 
     getHello({
       query: {
         user: 'modern@email.com',
       },
-    }).catch(() => undefined);
-    fetchImage().catch(() => undefined);
+    });
+    fetchImage();
   }, []);
 
   useEffect(() => {
@@ -60,11 +61,7 @@ const Page = () => {
 
     post({
       formUrlencoded: params.toString(),
-    })
-      .then(res => {
-        setUsername(res.formUrlencoded.username);
-      })
-      .catch(() => undefined);
+    }).then(res => setUsername(res.formUrlencoded.username));
   }, []);
 
   return (

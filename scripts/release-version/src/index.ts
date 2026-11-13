@@ -1,8 +1,8 @@
+import path from 'path';
 import assembleReleasePlan from '@changesets/assemble-release-plan';
 import { read } from '@changesets/config';
 import readChangesets from '@changesets/read';
 import { getPackages } from '@manypkg/get-packages';
-import path from 'path';
 
 async function run() {
   const cwd = process.cwd();

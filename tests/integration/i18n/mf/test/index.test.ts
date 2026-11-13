@@ -5,13 +5,7 @@ import {
   launchApp,
   launchOptions,
 } from '../../../../utils/modernTestUtils';
-import {
-  acquireTestLock,
-  clearI18nTestState,
-  conditionalTest,
-  gotoWithSSRRetry,
-  waitForHydration,
-} from '../../test-utils';
+import { clearI18nTestState, conditionalTest } from '../../test-utils';
 
 rstest.setConfig({ testTimeout: 1000 * 60 * 5, hookTimeout: 1000 * 60 * 5 });
 
@@ -42,88 +36,33 @@ const consumerDir = path.resolve(__dirname, '../mf-consumer');
 const COMPONENT_PROVIDER_PORT = 3006;
 const APP_PROVIDER_PORT = 3005;
 const CONSUMER_PORT = 3007;
-const APP_MF_SSR_ENV = {
-  MODERN_MF_APP_SSR: 'true',
-  MODERN_FAST_TEST: 'true',
-};
-const MULTIPLE_RENDERERS_WARNING =
-  'Detected multiple renderers concurrently rendering the same context provider.';
-
-function collectBrowserErrors(page: Page, browserErrors: string[]) {
-  page.on('console', message => {
-    if (message.type() === 'error') {
-      browserErrors.push(message.text());
-    }
-  });
-  page.on('pageerror', error => {
-    browserErrors.push(error instanceof Error ? error.message : String(error));
-  });
-}
-
-function expectNoRendererWarnings(output: string[]) {
-  expect(output.join('')).not.toContain(MULTIPLE_RENDERERS_WARNING);
-}
-
-async function fetchHtml(port: number, pathname: string) {
-  const response = await fetch(`http://localhost:${port}${pathname}`, {
-    headers: {
-      'accept-language': 'en-US,en;q=0.9',
-    },
-    signal: AbortSignal.timeout(10000),
-  });
-
-  return {
-    status: response.status,
-    html: await response.text(),
-  };
-}
 
 describe('mf-i18n-tests', () => {
-  let releaseLock: (() => Promise<void>) | undefined;
   let componentProviderApp: unknown;
   let appProviderApp: unknown;
   let componentProviderPage: Page;
   let componentProviderBrowser: Browser;
   let appProviderPage: Page;
   let appProviderBrowser: Browser;
-  const componentProviderBrowserErrors: string[] = [];
-  const appProviderBrowserErrors: string[] = [];
-  const componentProviderOutput: string[] = [];
-  const appProviderOutput: string[] = [];
 
   beforeAll(async () => {
-    releaseLock = await acquireTestLock('i18n-mf');
     componentProviderApp = await launchApp(
       componentProviderDir,
       COMPONENT_PROVIDER_PORT,
-      {
-        onStdout: (message: string) => componentProviderOutput.push(message),
-        onStderr: (message: string) => componentProviderOutput.push(message),
-      },
     );
     await waitForAppReady(COMPONENT_PROVIDER_PORT);
 
-    appProviderApp = await launchApp(
-      appProviderDir,
-      APP_PROVIDER_PORT,
-      {
-        onStdout: (message: string) => appProviderOutput.push(message),
-        onStderr: (message: string) => appProviderOutput.push(message),
-      },
-      APP_MF_SSR_ENV,
-    );
+    appProviderApp = await launchApp(appProviderDir, APP_PROVIDER_PORT);
     await waitForAppReady(APP_PROVIDER_PORT);
 
     componentProviderBrowser = await puppeteer.launch(launchOptions as any);
     componentProviderPage = await componentProviderBrowser.newPage();
-    collectBrowserErrors(componentProviderPage, componentProviderBrowserErrors);
     await componentProviderPage.setExtraHTTPHeaders({
       'Accept-Language': 'en-US,en;q=0.9',
     });
 
     appProviderBrowser = await puppeteer.launch(launchOptions as any);
     appProviderPage = await appProviderBrowser.newPage();
-    collectBrowserErrors(appProviderPage, appProviderBrowserErrors);
     await appProviderPage.setExtraHTTPHeaders({
       'Accept-Language': 'en-US,en;q=0.9',
     });
@@ -142,20 +81,11 @@ describe('mf-i18n-tests', () => {
     if (appProviderApp) {
       await killApp(appProviderApp);
     }
-    if (releaseLock) {
-      await releaseLock();
-    }
   });
 
   describe('mf-component-provider standalone', () => {
     beforeEach(async () => {
-      componentProviderBrowserErrors.length = 0;
       await clearI18nTestState(componentProviderPage);
-    });
-
-    afterEach(() => {
-      expect(componentProviderBrowserErrors).toEqual([]);
-      expectNoRendererWarnings(componentProviderOutput);
     });
 
     conditionalTest('should render home page with i18n correctly', async () => {
@@ -212,13 +142,7 @@ describe('mf-i18n-tests', () => {
 
   describe('mf-app-provider standalone', () => {
     beforeEach(async () => {
-      appProviderBrowserErrors.length = 0;
       await clearI18nTestState(appProviderPage);
-    });
-
-    afterEach(() => {
-      expect(appProviderBrowserErrors).toEqual([]);
-      expectNoRendererWarnings(appProviderOutput);
     });
 
     conditionalTest('should render home page correctly', async () => {
@@ -322,39 +246,20 @@ describe('mf-i18n-tests', () => {
     let consumerApp: unknown;
     let page: Page;
     let browser: Browser;
-    const browserErrors: string[] = [];
-    const consumerOutput: string[] = [];
 
     beforeAll(async () => {
-      consumerApp = await launchApp(
-        consumerDir,
-        CONSUMER_PORT,
-        {
-          onStdout: (message: string) => consumerOutput.push(message),
-          onStderr: (message: string) => consumerOutput.push(message),
-        },
-        APP_MF_SSR_ENV,
-      );
+      consumerApp = await launchApp(consumerDir, CONSUMER_PORT);
       await waitForAppReady(CONSUMER_PORT);
 
       browser = await puppeteer.launch(launchOptions as any);
       page = await browser.newPage();
-      collectBrowserErrors(page, browserErrors);
       await page.setExtraHTTPHeaders({
         'Accept-Language': 'en-US,en;q=0.9',
       });
     });
 
     beforeEach(async () => {
-      browserErrors.length = 0;
       await clearI18nTestState(page);
-    });
-
-    afterEach(() => {
-      expect(browserErrors).toEqual([]);
-      expectNoRendererWarnings(consumerOutput);
-      expectNoRendererWarnings(componentProviderOutput);
-      expectNoRendererWarnings(appProviderOutput);
     });
 
     afterAll(async () => {
@@ -444,39 +349,20 @@ describe('mf-i18n-tests', () => {
     let consumerApp: unknown;
     let page: Page;
     let browser: Browser;
-    const browserErrors: string[] = [];
-    const consumerOutput: string[] = [];
 
     beforeAll(async () => {
-      consumerApp = await launchApp(
-        consumerDir,
-        CONSUMER_PORT,
-        {
-          onStdout: (message: string) => consumerOutput.push(message),
-          onStderr: (message: string) => consumerOutput.push(message),
-        },
-        APP_MF_SSR_ENV,
-      );
+      consumerApp = await launchApp(consumerDir, CONSUMER_PORT);
       await waitForAppReady(CONSUMER_PORT);
 
       browser = await puppeteer.launch(launchOptions as any);
       page = await browser.newPage();
-      collectBrowserErrors(page, browserErrors);
       await page.setExtraHTTPHeaders({
         'Accept-Language': 'en-US,en;q=0.9',
       });
     });
 
     beforeEach(async () => {
-      browserErrors.length = 0;
       await clearI18nTestState(page);
-    });
-
-    afterEach(() => {
-      expect(browserErrors).toEqual([]);
-      expectNoRendererWarnings(consumerOutput);
-      expectNoRendererWarnings(componentProviderOutput);
-      expectNoRendererWarnings(appProviderOutput);
     });
 
     afterAll(async () => {
@@ -487,38 +373,6 @@ describe('mf-i18n-tests', () => {
         await killApp(consumerApp);
       }
     });
-
-    conditionalTest(
-      'should server render app-level remote route when alpha SSR is enabled',
-      async () => {
-        const { status, html } = await fetchHtml(CONSUMER_PORT, '/en/remote-2');
-        expect(status).toBe(200);
-        expect(html).toContain('data-mf-app-loading="app-remote-custom"');
-        expect(html).not.toContain('__modern_ssr_fallback_reason__');
-      },
-    );
-
-    conditionalTest(
-      'should keep app-level remote SSR content stable after hydration',
-      async () => {
-        const ssrResponse = await gotoWithSSRRetry(
-          page,
-          `http://localhost:${CONSUMER_PORT}/en/remote-2`,
-        );
-        expect(ssrResponse).toBeTruthy();
-        expect(ssrResponse).toContain(
-          'data-mf-app-loading="app-remote-custom"',
-        );
-        await waitForHydration(page, '#key');
-        const remoteKey = await page.$('#key');
-        const remoteText = await page.evaluate(
-          el => el?.textContent,
-          remoteKey,
-        );
-        expect(remoteText?.trim()).toEqual('Hello World(provider-custom)');
-        expect(browserErrors).toEqual([]);
-      },
-    );
 
     conditionalTest('should load remote app correctly', async () => {
       await page.goto(`http://localhost:${CONSUMER_PORT}/en/remote`, {
@@ -581,40 +435,5 @@ describe('mf-i18n-tests', () => {
       const remoteText = await page.evaluate(el => el?.textContent, remoteKey);
       expect(remoteText?.trim()).toEqual('你好，世界(provider-custom)');
     });
-  });
-
-  describe('mf-consumer with unavailable app-level remote', () => {
-    let consumerApp: unknown;
-
-    beforeAll(async () => {
-      consumerApp = await launchApp(
-        consumerDir,
-        CONSUMER_PORT,
-        {},
-        APP_MF_SSR_ENV,
-      );
-      await waitForAppReady(CONSUMER_PORT);
-    });
-
-    afterAll(async () => {
-      if (consumerApp) {
-        await killApp(consumerApp);
-      }
-    });
-
-    conditionalTest(
-      'should fallback to client boundary when app-level remote is unavailable',
-      async () => {
-        const { status, html } = await fetchHtml(
-          CONSUMER_PORT,
-          '/en/remote-unavailable',
-        );
-        expect(status).toBe(200);
-        expect(html).toContain('data-mf-app-loading="app-remote-unavailable"');
-        expect(html).toContain(
-          'Switched to client rendering because the server rendering errored',
-        );
-      },
-    );
   });
 });

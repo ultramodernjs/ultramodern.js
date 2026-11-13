@@ -1,5 +1,5 @@
-import chalk from 'chalk';
 import { join } from 'path';
+import chalk from 'chalk';
 
 export const ROOT = join(process.cwd(), '..', '..');
 

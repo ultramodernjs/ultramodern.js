@@ -16,7 +16,6 @@ const loader4 = async () => {
     message: 'from  server',
   };
 };
-
 export {
   loader as loader_0,
   loader2 as loader_1,

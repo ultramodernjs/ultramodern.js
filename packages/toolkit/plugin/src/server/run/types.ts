@@ -12,7 +12,7 @@ export type ServerCreateOptions = {
     sharedDirectory?: string;
     apiDirectory?: string;
     lambdaDirectory?: string;
-    bffRuntimeFramework?: 'hono' | 'effect';
+    bffRuntimeFramework?: string;
   };
 };
 

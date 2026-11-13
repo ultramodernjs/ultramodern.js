@@ -15,64 +15,51 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.0",
+  "version": "3.11.3",
   "files": [
     "dist",
     "hook.d.ts"
   ],
   "scripts": {
     "prepublishOnly": "only-allow-pnpm",
-    "dev": "rslib build --watch",
-    "build": "rslib build",
-    "test": "tsgo --noEmit -p tsconfig.json && rstest --passWithNoTests"
+    "dev": "rs lib --watch",
+    "build": "rs lib",
+    "test": "rstest --passWithNoTests",
+    "test:build": "pnpm run build && node --test tests/build.test.mjs"
   },
   "dependencies": {
-    "@modern-js/runtime-extensions": "workspace:*",
     "@modern-js/types": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@swc/helpers": "^0.5.23"
+    "@swc/helpers": "^0.5.17"
   },
   "devDependencies": {
     "@modern-js/rslib": "workspace:*",
     "@modern-js/server-core": "workspace:*",
-    "@rslib/core": "1.0.0",
-    "@scripts/build": "workspace:*",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.4.1",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "react-server-dom-rspack": "0.1.0",
-    "typescript": "^7.0.2"
+    "typescript": "^5"
   },
   "peerDependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "react": ">=18.3.1",
+    "react-dom": ">=18.3.1",
     "react-server-dom-rspack": "0.1.0"
-  },
-  "peerDependenciesMeta": {
-    "react-server-dom-rspack": {
-      "optional": true
-    }
   },
   "exports": {
     "./ssr": {
       "types": "./dist/types/server/ssr/index.d.ts",
-      "default": "./dist/esm/ssr.mjs"
+      "default": "./dist/esm/server/ssr/index.js"
     },
     "./rsc": {
       "types": "./dist/types/server/rsc/index.d.ts",
-      "default": "./dist/esm/rsc.mjs"
-    },
-    "./rsc-worker": {
-      "types": "./dist/types/rsc.worker.d.ts",
-      "default": "./dist/esm/rscWorker.mjs"
+      "default": "./dist/esm/server/rsc/index.js"
     },
     "./client": {
       "types": "./dist/types/client/index.d.ts",
-      "default": "./dist/esm/client.mjs"
+      "default": "./dist/esm/client/index.js"
     }
   },
   "typesVersions": {
@@ -82,9 +69,6 @@
       ],
       "rsc": [
         "./dist/types/server/rsc/index.d.ts"
-      ],
-      "rsc-worker": [
-        "./dist/types/rsc.worker.d.ts"
       ],
       "client": [
         "./dist/types/client/index.d.ts"

@@ -1,5 +1,5 @@
-import { fs } from '@modern-js/utils';
 import { join } from 'path';
+import { fs } from '@modern-js/utils';
 import { applyBaseConfig } from '../../utils/applyBaseConfig';
 
 const logs: string[] = [];

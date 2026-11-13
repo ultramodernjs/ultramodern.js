@@ -1,35 +1,30 @@
-// @effect-diagnostics asyncFunction:off processEnv:off
 import { renderSSRStream } from '@modern-js/render/ssr';
-import * as rendererHead from '@modern-js/runtime-extensions';
 import { storage } from '@modern-js/runtime-utils/node';
-import { ESCAPED_SHELL_STREAM_END_MARK } from '../../../common';
 import { RenderLevel } from '../../constants';
-import { createReplaceHelemt, getHelmetData } from '../helmet';
-import { enqueueFromEntries } from './deferredScript';
+import { enqueueFromEntries, hasDeferredResolvers } from './deferredScript';
+import { DeferredScriptOutputCoordinator } from './deferredScriptOutputCoordinator';
 import {
   type CreateReadableStreamFromElement,
+  ShellChunkStatus,
+  createShellEndMarkSplitter,
   encodeForWebStream,
   getReadableStreamFromString,
   resolveStreamingMode,
-  ShellChunkStatus,
 } from './shared';
 import { getTemplates } from './template';
 
 export const createReadableStreamFromElement: CreateReadableStreamFromElement =
   async (request, rootElement, options) => {
     let shellChunkStatus = ShellChunkStatus.START;
-    const chunkVec: string[] = [];
+    const splitAtShellEndMark = createShellEndMarkSplitter();
     const {
       htmlTemplate,
       runtimeContext,
       config,
       ssrConfig,
       entryName,
-      moduleFederationCssAssets,
-      rscManifest,
       rscRoot,
     } = options;
-    rendererHead.beginHeadRender(runtimeContext);
 
     const { shellBefore, shellAfter } = await getTemplates(htmlTemplate, {
       renderLevel: RenderLevel.SERVER_RENDER,
@@ -38,14 +33,12 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
       request,
       config,
       entryName,
-      moduleFederationCssAssets,
     });
 
     try {
       const readableOriginal = await renderSSRStream(rootElement, {
         request,
         nonce: config.nonce,
-        rscManifest,
         rscRoot: rscRoot!,
         routes: runtimeContext.routes,
         onError(error: unknown) {
@@ -67,7 +60,7 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
       // from: https://react.dev/reference/react-dom/server/renderToReadableStream#handling-different-errors-in-different-ways
       const forceStreamToString = Boolean(
         typeof process !== 'undefined' &&
-          process.env?.MODERN_JS_STREAM_TO_STRING,
+        process.env?.MODERN_JS_STREAM_TO_STRING,
       );
       const { waitForAllReady } = resolveStreamingMode(
         request,
@@ -79,19 +72,15 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
         await readableOriginal.allReady;
       }
 
-      const reader = rendererHead
-        .createConservingWebShellStream(
-          readableOriginal,
-          runtimeContext,
-          ESCAPED_SHELL_STREAM_END_MARK,
-          options.onError,
-        )
-        .getReader();
+      const reader = readableOriginal.getReader();
+      let coordinator: DeferredScriptOutputCoordinator | undefined;
 
       const stream = new ReadableStream({
         start(controller) {
+          const decoder = new TextDecoder();
           const pendingScripts: string[] = [];
           let isClosed = false;
+          let deferredResolversComplete = Promise.resolve();
 
           const safeEnqueue = (chunk: Uint8Array | unknown) => {
             if (isClosed) return;
@@ -113,23 +102,13 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
             }
           };
 
-          const flushPendingScripts = () => {
-            for (const s of pendingScripts) {
-              safeEnqueue(encodeForWebStream(s));
-            }
-            pendingScripts.length = 0;
-          };
-
-          const enqueueScript = (script: string) => {
-            if (shellChunkStatus === ShellChunkStatus.FINISH) {
-              safeEnqueue(encodeForWebStream(script));
-            } else {
-              pendingScripts.push(script);
-            }
-          };
+          coordinator = new DeferredScriptOutputCoordinator(content => {
+            safeEnqueue(encodeForWebStream(content));
+          });
 
           const storageContext = storage.useContext?.();
           const activeDeferreds = storageContext?.activeDeferreds;
+          const deferredScriptKeys = storageContext?.deferredScriptKeys;
           /**
            * activeDeferreds is injected into storageContext by @modern-js/runtime.
            * @see packages/toolkit/runtime-utils/src/browser/nestedRoutes.tsx
@@ -139,14 +118,36 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
               ? Array.from(activeDeferreds.entries())
               : [];
 
-          if (entries.length > 0) {
-            enqueueFromEntries(entries, config.nonce, enqueueScript);
+          if (hasDeferredResolvers(entries, deferredScriptKeys)) {
+            deferredResolversComplete = enqueueFromEntries(
+              entries,
+              deferredScriptKeys,
+              config.nonce,
+              script => {
+                if (!coordinator) {
+                  throw new Error('Deferred script coordinator is not ready');
+                }
+                if (shellChunkStatus === ShellChunkStatus.FINISH) {
+                  coordinator.enqueueResolver(script);
+                } else {
+                  pendingScripts.push(script);
+                }
+              },
+            );
+          } else {
+            coordinator.markNoResolvers();
           }
 
           async function push() {
             try {
               const { done, value } = await reader.read();
               if (done) {
+                const trailingText = decoder.decode();
+                if (trailingText) {
+                  coordinator?.writeReact(trailingText);
+                }
+                await deferredResolversComplete;
+                coordinator?.finish();
                 closeController();
                 return;
               }
@@ -154,9 +155,6 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
               if (isClosed) return;
 
               if (shellChunkStatus !== ShellChunkStatus.FINISH) {
-                chunkVec.push(new TextDecoder().decode(value));
-                const concatedChunk = chunkVec.join('');
-
                 /**
                  * React's chunk boundaries are byte-driven, so the marker can
                  * land in the middle of a chunk that already carries
@@ -166,37 +164,35 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
                  * so it lands past the closing `</html>` rather than being
                  * swallowed inside it.
                  */
-                const markerIndex = concatedChunk.indexOf(
-                  ESCAPED_SHELL_STREAM_END_MARK,
+                const shell = splitAtShellEndMark(
+                  decoder.decode(value, { stream: true }),
                 );
-                if (markerIndex !== -1) {
-                  const beforeMark = concatedChunk.slice(0, markerIndex);
-                  const afterMark = concatedChunk.slice(
-                    markerIndex + ESCAPED_SHELL_STREAM_END_MARK.length,
-                  );
-                  rendererHead.publishHeadRender(runtimeContext);
-                  const completedShellBefore = createReplaceHelemt(
-                    getHelmetData(runtimeContext),
-                  )(shellBefore);
+                if (shell) {
+                  const { beforeMark, afterMark } = shell;
 
                   shellChunkStatus = ShellChunkStatus.FINISH;
-                  safeEnqueue(
-                    encodeForWebStream(
-                      `${completedShellBefore}${beforeMark}${shellAfter}`,
-                    ),
+                  coordinator?.writeReact(
+                    `${shellBefore}${beforeMark}${shellAfter}`,
                   );
-                  if (afterMark.length > 0) {
-                    safeEnqueue(encodeForWebStream(afterMark));
+                  if (afterMark) {
+                    coordinator?.writeReact(afterMark);
                   }
-                  flushPendingScripts();
+                  coordinator?.markShellFinished();
+                  for (const script of pendingScripts) {
+                    coordinator?.enqueueResolver(script);
+                  }
+                  pendingScripts.length = 0;
                 }
               } else {
-                safeEnqueue(value);
+                const decodedChunk = decoder.decode(value, { stream: true });
+                if (decodedChunk) {
+                  coordinator?.writeReact(decodedChunk);
+                }
               }
 
               if (!isClosed) push();
             } catch (error) {
-              rendererHead.abortHeadRender(runtimeContext);
+              coordinator?.abort();
               if (!isClosed) {
                 isClosed = true;
                 try {
@@ -210,7 +206,7 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
           push();
         },
         cancel(reason) {
-          rendererHead.abortHeadRender(runtimeContext);
+          coordinator?.abort();
           reader.cancel(reason).catch(() => {
             // Ignore cancellation errors
           });
@@ -218,7 +214,6 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
       });
       return stream;
     } catch (e) {
-      rendererHead.abortHeadRender(runtimeContext);
       // Don't log error in `onShellError` callback, since it has been logged in `onError` callback
       const fallbackHtml = `${shellBefore}${shellAfter}`;
       const stream = getReadableStreamFromString(fallbackHtml);

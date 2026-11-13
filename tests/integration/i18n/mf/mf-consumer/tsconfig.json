@@ -11,5 +11,5 @@
       "*": ["./@mf-types/*"]
     }
   },
-  "include": ["src", "modern.config.ts"]
+  "include": ["src", "tests", "modern.config.ts"]
 }

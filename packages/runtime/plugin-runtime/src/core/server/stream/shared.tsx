@@ -1,40 +1,33 @@
-// @effect-diagnostics asyncFunction:off strictBooleanExpressions:off unnecessaryArrowBlock:off
 import type { OnError } from '@modern-js/app-tools';
 import { time } from '@modern-js/runtime-utils/time';
 import type {
   ClientManifest as RscClientManifest,
-  ServerManifest as RscServerManifest,
   SSRManifest as RscSSRManifest,
+  ServerManifest as RscServerManifest,
 } from '@modern-js/types/server';
-import { isbot as checkIsBot } from 'isbot';
+import checkIsBot from 'isbot';
 import type React from 'react';
-import { JSX_SHELL_STREAM_END_MARK } from '../../../common';
-import type { TInternalRuntimeContext } from '../../context';
+import {
+  ESCAPED_SHELL_STREAM_END_MARK,
+  JSX_SHELL_STREAM_END_MARK,
+} from '../../../common';
+import type { TRuntimeContext } from '../../context';
 import { wrapRuntimeContextProvider } from '../../react/wrapper';
 import type { HandleRequestConfig } from '../requestHandler';
 import type { RenderStreaming, SSRConfig } from '../shared';
 import { SSRErrors, SSRTimings } from '../tracer';
 import { getSSRConfigByEntry } from '../utils';
 
-export type RscManifest = {
-  clientManifest?: RscClientManifest;
-  serverConsumerModuleMap?: unknown;
-  serverManifest?: RscServerManifest;
-  entryCssFiles?: Record<string, string[]>;
-};
-
 export type CreateReadableStreamFromElementOptions = {
-  runtimeContext: TInternalRuntimeContext;
+  runtimeContext: TRuntimeContext;
   config: HandleRequestConfig;
   ssrConfig: SSRConfig;
   htmlTemplate: string;
   entryName: string;
-  moduleFederationCssAssets?: string[];
 
   rscClientManifest?: RscClientManifest;
   rscSSRManifest?: RscSSRManifest;
   rscServerManifest?: RscServerManifest;
-  rscManifest?: RscManifest;
   rscRoot?: React.ReactElement;
   onShellReady?: () => void;
   onShellError?: (error: unknown) => void;
@@ -51,6 +44,43 @@ export type CreateReadableStreamFromElement = (
 export enum ShellChunkStatus {
   START = 0,
   FINISH = 1,
+}
+
+/**
+ * Buffers the decoded shell text until `ESCAPED_SHELL_STREAM_END_MARK` shows up,
+ * then splits the buffered text at the marker.
+ *
+ * The marker can straddle two chunks, but the buffered text has already been
+ * searched, so a match must end inside the new text: searching the new text
+ * plus the last `marker.length - 1` buffered chars is enough. This keeps
+ * buffering linear in the shell size instead of re-joining and re-scanning the
+ * whole shell for every chunk.
+ */
+export function createShellEndMarkSplitter() {
+  const marker = ESCAPED_SHELL_STREAM_END_MARK;
+  const shellChunks: string[] = [];
+  let tail = '';
+
+  return (
+    text: string,
+  ): { beforeMark: string; afterMark: string } | undefined => {
+    const searchText = tail + text;
+    const markerIndex = searchText.indexOf(marker);
+    if (markerIndex === -1) {
+      shellChunks.push(text);
+      tail = searchText.slice(-(marker.length - 1));
+      return undefined;
+    }
+
+    // `tail` is always a suffix of the buffered shell text.
+    const buffered = shellChunks.join('');
+    return {
+      beforeMark:
+        buffered.slice(0, buffered.length - tail.length) +
+        searchText.slice(0, markerIndex),
+      afterMark: searchText.slice(markerIndex + marker.length),
+    };
+  };
 }
 
 const SHOULD_STREAM_ALL_HEADER = 'x-should-stream-all';
@@ -135,7 +165,7 @@ export function createRenderStreaming(
     const { runtimeContext, config, resource } = options;
     const { onError, onTiming } = options;
 
-    const { htmlTemplate, entryName, moduleFederationCssAssets } = resource;
+    const { htmlTemplate, entryName } = resource;
 
     const ssrConfig = getSSRConfigByEntry(
       entryName,
@@ -171,12 +201,9 @@ export function createRenderStreaming(
       runtimeContext,
       ssrConfig,
       entryName,
-      moduleFederationCssAssets,
       rscClientManifest: options.rscClientManifest,
       rscSSRManifest: options.rscSSRManifest,
       rscServerManifest: options.rscServerManifest,
-      rscManifest: (options as typeof options & { rscManifest?: RscManifest })
-        .rscManifest,
       rscRoot: options.rscRoot,
       onShellReady() {
         const cost = end();

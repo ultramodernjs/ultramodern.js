@@ -21,69 +21,13 @@ export default defineConfig({
 为更好的性能体验，我们仅支持 Streaming SSR 情况使用这种能力组合。
 
 :::warning
-应用级别模块（使用 `createBridgeComponent` 和 `createRemoteAppComponent` 的模块）在 SSR 场景下采用**分阶段稳定性契约**。
-
-请在 host 和 remote 两侧都显式开启：
-
-```ts title="modern.config.ts"
-export default defineConfig({
-  server: {
-    ssr: {
-      mode: 'stream',
-      moduleFederationAppSSR: true,
-    },
-  },
-});
-```
-
-建议在生产环境保留远程加载失败的 fallback 边界，并在日志 / 监控中跟踪 fallback 标记。
+应用级别模块（使用 `createBridgeComponent` 和 `createRemoteAppComponent` 的模块）不支持服务端渲染（SSR）。如果你需要使用 SSR 功能，请使用组件级别的模块导出方式。
 :::
-
-## Node SSR 打包兼容性
-
-当同时开启 Module Federation 与 `server.ssr` 时，请使用框架提供的 SSR
-和 Module Federation 配置入口，不要在应用里手动强制 bundler 输出模式。
-Module Federation 应用级 bundle 不是安全开启 `output.module` 的位置；除非
-应用已经验证了自定义运行时契约，否则 host 与 remote 都应保留框架生成的
-MF 输出模式。
-
-UltraModern 生成的 workspace root 和共享包保持 ESM，但生成的 MF app
-package 会有意不添加 app 级 `"type": "module"`。旧仓库迁移时应升级到
-新的框架 cohort，并运行生成的 workspace 校验；不要通过添加 app 级
-package mode、定制 server/navigation wrapper 或 Module Federation 输出 shim
-来绕过框架问题。
-
-Cloudflare SSR 部署中，最外层 Worker entry 是 ESM module worker；复制出的
-Modern.js SSR worker bundle 则保留在内层 CommonJS package scope 中，确保
-module Worker 可以稳定 import 这些已生成的 worker bundle。
-
-## Battle-Tested 上线检查清单
-
-在扩大到生产全量流量前，建议覆盖以下场景：
-
-1. Host 与全部 remote 统一使用 `server.ssr.mode: 'stream'` 和同一 MF SSR 契约开关。
-2. `dev` / `build` / `serve` 三种模式都验证通过 happy-path SSR。
-3. 远程不可用场景有明确 fallback 边界，且不会触发服务端崩溃。
-4. 数据获取 timeout 与 contract-error 场景都有确定性降级 UI。
-5. Host/remote 边界上的 trace 与 telemetry 标记可观测。
-6. 灰度发布采用渐进放量并配置明确回滚条件。
-
-## 示例上线场景
-
-1. 基线启用（host + remote）：
-  - host 与 remote 均配置 `server.ssr.mode: 'stream'` 和 `moduleFederationAppSSR: true`。
-  - 验证 SSR HTML 包含 remote shell 标记，且没有 fallback 标记。
-2. remote 不可用降级：
-  - 保持 host 开关开启，停止一个 remote 服务后访问对应远程路由。
-  - 验证响应仍为 `200`、fallback 边界正确渲染、服务端不崩溃。
-3. timeout 与 contract-error 演练：
-  - 在 CI 注入远程/数据延迟响应以及异常 payload。
-  - 验证降级 UI 可确定复现，并产出匹配的 telemetry reason code。
 
 ## 数据获取
 
 :::tip
-该能力仍处于分阶段推进中。建议在 CI 中执行上面的检查清单后再扩大流量。
+目前该功能为实验性功能，功能还未经过充分实践，请谨慎使用。
 :::
 
 Module Federation 在新版本中支持了[数据获取](https://module-federation.io/zh/guide/basic/data-fetch/index.html#%E7%AE%80%E4%BB%8B)的能力。每个生产者文件都可以有一个对应的数据获取文件，文件名格式为 `[name].data.ts`。

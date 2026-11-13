@@ -1,8 +1,8 @@
-import type { I18nSdkLoader, I18nSdkLoadOptions } from '../../../shared/type';
+import type { I18nSdkLoadOptions, I18nSdkLoader } from '../../../shared/type';
 import type { Resources } from '../instance';
 import {
-  createI18nSdkBackendId,
   I18N_SDK_RESOURCES_LOADED_EVENT,
+  createI18nSdkBackendId,
   setI18nSdkBackendId,
 } from './sdk-event';
 

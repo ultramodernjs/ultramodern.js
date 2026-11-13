@@ -6,7 +6,8 @@ import {
   launchApp,
   launchOptions,
 } from '../../../utils/modernTestUtils';
-import { setSuiteTimeout } from '../../../utils/setSuiteTimeout';
+
+rstest.setConfig({ testTimeout: 1000 * 60 * 2, hookTimeout: 1000 * 60 * 2 });
 
 const appDir = path.resolve(__dirname, '../');
 let app: any;
@@ -23,7 +24,6 @@ afterAll(async () => {
 });
 
 describe('test basic usage', () => {
-  setSuiteTimeout(25000);
   test(`should start successfully`, async () => {
     app = await launchApp(appDir, appPort, {}, {});
     const browser = await puppeteer.launch(launchOptions as any);

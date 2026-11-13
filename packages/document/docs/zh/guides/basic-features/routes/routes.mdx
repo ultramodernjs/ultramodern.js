@@ -4,17 +4,12 @@ sidebar_position: 2
 
 # 路由基础
 
-Modern.js 的约定式路由支持基于 [React Router](https://reactrouter.com/en/main) 和 [TanStack Router](https://tanstack.com/router) 两套框架，提供基于文件约定的路由能力，并支持业界流行的约定式路由模式：**嵌套路由**。当入口被识别为 [约定式路由](/guides/concept/entries.html#约定式路由) 时，Modern.js 会自动基于文件系统，生成对应的路由结构。
+Modern.js 的路由基于 [React Router 7](https://reactrouter.com/en/main)，提供了基于文件约定的路由能力，并支持了业界流行的约定式路由模式：**嵌套路由**。当入口被识别为 [约定式路由](/guides/concept/entries.html#约定式路由) 时，Modern.js 会自动基于文件系统，生成对应的路由结构。
 
 :::note
 
 本小节提到的路由，都是约定式路由。
 
-:::
-
-:::tip
-本页示例默认使用 React Router 的导出路径（`@modern-js/runtime/router`）。  
-如果你的项目通过 `--router tanstack` 创建，请改用 `@modern-js/plugin-tanstack/runtime`。
 :::
 
 ## 什么是嵌套路由
@@ -91,7 +86,7 @@ export default () => {
 
 :::note
 
-`<Outlet>` 是 React Router 提供的 API，详情可以查看 [Outlet](https://reactrouter.com/en/main/components/outlet#outlet)。
+`<Outlet>` 是 React Router v7 中提供的 API，详情可以查看 [Outlet](https://reactrouter.com/en/main/components/outlet#outlet)。
 
 :::
 
@@ -466,7 +461,7 @@ Modern.js 支持通过 `loading.tsx` 文件来解决这个问题，`routes/` 下
 
 ## 预加载
 
-大多数切换路由时白屏的情况，都可以通过定义 `<Loading>` 组件来优化体验。Modern.js 也支持在 `<Link>` 组件上定义 `prefetch` 和 `preload` 属性，提前对导航进行预热。
+大多数切换路由时白屏的情况，都可以通过定义 `<Loading>` 组件来优化体验。Modern.js 也支持在 `<Link>` 组件上定义 `prefetch` 属性，提前对静态资源和数据进行加载。
 
 对于有更高性能要求的应用，预加载可以进一步提升用户体验，减少展示 `<Loading>` 组件的时间：
 
@@ -476,36 +471,21 @@ Modern.js 支持通过 `loading.tsx` 文件来解决这个问题，`routes/` 下
 
 :::tip
 
-在 SSR 项目中，同源路由会为匹配到且带有可调用 loader 的路由预取 [Data Loader](/guides/basic-features/data/data-fetch) 返回的数据。如果某个路由的 loader 数据不应该在导航前请求，可以将该路由的 `handle.navigationWarmup.data` 设置为 `false`。
+对数据的预加载目前只会预加载 SSR 项目中 [Data Loader](/guides/basic-features/data/data-fetch) 中返回的数据。
 
 :::
 
-默认情况下，同源链接会在 `<Link>` 渲染时预取路由模块和匹配到的 loader 数据。当用户开启 Save-Data 或处于慢速网络时，Modern.js 会跳过这些自动预热。
+`prefetch` 属性有三个可选值：
 
-`prefetch` 属性有四个可选值：
-
-- `render`，默认值。当 `<Link>` 组件渲染时，就会预热对应的路由模块。
-- `intent`，当用户聚焦、悬停或触摸链接时，会开始预热对应的路由模块。如果意图在预热开始前取消，预热也会取消。
-- `viewport`，当 `<Link>` 组件进入视窗时，会开始预热对应的路由模块。
-- `none`，关闭自动 prefetch。如果没有显式设置 `preload`，也会关闭隐式 preload。
-
-`preload` 属性接受同样的时机值，默认跟随 `prefetch` 的时机。显式设置的 `preload` 总是优先生效，`preload={false}` 会关闭 preload 行为。
-
-如果要让某个路由关闭 SSR 数据预热：
-
-```ts title="routes/page.config.ts"
-export const handle = {
-  navigationWarmup: {
-    data: false,
-  },
-};
-```
+- `none`， 默认值，不会做 prefetch，没有任何额外的行为。
+- `intent`，这是我们推荐大多数场景下使用的值，当你把鼠标放在 Link 上时，会自动开始加载对应的分片和 Data Loader 中定义的数据，当鼠标移开时，会自动取消加载。在我们的测试中，即使是快速点击，也能减少大约 200ms 的加载时间。
+- `render`，当 `<Link>` 组件渲染时，就会加载对应的分片和 Data Loader 中定义的数据。
 
 :::details 值为 render 和不做路由分片的区别
 
-- `render` 可以通过 `<Link>` 组件在组件树中的位置控制路由模块预热时机。
-- `viewport` 可以把模块预热推迟到链接接近可操作时再触发。
-- SSR 数据预取默认开启；当路由的 loader 数据不适合在导航前获取时，使用 `handle.navigationWarmup.data = false` 关闭。
+- `render` 加载路由分片的时机是可控的，只有在 `<Link>` 组件进入视窗时才触发，可以通过控制 `<Link>` 组件的渲染位置来控制分片加载时机。
+- `render` 仅在空闲时对静态资源进行加载，不占用重要模块的加载时间。
+- 除了预加载路由分片，`render` 在 SSR 项目中还会发起数据预取。
 
 :::
 
@@ -515,22 +495,16 @@ import Motivation from '@site-docs/components/convention-routing-motivation';
 
 ## 常见问题
 
-1. 为什么要通过 `@modern-js/runtime/router` 或 `@modern-js/plugin-tanstack/runtime` 引入 API？
+1. 为什么要提供 `@modern-js/runtime/router` 来导出 React Router API ?
 
-Modern.js 提供了按路由框架区分的运行时导出：
+可以发现，在文档中所有的代码用例都是使用 `@modern-js/runtime/router` 包导出的 API，而不是直接使用 React Router 包导出的 API。那两者有什么区别呢？
 
-- React Router 模式使用 `@modern-js/runtime/router`。
-- TanStack Router 模式使用 `@modern-js/plugin-tanstack/runtime`。
+首先，在 `@modern-js/runtime/router` 中导出的 API 和 React Router 包的 API 是完全一致的，如果某个 API 使用出现问题，请先检查 React Router 的文档和 Issues。
 
-建议优先使用与当前路由方案对应的 Modern.js 运行时导出，而不是直接从上游路由包中引入。这样可以避免依赖重复，并确保与 Modern.js 的路由生成和运行时行为保持一致。
-
-如果遇到 API 使用问题，可以分别参考上游文档：
-
-- `@modern-js/runtime/router` 对应 React Router 文档。
-- `@modern-js/plugin-tanstack/runtime` 对应 TanStack Router 文档。
+在使用约定式路由的情况下，务必使用 `@modern-js/runtime/router` 中的 API，不直接使用 React Router 的 API。因为 Modern.js 内部会安装 React Router，如果应用中使用了 React Router 的 API，可能会导致两个版本的 React Router 同时存在，出现不符合预期的行为。
 
 :::note
 
-如果应用中必须直接使用 React Router 包的 API，例如部分路由行为被封装在统一的 npm 包中，那应用可以通过设置 [`source.alias`](/configure/app/source/alias)，将 `react-router` 指向项目的依赖，避免两个版本的 React Router 同时存在的问题。
+如果应用中必须直接使用 React Router 包的 API，例如部分路由行为被封装在统一的 npm 包中，那应用可以通过设置 [`source.alias`](/configure/app/source/alias)，将 `react-router` 和 `react-router-dom` 统一指向项目的依赖，避免两个版本的 React Router 同时存在的问题。
 
 :::

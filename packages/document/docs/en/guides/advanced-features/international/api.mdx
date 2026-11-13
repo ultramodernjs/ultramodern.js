@@ -10,17 +10,14 @@ title: API Reference
 
 ### Return Value
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `language` | `string` | Current language code |
-| `changeLanguage` | `(lang: string) => Promise<void>` | Switches language |
-| `supportedLanguages` | `string[]` | Supported language list, from `localeDetection.languages` |
-| `localisedUrls` | `boolean \| Record<string, Record<string, string>>` | Localised URL mapping from `localeDetection.localisedUrls` |
-| `isLanguageSupported` | `(lang: string) => boolean` | Checks whether a language is in the supported list |
-| `isResourcesReady` | `boolean` | Whether translation resources for the current language have finished loading |
-| `i18nInstance` | `I18nInstance` | i18next instance for advanced scenarios |
-
-When `localePathRedirect` is enabled and `localisedUrls` is omitted, Modern.js keeps prefix-only paths such as `/en/about`. Translated path segments are enabled only by a non-empty `localisedUrls` map. Route generation validates every localisable path and every configured language only while that map is enabled.
+| Field                 | Type                              | Description                                                                  |
+| --------------------- | --------------------------------- | ---------------------------------------------------------------------------- |
+| `language`            | `string`                          | Current language code                                                        |
+| `changeLanguage`      | `(lang: string) => Promise<void>` | Switches language                                                            |
+| `supportedLanguages`  | `string[]`                        | Supported language list, from `localeDetection.languages`                    |
+| `isLanguageSupported` | `(lang: string) => boolean`       | Checks whether a language is in the supported list                           |
+| `isResourcesReady`    | `boolean`                         | Whether translation resources for the current language have finished loading |
+| `i18nInstance`        | `I18nInstance`                    | i18next instance for advanced scenarios                                      |
 
 ### Basic Usage
 
@@ -88,13 +85,13 @@ A route link component with a locale prefix.
 
 ### Props
 
-| Prop | Type | Required | Description |
-| --- | --- | --- | --- |
-| `to` | `string` | Yes | Target path. Do not include the locale prefix |
-| `children` | `React.ReactNode` | Yes | Link content |
-| `replace` | `boolean` | No | Uses `history.replace` instead of `push` |
-| `state` | `any` | No | State passed to the target route |
-| Other Link props | - | No | Passed to the active router link when a router is available |
+| Prop             | Type              | Required | Description                                                        |
+| ---------------- | ----------------- | -------- | ------------------------------------------------------------------ |
+| `to`             | `string`          | Yes      | Target path. Do not include the locale prefix                      |
+| `children`       | `React.ReactNode` | Yes      | Link content                                                       |
+| `replace`        | `boolean`         | No       | Uses `history.replace` instead of `push`                           |
+| `state`          | `any`             | No       | State passed to the target route                                   |
+| Other Link props | -                 | No       | Inherited from the `Link` component in `@modern-js/runtime/router` |
 
 ### Usage
 
@@ -145,52 +142,19 @@ const myPlugin = (): RuntimePlugin => ({
 
 The i18next instance type used by the plugin. It is a subset of the i18next `i18n` type and only lists fields actually used by the plugin:
 
-:::warning BREAKING (UltraModern)
-`I18nInstance` no longer declares a top-level `[key: string]: unknown` index
-signature: TypeScript never grants an interface an implicit index signature, so
-that member made the documented `runtime: { i18n: { i18nInstance: i18next } }`
-usage fail to typecheck. Reading a property that is not declared below is now a
-type error (TS2339) — cast to the concrete instance type instead. `t` is now a
-REQUIRED member, so object literals that produce an `I18nInstance` must supply
-one.
-:::
-
 ```ts
-type TranslateFn = (
-  key: string | string[],
-  options?: Record<string, unknown>,
-) => string;
-
 interface I18nInstance {
   language: string;
-  isInitialized?: boolean;
-  init(options?: any, callback?: any): Promise<any>;
-  changeLanguage?(lng?: string, callback?: any): Promise<any>;
-  setLang?: (lang: string) => void | Promise<void>;
-  use(plugin: any): unknown;
-  t: TranslateFn;
-  exists?: (key: string | string[], options?: Record<string, unknown>) => boolean;
-  getFixedT?: (
-    lng: string | readonly string[] | null,
-    ns?: string | readonly string[] | null,
-    keyPrefix?: string,
-  ) => TranslateFn;
-  hasLoadedNamespace?: (
-    ns: string | readonly string[],
-    options?: Record<string, unknown>,
-  ) => boolean;
-  dir?: (lng?: string) => string;
-  languages?: readonly string[];
-  resolvedLanguage?: string;
-  createInstance?(options?: any, callback?: any): I18nInstance;
-  cloneInstance?(options?: any, callback?: any): I18nInstance;
+  isInitialized: boolean;
+  init: (options?: I18nInitOptions) => void | Promise<void>;
+  changeLanguage: (lang: string) => void | Promise<void>;
+  use: (plugin: any) => void;
+  createInstance: (options?: I18nInitOptions) => I18nInstance;
   options?: {
-    detection?: any;
-    backend?: any;
-    ns?: any;
-    defaultNS?: any;
+    backend?: BackendOptions;
+    supportedLngs?: string[];
+    [key: string]: any;
   };
-  // ...see src/runtime/i18n/instance.ts for the full member list.
 }
 ```
 
@@ -202,11 +166,11 @@ Type of the custom backend loader function:
 type I18nSdkLoader = (options: I18nSdkLoadOptions) => Promise<Resources>;
 
 interface I18nSdkLoadOptions {
-  lng?: string;      // Single language code
-  ns?: string;       // Single namespace
-  lngs?: string[];   // Multiple language codes
-  nss?: string[];    // Multiple namespaces
-  all?: boolean;     // Load all resources
+  lng?: string; // Single language code
+  ns?: string; // Single namespace
+  lngs?: string[]; // Multiple language codes
+  nss?: string[]; // Multiple namespaces
+  all?: boolean; // Load all resources
 }
 
 type Resources = {
@@ -221,14 +185,14 @@ type Resources = {
 ```ts
 interface LanguageDetectorOptions {
   order?: string[];
-  lookupQuerystring?: string;   // Default: 'lng'
-  lookupCookie?: string;        // Default: 'i18next'
-  lookupLocalStorage?: string;  // Default: 'i18nextLng'
+  lookupQuerystring?: string; // Default: 'lng'
+  lookupCookie?: string; // Default: 'i18next'
+  lookupLocalStorage?: string; // Default: 'i18nextLng'
   lookupSession?: string;
-  lookupHeader?: string;        // Default: 'accept-language'
+  lookupHeader?: string; // Default: 'accept-language'
   lookupFromPathIndex?: number; // Default: 0
   caches?: false | string[];
-  cookieMinutes?: number;       // Default: 525600 (1 year)
+  cookieMinutes?: number; // Default: 525600 (1 year)
   cookieExpirationDate?: Date;
   cookieDomain?: string;
 }
@@ -248,8 +212,8 @@ import { useTranslation } from 'react-i18next';
 import { useModernI18n } from '@modern-js/plugin-i18n/runtime';
 
 function App() {
-  const { t } = useTranslation();                          // Translate text
-  const { language, changeLanguage } = useModernI18n();    // Switch language
+  const { t } = useTranslation(); // Translate text
+  const { language, changeLanguage } = useModernI18n(); // Switch language
 
   return (
     <div>
@@ -267,5 +231,11 @@ You can also get the i18next instance from `useModernI18n` and call capabilities
 const { i18nInstance } = useModernI18n();
 
 // Dynamically add translation resources.
-i18nInstance.addResourceBundle('zh', 'translation', { key: 'Value' }, true, true);
+i18nInstance.addResourceBundle(
+  'zh',
+  'translation',
+  { key: 'Value' },
+  true,
+  true,
+);
 ```

@@ -16,7 +16,7 @@ This is a CSR (Client-Side Rendering) application example project built with the
 
 ## Prerequisites
 
-- Node.js >= 26.7.0
+- Node.js >= 20.19.5
 - pnpm package manager
 
 ## Getting Started

@@ -1,7 +1,8 @@
 import type { PayloadRoute, ServerPayload } from './index.server';
+export type { ServerPayload, PayloadRoute };
 
-export type { PayloadRoute, ServerPayload };
-
-export const getServerPayload = (): ServerPayload | undefined => undefined;
+export const getServerPayload = (): ServerPayload | undefined => {
+  return undefined;
+};
 
 export const setServerPayload = (payload: ServerPayload): void => {};

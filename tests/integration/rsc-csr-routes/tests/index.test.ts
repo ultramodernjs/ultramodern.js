@@ -1,5 +1,5 @@
-import { isVersionAtLeast18 } from '@modern-js/utils';
 import path from 'path';
+import { isVersionAtLeast18 } from '@modern-js/utils';
 import type { Browser, Page } from 'puppeteer';
 import puppeteer from 'puppeteer';
 import {

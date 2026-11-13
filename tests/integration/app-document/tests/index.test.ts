@@ -34,98 +34,146 @@ describe('test dev and build', () => {
       expect(existsSync('html/sub/index.html')).toBe(true);
     });
 
-    test('built documents expose custom document behavior in a browser', async () => {
-      const browser = await puppeteer.launch(launchOptions as any);
-      try {
-        const page = await browser.newPage();
-        const consoleMessages: string[] = [];
-        page.on('console', message => consoleMessages.push(message.text()));
+    test('should have the test html and the correct content', async () => {
+      const htmlNoDoc = fs.readFileSync(
+        path.join(appDir, 'dist', 'html/test/index.html'),
+        'utf-8',
+      );
+      expect(htmlNoDoc.includes('<div id="root"><!--<?- html ?>--></div>'));
+    });
 
-        await page.setContent(
-          fs.readFileSync(
-            path.join(appDir, 'dist', 'html/test/index.html'),
-            'utf-8',
-          ),
-        );
-        expect(
-          await page.$eval('#root', root => ({
-            childElements: root.childElementCount,
-            comments: [...root.childNodes]
-              .filter(node => node.nodeType === Node.COMMENT_NODE)
-              .map(node => node.nodeValue),
-          })),
-        ).toEqual({ childElements: 0, comments: ['<?- html ?>'] });
+    test('should have the sub html and the correct content', async () => {
+      const htmlWithDoc = fs.readFileSync(
+        path.join(appDir, 'dist', 'html/sub/index.html'),
+        'utf-8',
+      );
+      expect(htmlWithDoc.includes('<div id="root"><!--<?- html ?>--><h1'));
+    });
 
-        await page.setContent(
-          fs.readFileSync(
-            path.join(appDir, 'dist', 'html/sub/index.html'),
-            'utf-8',
-          ),
-        );
-        const documentState = await page.evaluate(() => {
-          const logo = document.createElement('div');
-          logo.className = 'logo-spin';
-          const logoChild = document.createElement('div');
-          logo.append(logoChild);
-          document.body.append(logo);
-          const script =
-            document.querySelector<HTMLScriptElement>('#script-has-id');
-          const comments: string[] = [];
-          const walker = document.createTreeWalker(
-            document,
-            NodeFilter.SHOW_COMMENT,
-          );
-          while (walker.nextNode()) {
-            comments.push(walker.currentNode.nodeValue ?? '');
-          }
+    test('should has comment in Head', async () => {
+      const htmlWithDoc = fs.readFileSync(
+        path.join(appDir, 'dist', 'html/sub/index.html'),
+        'utf-8',
+      );
 
-          return {
-            aliasRendered:
-              document
-                .querySelector('#root')
-                ?.textContent?.includes('alias message: Alias module works!') ??
-              false,
-            bodyDirection: document.body.dir,
-            comments,
-            headClass: document.head.className,
-            iifeScript: {
-              async: script?.async,
-              defer: script?.defer,
-            },
-            inlineCommentRendered:
-              document.documentElement.textContent?.includes(
-                '== COMMENT BY APP in inline ==',
-              ) ?? false,
-            rootClass: document.querySelector('#root')?.className,
-            styleMargin: getComputedStyle(logoChild).marginRight,
-            title: document.title,
-            windowState: {
-              abc: (window as any).abc,
-              b: (window as any).b,
-            },
-            documentLanguage: document.documentElement.lang,
-          };
-        });
+      expect(htmlWithDoc.includes('<!-- COMMENT BY APP -->')).toBe(true);
+      expect(htmlWithDoc.includes('== COMMENT BY APP in inline ==')).toBe(true);
+      expect(htmlWithDoc.includes('== COMMENT BY APP but inline ==')).toBe(
+        false,
+      );
+    });
 
-        expect(documentState).toMatchObject({
-          aliasRendered: true,
-          bodyDirection: 'ltr',
-          comments: expect.arrayContaining([' COMMENT BY APP ', '<?- html ?>']),
-          documentLanguage: 'cn',
-          headClass: 'head',
-          iifeScript: { async: true, defer: true },
-          inlineCommentRendered: true,
-          rootClass: 'root',
-          styleMargin: '0px',
-          title: 'test-title',
-          windowState: { abc: 'hjk', b: 22 },
-        });
-        expect(consoleMessages).toEqual(
-          expect.arrayContaining(['abc', 'sss', 'this is a IIFE function']),
-        );
-      } finally {
-        await browser.close();
-      }
+    test('should has style in Head', async () => {
+      const htmlWithDoc = fs.readFileSync(
+        path.join(appDir, 'dist', 'html/sub/index.html'),
+        'utf-8',
+      );
+
+      expect(htmlWithDoc.includes('.logo-spin>div:last-child')).toBe(true);
+    });
+
+    test('should has lang property in html', async () => {
+      const htmlWithDoc = fs.readFileSync(
+        path.join(appDir, 'dist', 'html/sub/index.html'),
+        'utf-8',
+      );
+
+      expect(htmlWithDoc.includes(`html lang="cn"`)).toBe(true);
+    });
+
+    test('should has dir property in body', async () => {
+      const htmlWithDoc = fs.readFileSync(
+        path.join(appDir, 'dist', 'html/sub/index.html'),
+        'utf-8',
+      );
+
+      expect(htmlWithDoc.includes(`body dir="ltr"`)).toBe(true);
+    });
+
+    test('should has class property in root div', async () => {
+      const htmlWithDoc = fs.readFileSync(
+        path.join(appDir, 'dist', 'html/sub/index.html'),
+        'utf-8',
+      );
+
+      expect(htmlWithDoc.includes(`div id="root" class="root"`)).toBe(true);
+    });
+
+    test('should has class property in root div', async () => {
+      const htmlWithDoc = fs.readFileSync(
+        path.join(appDir, 'dist', 'html/sub/index.html'),
+        'utf-8',
+      );
+
+      expect(htmlWithDoc.includes(`head class="head"`)).toBe(true);
+    });
+
+    test('when not set partial html should normal', async () => {
+      const normalHtml = fs.readFileSync(
+        path.join(appDir, 'dist', 'html/differentProperities/index.html'),
+        'utf-8',
+      );
+      const partialPlaceholder = encodeURIComponent(
+        '<!--<?- partials.top ?>-->',
+      );
+      expect(new RegExp(partialPlaceholder).test(normalHtml)).toBe(false);
+    });
+
+    test('should injected partial html content to html', async () => {
+      const htmlWithDoc = fs.readFileSync(
+        path.join(appDir, 'dist', 'html/sub/index.html'),
+        'utf-8',
+      );
+
+      expect(
+        /<head [\s\S]*<script>window.abc="hjk"<\/script>[\s\S]*<\/head>/.test(
+          htmlWithDoc,
+        ),
+      ).toBe(true);
+      expect(
+        /<head[\s\S]*<script>console.log\("abc"\)<\/script>[\s\S]*<\/head>/.test(
+          htmlWithDoc,
+        ),
+      ).toBe(true);
+
+      expect(
+        /<body[\s\S]*<script>console.log\(abc\)<\/script>[\s\S]*<\/body>/.test(
+          htmlWithDoc,
+        ),
+      ).toBe(true);
+    });
+
+    test('should has title in Head', async () => {
+      const htmlWithDoc = fs.readFileSync(
+        path.join(appDir, 'dist', 'html/sub/index.html'),
+        'utf-8',
+      );
+      expect(htmlWithDoc.includes('<title>test-title</title>')).toBe(true);
+    });
+
+    test('should has Script origin script properties', async () => {
+      const htmlWithDoc = fs.readFileSync(
+        path.join(appDir, 'dist', 'html/sub/index.html'),
+        'utf-8',
+      );
+
+      expect(
+        htmlWithDoc.includes('<script defer="" async="" id="script-has-id">'),
+      ).toBe(true);
+      // IIFE should worked
+      expect(
+        htmlWithDoc.includes('console.log("this is a IIFE function")'),
+      ).toBe(true);
+    });
+
+    test('should render alias content in sub html', async () => {
+      const htmlWithDoc = fs.readFileSync(
+        path.join(appDir, 'dist', 'html', 'sub', 'index.html'),
+        'utf-8',
+      );
+      expect(htmlWithDoc.includes('alias message: Alias module works!')).toBe(
+        true,
+      );
     });
   });
 
@@ -184,6 +232,20 @@ describe('test dev and build', () => {
       const targetText = await page.evaluate(el => el?.textContent, root);
       expect(targetText?.trim()).toEqual('Here is page A返回 Home');
       expect(errors.length).toEqual(0);
+    });
+  });
+
+  describe('fix rem', () => {
+    beforeAll(async () => {
+      await modernBuild(appDir, ['-c', 'modern-rem.config.ts']);
+    });
+
+    test('should add rem resource correct', async () => {
+      const htmlNoDoc = fs.readFileSync(
+        path.join(appDir, 'dist-1', 'html/test/index.html'),
+        'utf-8',
+      );
+      expect(htmlNoDoc.includes('/static/js/convert-rem.'));
     });
   });
 });

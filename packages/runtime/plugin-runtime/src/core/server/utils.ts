@@ -1,23 +1,15 @@
-// @effect-diagnostics processEnv:off strictBooleanExpressions:off
-
 import type { ServerUserConfig } from '@modern-js/app-tools';
 import {
-  escapeHtmlAttribute,
-  isSafeHtmlAttributeName,
-} from '@modern-js/runtime-extensions';
-import type { StaticHandlerContext } from '@modern-js/runtime-utils/router';
-import { isRouteErrorResponse } from '../../router/runtime/routerHelper';
+  type StaticHandlerContext,
+  isRouteErrorResponse,
+} from '@modern-js/runtime-utils/router';
 import type { SSRConfig } from './shared';
 
 export function attributesToString(attributes: Record<string, any>) {
   // Iterate through the properties and convert them into a string, only including properties that are not undefined.
-  return Object.entries(attributes).reduce(
-    (str, [key, value]) =>
-      value === undefined || !isSafeHtmlAttributeName(key)
-        ? str
-        : `${str} ${key}="${escapeHtmlAttribute(value)}"`,
-    '',
-  );
+  return Object.entries(attributes).reduce((str, [key, value]) => {
+    return value === undefined ? str : `${str} ${key}="${value}"`;
+  }, '');
 }
 
 /**
@@ -38,6 +30,33 @@ export function checkIsNode(): boolean {
   return typeof process !== 'undefined' && process.release?.name === 'node';
 }
 
+// Holds each inlined build output once, so its size is bounded by the build.
+const assetCache = new Map<string, Promise<string>>();
+
+/**
+ * Read a build output file (e.g. an inlined css / js chunk) by its absolute path.
+ * Inlining only applies in production, where build outputs don't change at
+ * runtime, so the content is cached. Failed reads are not cached.
+ */
+export function readAssetWithCache(filepath: string): Promise<string> {
+  const cached = assetCache.get(filepath);
+  if (cached) {
+    return cached;
+  }
+
+  const content = import('fs/promises').then(fs =>
+    fs.readFile(filepath, 'utf-8'),
+  );
+  assetCache.set(filepath, content);
+  // Only drops the failed entry, callers still receive the rejection.
+  content.catch(() => {
+    if (assetCache.get(filepath) === content) {
+      assetCache.delete(filepath);
+    }
+  });
+  return content;
+}
+
 /**
  * forked from https://github.com/remix-run/remix/blob/main/packages/remix-server-runtime/errors.ts
  * license at https://github.com/remix-run/remix/blob/main/LICENSE.md
@@ -54,60 +73,18 @@ export function serializeErrors(
     // Hey you!  If you change this, please change the corresponding logic in
     // deserializeErrors
     if (isRouteErrorResponse(val)) {
-      serialized[key] = serializeRouteErrorResponse(val);
+      serialized[key] = { ...val, __type: 'RouteErrorResponse' };
     } else if (val instanceof Error) {
-      serialized[key] = serializeError(val);
+      serialized[key] = {
+        message: val.message,
+        stack: val.stack,
+        __type: 'Error',
+      };
     } else {
       serialized[key] = val;
     }
   }
   return serialized;
-}
-
-export function shouldRedactServerError() {
-  return (
-    process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test'
-  );
-}
-
-function serializeError(error: Error) {
-  if (shouldRedactServerError()) {
-    return {
-      message: 'Unexpected Server Error',
-      stack: undefined,
-      __type: 'Error',
-    };
-  }
-
-  return {
-    message: error.message,
-    stack: error.stack,
-    __type: 'Error',
-  };
-}
-
-function serializeRouteErrorResponse(error: unknown) {
-  if (!isRouteErrorResponse(error)) {
-    return error;
-  }
-
-  if (error.status >= 500 && shouldRedactServerError()) {
-    return {
-      status: error.status,
-      statusText: 'Internal Server Error',
-      data: 'Unexpected Server Error',
-      internal: error.internal,
-      __type: 'RouteErrorResponse',
-    };
-  }
-
-  return {
-    status: error.status,
-    statusText: error.statusText,
-    data: error.data,
-    internal: error.internal,
-    __type: 'RouteErrorResponse',
-  };
 }
 
 export function getSSRConfigByEntry(
@@ -140,12 +117,11 @@ const getLinkAttributes = (linkTag: string) => {
 
   while ((match = attributeRegExp.exec(linkTag))) {
     const [, name, doubleQuotedValue, singleQuotedValue, unquotedValue] = match;
-    const normalizedName = name.toLowerCase();
-    if (normalizedName === 'link' || attributes.has(normalizedName)) {
+    if (name.toLowerCase() === 'link') {
       continue;
     }
     attributes.set(
-      normalizedName,
+      name.toLowerCase(),
       doubleQuotedValue ?? singleQuotedValue ?? unquotedValue ?? '',
     );
   }

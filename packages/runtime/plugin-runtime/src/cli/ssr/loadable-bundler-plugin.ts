@@ -1,4 +1,3 @@
-// @effect-diagnostics nodeBuiltinImport:off strictBooleanExpressions:off unnecessaryArrowBlock:off
 /**
  * The following code is modified based on
  * https://github.com/gregberge/loadable-components
@@ -12,9 +11,9 @@
 // The Rspack stas & compilation lacks some fields, so `loadable-webpack-plugin` can not run normally in Rspack.
 // So that we write a `loadable-bundler-plugin` based on it.
 
+import path from 'path';
 import type { Rspack } from '@modern-js/app-tools';
 import { fs } from '@modern-js/utils';
-import path from 'path';
 
 interface LoadablePluginOptions {
   filename: string;
@@ -24,14 +23,24 @@ interface LoadablePluginOptions {
   chunkLoadingGlobal?: string;
 }
 
+const DEFAULT_CHUNK_LOADING_GLOBAL = '__LOADABLE_LOADED_CHUNKS__';
+
 type Compiler = Rspack.Compiler;
 
 type Compilation = Rspack.Compilation;
 
-const normalizeChunkId = (id: string | number | null | undefined) =>
-  typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : id;
-
-const DEFAULT_CHUNK_LOADING_GLOBAL = '__LOADABLE_LOADED_CHUNKS__';
+// Chunk IDs reported by Rspack 2.0 can be numeric strings (for example `"1"`)
+// while the emitted runtime registers them as numbers, so they need converting.
+// The conversion must stay lossless: `compact-hashed` ids such as `"01"` only
+// match themselves as strings, and `Number()` would collapse them to `1`, which
+// then never satisfies `loadableReady`'s strict `indexOf` lookup.
+const normalizeChunkId = (id: string | number | null | undefined) => {
+  if (typeof id !== 'string' || !/^\d+$/.test(id)) {
+    return id;
+  }
+  const num = Number(id);
+  return String(num) === id ? num : id;
+};
 
 const normalizeChunkGroup = (
   group: Record<string, any>,
@@ -71,15 +80,28 @@ class LoadablePlugin {
   apply(compiler: Compiler) {
     this.compiler = compiler;
 
-    const chunkLoadingGlobal =
-      this.opts.chunkLoadingGlobal ??
-      compiler.options.output.chunkLoadingGlobal ??
-      DEFAULT_CHUNK_LOADING_GLOBAL;
+    if (this.opts.chunkLoadingGlobal) {
+      compiler.options.output.chunkLoadingGlobal = this.opts.chunkLoadingGlobal;
+    }
 
-    compiler.options.output.chunkLoadingGlobal = chunkLoadingGlobal;
-    new compiler.webpack.DefinePlugin({
-      __MODERN_CHUNK_LOADING_GLOBAL__: JSON.stringify(chunkLoadingGlobal),
-    }).apply(compiler);
+    // Read the final value after all Rspack plugins have been applied, because
+    // another plugin may update chunkLoadingGlobal directly on the compiler.
+    compiler.hooks.initialize.tap(
+      {
+        name: LoadablePlugin.name,
+        stage: Number.POSITIVE_INFINITY,
+      },
+      () => {
+        const chunkLoadingGlobal =
+          compiler.options.output.chunkLoadingGlobal ||
+          DEFAULT_CHUNK_LOADING_GLOBAL;
+
+        new compiler.webpack.DefinePlugin({
+          'process.env.MODERN_CHUNK_LOADING_GLOBAL':
+            JSON.stringify(chunkLoadingGlobal),
+        }).apply(compiler);
+      },
+    );
 
     if (this.opts.outputAsset || this.opts.writeToDisk) {
       compiler.hooks.make.tap(

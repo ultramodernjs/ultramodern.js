@@ -9,11 +9,6 @@
 - `api/index.ts` ← `origin/v2:tests/integration/bff-hono/api/index.ts`（裁剪）
 - `src/routes/{layout,page}.tsx` ← 同名文件
 
-安全维护：fixture 的 `hono` 依赖已更新为 `^4.13.5`，Node 引擎要求已更新为
-UltraModern.js 的 `>=26.7.0` 基线。保留的 BFF 与 server 源码只使用 Modern.js
-导出的 Hono 集成面（`Api` / `Get` / `Query`、
-`useHonoContext`、`MiddlewareHandler`），不依赖 Hono 3 的直接导入或私有 API。
-
 ⚠️ `modern.config.ts` 使用仓库 integration 测试 helper `applyBaseConfig(...)`（**非标准用户配置包装**）。
 本 fixture 用于验证：遇到 `applyBaseConfig` 时，`runtime` / `plugins` 等**结构性迁移不自动进行**、
 明确进 manual 并提示「结构迁移未完成」；只做依赖升级 / import 路径等文件级安全改写。

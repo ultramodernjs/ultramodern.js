@@ -12,9 +12,9 @@ import type {
   AfterStreamingRenderContext,
 } from '@modern-js/types';
 import type { MiddlewareHandler } from 'hono';
+import type { MiddlewareObj } from './base';
 import type {
   APIServerStartInput,
-  MiddlewareObj,
   ServerConfig,
   WebAdapter,
   WebServerStartInput,

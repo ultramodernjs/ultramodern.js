@@ -2,10 +2,6 @@
 
 In a Modern.js application, developers can define API files under the `api/lambda` directory and export API functions from these files. In the frontend code, these API functions can be directly invoked by importing the file, which initiates the API requests.
 
-:::warning
-`api/lambda/**` is the Hono/file-function compatibility runtime. New UltraModern generated API work should use the strict Effect runtime with `api/index.ts`, `shared/api.ts`, `defineEffectBff(...)`, and Effect `HttpApi` schemas instead.
-:::
-
 This invocation method is called **unified invocation**, where developers do not need to write glue code for the frontend and backend separately, thereby ensuring type safety across both.
 
 ## Enable BFF
@@ -191,7 +187,7 @@ Parameters following the dynamic path are an object called `RequestOption`, whic
 In a standard function without dynamic routes, `RequestOption` can be obtained from the first parameter, for example:
 
 ```ts title="api/lambda/hello.ts"
-import type { RequestOption } from '@modern-js/plugin-bff/hono-server';
+import type { RequestOption } from '@modern-js/plugin-bff/server';
 
 export async function post({
   query,
@@ -204,7 +200,7 @@ export async function post({
 Custom types can also be used here:
 
 ```ts title="api/lambda/hello.ts"
-import type { RequestOption } from '@modern-js/plugin-bff/hono-server';
+import type { RequestOption } from '@modern-js/plugin-bff/server';
 
 type IQuery = {
   // some types

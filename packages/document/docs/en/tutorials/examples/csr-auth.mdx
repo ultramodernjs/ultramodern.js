@@ -4,7 +4,7 @@ title: Route Authorization
 
 # Route Authorization
 
-UltraModern.js uses convention-based routing backed by TanStack Router. For more details, please refer to [Routing](/guides/basic-features/routes/routes#routing).
+Modern.js defaults to the convention-based routing based on React Router v7. For more details, please refer to [Routing](/guides/basic-features/routes/routes#routing).
 
 In a web application, if there are multiple routes, we may need to authorize access to some of them before accessing them. For example, in the following scenario:
 
@@ -12,7 +12,6 @@ In a web application, if there are multiple routes, we may need to authorize acc
 - Access to the `/protected` route requires authorization. If there is no authorization, it will automatically redirect to the `/login` route. After successful login, it returns to `/protected`.
 
 import Sandpack from '@site/src/components/Sandpack';
-import { ultramodernSandpackFiles } from '@modern-js/ultramodern-sandpack-profile';
 import srcRoutesPageText from '../../../../src/sandbox/csr-auth/src/routes/page-tsx.txt';
 import srcRoutesLayoutText from '../../../../src/sandbox/csr-auth/src/routes/layout-tsx.txt';
 import srcRoutesAuthText from '../../../../src/sandbox/csr-auth/src/routes/Auth-tsx.txt';
@@ -21,7 +20,6 @@ import srcRoutesProtectedPageText from '../../../../src/sandbox/csr-auth/src/rou
 import srcRoutesLoginPageText from '../../../../src/sandbox/csr-auth/src/routes/login/page-tsx.txt';
 
 <Sandpack template="web-app" files={{
-  ...ultramodernSandpackFiles,
   '/src/routes/page.tsx': srcRoutesPageText,
   '/src/routes/layout.tsx': srcRoutesLayoutText,
   '/src/routes/Auth.tsx': srcRoutesAuthText,

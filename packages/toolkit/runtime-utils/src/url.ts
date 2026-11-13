@@ -9,6 +9,7 @@
  * pathname3: '/', the nomalizeResult also as '/'
  */
 export function normalizePathname(pathname: string): string {
+  // biome-ignore lint/style/useTemplate: <explanation>
   const normalized = '/' + pathname.replace(/^\/+|\/+$/g, '');
 
   if (normalized === '/') {

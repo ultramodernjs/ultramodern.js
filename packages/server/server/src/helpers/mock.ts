@@ -7,9 +7,8 @@ import {
 import { connectMockMid2HonoMid } from '@modern-js/server-core/node';
 import type { NextFunction } from '@modern-js/types';
 import type { NodeRequest, NodeResponse } from '@modern-js/types/server';
-import { compatibleRequire, fs } from '@modern-js/utils';
+import { fs, compatibleRequire } from '@modern-js/utils';
 import { match } from 'path-to-regexp';
-
 /** Types: Mock  */
 type MockHandler =
   | {
@@ -70,8 +69,8 @@ const parseKey = (key: string): { method: string; path: string } => {
   if (splitted.length > 1) {
     const [method, pathname] = splitted;
     return {
-      method: (method ?? 'get').toLowerCase(),
-      path: pathname ?? '/',
+      method: method.toLowerCase(),
+      path: pathname,
     };
   }
 
@@ -122,9 +121,7 @@ const getMockModule = async (
   )) as MockModule;
 
   const enable = config?.enable as
-    | boolean
-    | ((req: NodeRequest, res: NodeResponse) => boolean)
-    | undefined;
+    boolean | ((req: NodeRequest, res: NodeResponse) => boolean) | undefined;
 
   if (enable === false) {
     return undefined;
@@ -147,6 +144,7 @@ export const getMatched = (request: InternalRequest, mockApis: MockAPI[]) => {
     const { method, path: pathname } = mockApi;
     if (method.toLowerCase() === targetMethod.toLowerCase()) {
       return match(pathname, {
+        encode: encodeURI,
         decode: decodeURIComponent,
       })(targetPathname);
     }

@@ -21,20 +21,29 @@ React Server Components (RSC) 是一种新的组件类型，允许在服务端�
 
 ## 快速开始
 
-:::warning UltraModern 可用性
-RSC 仍属实验性能力，默认关闭，且不对外部消费者提供支持；当前 UltraModern 公司发行版不会随附 RSC。发布批次与 clean-room 发布验收测试验证 RSC 运行时不存在且无法解析，发布批次也没有已维护的 `@bleedingdev/*` RSC 运行时包；启用 RSC 时，除非应用提供完整的可选工具链，否则框架会按 fail-closed 处理。
+1. **确保 React 和 React DOM 升级到 19 版本**（建议 19.2.4 以上版本）
 
-根目录专用的 `react-server-dom-rspack@0.0.3` 补丁仅为本仓库的 RSC 回归测试回移 Flight 解码器安全修复；它不会复制到生成工作区或发布给消费者，因此应用自行安装上游包得到的是未打补丁的字节。[SyMind/react#1](https://github.com/SyMind/react/pull/1) 已于 2026-08-11 合并；[BleedingDev/react#1](https://github.com/BleedingDev/react/pull/1) 与 [rspack#15144](https://github.com/web-infra-dev/rspack/issues/15144) 仍处于 open 状态。npm 上 `react-server-dom-rspack` 的 `latest` 仍为 `0.0.3`，且没有包含补丁的消费者发行版，因此根目录补丁对于本仓库的 RSC 测试仍是必要的。此边界仍待所有者最终批准。
+2. **安装 `react-server-dom-rspack@0.0.2` 依赖**
+
+```bash
+npm install react-server-dom-rspack@0.0.2
+```
+
+:::warning 注意事项
+
+1. 目前暂不支持在 SPA 项目中使用 [Server Functions](https://react.dev/reference/rsc/server-functions)
+2. 目前在 Rspack 构建时，产物分片和体积还未达到最优状态，我们将在近期进一步优化
+
 :::
 
-请保持 [`server.rsc`](/configure/app/server/rsc) 为 `false`：
+3. 设置 [`server.rsc`](/configure/app/server/rsc) 为 `true`：
 
 ```ts title="modern.config.ts"
 import { defineConfig } from '@modern-js/app-tools';
 
 export default defineConfig({
   server: {
-    rsc: false,
+    rsc: true,
   },
 });
 ```
@@ -230,12 +239,12 @@ export default function DashboardPage() {
 
 ### 两种数据获取方式对比
 
-| 特性 | Server Component 中获取 | Data Loader 中获取 |
-| --- | --- | --- |
-| 避免请求瀑布 | 需要手动优化 | ✅ 自动并行执行 |
-| 组件内聚性 | ✅ 数据和 UI 在同一处 | 数据逻辑分离到单独文件 |
-| 维护性 | ✅ 更易理解和维护 | 需要维护额外文件 |
-| 类型安全 | ✅ 天然类型推断 | 需要手动管理类型 |
+| 特性         | Server Component 中获取 | Data Loader 中获取     |
+| ------------ | ----------------------- | ---------------------- |
+| 避免请求瀑布 | 需要手动优化            | ✅ 自动并行执行        |
+| 组件内聚性   | ✅ 数据和 UI 在同一处   | 数据逻辑分离到单独文件 |
+| 维护性       | ✅ 更易理解和维护       | 需要维护额外文件       |
+| 类型安全     | ✅ 天然类型推断         | 需要手动管理类型       |
 
 **一般情况下，我们推荐在 Server Component 中获取数据**，因为在服务端瀑布请求对性能的影响较小，这种方式使组件更加内聚，数据获取逻辑和 UI 渲染在同一处，更易于理解和维护。但如果你的页面有多个独立的数据源，且希望完全避免请求瀑布问题，Data Loader 的并行执行特性会更有优势。
 
@@ -259,7 +268,11 @@ export default function DashboardPage() {
 
 ```tsx title="routes/user/page.tsx"
 // Server Component 通过 props 接收 loaderData
-export default function UserPage({ loaderData }: { loaderData: { name: string } }) {
+export default function UserPage({
+  loaderData,
+}: {
+  loaderData: { name: string };
+}) {
   return <div>Welcome, {loaderData.name}</div>;
 }
 ```
@@ -267,7 +280,11 @@ export default function UserPage({ loaderData }: { loaderData: { name: string } 
 ```tsx title="routes/user/page.tsx"
 'use client';
 // Client Component 同样可以通过 props 接收 loaderData
-export default function UserPage({ loaderData }: { loaderData: { name: string } }) {
+export default function UserPage({
+  loaderData,
+}: {
+  loaderData: { name: string };
+}) {
   return <div>Welcome, {loaderData.name}</div>;
 }
 ```
@@ -590,7 +607,6 @@ export default function ProfilePage() {
 当使用 react19 时，无需再使用 Helmet，推荐直接使用 react 提供的[组件](https://react.dev/reference/react-dom/components)。
 
 import DeployTip from '@site-docs/components/rsc-deploy-tip';
-
 
 <DeployTip />
 

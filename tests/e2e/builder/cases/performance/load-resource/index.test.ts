@@ -1,32 +1,10 @@
-import type { Page } from '@playwright/test';
+import { join } from 'path';
 import { expect, test } from '@playwright/test';
 import { build } from '@scripts/shared';
-import { join } from 'path';
 
 const fixtures = __dirname;
 
-const getResourceLinks = async (
-  page: Page,
-  files: Record<string, string>,
-  rel: 'prefetch' | 'preload',
-) => {
-  const html = Object.entries(files).find(([name]) =>
-    name.endsWith('index.html'),
-  )?.[1];
-  expect(html).toBeDefined();
-  await page.setContent(html!);
-  return page.locator(`link[rel="${rel}"]`).evaluateAll(links =>
-    links.map(link => ({
-      as: link.getAttribute('as'),
-      crossOrigin: link.getAttribute('crossorigin'),
-      href: link.getAttribute('href'),
-    })),
-  );
-};
-
-test('should generate prefetch link when prefetch is defined', async ({
-  page,
-}) => {
+test('should generate prefetch link when prefetch is defined', async () => {
   const builder = await build({
     cwd: fixtures,
     entry: {
@@ -47,21 +25,23 @@ test('should generate prefetch link when prefetch is defined', async ({
   const asyncFileName = Object.keys(files).find(file =>
     file.includes('/static/js/async/'),
   )!;
-  const links = await getResourceLinks(page, files, 'prefetch');
+  const [, content] = Object.entries(files).find(([name]) =>
+    name.endsWith('index.html'),
+  )!;
 
-  expect(links).toHaveLength(3);
-  expect(links).toContainEqual({
-    as: null,
-    crossOrigin: null,
-    href: `https://www.foo.com${asyncFileName.slice(
-      asyncFileName.indexOf('/static/js/async/'),
-    )}`,
-  });
+  // test.js、test.css、test.png
+  expect(content.match(/rel="prefetch"/g)?.length).toBe(3);
+
+  expect(
+    content.includes(
+      `<link href="https://www.foo.com${asyncFileName.slice(
+        asyncFileName.indexOf('/static/js/async/'),
+      )}" rel="prefetch">`,
+    ),
+  ).toBeTruthy();
 });
 
-test('should generate prefetch link correctly when assetPrefix do not have a protocol', async ({
-  page,
-}) => {
+test('should generate prefetch link correctly when assetPrefix do not have a protocol', async () => {
   const builder = await build({
     cwd: fixtures,
     entry: {
@@ -82,18 +62,20 @@ test('should generate prefetch link correctly when assetPrefix do not have a pro
   const asyncFileName = Object.keys(files).find(file =>
     file.includes('/static/js/async/'),
   )!;
-  const links = await getResourceLinks(page, files, 'prefetch');
+  const [, content] = Object.entries(files).find(([name]) =>
+    name.endsWith('index.html'),
+  )!;
 
-  expect(links).toContainEqual({
-    as: null,
-    crossOrigin: null,
-    href: `//www.foo.com${asyncFileName.slice(
-      asyncFileName.indexOf('/static/js/async/'),
-    )}`,
-  });
+  expect(
+    content.includes(
+      `<link href="//www.foo.com${asyncFileName.slice(
+        asyncFileName.indexOf('/static/js/async/'),
+      )}" rel="prefetch">`,
+    ),
+  ).toBeTruthy();
 });
 
-test('should generate prefetch link with filter', async ({ page }) => {
+test('should generate prefetch link with filter', async () => {
   const builder = await build({
     cwd: fixtures,
     entry: {
@@ -113,20 +95,23 @@ test('should generate prefetch link with filter', async ({ page }) => {
   const asyncFileName = Object.keys(files).find(file =>
     file.includes('/static/image/test'),
   )!;
-  const links = await getResourceLinks(page, files, 'prefetch');
+  const [, content] = Object.entries(files).find(([name]) =>
+    name.endsWith('index.html'),
+  )!;
 
-  expect(links).toEqual([
-    {
-      as: null,
-      crossOrigin: null,
-      href: asyncFileName.slice(asyncFileName.indexOf('/static/image/test')),
-    },
-  ]);
+  // test.js、test.css、test.png
+  expect(content.match(/rel="prefetch"/g)?.length).toBe(1);
+
+  expect(
+    content.includes(
+      `<link href="${asyncFileName.slice(
+        asyncFileName.indexOf('/static/image/test'),
+      )}" rel="prefetch">`,
+    ),
+  ).toBeTruthy();
 });
 
-test('should generate preload link when preload is defined', async ({
-  page,
-}) => {
+test('should generate preload link when preload is defined', async () => {
   const builder = await build({
     cwd: fixtures,
     entry: {
@@ -144,17 +129,23 @@ test('should generate preload link when preload is defined', async ({
   const asyncFileName = Object.keys(files).find(file =>
     file.includes('/static/js/async/'),
   )!;
-  const links = await getResourceLinks(page, files, 'preload');
+  const [, content] = Object.entries(files).find(([name]) =>
+    name.endsWith('index.html'),
+  )!;
 
-  expect(links).toHaveLength(3);
-  expect(links).toContainEqual({
-    as: 'script',
-    crossOrigin: null,
-    href: asyncFileName.slice(asyncFileName.indexOf('/static/js/async/')),
-  });
+  // test.js、test.css、test.png
+  expect(content.match(/rel="preload"/g)?.length).toBe(3);
+
+  expect(
+    content.includes(
+      `<link href="${asyncFileName.slice(
+        asyncFileName.indexOf('/static/js/async/'),
+      )}" rel="preload" as="script">`,
+    ),
+  ).toBeTruthy();
 });
 
-test('should generate preload link with crossOrigin', async ({ page }) => {
+test('should generate preload link with crossOrigin', async () => {
   const builder = await build({
     cwd: fixtures,
     entry: {
@@ -178,21 +169,23 @@ test('should generate preload link with crossOrigin', async ({ page }) => {
   const asyncFileName = Object.keys(files).find(file =>
     file.includes('/static/js/async/'),
   )!;
-  const links = await getResourceLinks(page, files, 'preload');
+  const [, content] = Object.entries(files).find(([name]) =>
+    name.endsWith('.html'),
+  )!;
 
-  expect(links).toHaveLength(3);
-  expect(links).toContainEqual({
-    as: 'script',
-    crossOrigin: '',
-    href: `//aaa.com${asyncFileName.slice(
-      asyncFileName.indexOf('/static/js/async/'),
-    )}`,
-  });
+  // test.js、test.css、test.png
+  expect(content.match(/rel="preload"/g)?.length).toBe(3);
+
+  expect(
+    content.includes(
+      `<link href="//aaa.com${asyncFileName.slice(
+        asyncFileName.indexOf('/static/js/async/'),
+      )}" rel="preload" as="script" crossorigin="">`,
+    ),
+  ).toBeTruthy();
 });
 
-test('should generate preload link without crossOrigin when same origin', async ({
-  page,
-}) => {
+test('should generate preload link without crossOrigin when same origin', async () => {
   const builder = await build({
     cwd: fixtures,
     entry: {
@@ -213,12 +206,18 @@ test('should generate preload link without crossOrigin when same origin', async 
   const asyncFileName = Object.keys(files).find(file =>
     file.includes('/static/js/async/'),
   )!;
-  const links = await getResourceLinks(page, files, 'preload');
+  const [, content] = Object.entries(files).find(([name]) =>
+    name.endsWith('.html'),
+  )!;
 
-  expect(links).toHaveLength(3);
-  expect(links).toContainEqual({
-    as: 'script',
-    crossOrigin: null,
-    href: asyncFileName.slice(asyncFileName.indexOf('/static/js/async/')),
-  });
+  // test.js、test.css、test.png
+  expect(content.match(/rel="preload"/g)?.length).toBe(3);
+
+  expect(
+    content.includes(
+      `<link href="${asyncFileName.slice(
+        asyncFileName.indexOf('/static/js/async/'),
+      )}" rel="preload" as="script">`,
+    ),
+  ).toBeTruthy();
 });

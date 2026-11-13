@@ -1,26 +1,8 @@
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { build, getHrefByEntryName } from '@scripts/shared';
-import tailwindPostcss from '@tailwindcss/postcss';
+import { build } from '@scripts/shared';
 
-const expectEntryStyles = async (
-  page: import('@playwright/test').Page,
-  port: number,
-) => {
-  await page.goto(getHrefByEntryName('foo', port));
-  await expect(page.locator('h1')).toHaveCSS('font-weight', '700');
-  await expect(page.locator('h1')).toHaveCSS(
-    'text-decoration-line',
-    'underline',
-  );
-
-  await page.goto(getHrefByEntryName('bar', port));
-  await expect(page.locator('h1')).toHaveCSS('font-size', '30px');
-};
-
-test('should allow to use `postcssOptions` function to apply different postcss config for different files and overrides modern.js default plugins', async ({
-  page,
-}) => {
+test('should allow to use `postcssOptions` function to apply different postcss config for different files and overrides modern.js default plugins', async () => {
   const builder = await build({
     cwd: __dirname,
     entry: {
@@ -39,27 +21,37 @@ test('should allow to use `postcssOptions` function to apply different postcss c
             const name = loaderContext.resourcePath.includes('foo')
               ? 'foo'
               : 'bar';
+            const tailwindConfig = path.join(
+              __dirname,
+              `./tailwind.config.${name}.cjs`,
+            );
             return {
-              plugins: [
-                tailwindPostcss({
-                  base: path.join(__dirname, `./src/${name}`),
-                }),
-              ],
+              plugins: [require('tailwindcss')({ config: tailwindConfig })],
             };
           };
         },
       },
     },
-    runServer: true,
   });
 
-  await expectEntryStyles(page, builder.port);
-  builder.close();
+  const files = await builder.unwrapOutputJSON();
+  const fooCssFile = Object.keys(files).find(
+    file => file.includes('foo.') && file.endsWith('.css'),
+  )!;
+
+  expect(files[fooCssFile]).toEqual(
+    '.font-bold{font-weight:700}.underline{text-decoration-line:underline}',
+  );
+
+  const barCssFile = Object.keys(files).find(
+    file => file.includes('bar.') && file.endsWith('.css'),
+  )!;
+  expect(files[barCssFile]).toEqual(
+    '.text-3xl{font-size:1.875rem;line-height:2.25rem}',
+  );
 });
 
-test('should allow to use `postcssOptions` function to apply different postcss config for different files and apply modern.js default plugins', async ({
-  page,
-}) => {
+test('should allow to use `postcssOptions` function to apply different postcss config for different files and apply modern.js default plugins', async () => {
   const builder = await build({
     cwd: __dirname,
     entry: {
@@ -79,24 +71,38 @@ test('should allow to use `postcssOptions` function to apply different postcss c
             const name = loaderContext.resourcePath.includes('foo')
               ? 'foo'
               : 'bar';
+            const tailwindConfig = path.join(
+              __dirname,
+              `./tailwind.config.${name}.cjs`,
+            );
             return {
               plugins: [
                 // apply modern.js default plugins
                 ...(typeof originalPostcssOptions === 'object'
                   ? (originalPostcssOptions.plugins ?? [])
                   : []),
-                tailwindPostcss({
-                  base: path.join(__dirname, `./src/${name}`),
-                }),
+                require('tailwindcss')({ config: tailwindConfig }),
               ],
             };
           };
         },
       },
     },
-    runServer: true,
   });
 
-  await expectEntryStyles(page, builder.port);
-  builder.close();
+  const files = await builder.unwrapOutputJSON();
+  const fooCssFile = Object.keys(files).find(
+    file => file.includes('foo.') && file.endsWith('.css'),
+  )!;
+  // apply tailwind config and autoprefixer correctly
+  expect(files[fooCssFile]).toEqual(
+    '.font-bold{font-weight:700}.underline{text-decoration-line:underline}',
+  );
+
+  const barCssFile = Object.keys(files).find(
+    file => file.includes('bar.') && file.endsWith('.css'),
+  )!;
+  expect(files[barCssFile]).toEqual(
+    '.text-3xl{font-size:1.875rem;line-height:2.25rem}',
+  );
 });

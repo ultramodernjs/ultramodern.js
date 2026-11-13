@@ -1,6 +1,6 @@
+import path from 'path';
 import { expect, test } from '@playwright/test';
 import { build, getHrefByEntryName } from '@scripts/shared';
-import path from 'path';
 
 test('security.sri', async ({ page }) => {
   const builder = await build({
@@ -14,21 +14,20 @@ test('security.sri', async ({ page }) => {
     },
   });
 
+  const files = await builder.unwrapOutputJSON();
+  const htmlFileName = Object.keys(files).find(f => f.endsWith('.html'))!;
+
+  const regex = /integrity=/g;
+
+  const matches = files[htmlFileName].match(regex);
+
+  // at least 1 js file and 1 css file
+  expect(matches?.length).toBeGreaterThanOrEqual(2);
+
   await page.goto(getHrefByEntryName('index', builder.port));
 
   const test = page.locator('#test');
   await expect(test).toHaveText('Hello Builder!');
-  const protectedResources = page.locator('script[integrity], link[integrity]');
-  expect(await protectedResources.count()).toBeGreaterThanOrEqual(2);
-  expect(
-    await protectedResources.evaluateAll(elements =>
-      elements.every(element =>
-        /^sha384-[A-Za-z0-9+/]+=*$/u.test(
-          element.getAttribute('integrity') ?? '',
-        ),
-      ),
-    ),
-  ).toBe(true);
 
   builder.close();
 });

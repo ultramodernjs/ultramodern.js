@@ -22,6 +22,18 @@ server: {
 }
 ```
 
+### dev.lazyCompilation
+
+**变更内容**：开发环境下的默认值变化。纯 CSR 与流式 SSR 应用默认开启按需编译，默认值为 `{ imports: true, entries: false }`；使用 string SSR、RSC 或 SSG 的应用仍默认关闭。该变更只影响开发环境，不影响生产构建产物。
+
+**迁移示例**：如需保持 2.0 的行为，可以显式关闭：
+
+```typescript
+dev: {
+  lazyCompilation: false;
+}
+```
+
 ## html
 
 ### html.appIcon
@@ -334,7 +346,7 @@ export default {
 
 ### tools.rsdoctor
 
-**变更内容**：该配置已废弃。v3 中可通过 [`performance.rsdoctor`](/configure/app/performance/rsdoctor) 显式启用 Rsdoctor 诊断能力。
+**变更内容**：该配置已废弃，请参考 [Rsdoctor 文档](/guides/basic-features/debug/rsdoctor)，使用 Rspack 的 [Rsdoctor 插件](https://rsdoctor.dev/)来启用支持。
 
 **迁移示例**：
 
@@ -348,10 +360,22 @@ tools: {
 },
 
 // v3
+import { RsdoctorRspackPlugin } from '@rsdoctor/rspack-plugin';
+
 export default {
-  performance: {
-    rsdoctor: {
-      enabled: true,
+  // ...
+  tools: {
+    bundlerChain(chain) {
+      // 仅在 RSDOCTOR 为 true 时注册插件，因为插件会增加构建耗时
+      if (process.env.RSDOCTOR) {
+        chain.plugin('rsdoctor').use(RsdoctorRspackPlugin, [
+          {
+            // 插件选项
+            disableClientServer: true,
+            features: ['bundle', 'loader', 'plugins', 'resolver'],
+          },
+        ]);
+      }
     },
   },
 };
@@ -359,9 +383,7 @@ export default {
 
 ### tools.babel
 
-**变更内容**：该配置已废弃，框架不再内置 Babel，请使用 [Rsbuild 的 Babel 插件](https://rsbuild.rs/plugins/list/plugin-babel) 来启用支持。
-
-当 Babel 选项都是可序列化的普通数据时，可以设置 `parallel: true`，通过 Rsbuild 的 worker 模式运行 Babel。包含函数的 Babel 选项不要启用该模式。
+**变更内容**：该配置已废弃，框架不再内置 Babel，请使用 [Rsbuild 的 Babel 插件](https://v0.rsbuild.rs/plugins/list/plugin-babel) 来启用支持。
 
 **迁移示例**：
 
@@ -389,7 +411,6 @@ export default {
   // ...
   builderPlugins: [
     pluginBabel({
-      parallel: true,
       babelLoaderOptions: {
         plugins: [
           [

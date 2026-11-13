@@ -1,15 +1,12 @@
-import { compatibleRequire, fs, globby } from '@modern-js/utils';
 import type { Stats } from 'fs';
-import { createJiti } from 'jiti';
 import path from 'path';
+import { fs, compatibleRequire, globby } from '@modern-js/utils';
+import { createJiti } from 'jiti';
 
 export const getConfigFilePath = (
   appDirectory: string,
-  configFilePath: string | false,
+  configFilePath: string,
 ) => {
-  if (configFilePath === false) {
-    return false;
-  }
   if (path.isAbsolute(configFilePath)) {
     return configFilePath;
   }
@@ -121,10 +118,10 @@ export const loadTypeScriptFile = (filePath: string): any => {
 
 export const loadConfig = async <T>(
   appDirectory: string,
-  configFile: string | false,
+  configFile: string,
 ): Promise<{
   packageName: string;
-  configFile: string | false;
+  configFile: string;
   config?: T;
   pkgConfig?: T;
 }> => {

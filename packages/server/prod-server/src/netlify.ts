@@ -7,7 +7,7 @@ import {
 import { applyPlugins } from './apply';
 import type { BaseEnv, ProdServerOptions } from './types';
 
-export type { BaseEnv, ProdServerOptions } from './types';
+export type { ProdServerOptions, BaseEnv } from './types';
 
 export const createNetlifyFunction = async (options: ProdServerOptions) => {
   await loadServerEnv(options);

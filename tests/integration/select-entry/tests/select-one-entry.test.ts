@@ -1,10 +1,7 @@
 import { existsSync } from 'fs';
 import path from 'path';
-import {
-  getPort,
-  killApp,
-  runModernCommandDev,
-} from '../../../utils/modernTestUtils';
+import getPort from 'get-port';
+import { killApp, runModernCommandDev } from '../../../utils/modernTestUtils';
 
 describe('select entry', () => {
   test(`should only compile selected entry`, async () => {

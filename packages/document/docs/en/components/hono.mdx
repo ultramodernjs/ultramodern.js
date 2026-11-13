@@ -13,7 +13,7 @@ export const get = async () => {
 ```
 
 :::info
-For more details, refer to [useHonoContext](/apis/app/runtime/bff/use-backend-context).
+For more details, refer to [useHonoContext](/apis/app/runtime/bff/use-hono-context).
 :::
 
 ### Getting Cookies
@@ -21,7 +21,7 @@ For more details, refer to [useHonoContext](/apis/app/runtime/bff/use-backend-co
 When getting cookies in BFF functions, you need to get the request context through `useHonoContext`, then use `c.req.header('cookie')` to get the Cookie string and parse it manually:
 
 ```ts title="api/lambda/cookies.ts"
-import { Api, Get } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get } from '@modern-js/plugin-bff/server';
 import { useHonoContext } from '@modern-js/server-runtime';
 
 // Helper function to parse Cookie string
@@ -64,7 +64,7 @@ The `c.req.cookie()` method does not exist in the current version. You need to u
 When using Hono as the runtime framework, you can define interfaces through [Api functions](/guides/advanced-features/bff/operators.html):
 
 ```ts title="api/lambda/user.ts"
-import { Api, Get, Query } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Query } from '@modern-js/plugin-bff/server';
 import { z } from 'zod';
 
 const QuerySchema = z.object({
@@ -93,7 +93,7 @@ For more details about Api functions and operators, refer to [Creating Extensibl
 Hono supports a rich middleware ecosystem, and you can use middleware in BFF functions:
 
 ```ts title="api/lambda/user.ts"
-import { Api, Get, Middleware } from '@modern-js/plugin-bff/hono-server';
+import { Api, Get, Middleware } from '@modern-js/plugin-bff/server';
 
 export const getUser = Api(
   Get('/user'),

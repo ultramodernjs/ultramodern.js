@@ -3,13 +3,13 @@ import type { EN_US } from './enUS';
 export const ZH_CN: Record<keyof typeof EN_US, string> = {
   // Announcement
   announcementLabel: 'NEW',
-  announcementText: 'UltraModern.js 3.0 已面向 SuperApp 就绪',
+  announcementText: 'Modern.js 3.0 正式发布！',
 
-  introduction: 'UltraModern 指南',
-  quickStart: '开始构建',
+  introduction: '介绍',
+  quickStart: '快速上手',
 
   // Slogans
-  slogan: '面向 Effect、TanStack、SSR、BFF 与 Micro Verticals 的 SuperApp 框架',
+  slogan: '基于 React 的渐进式 Web 开发框架',
   secondSlogan1: '享受愉悦的开发体验，',
   secondSlogan2: '让创新更快发生。',
 
@@ -42,4 +42,13 @@ export const ZH_CN: Record<keyof typeof EN_US, string> = {
   pluginSystem: '插件系统',
   githubDiscussion: 'Github 讨论区',
   changelog: '更新日志',
+
+  // Showcase
+  doubao: '豆包',
+  writingo: '火山写作',
+  volctrans: '火山翻译',
+  shidianbaike: '识典百科',
+  xiaohe: '小荷健康',
+  dongchedi: '懂车帝',
+  volcengineDeveloper: '火山引擎开发者社区',
 };

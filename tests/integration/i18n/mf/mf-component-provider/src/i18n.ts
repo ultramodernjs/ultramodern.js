@@ -1,6 +1,6 @@
-import originalI18next, { type i18n } from 'i18next';
+import originalI18next from 'i18next';
 
-const i18next: i18n = originalI18next.createInstance();
+const i18next = originalI18next.createInstance();
 
 i18next.init({
   lng: 'en',

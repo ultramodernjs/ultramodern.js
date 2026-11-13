@@ -1,10 +1,10 @@
 const Koa = require('koa');
-const fs = require('node:fs');
-const path = require('node:path');
+const fs = require('fs');
+const path = require('path');
 const mime = require('mime-types');
 
 const app = new Koa();
-app.use(async (ctx, _next) => {
+app.use(async (ctx, next) => {
   if (ctx.path.startsWith('/static')) {
     const contentType = mime.lookup(ctx.path);
     ctx.type = contentType;

@@ -1,8 +1,9 @@
+import path from 'path';
 import { fs, ROUTE_MANIFEST_FILE } from '@modern-js/utils';
 import { ROUTE_MANIFEST } from '@modern-js/utils/universal/constants';
-import path from 'path';
-import type { Page } from 'puppeteer';
 import puppeteer, { type Browser } from 'puppeteer';
+
+import type { Page } from 'puppeteer';
 import {
   getPort,
   killApp,
@@ -10,10 +11,26 @@ import {
   launchOptions,
   modernBuild,
   modernServe,
+  runModernCommand,
 } from '../../../utils/modernTestUtils';
 import { expectPageToMatchTextContent } from '../../../utils/rstestPuppeteer';
 
 const appDir = path.resolve(__dirname, '../');
+
+const findRouteByPath = (routes: any[], targetPath: string): any => {
+  for (const route of routes) {
+    if (route.path === targetPath) {
+      return route;
+    }
+    if (route.children && route.children.length > 0) {
+      const found = findRouteByPath(route.children, targetPath);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  return null;
+};
 
 const renderSelfRoute = async (
   page: Page,
@@ -188,7 +205,6 @@ const supportThrowError = async (
   page: Page,
   errors: string[],
   appPort: number,
-  expectedMessage = "can't found the user",
 ) => {
   const response = await page.goto(
     `http://localhost:${appPort}/three/error/response?type=throw_error`,
@@ -201,7 +217,7 @@ const supportThrowError = async (
   const errorStatusElm = await page.$('.error-content');
   const text = await page.evaluate(el => el?.textContent, errorStatusElm);
   expect(text?.includes('500')).toBeFalsy();
-  expect(text).toContain(expectedMessage);
+  expect(text?.includes("can't found the user")).toBeTruthy();
 };
 
 const supportThrowResponse = async (
@@ -657,7 +673,6 @@ const supportConfigWithCompanionFiles = async (
   page: Page,
   errors: string[],
   appPort: number,
-  expectedErrorMessage = 'Product load error',
 ) => {
   // Should load data via server loader
   await page.goto(`http://localhost:${appPort}/three/product/123`, {
@@ -680,7 +695,7 @@ const supportConfigWithCompanionFiles = async (
   const errorElm = await page.$('.product-error');
   const errorText = await page.evaluate(el => el?.textContent, errorElm);
   expect(errorText?.includes('Product Error Boundary')).toBeTruthy();
-  expect(errorText?.includes(expectedErrorMessage)).toBeTruthy();
+  expect(errorText?.includes('Product load error')).toBeTruthy();
 };
 
 const supportDeepFileRoutesManipulation = async (
@@ -903,7 +918,7 @@ describe('build with rspack', () => {
     test('support redirect for csr', () =>
       supportRedirectForCSR(page, errors, appPort));
     test('support throw error', async () =>
-      supportThrowError(page, errors, appPort, 'Unexpected Server Error'));
+      supportThrowError(page, errors, appPort));
     test('support throw response', async () => {
       await supportThrowResponse(page, errors, appPort, 500);
       await supportThrowResponse(page, errors, appPort, 200);
@@ -974,17 +989,108 @@ describe('build with rspack', () => {
     test('mixed nested routes work correctly', async () =>
       supportMixedNestedRoutes(page, errors, appPort));
     test('config route with auto-discovered companion files', async () =>
-      supportConfigWithCompanionFiles(
-        page,
-        errors,
-        appPort,
-        'Unexpected Server Error',
-      ));
+      supportConfigWithCompanionFiles(page, errors, appPort));
   });
 
   afterAll(async () => {
     await killApp(app);
     await page.close();
     await browser.close();
+  });
+});
+
+describe('routes inspect report', () => {
+  beforeAll(async () => {
+    const distDir = path.join(appDir, './dist');
+    if (await fs.pathExists(distDir)) {
+      await fs.remove(distDir);
+    }
+
+    await runModernCommand(['routes'], {
+      cwd: appDir,
+      stdout: true,
+      stderr: true,
+    });
+  });
+  test('should generate correct routes inspect report', async () => {
+    const reportPath = path.join(appDir, './dist/routes-inspect.json');
+
+    expect(await fs.pathExists(reportPath)).toBeTruthy();
+
+    const report = await fs.readJSON(reportPath);
+
+    expect(report).toHaveProperty('four');
+    expect(report).toHaveProperty('three');
+    expect(report.four).toHaveProperty('routes');
+    expect(report.three).toHaveProperty('routes');
+
+    const fourRoutes = report.four.routes;
+    expect(fourRoutes).toHaveLength(1);
+
+    const fourRoot = fourRoutes[0];
+    expect(fourRoot.path).toBe('/');
+    expect(fourRoot.component).toContain('@_modern_js_src/four/routes/layout');
+    expect(fourRoot.children).toBeDefined();
+
+    const fourChildren = fourRoot.children!;
+    expect(fourChildren.length).toBeGreaterThan(0);
+
+    const dynamicRoute = findRouteByPath(fourChildren, ':id');
+    expect(dynamicRoute).toBeDefined();
+    expect(dynamicRoute?.params).toEqual(['id']);
+    expect(dynamicRoute?.data).toContain(
+      '@_modern_js_src/four/routes/user/[id]/page.data',
+    );
+
+    const catchAllRoute = findRouteByPath(fourChildren, '*');
+    expect(catchAllRoute).toBeDefined();
+
+    const optionalRoute = findRouteByPath(fourChildren, 'act/:bid?');
+    expect(optionalRoute).toBeDefined();
+    expect(optionalRoute?.params).toEqual(['bid?']);
+
+    const threeRoutes = report.three.routes;
+    expect(threeRoutes).toHaveLength(1);
+
+    const threeRoot = threeRoutes[0];
+    expect(threeRoot.path).toBe('/');
+    expect(threeRoot.component).toContain(
+      '@_modern_js_src/three/routes/layout',
+    );
+    expect(threeRoot.error).toContain('@_modern_js_src/three/routes/error');
+    expect(threeRoot.loading).toContain('@_modern_js_src/three/routes/loading');
+    expect(threeRoot.config).toContain(
+      '@_modern_js_src/three/routes/layout.config',
+    );
+
+    const threeChildren = threeRoot.children!;
+
+    const authShopRoute = findRouteByPath(threeChildren, 'item');
+    expect(authShopRoute).toBeDefined();
+    expect(authShopRoute?.component).toContain(
+      '@_modern_js_src/three/routes/__auth/__shop/item/page',
+    );
+
+    const clientLoaderRoute = findRouteByPath(threeChildren, 'client-loader');
+    expect(clientLoaderRoute).toBeDefined();
+    expect(clientLoaderRoute?.data).toContain(
+      '@_modern_js_src/three/routes/client-loader/layout.data',
+    );
+    expect(clientLoaderRoute?.clientData).toContain(
+      '@_modern_js_src/three/routes/client-loader/layout.data.client',
+    );
+
+    const errorRoute = findRouteByPath(threeChildren, 'error');
+    expect(errorRoute).toBeDefined();
+    expect(errorRoute?.component).toBe('');
+
+    const dotRoute = findRouteByPath(threeChildren, 'user/profile/name');
+    expect(dotRoute).toBeDefined();
+    expect(dotRoute?.component).toContain(
+      '@_modern_js_src/three/routes/user.profile.name/layout',
+    );
+    expect(dotRoute?.config).toContain(
+      '@_modern_js_src/three/routes/user.profile.name/layout.config',
+    );
   });
 });

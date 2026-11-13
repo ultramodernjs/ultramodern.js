@@ -8,7 +8,7 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.0",
+  "version": "3.11.3",
   "types": "./src/index.ts",
   "main": "./dist/cjs/index.js",
   "export": {
@@ -26,27 +26,24 @@
     }
   },
   "scripts": {
-    "dev": "rslib build --watch",
-    "build": "rslib build"
+    "dev": "rs lib --watch",
+    "build": "rs lib"
   },
   "dependencies": {
     "@rsbuild/plugin-styled-components": "1.7.0",
-    "@swc/helpers": "^0.5.23"
+    "@swc/helpers": "^0.5.17"
   },
   "devDependencies": {
     "@modern-js/app-tools": "workspace:*",
     "@modern-js/rslib": "workspace:*",
     "@modern-js/runtime": "workspace:*",
-    "@rslib/core": "1.0.0",
-    "@types/jest": "^30.0.0",
-    "@types/node": "^26.4.1",
+    "@types/node": "^20",
     "@types/styled-components": "^5.1.36",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "styled-components": "^6.5.3",
-    "typescript": "^7.0.2"
+    "styled-components": "^5.3.1",
+    "typescript": "^5.3.3"
   },
   "peerDependencies": {
-    "styled-components": "^6.5.3"
+    "styled-components": "^5.3.1"
   },
   "exports": {
     ".": {

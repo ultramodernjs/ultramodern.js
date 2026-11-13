@@ -1,8 +1,8 @@
-import { fs } from '@modern-js/utils';
 import path from 'path';
+import { fs } from '@modern-js/utils';
+import getPort from 'get-port';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import {
-  getPort,
   killApp,
   launchApp,
   launchOptions,
@@ -35,16 +35,7 @@ describe('source build', () => {
 
   beforeEach(async () => {
     port = await getPort();
-    let detectedPort = port;
-    app = await launchApp(appDir, port, {
-      onStdout(message: string) {
-        const match = message.match(/http:\/\/localhost:(\d+)\/?/);
-        if (match) {
-          detectedPort = Number(match[1]);
-        }
-      },
-    });
-    port = detectedPort;
+    app = await launchApp(appDir, port, {});
     browser = await puppeteer.launch(launchOptions as any);
     const cardCompDir = path.join(__dirname, './components/src/card/index.tsx');
     card = {
@@ -52,9 +43,9 @@ describe('source build', () => {
       original: await fs.readFile(cardCompDir, 'utf8'),
     };
   });
-
   test('should run successfully', async () => {
     expect(app.exitCode).toBe(null);
+    // browser = await puppeteer.launch(launchOptions as any);
     const page = await browser.newPage();
     await page.goto(`http://localhost:${port}`);
     const targetText = await getRootTextAfterRender(

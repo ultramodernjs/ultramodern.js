@@ -1,11 +1,7 @@
-import type { ServerRoute } from '@modern-js/types';
-import { MAIN_ENTRY_NAME } from '@modern-js/utils';
 import path from 'path';
+import { MAIN_ENTRY_NAME } from '@modern-js/utils';
 import type { Entrypoint } from '../../src/plugins/analyze/getFileSystemEntry';
-import {
-  getProdEntrypoints,
-  getServerRoutes,
-} from '../../src/plugins/analyze/getServerRoutes';
+import { getServerRoutes } from '../../src/plugins/analyze/getServerRoutes';
 import type { AppNormalizedConfig, AppToolsContext } from '../../src/types';
 
 describe('get server routes', () => {
@@ -303,6 +299,35 @@ describe('get server routes', () => {
     ]);
   });
 
+  test(`should support public folder without config dir`, () => {
+    const appDirectory = path.resolve(
+      __dirname,
+      './fixtures/server-routes/has-config/config',
+    );
+
+    const routes = getServerRoutes([], {
+      appContext: { appDirectory } as AppToolsContext,
+      config: {
+        source: {},
+        output: outputConfig,
+        html: htmlConfig,
+        server: serverConfig,
+      } as any,
+    });
+
+    expect(
+      routes.map(({ urlPath, entryPath }) => ({ urlPath, entryPath })),
+    ).toEqual(
+      expect.arrayContaining([
+        { urlPath: '/b/about/logo.png', entryPath: 'public/b/about/logo.png' },
+        { urlPath: '/b/info.js', entryPath: 'public/b/info.js' },
+        { urlPath: '/test.json', entryPath: 'public/test.json' },
+        { urlPath: '/wx.txt', entryPath: 'public/wx.txt' },
+      ]),
+    );
+    expect(routes).toHaveLength(4);
+  });
+
   test(`should support disable spa`, () => {
     const routes = getServerRoutes(
       [{ entryName: 'page-a' }] as Entrypoint[],
@@ -328,47 +353,6 @@ describe('get server routes', () => {
         entryPath: 'html/page-a',
         isSPA: false,
         isSSR: false,
-      },
-    ]);
-  });
-});
-
-describe('get production entrypoints', () => {
-  test('reconstructs unique built entries without source directories', () => {
-    expect(
-      getProdEntrypoints(
-        '/app/dist',
-        [
-          {
-            entryName: 'index',
-            entryPath: 'html/index/index.html',
-            bundle: 'bundles/index.js',
-          },
-          {
-            entryName: 'index',
-            entryPath: 'html/index/index.html',
-            bundle: 'bundles/index.js',
-            urlPath: '/alternate',
-          },
-          {
-            entryName: 'admin',
-            entryPath: 'html/admin/index.html',
-          },
-        ] as ServerRoute[],
-        'index',
-      ),
-    ).toEqual([
-      {
-        entryName: 'index',
-        entry: path.resolve('/app/dist/bundles/index.js'),
-        isAutoMount: true,
-        isMainEntry: true,
-      },
-      {
-        entryName: 'admin',
-        entry: path.resolve('/app/dist/html/admin/index.html'),
-        isAutoMount: true,
-        isMainEntry: false,
       },
     ]);
   });

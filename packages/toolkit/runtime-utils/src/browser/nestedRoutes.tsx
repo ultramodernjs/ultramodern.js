@@ -6,12 +6,12 @@ import { LOADER_REPORTER_NAME } from '@modern-js/utils/universal/constants';
 import type React from 'react';
 import { type JSX, Suspense } from 'react';
 import {
-  createRoutesFromElements,
   type LoaderFunction,
   type LoaderFunctionArgs,
   Outlet,
   Route,
   type RouteProps,
+  createRoutesFromElements,
 } from 'react-router';
 import { time } from '../time';
 import { getAsyncLocalStorage } from '../universal/async_storage';
@@ -57,6 +57,7 @@ export const renderNestedRoute = (
     id: nestedRoute.id,
     loader: createLoader(nestedRoute),
     action: nestedRoute.action,
+    hasErrorBoundary: nestedRoute.hasErrorBoundary,
     shouldRevalidate: nestedRoute.shouldRevalidate,
     handle: {
       ...handle,
@@ -112,6 +113,10 @@ export const renderNestedRoute = (
     routeProps.element = element;
   }
 
+  if (nestedRoute.loading) {
+    routeProps.hydrateFallbackElement = <nestedRoute.loading />;
+  }
+
   const childElements = children?.map(childRoute => {
     return renderNestedRoute(childRoute, {
       parent: nestedRoute,
@@ -137,12 +142,20 @@ function isPlainObject(value: any): value is Record<string, any> {
   );
 }
 
+// Loaders start downloading the route module early and do not wait for it.
+// A failure here must not surface as an unhandled rejection: the component's
+// own import retries the chunk and reports the real error to the route's
+// error boundary.
+function preloadRouteModule(lazyImport: () => Promise<unknown>) {
+  lazyImport().catch(() => {});
+}
+
 function createLoader(route: NestedRoute): LoaderFunction {
   const { loader } = route;
   if (loader) {
     return async (args: LoaderFunctionArgs) => {
       if (typeof route.lazyImport === 'function') {
-        route.lazyImport();
+        preloadRouteModule(route.lazyImport);
       }
       const end = time();
       const res = await loader(args);
@@ -173,7 +186,7 @@ function createLoader(route: NestedRoute): LoaderFunction {
   } else {
     return () => {
       if (typeof route.lazyImport === 'function') {
-        route.lazyImport();
+        preloadRouteModule(route.lazyImport);
       }
       return null;
     };

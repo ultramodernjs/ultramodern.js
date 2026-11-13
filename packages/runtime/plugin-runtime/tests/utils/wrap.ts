@@ -27,6 +27,7 @@ export const wrapRuntimeProvider = (
 
 export const wrap = <P = Record<string, unknown>>(
   App: React.ComponentType<any>,
+  // biome-ignore lint/correctness/noEmptyPattern: <explanation>
   {}: WrapOptions,
   manager = runtime,
 ) => {

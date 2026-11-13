@@ -35,7 +35,7 @@ monorepo
 
 **产物引用指的是当前项目引用其他子项目构建后的产物。**
 
-比如上述例子中的 lib 是使用 TypeScript 编写的，通常情况下，我们需要提前构建 lib 的代码，生成 JavaScript 产物，这样 app 才可以正确引用它。当 lib 代码更新时，还需要重新执行一次构建（或者使用 `tsgo --watch`），否则 app 无法引用到最新的代码。
+比如上述例子中的 lib 是使用 TypeScript 编写的，通常情况下，我们需要提前构建 lib 的代码，生成 JavaScript 产物，这样 app 才可以正确引用它。当 lib 代码更新时，还需要重新执行一次构建（或者使用 `tsc --watch`），否则 app 无法引用到最新的代码。
 
 这种方式的优势在于：
 
@@ -142,7 +142,7 @@ Project reference 提供了以下能力：
 {
   "compilerOptions": {
     "composite": true
-  },
+  }
 }
 ```
 

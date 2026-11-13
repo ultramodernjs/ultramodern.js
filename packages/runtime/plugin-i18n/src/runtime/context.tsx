@@ -1,25 +1,18 @@
-import type { LocalisedUrlsOption } from '@modern-js/i18n-runtime-extensions';
-import type { ComponentType, FC, ReactNode } from 'react';
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-} from 'react';
-import {
-  changeModernI18nLanguage,
-  getPathLanguage,
-  isI18nLanguageSupported,
-  isI18nResourcesReady,
-  translateI18n,
-} from './contextHelpers';
+import { isBrowser } from '@modern-js/runtime';
+import { createContext, useCallback, useContext, useMemo } from 'react';
+import type { FC, ReactNode } from 'react';
 import type { I18nInstance } from './i18n';
-import type { Resources } from './i18n/instance';
-import { getActualI18nextInstance } from './i18n/instance';
-import { useI18nRouterAdapter } from './routerAdapter';
+import type { SdkBackend } from './i18n/backend/sdk-backend';
+import { cacheUserLanguage } from './i18n/detection';
+import {
+  buildLocalizedUrl,
+  detectLanguageFromPath,
+  getEntryPath,
+  shouldIgnoreRedirect,
+  useRouterHooks,
+} from './utils';
 
-interface ModernI18nContextValue {
+export interface ModernI18nContextValue {
   language: string;
   i18nInstance: I18nInstance;
   // Plugin configuration for useModernI18n hook
@@ -27,201 +20,35 @@ interface ModernI18nContextValue {
   languages?: string[];
   localePathRedirect?: boolean;
   ignoreRedirectRoutes?: string[] | ((pathname: string) => boolean);
-  localisedUrls?: LocalisedUrlsOption;
   // Callback to update language in context
   updateLanguage?: (newLang: string) => void;
-  synchronizeLanguage?: (newLang: string) => void;
 }
 
-const modernI18nContextKey = Symbol.for(
-  '@modern-js/plugin-i18n/runtime/ModernI18nContext',
-);
-const reactI18nextProviderContextKey = Symbol.for(
-  '@modern-js/plugin-i18n/runtime/ReactI18nextProviderContext',
-);
+const ModernI18nContext = createContext<ModernI18nContextValue | null>(null);
 
-type GlobalContextStore<T> = typeof globalThis & {
-  [key: symbol]: ReturnType<typeof createContext<T>> | undefined;
-};
-
-const getGlobalContext = <T,>(key: symbol, defaultValue: T) => {
-  const globalStore = globalThis as GlobalContextStore<T>;
-  globalStore[key] ??= createContext<T>(defaultValue);
-  return globalStore[key];
-};
-
-const ModernI18nContext = getGlobalContext<ModernI18nContextValue | null>(
-  modernI18nContextKey,
-  null,
-);
-const ReactI18nextProviderContext = getGlobalContext<ComponentType<any> | null>(
-  reactI18nextProviderContextKey,
-  null,
-);
-
-interface ModernI18nProviderProps {
+export interface ModernI18nProviderProps {
   children: ReactNode;
-  i18nextProvider?: ComponentType<any> | null;
   value: ModernI18nContextValue;
 }
 
 export const ModernI18nProvider: FC<ModernI18nProviderProps> = ({
   children,
-  i18nextProvider,
   value,
 }) => {
-  const content = (
+  return (
     <ModernI18nContext.Provider value={value}>
       {children}
     </ModernI18nContext.Provider>
   );
-  return i18nextProvider === undefined ? (
-    content
-  ) : (
-    <ReactI18nextProviderContext.Provider value={i18nextProvider}>
-      {content}
-    </ReactI18nextProviderContext.Provider>
-  );
 };
 
-export interface FederatedI18nBoundaryProps {
-  children: ReactNode;
-  defaultNamespace: string;
-  fallbackLanguage?: string;
-  resources: Resources;
-  supportedLanguages?: string[];
-}
-
-/**
- * Keeps a federated surface's translation resources inside its delivery unit.
- * The host supplies only the active language; the remote owns and versions the
- * resources used below this boundary.
- */
-export const FederatedI18nBoundary: FC<FederatedI18nBoundaryProps> = ({
-  children,
-  defaultNamespace,
-  fallbackLanguage,
-  resources,
-  supportedLanguages,
-}) => {
-  const parent = useContext(ModernI18nContext);
-  const I18nextProvider = useContext(ReactI18nextProviderContext);
-  if (!parent) {
-    throw new Error(
-      'FederatedI18nBoundary must be used within ModernI18nProvider',
-    );
-  }
-
-  const languages =
-    supportedLanguages ?? parent.languages ?? Object.keys(resources);
-  const scopedInstance = useMemo(() => {
-    const parentInstance = getActualI18nextInstance(parent.i18nInstance);
-    const clone = parentInstance.cloneInstance?.({
-      defaultNS: defaultNamespace,
-      fallbackLng: fallbackLanguage ?? languages[0] ?? parent.language,
-      forkResourceStore: true,
-      initImmediate: false,
-      lng: parent.language,
-      ns: [defaultNamespace],
-      resources,
-      supportedLngs: languages,
-    });
-    if (!clone) {
-      throw new Error(
-        'FederatedI18nBoundary requires an i18n instance with cloneInstance support',
-      );
-    }
-    const resourceStore = clone.store;
-    const parentResourceStore = parentInstance.store;
-    const sharesNestedResourceState = Object.entries(
-      resourceStore?.data ?? {},
-    ).some(([language, namespaces]) => {
-      const parentNamespaces = parentResourceStore?.data?.[language];
-      return (
-        namespaces === parentNamespaces ||
-        Object.entries(namespaces).some(
-          ([namespace, resource]) =>
-            resource !== null &&
-            typeof resource === 'object' &&
-            resource === parentNamespaces?.[namespace],
-        )
-      );
-    });
-    if (
-      clone === parentInstance ||
-      resourceStore === parentResourceStore ||
-      resourceStore?.data === parentResourceStore?.data ||
-      sharesNestedResourceState
-    ) {
-      throw new Error(
-        'FederatedI18nBoundary cloneInstance did not isolate the host resource store',
-      );
-    }
-    if (
-      !resourceStore?.addResourceBundle ||
-      !clone.removeResourceBundle ||
-      !resourceStore.data
-    ) {
-      throw new Error(
-        'FederatedI18nBoundary requires an isolated mutable i18n resource store',
-      );
-    }
-    for (const [language, namespaces] of Object.entries(resourceStore.data)) {
-      for (const namespace of Object.keys(namespaces)) {
-        clone.removeResourceBundle(language, namespace);
-      }
-    }
-    for (const [language, namespaces] of Object.entries(resources)) {
-      for (const [namespace, resource] of Object.entries(namespaces)) {
-        resourceStore.addResourceBundle(
-          language,
-          namespace,
-          resource as Record<string, string>,
-          true,
-          true,
-        );
-      }
-    }
-    return clone;
-  }, [
-    defaultNamespace,
-    fallbackLanguage,
-    languages,
-    parent.i18nInstance,
-    parent.language,
-    resources,
-  ]);
-  const value = useMemo(
-    () => ({
-      ...parent,
-      i18nInstance: scopedInstance,
-      language: parent.language,
-      languages,
-    }),
-    [languages, parent, scopedInstance],
-  );
-
-  const scopedContent = (
-    <ModernI18nProvider value={value}>{children}</ModernI18nProvider>
-  );
-  return I18nextProvider ? (
-    <I18nextProvider i18n={scopedInstance}>{scopedContent}</I18nextProvider>
-  ) : (
-    scopedContent
-  );
-};
-
-export interface UseModernI18nReturn<
-  TInstance extends I18nInstance = I18nInstance,
-> {
+export interface UseModernI18nReturn {
   language: string;
   changeLanguage: (newLang: string) => Promise<void>;
-  t: (key: string | string[], ...args: any[]) => string;
-  i18nInstance: TInstance;
+  i18nInstance: I18nInstance;
   supportedLanguages: string[];
-  localisedUrls?: LocalisedUrlsOption;
   isLanguageSupported: (lang: string) => boolean;
-  // Indicates whether translation resources for current language are ready
+  // Indicates if translation resources for current language are ready to use
   isResourcesReady: boolean;
 }
 
@@ -231,25 +58,17 @@ export interface UseModernI18nReturn<
  * This hook provides:
  * - Current language from URL params or i18n context
  * - changeLanguage function that updates both i18n instance and URL
- * - Direct access to i18n instance
+ * - Direct access to the i18n instance
  * - List of supported languages
- * - Helper function to check if language is supported
+ * - Helper function to check if a language is supported
  *
- * @typeParam TInstance - The concrete shape of the i18n instance held by the
- * provider (e.g. i18next's `i18n`, or a wrapper type). Constrained to
- * `I18nInstance`, so a nonsense argument is rejected; within that constraint it
- * is still a caller assertion — the provider stores the base type and the
- * narrowing is not verified at runtime. Pass it only when you know which
- * instance the provider was given.
  * @param options - Optional configuration to override context settings
  * @returns Object containing i18n functionality and utilities
  */
-export const useModernI18n = <
-  TInstance extends I18nInstance = I18nInstance,
->(): UseModernI18nReturn<TInstance> => {
+export const useModernI18n = (): UseModernI18nReturn => {
   const context = useContext(ModernI18nContext);
   if (!context) {
-    throw new Error('useModernI18n must be used within ModernI18nProvider');
+    throw new Error('useModernI18n must be used within a ModernI18nProvider');
   }
 
   const {
@@ -258,55 +77,135 @@ export const useModernI18n = <
     languages,
     localePathRedirect,
     ignoreRedirectRoutes,
-    localisedUrls,
     updateLanguage,
-    synchronizeLanguage,
   } = context;
 
-  const { navigate, location, hasRouter } = useI18nRouterAdapter();
+  // Get router hooks safely
+  const { navigate, location, hasRouter } = useRouterHooks();
 
-  const pathLanguage = useMemo(
-    () => getPathLanguage(location?.pathname, languages, localePathRedirect),
-    [languages, localePathRedirect, location?.pathname],
-  );
-
-  useEffect(() => {
-    if (pathLanguage) {
-      synchronizeLanguage?.(pathLanguage);
-    }
-  }, [pathLanguage, synchronizeLanguage]);
-
+  // Get current language from context (which reflects the actual current language)
+  // URL params might be stale after language changes, so we prioritize the context language
   const currentLanguage = contextLanguage;
 
   /**
-   * Changes the current language and updates URL accordingly.
+   * Changes the current language and updates the URL accordingly.
    *
    * This function:
-   * 1. Updates i18n instance language
-   * 2. Updates URL by replacing language prefix in the current path
-   * 3. Triggers navigation to the new URL
+   * 1. Updates the i18n instance language
+   * 2. Updates the URL by replacing the language prefix in the current path
+   * 3. Triggers a navigation to the new URL
    *
    * @param newLang - The new language code to switch to
    */
   const changeLanguage = useCallback(
-    (newLang: string) =>
-      changeModernI18nLanguage(newLang, {
-        i18nInstance,
-        updateLanguage,
-        localePathRedirect,
-        ignoreRedirectRoutes,
-        localisedUrls,
-        languages,
-        hasRouter,
-        navigate,
-        location,
-      }),
+    async (newLang: string) => {
+      try {
+        // Validate language
+        if (!newLang || typeof newLang !== 'string') {
+          throw new Error('Language must be a non-empty string');
+        }
+
+        await i18nInstance?.setLang?.(newLang);
+        await i18nInstance?.changeLanguage?.(newLang);
+
+        if (isBrowser()) {
+          const detectionOptions = i18nInstance.options?.detection;
+          cacheUserLanguage(i18nInstance, newLang, detectionOptions);
+        }
+
+        if (
+          localePathRedirect &&
+          isBrowser() &&
+          hasRouter &&
+          navigate &&
+          location
+        ) {
+          const currentPath = location.pathname;
+          const entryPath = getEntryPath();
+          const relativePath = currentPath.replace(entryPath, '');
+
+          // Check if the path already contains the target language
+          const pathLanguage = detectLanguageFromPath(
+            currentPath,
+            languages || [],
+            localePathRedirect,
+          );
+
+          // If path already has the target language, skip redirect
+          if (pathLanguage.detected && pathLanguage.language === newLang) {
+            return;
+          }
+
+          if (
+            !shouldIgnoreRedirect(
+              relativePath,
+              languages || [],
+              ignoreRedirectRoutes,
+            )
+          ) {
+            const newPath = buildLocalizedUrl(
+              relativePath,
+              newLang,
+              languages || [],
+            );
+            const newUrl =
+              entryPath + newPath + location.search + location.hash;
+
+            await navigate(newUrl, { replace: true });
+          }
+        } else if (localePathRedirect && isBrowser() && !hasRouter) {
+          const currentPath = window.location.pathname;
+          const entryPath = getEntryPath();
+          const relativePath = currentPath.replace(entryPath, '');
+
+          // Check if the path already contains the target language
+          const pathLanguage = detectLanguageFromPath(
+            currentPath,
+            languages || [],
+            localePathRedirect,
+          );
+
+          // If path already has the target language, skip redirect
+          if (pathLanguage.detected && pathLanguage.language === newLang) {
+            return;
+          }
+
+          if (
+            !shouldIgnoreRedirect(
+              relativePath,
+              languages || [],
+              ignoreRedirectRoutes,
+            )
+          ) {
+            const newPath = buildLocalizedUrl(
+              relativePath,
+              newLang,
+              languages || [],
+            );
+            const newUrl =
+              entryPath +
+              newPath +
+              window.location.search +
+              window.location.hash;
+
+            window.history.pushState(null, '', newUrl);
+          }
+        }
+
+        // Update language state after URL update
+        if (updateLanguage) {
+          updateLanguage(newLang);
+        }
+      } catch (error) {
+        console.error('Failed to change language:', error);
+        throw error;
+      }
+    },
     [
       i18nInstance,
       updateLanguage,
       localePathRedirect,
       ignoreRedirectRoutes,
-      localisedUrls,
       languages,
       hasRouter,
       navigate,
@@ -314,34 +213,68 @@ export const useModernI18n = <
     ],
   );
 
-  const t = useCallback(
-    (key: string | string[], ...args: any[]) =>
-      translateI18n(i18nInstance, key, ...args),
-    [currentLanguage, i18nInstance],
-  );
-
-  // Helper function to check if language is supported
+  // Helper function to check if a language is supported
   const isLanguageSupported = useCallback(
-    (lang: string) => isI18nLanguageSupported(languages, lang),
+    (lang: string) => {
+      return languages?.includes(lang) || false;
+    },
     [languages],
   );
 
   // Check if current language resources are ready
-  // This checks if all required namespaces for current language are loaded
-  const isResourcesReady = useMemo(
-    () => isI18nResourcesReady(i18nInstance, currentLanguage),
-    [currentLanguage, i18nInstance],
-  );
+  // This checks if all required namespaces for the current language are loaded
+  const isResourcesReady = useMemo(() => {
+    if (!i18nInstance?.isInitialized) {
+      return false;
+    }
+
+    // Get backend instance
+    const backend = i18nInstance?.services?.backend as SdkBackend | undefined;
+
+    // If using SDK backend, check loading state
+    if (backend && typeof backend.isLoading === 'function') {
+      // Check if any resource for current language is loading
+      const loadingResources = backend.getLoadingResources();
+      const isCurrentLanguageLoading = loadingResources.some(
+        ({ language }) => language === currentLanguage,
+      );
+      if (isCurrentLanguageLoading) {
+        return false;
+      }
+    }
+
+    // Check if resources exist in store
+    const store = (i18nInstance as any).store;
+    if (!store?.data) {
+      return false;
+    }
+
+    const langData = store.data[currentLanguage];
+    if (!langData || typeof langData !== 'object') {
+      return false;
+    }
+
+    // Get required namespaces
+    const options = i18nInstance.options;
+    const namespaces = options?.ns || options?.defaultNS || ['translation'];
+    const requiredNamespaces = Array.isArray(namespaces)
+      ? namespaces
+      : [namespaces];
+
+    // Check if all required namespaces are loaded
+    return requiredNamespaces.every(ns => {
+      const nsData = langData[ns];
+      return (
+        nsData && typeof nsData === 'object' && Object.keys(nsData).length > 0
+      );
+    });
+  }, [currentLanguage, i18nInstance]);
 
   return {
     language: currentLanguage,
     changeLanguage,
-    t,
-    // The provider stores the instance as the base `I18nInstance`; the caller
-    // narrows to the concrete instance type via the TInstance type argument.
-    i18nInstance: i18nInstance as TInstance,
+    i18nInstance,
     supportedLanguages: languages || [],
-    localisedUrls,
     isLanguageSupported,
     isResourcesReady,
   };

@@ -1,68 +1,53 @@
-import { getRuntimeReactContext } from '@modern-js/runtime-extensions/react-context';
-import type {
-  RouteObject,
-  StaticHandlerContext,
-} from '@modern-js/runtime-utils/router';
+import type { RouteObject } from '@modern-js/runtime-utils/router';
+import type { StaticHandlerContext } from '@modern-js/runtime-utils/router';
 import type { BaseSSRServerContext } from '@modern-js/types';
-import { createContext } from 'react';
+import { ROUTE_MANIFEST } from '@modern-js/utils/universal/constants';
+import { createContext, useContext } from 'react';
 import type { RouteManifest } from '../../router/runtime/types';
-import {
-  ReactRuntimeContext,
-  RuntimeContext,
-  type TRuntimeContext,
-  useRuntimeContext,
-} from './public';
+import type { RequestContext, SSRServerContext } from '../types';
 
-const ROUTE_MANIFEST = '_MODERNJS_ROUTE_MANIFEST';
-
-export type InternalSSRContext = {
-  request: BaseSSRServerContext['request'] & { raw?: Request };
-  response: BaseSSRServerContext['response'];
-  [key: string]: any;
-};
-
-export {
-  ReactRuntimeContext,
-  RuntimeContext,
-  type TRuntimeContext,
-  useRuntimeContext,
-} from './public';
+export interface TRuntimeContext {
+  initialData?: Record<string, unknown>;
+  isBrowser: boolean;
+  routes?: RouteObject[];
+  requestContext: RequestContext;
+  /**
+   * @deprecated Use `requestContext` instead
+   */
+  context: RequestContext;
+  [key: string]: unknown;
+}
 
 /**
  * InternalRuntimeContext used internally and by plugins
  */
 export interface TInternalRuntimeContext extends TRuntimeContext {
   routeManifest?: RouteManifest;
-  routes?: RouteObject[];
   routerContext?: StaticHandlerContext;
   unstable_getBlockNavState?: () => boolean;
-  ssrContext?: InternalSSRContext;
+  ssrContext?: SSRServerContext;
   _internalContext?: any;
   _internalRouterBaseName?: any;
 }
 
-export const InternalRuntimeContext = getRuntimeReactContext('internal', () =>
-  createContext<TInternalRuntimeContext>({} as TInternalRuntimeContext),
+export const InternalRuntimeContext = createContext<TInternalRuntimeContext>(
+  {} as any,
 );
+
+export const RuntimeContext = createContext<TRuntimeContext>({} as any);
+
+/**
+ * deprecated, use RuntimeContext instead
+ */
+export const ReactRuntimeContext = RuntimeContext;
 
 export const getInitialContext = (
   isBrowser = true,
   routeManifest?: RouteManifest,
 ): TInternalRuntimeContext => {
   const requestContext = {
-    request: {
-      params: {},
-      pathname: '',
-      query: {},
-      headers: {},
-      host: '',
-      url: '',
-    },
-    response: {
-      setHeader() {},
-      status() {},
-      locals: {},
-    },
+    request: {} as BaseSSRServerContext['request'],
+    response: {} as BaseSSRServerContext['response'],
   };
   return {
     isBrowser,
@@ -72,4 +57,11 @@ export const getInitialContext = (
     requestContext,
     context: requestContext, // deprecated, keep for backward compatibility
   };
+};
+
+/**
+ * @deprecated use use(RuntimeContext) instead
+ */
+export const useRuntimeContext = (): TRuntimeContext => {
+  return useContext(RuntimeContext);
 };

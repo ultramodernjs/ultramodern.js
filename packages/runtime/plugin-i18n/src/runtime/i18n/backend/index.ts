@@ -5,8 +5,8 @@ import type {
 import type { BackendOptions, I18nInitOptions } from '../instance';
 import { mergeBackendOptions as baseMergeBackendOptions } from './config';
 import {
-  convertBackendOptions,
   DEFAULT_I18NEXT_BACKEND_OPTIONS,
+  convertBackendOptions,
 } from './defaults';
 
 function hasSdkFunction(

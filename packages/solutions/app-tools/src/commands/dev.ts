@@ -3,15 +3,15 @@ import type { CLIPluginAPI } from '@modern-js/plugin';
 import { applyPlugins } from '@modern-js/prod-server';
 import {
   type ApplyPlugins,
-  createDevServer,
   type ModernDevServerOptions,
+  createDevServer,
 } from '@modern-js/server';
 import {
   type Alias,
   DEFAULT_DEV_HOST,
+  SERVER_DIR,
   getMeta,
   logger,
-  SERVER_DIR,
 } from '@modern-js/utils';
 import type { ConfigChain } from '@rsbuild/core';
 import type { AppNormalizedConfig, AppTools } from '../types';
@@ -43,7 +43,7 @@ export const dev = async (
     .concat(normalizedConfig?.resolve?.alias ?? [])
     .concat(normalizedConfig?.source?.alias ?? []) as ConfigChain<Alias>;
 
-  // Setup Node-native TypeScript path alias support.
+  // Setup ts-node and tsconfig-paths for TypeScript runtime support
   await setupTsRuntime(
     appContext.appDirectory,
     appContext.distDirectory,

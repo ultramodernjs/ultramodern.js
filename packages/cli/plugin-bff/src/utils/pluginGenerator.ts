@@ -1,47 +1,29 @@
-// @effect-diagnostics asyncFunction:off nodeBuiltinImport:off
-import { fs, logger, normalizeToPosixPath } from '@modern-js/utils';
 import path from 'path';
+import { fs, logger, normalizeToPosixPath } from '@modern-js/utils';
 import {
   API_DIR,
   DIST_DIR,
-  EFFECT_ENTRY,
   LAMBDA_DIR,
-  OPERATION_CONTRACTS_JSON,
   PACKAGE_NAME,
   PREFIX,
-  REQUEST_ID,
-  RUNTIME_FRAMEWORK,
 } from './crossProjectApiPlugin';
 
 function replaceContent(
   source: string,
   packageName: string,
-  requestId: string,
   prefix: string,
   relativeDistPath: string,
   relativeApiPath: string,
   relativeLambdaPath: string,
-  runtimeFramework: 'hono' | 'effect',
-  relativeEffectEntry: string,
-  operationContracts: Record<string, unknown>,
 ) {
   const updatedSource = source
     .replace(new RegExp(PACKAGE_NAME, 'g'), packageName)
-    .replace(new RegExp(REQUEST_ID, 'g'), requestId)
     .replace(new RegExp(PREFIX, 'g'), prefix)
     .replace(new RegExp(DIST_DIR, 'g'), normalizeToPosixPath(relativeDistPath))
     .replace(new RegExp(API_DIR, 'g'), normalizeToPosixPath(relativeApiPath))
     .replace(
       new RegExp(LAMBDA_DIR, 'g'),
       normalizeToPosixPath(relativeLambdaPath),
-    )
-    .replace(new RegExp(RUNTIME_FRAMEWORK, 'g'), runtimeFramework)
-    .replace(
-      new RegExp(EFFECT_ENTRY, 'g'),
-      normalizeToPosixPath(relativeEffectEntry),
-    )
-    .replace(`'${OPERATION_CONTRACTS_JSON}'`, () =>
-      JSON.stringify(JSON.stringify(operationContracts)),
     );
   return updatedSource;
 }
@@ -49,23 +31,15 @@ function replaceContent(
 async function pluginGenerator({
   prefix,
   appDirectory,
-  requestId,
   relativeDistPath,
   relativeApiPath,
   relativeLambdaPath,
-  runtimeFramework,
-  relativeEffectEntry,
-  operationContracts,
 }: {
   prefix: string;
   appDirectory: string;
-  requestId: string;
   relativeDistPath: string;
   relativeApiPath: string;
   relativeLambdaPath: string;
-  runtimeFramework: 'hono' | 'effect';
-  relativeEffectEntry: string;
-  operationContracts: Record<string, unknown>;
 }) {
   try {
     const packageContent = await fs.readFile(
@@ -88,14 +62,10 @@ async function pluginGenerator({
     const updatedPlugin = replaceContent(
       pluginTemplate,
       packageJson.name,
-      requestId,
       prefix,
       relativeDistPath,
       relativeApiPath,
       relativeLambdaPath,
-      runtimeFramework,
-      relativeEffectEntry,
-      operationContracts,
     );
 
     await fs.ensureFile(pluginPath);

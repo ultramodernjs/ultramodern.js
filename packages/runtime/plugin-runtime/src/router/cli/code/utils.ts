@@ -1,13 +1,12 @@
-// @effect-diagnostics asyncFunction:off nodeBuiltinImport:off strictBooleanExpressions:off unnecessaryArrowBlock:off
-import {
-  fs as fse,
-  JS_EXTENSIONS,
-  normalizeToPosixPath,
-} from '@modern-js/utils';
-import { parse } from 'es-module-lexer';
-import { transform } from 'esbuild';
 import fs from 'fs';
 import path from 'path';
+import {
+  JS_EXTENSIONS,
+  fs as fse,
+  normalizeToPosixPath,
+} from '@modern-js/utils';
+import { transform } from '@swc/core';
+import { parse } from 'es-module-lexer';
 import { ACTION_EXPORT_NAME, LOADER_EXPORT_NAME } from '../constants';
 
 export const walkDirectory = (dir: string): string[] =>
@@ -57,23 +56,19 @@ export const parseModule = async ({
 
   if (JS_EXTENSIONS.some(ext => filename.endsWith(ext))) {
     const ext = path.extname(filename);
-    const loader =
-      ext === '.tsx'
-        ? 'tsx'
-        : ext === '.ts'
-          ? 'ts'
-          : ext === '.jsx'
-            ? 'jsx'
-            : 'js';
+    const isTs = ext === '.ts' || ext === '.tsx';
+    const isJsx = ext === '.jsx' || ext === '.tsx';
     const result = await transform(content, {
-      sourcefile: filename,
-      loader,
-      format: 'esm',
-      target: 'es2022',
-      tsconfigRaw: {
-        compilerOptions: {
-          experimentalDecorators: true,
-        },
+      filename,
+      isModule: true,
+      module: { type: 'es6' },
+      jsc: {
+        parser: isTs
+          ? { syntax: 'typescript', tsx: isJsx, decorators: true }
+          : { syntax: 'ecmascript', jsx: isJsx, decorators: true },
+        transform: { legacyDecorator: true },
+        target: 'es2022',
+        keepClassNames: true,
       },
     });
     content = result.code;
@@ -82,35 +77,32 @@ export const parseModule = async ({
   return parse(content);
 };
 
-export const hasLoader = async (filename: string, source?: string) => {
+const hasExport = async (
+  filename: string,
+  exportName: string,
+  source?: string,
+) => {
   let content = source;
   if (!source) {
     content = (await fse.readFile(filename, 'utf-8')).toString();
   }
-  if (content) {
+  // An export name is written in the source as is or with escape sequences,
+  // so a file containing neither cannot export it and needs no parsing.
+  if (content && (content.includes(exportName) || content.includes('\\'))) {
     const [, moduleExports] = await parseModule({
       source: content.toString(),
       filename,
     });
-    return moduleExports.some(e => e.n === LOADER_EXPORT_NAME);
+    return moduleExports.some(e => e.n === exportName);
   }
   return false;
 };
 
-export const hasAction = async (filename: string, source?: string) => {
-  let content = source;
-  if (!source) {
-    content = (await fse.readFile(filename, 'utf-8')).toString();
-  }
-  if (content) {
-    const [, moduleExports] = await parseModule({
-      source: content.toString(),
-      filename,
-    });
-    return moduleExports.some(e => e.n === ACTION_EXPORT_NAME);
-  }
-  return false;
-};
+export const hasLoader = (filename: string, source?: string) =>
+  hasExport(filename, LOADER_EXPORT_NAME, source);
+
+export const hasAction = (filename: string, source?: string) =>
+  hasExport(filename, ACTION_EXPORT_NAME, source);
 
 export const getServerLoadersFile = (
   internalDirectory: string,

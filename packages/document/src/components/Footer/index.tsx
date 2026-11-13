@@ -81,15 +81,15 @@ export default function Footer() {
       items: [
         {
           label: t('changelog'),
-          to: 'https://github.com/BleedingDev/ultramodern.js/releases',
+          to: 'https://github.com/web-infra-dev/modern.js/releases',
         },
         {
           label: 'GitHub Issues',
-          to: 'https://github.com/BleedingDev/ultramodern.js/issues',
+          to: 'https://github.com/web-infra-dev/modern.js/issues',
         },
         {
           label: t('githubDiscussion'),
-          to: 'https://github.com/BleedingDev/ultramodern.js/discussions',
+          to: 'https://github.com/web-infra-dev/modern.js/discussions',
         },
       ],
     },

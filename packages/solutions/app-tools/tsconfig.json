@@ -5,9 +5,9 @@
     "esModuleInterop": true,
     "allowJs": true,
     "jsx": "preserve",
+    "baseUrl": "./",
     "skipLibCheck": true,
-    "isolatedModules": true,
-    "rootDir": "./src"
+    "isolatedModules": true
   },
   "include": ["src"]
 }

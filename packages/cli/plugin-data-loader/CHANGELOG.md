@@ -1,5 +1,123 @@
 # @modern-js/plugin-data-loader
 
+## 3.11.3
+
+### Patch Changes
+
+- @modern-js/runtime-utils@3.11.3
+- @modern-js/utils@3.11.3
+
+## 3.11.2
+
+### Patch Changes
+
+- @modern-js/runtime-utils@3.11.2
+- @modern-js/utils@3.11.2
+
+## 3.11.1
+
+### Patch Changes
+
+- f74d24d: fix(data-loader): handle redirects returned or thrown by server actions during client submissions.
+
+  fix(data-loader): 修复客户端提交时服务端 action 返回或抛出的重定向无法触发页面跳转的问题。
+
+  - @modern-js/runtime-utils@3.11.1
+  - @modern-js/utils@3.11.1
+
+## 3.11.0
+
+### Patch Changes
+
+- Updated dependencies [6a50ea0]
+  - @modern-js/runtime-utils@3.11.0
+  - @modern-js/utils@3.11.0
+
+## 3.10.4
+
+### Patch Changes
+
+- @modern-js/runtime-utils@3.10.4
+- @modern-js/utils@3.10.4
+
+## 3.10.3
+
+### Patch Changes
+
+- @modern-js/runtime-utils@3.10.3
+- @modern-js/utils@3.10.3
+
+## 3.10.2
+
+### Patch Changes
+
+- 76c675d: perf: reuse the static handler of data loader requests and match the entry without sorting the server routes on every request
+
+  perf: 数据加载请求复用 static handler，并且匹配入口时不再在每次请求时排序服务端路由
+
+- Updated dependencies [76c675d]
+- Updated dependencies [b1c1018]
+  - @modern-js/runtime-utils@3.10.2
+  - @modern-js/utils@3.10.2
+
+## 3.10.1
+
+### Patch Changes
+
+- @modern-js/runtime-utils@3.10.1
+- @modern-js/utils@3.10.1
+
+## 3.10.0
+
+### Patch Changes
+
+- da0fe78: chore: upgrade Rsbuild to v2.2.13
+
+  chore: 升级 Rsbuild 至 v2.2.13
+
+- Updated dependencies [9a766ec]
+  - @modern-js/runtime-utils@3.10.0
+  - @modern-js/utils@3.10.0
+
+## 3.9.3
+
+### Patch Changes
+
+- 9f475f6: chore: upgrade Rsbuild to v2.2.9
+
+  chore: 升级 Rsbuild 至 v2.2.9
+
+- Updated dependencies [a9c110f]
+  - @modern-js/runtime-utils@3.9.3
+  - @modern-js/utils@3.9.3
+
+## 3.9.2
+
+### Patch Changes
+
+- b4dec57: chore: upgrade Rsbuild to v2.2.6
+
+  chore: 升级 Rsbuild 至 v2.2.6
+
+- e2bbad2: chore: upgrade Rsbuild to v2.2.7
+
+  chore: 升级 Rsbuild 至 v2.2.7
+
+  - @modern-js/runtime-utils@3.9.2
+  - @modern-js/utils@3.9.2
+
+## 3.9.1
+
+### Patch Changes
+
+- 4af5bf0: Upgrade Rsbuild to 2.2.4 and support its stricter bundler chain types, preserving service worker library options and handling non-string public paths in asset prefix templates.
+
+  升级 Rsbuild 至 2.2.4，兼容更严格的 bundler chain 类型，保留 service worker 的 library 配置，并在 assetPrefix 模板中处理非字符串 publicPath。
+
+- Updated dependencies [2e6d853]
+  - @modern-js/runtime-utils@3.9.1
+  - @modern-js/utils@3.9.1
+
 ## 3.9.0
 
 ### Patch Changes

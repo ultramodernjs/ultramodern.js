@@ -1,6 +1,6 @@
+import { promisify } from 'util';
 import { logger } from '@modern-js/utils';
 import type { Rspack } from '@rsbuild/core';
-import { promisify } from 'util';
 import { generateClient } from './generateClient';
 
 type Context = {

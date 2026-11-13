@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { ProductAnalytics } from '@/components/Slow';
+import { useState } from 'react';
 
 const products = [
   { id: 1, name: 'Atlas Chair', category: 'Office', price: 189, score: 92 },

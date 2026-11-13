@@ -177,7 +177,7 @@ export const createCli = <Extends extends CLIPluginExtends>() => {
   };
 };
 
-type UselessOptions = 'handleSetupResult' | 'command';
+type UselessOptions = 'handleSetupResult' | 'command' | 'internalPlugins';
 
 type CreateConfigOption<Extends extends CLIPluginExtends> = Omit<
   CLIRunOptions<Extends>,
@@ -208,12 +208,9 @@ export const createConfigOptions = async <Extends extends CLIPluginExtends>(
     ? await options.modifyModernConfig(loaded.config || {})
     : loaded.config;
 
-  const allPlugins = [
-    ...(options.internalPlugins || []),
-    ...((loaded.config as unknown as { plugins: Plugin[] }).plugins || []),
-  ];
-  checkIsDuplicationPlugin(allPlugins.map(plugin => plugin.name));
-  pluginManager.addPlugins(allPlugins);
+  pluginManager.addPlugins(
+    (loaded.config as unknown as { plugins: Plugin[] }).plugins || [],
+  );
   const plugins = (await pluginManager.getPlugins()) as CLIPlugin<Extends>[];
 
   const context = await createContext<Extends>({

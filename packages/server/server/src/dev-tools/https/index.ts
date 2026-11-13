@@ -1,5 +1,5 @@
-import { chalk, getPackageManager, logger, tryResolve } from '@modern-js/utils';
 import type Buffer from 'buffer';
+import { chalk, getPackageManager, logger, tryResolve } from '@modern-js/utils';
 import type { DevServerHttpsOptions } from '../../types';
 
 export const genHttpsOptions = async (

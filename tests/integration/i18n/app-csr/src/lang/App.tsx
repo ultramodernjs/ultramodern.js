@@ -5,15 +5,11 @@ import {
   Route,
   Routes,
 } from '@modern-js/runtime/router';
+import i18next from 'i18next';
 
 const App = () => {
-  const {
-    changeLanguage,
-    isLanguageSupported,
-    language,
-    supportedLanguages,
-    t,
-  } = useModernI18n();
+  const { language, changeLanguage, supportedLanguages, isLanguageSupported } =
+    useModernI18n();
 
   const handleLanguageChange = (newLang: string) => {
     if (isLanguageSupported(newLang)) {
@@ -52,7 +48,7 @@ const App = () => {
             element={
               <div>
                 <I18nLink to="/about">About</I18nLink>
-                <div id="key">{t('key')}</div>
+                <div id="key">{i18next.t('key')}</div>
               </div>
             }
           />
@@ -61,7 +57,7 @@ const App = () => {
             element={
               <div>
                 <I18nLink to="/">Index</I18nLink>
-                <div id="about">{t('about')}</div>
+                <div id="about">{i18next.t('about')}</div>
               </div>
             }
           />

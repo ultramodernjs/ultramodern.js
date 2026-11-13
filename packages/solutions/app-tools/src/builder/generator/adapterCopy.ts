@@ -1,5 +1,5 @@
-import type { RsbuildPlugin } from '@modern-js/builder';
 import path from 'path';
+import type { RsbuildPlugin } from '@modern-js/builder';
 import type { BuilderOptions } from '../shared';
 import { createCopyInfo } from '../shared';
 import { createPublicPattern } from './createCopyPattern';

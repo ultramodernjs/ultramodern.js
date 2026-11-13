@@ -1,37 +1,24 @@
-UltraModern.js provides the BleedingDev create package to create SuperApp
-workspaces. It does not require global installation and can be run on-demand
-using `pnpm dlx`.
+Modern.js provides the `@modern-js/create` tool to create projects. It does not require global installation and can be run on-demand using `npx`.
 
-The supported pnpm command is the scoped package specifier:
-`pnpm dlx @bleedingdev/modern-js-ultramodern-create <target>`. Do not shorten it
-to `pnpm dlx modern-js-ultramodern-create`; there is no unscoped package by
-that name.
-
-You can initialize the empty directory you are already in:
+You can create a project in an existing empty directory:
 
 ```bash
 mkdir myapp && cd myapp
-pnpm dlx @bleedingdev/modern-js-ultramodern-create .
+npx @modern-js/create@latest
 ```
 
 You can also create a project directly in a new directory:
 
 ```bash
-pnpm dlx @bleedingdev/modern-js-ultramodern-create my-super-app
+npx @modern-js/create@latest myapp
 ```
 
-To initialize with workspace protocol dependencies (for local monorepo testing of unreleased Modern.js packages):
+`@modern-js/create` will directly create the application without providing an interactive Q & A interface:
 
 ```bash
-pnpm dlx @bleedingdev/modern-js-ultramodern-create my-super-app --workspace
-```
+🚀 Welcome to Modern.js
 
-The BleedingDev create package will directly create the application without providing an interactive Q & A interface:
-
-```bash
-🚀 Welcome to UltraModern.js
-
-📦 Creating project "my-super-app"...
+📦 Creating project "myapp"...
 
 ✨ Project created successfully! 🎉
 
@@ -39,7 +26,7 @@ The BleedingDev create package will directly create the application without prov
 
 📁 Enter the project directory:
 
-  cd my-super-app
+  cd myapp
 
 🔧 Initialize Git repository:
 
@@ -51,44 +38,29 @@ The BleedingDev create package will directly create the application without prov
 
 ⚡ Start the development server:
 
-  pnpm start
+  pnpm dev
 ```
 
 Now, the project structure is as follows:
 
 ```
 .
-├── apps
-│   └── shell-super-app
+├── modern.config.ts
 ├── package.json
-├── packages
-│   ├── shared-contracts
-│   ├── shared-design-tokens
-│   └── shared-effect-client
-├── scripts
-├── topology
-└── verticals
+├── README.md
+├── rstack.config.mts
+├── src
+│   ├── modern.runtime.ts
+│   └── routes
+│       ├── index.css
+│       ├── layout.tsx
+│       └── page.tsx
+└── tsconfig.json
 ```
 
-The default workspace starts shell-only and installs the published BleedingDev
-package aliases:
+New standalone projects use [Rstack CLI](https://rstack.rs/) for linting and formatting:
 
 ```bash
-pnpm dlx @bleedingdev/modern-js-ultramodern-create my-super-app
+pnpm check
+pnpm format
 ```
-
-From a generated SuperApp workspace, add a business MicroVertical in place:
-
-```bash
-pnpm dlx @bleedingdev/modern-js-ultramodern-create transportation --vertical
-```
-
-The `--vertical` command mutates the current workspace: it adds the vertical
-package and wires topology, ownership metadata, shell Module Federation,
-development overlays, package dependencies, generated contracts, route-owned
-i18n, CSS isolation, and the Effect BFF/client surface.
-
-The lower-level `--ultramodern-package-*` flags are reserved for release
-engineering and local package-source testing. BleedingDev packages are published
-through GitHub Actions trusted publishing; do not publish them manually from a
-developer machine.

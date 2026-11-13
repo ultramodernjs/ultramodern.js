@@ -1,9 +1,9 @@
-import { fs, logger } from '@modern-js/utils';
 import path from 'path';
+import { fs, logger } from '@modern-js/utils';
 import 'reflect-metadata';
 import type { HttpMethodDecider } from '@modern-js/types';
-import { HttpMethod, httpMethods, OperatorType, TriggerType } from '../types';
-import { debug, INPUT_PARAMS_DECIDER } from '../utils';
+import { HttpMethod, OperatorType, TriggerType, httpMethods } from '../types';
+import { INPUT_PARAMS_DECIDER, debug } from '../utils';
 import {
   API_FILE_RULES,
   FRAMEWORK_MODE_APP_DIR,
@@ -17,8 +17,8 @@ import {
   sortRoutes,
 } from './utils';
 
-export * from './constants';
 export * from './types';
+export * from './constants';
 
 export class ApiRouter {
   private appDir?: string;

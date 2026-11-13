@@ -4,9 +4,9 @@ sidebar_position: 1
 
 # Commands
 
-UltraModern.js has some built-in commands that can help you quickly start a development server, build production environment code, and more.
+Modern.js has some built-in commands that can help you quickly start a development server, build production environment code, and more.
 
-Through this chapter, you can learn about the built-in commands of UltraModern.js and how to use them.
+Through this chapter, you can learn about the built-in commands of Modern.js and how to use them.
 
 ## modern dev
 
@@ -23,7 +23,7 @@ Options:
   --api-only            only start API service
 ```
 
-After running `modern dev`, UltraModern.js will watch source file changes and apply hot module replacement.
+After running `modern dev`, Modern.js will watch source file changes and apply hot module replacement.
 
 ```bash
 $ modern dev
@@ -80,67 +80,77 @@ Options:
   -w --watch            turn on watch mode, watch for changes and rebuild
 ```
 
-## modern runtime status
+## modern new
 
-The `modern runtime status` command reads the runtime status endpoint and prints the response. It targets `http://127.0.0.1:8080/_modern/runtime/status` by default.
+The `modern new` command is used to enable features in an existing project.
+
+For example, add application entry, enable some optional features such as BFF, micro frontend, etc.
 
 ```bash
-Usage: modern runtime status [options]
+Usage: modern new [options]
 
 Options:
-  --endpoint <endpoint>  runtime status endpoint URL or path
-  --token <token>        runtime status auth token
-  --token-env <name>     environment variable name that stores runtime status auth token (default: "MODERN_RUNTIME_SIGNAL_TOKEN")
-  --header-name <name>   auth header name (default: "x-modernjs-runtime-signal-token")
-  --timeout <ms>         request timeout in milliseconds (default: "5000")
-  --json                 output as JSON format for machine reading
-  -h, --help             display help for command
+  --config-file <configFile>  specify the configuration file, which can be a relative or absolute path
+  --lang <lang>          set the language (zh or en) for the new command.
+  -d, --debug            using debug mode to log something (default: false)
+  -c, --config <config>  set default generator config(json string)
+  --dist-tag <tag>       use specified tag version for its generator
+  --registry             set npm registry url to run npm command
+  -h, --help             show command help
 ```
 
-If `--endpoint` is a path, it is resolved against `http://127.0.0.1:8080`. If `--token` is omitted, the command reads the token from the environment variable named by `--token-env`.
+### Add Entry
 
-By default, the command formats the response as readable key/value lines. Add `--json` to print the raw JSON payload.
+In the project, execute the `new` command to add entries as follows:
 
-```bash
-modern runtime status --json
+```text
+$ npx modern new
+? Please select the operation you want: Create Element
+? Please select the type of element to create: New "entry"
+? Please fill in the entry name: entry
 ```
 
-## modern runtime fallback-signal
+### Enable Features
 
-The `modern runtime fallback-signal` command posts a runtime fallback signal to the canary contract-gate endpoint. It targets `http://127.0.0.1:8080/_modern/contract-gates/runtime-fallback` by default.
+In the project, execute the `new` command to enable features as follows:
 
-```bash
-Usage: modern runtime fallback-signal [options]
-
-Options:
-  --app <appName>          remote app name
-  --endpoint <endpoint>    runtime fallback signal endpoint URL or path
-  --reason <reason>        fallback reason (default: "runtime_fallback")
-  --phase <phase>          fallback phase (default: "load")
-  --entry <entry>          remote entry URL
-  --runtime-digest <digest>  runtime digest value
-  --metadata <json>        metadata JSON object string
-  --token <token>          runtime signal auth token
-  --token-env <name>       environment variable name that stores runtime signal auth token (default: "MODERN_RUNTIME_SIGNAL_TOKEN")
-  --header-name <name>     auth header name (default: "x-modernjs-runtime-signal-token")
-  --timeout <ms>           request timeout in milliseconds (default: "5000")
-  --json                   output as JSON format for machine reading
-  -h, --help               display help for command
+```text
+$ npx modern new
+? Please select the operation you want: Enable Features
+? Please select the feature name: (Use arrow keys)
+❯ Enable BFF
+  Enable SSG
+  Enable Micro Frontend
 ```
 
-The request body always includes `appName`, `reason`, and `phase`. It includes `entry`, `runtimeDigest`, and `metadata` only when those options are provided. `--metadata` must be a JSON object string.
+:::tip
+The `--config` parameter needs to use a JSON string.
 
-```bash
-modern runtime fallback-signal --app crm-shell --reason remote_load_failed --phase load --json
-```
+pnpm does not support the use of JSON strings as parameter values currently. Use `npm new` to turn on.【[Relate Issue](https://github.com/pnpm/pnpm/issues/3876)】
+:::
 
 import ServeCommand from '@site-docs-en/components/serve-command';
 
 <ServeCommand />
 
+## modern upgrade
+
+Execute the command `npx modern upgrade` in the project, by default, dependencies in the `package.json` are updated to the latest version.
+
+```bash
+Usage: modern upgrade [options]
+
+Options:
+  --config <config> specify the configuration file, which can be a relative or absolute path
+  --registry <registry>  specify npm registry (default: "")
+  -d,--debug             using debug mode to log something (default: false)
+  --cwd <cwd>            app directory (default: "")
+  -h, --help             show command help
+```
+
 ## modern inspect
 
-The `modern inspect` command is used to view the UltraModern.js config, [Rsbuild config](https://v2.rsbuild.rs/config/index) and Rspack config of the project.
+The `modern inspect` command is used to view the Modern.js config, [Rsbuild config](https://v2.rsbuild.rs/config/index) and Rspack config of the project.
 
 ```bash
 Usage: modern inspect [options]

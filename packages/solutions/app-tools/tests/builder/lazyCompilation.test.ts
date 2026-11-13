@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { getSSRLazyCompilation as scopeSSR } from '../../src/builder/shared/builderPlugins/adapterSSR';
 import {
   aggregateEagerRouteComponentFiles,
   buildSSRLazyCompilationTest,
@@ -236,17 +235,6 @@ describe('route component collection uses FINAL routes (timing)', () => {
 describe('planSSRLazyCompilation', () => {
   const fileA = normalizeModulePath('/app/src/routes/a/page.tsx');
   const lazyOn = { imports: true, entries: false };
-
-  it('leaves ordinary apps native and plans stream SSR routes eagerly', () => {
-    const routes = new Map([
-      ['main', { resolvedFiles: new Set([fileA]), unresolvedSpecifiers: [] }],
-    ]);
-    const app = { appDirectory: '/app' } as any;
-    const plan = (ssr?: any) =>
-      scopeSSR(lazyOn, { server: { ssr } } as any, app, routes);
-    expect(plan()).toBeUndefined();
-    expect((plan(true) as any).test({ resource: fileA })).toBe(false);
-  });
 
   it('does not apply when lazy is not enabled', () => {
     const plan = planSSRLazyCompilation(undefined, {

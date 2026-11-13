@@ -1,6 +1,6 @@
+import path, { join } from 'path';
 import { fs } from '@modern-js/utils';
 import axios from 'axios';
-import path, { join } from 'path';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import {
   getPort,
@@ -11,6 +11,7 @@ import {
 import { expectPageToMatchTextContent } from '../../../utils/rstestPuppeteer';
 
 const fixtureDir = path.resolve(__dirname, '../fixtures');
+const chunkLoadingGlobal = 'modernJsLoadableChunks';
 
 async function loadableUsage(page: Page, appPort: number) {
   await page.goto(`http://localhost:${appPort}`, {
@@ -59,5 +60,27 @@ describe('loadable', () => {
 
   test(`basic usage`, async () => {
     await loadableUsage(page, appPort);
+  });
+
+  test('should preserve chunkLoadingGlobal modified by a builder plugin', async () => {
+    await page.goto(`http://localhost:${appPort}`, {
+      waitUntil: ['networkidle0'],
+    });
+
+    const hasCustomChunkLoadingGlobal = await page.evaluate(
+      name => Array.isArray((window as any)[name]),
+      chunkLoadingGlobal,
+    );
+
+    expect(hasCustomChunkLoadingGlobal).toBe(true);
+  });
+
+  test('should hydrate with chunkLoadingGlobal modified by a builder plugin', async () => {
+    await page.goto(`http://localhost:${appPort}`, {
+      waitUntil: ['networkidle0'],
+    });
+
+    await page.click('#loadable-hydration-button');
+    await expectPageToMatchTextContent(page, 'Hydration count: 1');
   });
 });

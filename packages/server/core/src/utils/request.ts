@@ -39,7 +39,7 @@ export function parseHeaders(request: Request): HeadersData {
 export function getPathname(request: Request): string {
   // Optimized: RegExp is faster than indexOf() + slice()
   const match = request.url.match(/^https?:\/\/[^/]+(\/[^?]*)/);
-  return match?.[1] ?? '/';
+  return match ? match[1] : '/';
 }
 
 export function getHost(request: Request): string {
@@ -71,7 +71,7 @@ export function parseCookie(req: Request): Cookie {
       // every item is name=value
       const [k, v] = item.trim().split('=');
 
-      if (k && typeof v !== 'undefined') {
+      if (k) {
         cookie[k] = v;
       }
     });

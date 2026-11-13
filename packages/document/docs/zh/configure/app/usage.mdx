@@ -117,7 +117,7 @@ Modern.js 命令行支持通过 `--config` 选项来指定配置文件的名称�
 ```json title="package.json"
 {
   "scripts": {
-    "dev": "modern dev",
+    "dev": "modern modern",
     "build": "modern build --config modern.prod.config.ts"
   }
 }
@@ -265,11 +265,7 @@ import { defineConfig } from '@modern-js/app-tools';
 import { xxPlugin } from '@modern-js/plugin-xx';
 
 export default defineConfig({
-  plugins: [
-    xxPlugin({
-      /** 在此处添加参数 */
-    }),
-  ],
+  plugins: [xxPlugin({/** 在此处添加参数 */})],
 });
 ```
 

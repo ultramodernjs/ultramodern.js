@@ -1,5 +1,5 @@
-import { fs } from '@modern-js/utils';
 import path from 'path';
+import { fs } from '@modern-js/utils';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import {
   getPort,

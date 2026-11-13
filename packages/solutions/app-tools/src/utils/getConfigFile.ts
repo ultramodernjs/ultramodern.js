@@ -1,5 +1,5 @@
-import { CONFIG_FILE_EXTENSIONS, findExists } from '@modern-js/utils';
 import path from 'path';
+import { CONFIG_FILE_EXTENSIONS, findExists } from '@modern-js/utils';
 import { DEFAULT_CONFIG_FILE } from '../constants';
 
 export const getConfigFile = (configFile?: string, cwd = process.cwd()) =>

@@ -1,12 +1,12 @@
+import path from 'path';
 import type { Entrypoint } from '@modern-js/types';
 import {
-  ensureAbsolutePath,
-  findExists,
   fs,
   JS_EXTENSIONS,
   MAIN_ENTRY_NAME,
+  ensureAbsolutePath,
+  findExists,
 } from '@modern-js/utils';
-import path from 'path';
 import type { AppNormalizedConfig } from '../../types';
 import type { AppToolsContext, AppToolsHooks } from '../../types/plugin';
 import {

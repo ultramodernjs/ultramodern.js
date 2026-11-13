@@ -1,8 +1,8 @@
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { build, getHrefByEntryName } from '@scripts/shared';
+import { build } from '@scripts/shared';
 
-test('should load postcss.config.ts correctly', async ({ page }) => {
+test('should load postcss.config.ts correctly', async () => {
   const builder = await build({
     cwd: __dirname,
     entry: { index: path.resolve(__dirname, './src/index.ts') },
@@ -11,11 +11,14 @@ test('should load postcss.config.ts correctly', async ({ page }) => {
         template: './src/index.html',
       },
     },
-    runServer: true,
   });
 
-  await page.goto(getHrefByEntryName('index', builder.port));
-  await expect(page.locator('h1')).toHaveCSS('font-size', '30px');
-  await expect(page.locator('h1')).toHaveCSS('font-weight', '700');
-  builder.close();
+  const files = await builder.unwrapOutputJSON();
+  const indexCssFile = Object.keys(files).find(
+    file => file.includes('index.') && file.endsWith('.css'),
+  )!;
+
+  expect(files[indexCssFile]).toEqual(
+    '.text-3xl{font-size:1.875rem;line-height:2.25rem}.font-bold{font-weight:700}',
+  );
 });

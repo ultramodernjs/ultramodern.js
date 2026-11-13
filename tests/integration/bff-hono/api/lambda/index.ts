@@ -8,7 +8,7 @@ import {
   Pipe,
   Post,
   Query,
-} from '@modern-js/plugin-bff/hono-server';
+} from '@modern-js/plugin-bff/server';
 import { useHonoContext } from '@modern-js/server-runtime';
 import { z } from 'zod';
 

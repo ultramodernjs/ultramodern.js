@@ -1,5 +1,5 @@
-import { fs, OUTPUT_CONFIG_FILE } from '@modern-js/utils';
 import path from 'path';
+import { fs, OUTPUT_CONFIG_FILE } from '@modern-js/utils';
 import { modernBuild } from '../../../utils/modernTestUtils';
 
 test(`should allow distPath.root to be an absolute path`, async () => {

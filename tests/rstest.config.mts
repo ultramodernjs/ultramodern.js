@@ -7,9 +7,8 @@ export default defineConfig({
   globals: true,
   // Framework tests spawn many build/dev-server/puppeteer tasks; cap file-level
   // concurrency to avoid CI resource contention without changing assertions.
-  // The cap is CI-scoped only; local runs use full worker parallelism.
   pool: {
-    maxWorkers: process.env.CI === 'true' ? '50%' : '100%',
+    maxWorkers: '50%',
   },
   retry: 1,
   testTimeout: 60_000,

@@ -2,10 +2,9 @@
  * Set test cases "private": true in package.json
  * to avoid changesets calculate version for this pkgs
  */
-
-import { fastGlob } from '@modern-js/utils';
 import fs from 'fs';
 import path from 'path';
+import { fastGlob } from '@modern-js/utils';
 
 const run = () => {
   const root = path.join(__dirname, '../integration');

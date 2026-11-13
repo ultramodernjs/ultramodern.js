@@ -1,6 +1,7 @@
-import type { ServerRoute } from '@modern-js/types';
-import { fs, logger } from '@modern-js/utils';
 import path from 'path';
+import type { ServerRoute } from '@modern-js/types';
+import { fs } from '@modern-js/utils';
+import { logger } from '@modern-js/utils';
 import type { CreatePreset } from './platform';
 
 async function reorganizeHtmlFiles(

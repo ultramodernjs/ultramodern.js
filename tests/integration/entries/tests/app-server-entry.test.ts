@@ -1,6 +1,6 @@
 import dns from 'node:dns';
-import axios from 'axios';
 import path from 'path';
+import axios from 'axios';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import {
   getPort,

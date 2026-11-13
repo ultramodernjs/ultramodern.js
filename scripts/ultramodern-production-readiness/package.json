@@ -1,8 +1,0 @@
-{
-  "name": "@scripts/ultramodern-production-readiness",
-  "version": "0.0.0",
-  "private": true,
-  "dependencies": {
-    "@babel/core": "^8.0.1"
-  }
-}

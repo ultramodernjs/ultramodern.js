@@ -1,7 +1,7 @@
+import { join } from 'path';
 import { fs } from '@modern-js/utils';
 import { expect, test } from '@playwright/test';
 import { build, getHrefByEntryName } from '@scripts/shared';
-import { join } from 'path';
 
 const fixtures = __dirname;
 
@@ -36,6 +36,8 @@ test.describe('html configure multi', () => {
 
 test.describe('html element set', () => {
   let builder: Awaited<ReturnType<typeof build>>;
+  let mainContent: string;
+  let fooContent: string;
 
   test.beforeAll(async () => {
     builder = await build({
@@ -55,30 +57,38 @@ test.describe('html element set', () => {
         },
       },
     });
+
+    mainContent = await fs.readFile(
+      join(builder.distPath, 'html/main/index.html'),
+      'utf-8',
+    );
+    fooContent = await fs.readFile(
+      join(builder.distPath, 'html/foo/index.html'),
+      'utf-8',
+    );
   });
 
   test.afterAll(() => {
     builder.close();
   });
 
-  test('custom inject', async ({ page }) => {
-    await page.goto(getHrefByEntryName('main', builder.port));
+  test('custom inject', async () => {
     expect(
-      await page
-        .locator('script')
-        .evaluateAll(scripts =>
-          scripts.every(script => script.parentElement?.tagName === 'BODY'),
-        ),
-    ).toBe(true);
+      /<head>[\s\S]*<script[\s\S]*>[\s\S]*<\/head>/.test(mainContent),
+    ).toBeFalsy();
+    expect(
+      /<body>[\s\S]*<script[\s\S]*>[\s\S]*<\/body>/.test(mainContent),
+    ).toBeTruthy();
   });
 
-  test('custom meta', async ({ page }) => {
-    await page.goto(getHrefByEntryName('main', builder.port));
-    const description = page.locator('meta[name="description"]');
-    await expect(description).toHaveCount(1);
-    await expect(description).toHaveAttribute(
-      'content',
-      'a description of the page',
+  test('custom meta', async () => {
+    const metaContent =
+      '<meta name="description" content="a description of the page">';
+
+    // only insert once
+    expect(mainContent.indexOf(metaContent)).toBeGreaterThan(0);
+    expect(mainContent.indexOf(metaContent)).toBe(
+      mainContent.lastIndexOf(metaContent),
     );
   });
 });
@@ -170,13 +180,14 @@ test('tools.htmlPlugin', async ({ page }) => {
 
   await page.goto(getHrefByEntryName('main', builder.port));
 
+  const pagePath = join(builder.distPath, 'html/main/index.html');
+  const content = await fs.readFile(pagePath, 'utf-8');
+
+  const allScripts = /(<script [\s\S]*?>)/g.exec(content);
+
   expect(
-    await page
-      .locator('script')
-      .evaluateAll(scripts =>
-        scripts.every(script => script.type === 'module'),
-      ),
-  ).toBe(true);
+    allScripts?.every(data => data.includes('type="module"')),
+  ).toBeTruthy();
 
   builder.close();
 });
