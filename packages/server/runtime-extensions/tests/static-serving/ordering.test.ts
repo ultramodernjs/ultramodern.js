@@ -113,11 +113,16 @@ it('patches frontend manifests and native-static remote entries while bypassing 
   await writeFile(path.join(root, 'static/remote.js.br'), 'must not be served');
   const server = await serverFor(root, [], 'https://cdn.example/assets/');
   const manifestResponse = await server.request('/assets/mf-manifest.json', {
-    headers: { 'accept-encoding': 'br' },
+    headers: { 'accept-encoding': 'br', 'if-none-match': '*' },
   });
   const remoteResponse = await server.request('/assets/static/remote.js', {
-    headers: { 'accept-encoding': 'br' },
+    headers: { 'accept-encoding': 'br', 'if-none-match': '*' },
   });
+  for (const response of [manifestResponse, remoteResponse]) {
+    expect(response.headers.get('content-length')).toBe(
+      String((await response.clone().arrayBuffer()).byteLength),
+    );
+  }
   expect((await manifestResponse.json()).metaData.publicPath).toBe(
     'http://localhost/assets/',
   );
@@ -125,6 +130,8 @@ it('patches frontend manifests and native-static remote entries while bypassing 
     '__webpack_require__.p = "http://localhost/assets/";',
   );
   for (const response of [manifestResponse, remoteResponse]) {
+    expect(response.status).toBe(200);
+    expect(response.headers.get('etag')).toBeNull();
     expect(response.headers.get('content-encoding')).toBeNull();
     expect(response.headers.get('access-control-allow-origin')).toBe('*');
     expect(response.headers.get('access-control-allow-methods')).toBe(

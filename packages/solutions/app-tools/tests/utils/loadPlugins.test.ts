@@ -1,48 +1,67 @@
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import type { InternalPlugins } from '@modern-js/types';
 import { loadInternalPlugins } from '../../src/utils/loadPlugins';
 
-const withPlugin = async (
-  fileName: string,
-  source: string,
-  run: (directory: string, plugin: string) => Promise<void>,
-) => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'modern-plugin #'));
-  const plugin = path.join(directory, fileName);
-  try {
-    fs.writeFileSync(plugin, source);
-    await run(directory, plugin);
-  } finally {
-    fs.rmSync(directory, { recursive: true, force: true });
-  }
-};
+const mockCompatibleRequire = rstest.fn();
+const mockDynamicImport = rstest.fn();
 
-it('loads async ESM CLI plugins from paths containing URL delimiters', () =>
-  withPlugin(
-    'async-plugin.mjs',
-    'await Promise.resolve(); export default { name: "async-plugin" };',
-    async (directory, plugin) => {
-      await expect(
-        loadInternalPlugins(directory, {
-          'async-plugin': { path: plugin, forced: true },
-        }),
-      ).resolves.toEqual([{ name: 'async-plugin' }]);
-    },
-  ));
+rstest.mock('@modern-js/server-core/node', () => ({
+  loadServerPlugins: rstest.fn(),
+}));
 
-it('surfaces the original error of a CJS plugin that throws', () =>
-  withPlugin(
-    'broken-plugin.cjs',
-    // Count evaluations: a retry through another loader would report `#2`.
-    'globalThis.__brokenPluginRuns = (globalThis.__brokenPluginRuns ?? 0) + 1;' +
-      'throw new Error("broken plugin #" + globalThis.__brokenPluginRuns);',
-    async (directory, plugin) => {
-      await expect(
-        loadInternalPlugins(directory, {
-          'broken-plugin': { path: plugin, forced: true },
-        }),
-      ).rejects.toThrow('broken plugin #1');
-      expect((globalThis as any).__brokenPluginRuns).toBe(1);
+rstest.mock('@modern-js/utils', () => ({
+  createDebugger: () => () => {},
+  compatibleRequire: (modulePath: string) => mockCompatibleRequire(modulePath),
+  dynamicImport: (modulePath: string) => mockDynamicImport(modulePath),
+  tryResolve: (modulePath: string) => modulePath,
+  getInternalPlugins: (_appDirectory: string, plugins: InternalPlugins = {}) =>
+    Object.values(plugins).map(config =>
+      typeof config === 'string' ? config : config.path,
+    ),
+}));
+
+describe('loadInternalPlugins', () => {
+  const appDirectory = path.resolve('test-app');
+
+  beforeEach(() => {
+    mockCompatibleRequire.mockReset();
+    mockDynamicImport.mockReset();
+  });
+
+  const loadPlugin = (pluginPath: string) =>
+    loadInternalPlugins(appDirectory, {
+      'test-plugin': { path: pluginPath, forced: true },
+    });
+
+  it.each(['object', 'factory'])(
+    'loads a plugin %s through compatibleRequire',
+    async exportType => {
+      const plugin = { name: 'commonjs-plugin' };
+      const factory = rstest.fn(() => plugin);
+      mockCompatibleRequire.mockResolvedValue(
+        exportType === 'factory' ? factory : plugin,
+      );
+
+      const pluginPath = path.join(appDirectory, 'plugin.cjs');
+      await expect(loadPlugin(pluginPath)).resolves.toEqual([plugin]);
+
+      expect(mockCompatibleRequire).toHaveBeenCalledWith(pluginPath);
+      expect(mockDynamicImport).not.toHaveBeenCalled();
+      expect(factory).toHaveBeenCalledTimes(exportType === 'factory' ? 1 : 0);
     },
-  ));
+  );
+
+  it('propagates plugin load errors without retrying the module', async () => {
+    const cause = new Error('native addon permission check failed');
+    const originalError = Object.assign(
+      new Error('real error from plugin', { cause }),
+      { code: 'ERR_DLOPEN_FAILED' },
+    );
+    mockCompatibleRequire.mockRejectedValue(originalError);
+
+    await expect(
+      loadPlugin(path.join(appDirectory, 'throwing.cjs')),
+    ).rejects.toBe(originalError);
+    expect(mockDynamicImport).not.toHaveBeenCalled();
+  });
+});

@@ -15,7 +15,7 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.3",
+  "version": "3.11.3",
   "types": "./dist/types/index.d.ts",
   "main": "./dist/cjs/index.js",
   "exports": {
@@ -150,8 +150,8 @@
     "@modern-js/server-utils": "workspace:*",
     "@modern-js/types": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@rsbuild/core": "2.2.13",
-    "@swc/core": "1.16.18",
+    "@rsbuild/core": "2.3.2",
+    "@swc/core": "1.16.21",
     "@swc/helpers": "^0.5.23",
     "compression-webpack-plugin": "^12.0.0",
     "es-module-lexer": "^3.0.4",

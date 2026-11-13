@@ -216,7 +216,7 @@
     "@tanstack/router-core": "1.171.38",
     "octane": "0.13.8",
     "i18next": ">=25.7.4",
-    "@rsbuild/core": "2.2.13",
+    "@rsbuild/core": "2.3.2",
     "@tsrx/oxc": "0.20.0"
   },
   "peerDependenciesMeta": {
@@ -248,7 +248,7 @@
     "@octanejs/tanstack-router": "https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz",
     "@tanstack/router-core": "https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz",
     "@modern-js/tsconfig": "workspace:*",
-    "@rsbuild/core": "2.2.13",
+    "@rsbuild/core": "2.3.2",
     "@rslib/core": "1.0.3",
     "@scripts/rstest-config": "workspace:*",
     "@types/node": "^26.6.5",

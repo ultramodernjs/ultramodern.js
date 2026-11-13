@@ -6,7 +6,6 @@ import {
   fs as fse,
   removeModuleSyncFromExports,
 } from '@modern-js/utils';
-import { nodeDepEmit as handleDependencies } from 'ndepe';
 import { readTemplate, resolveESMDependency } from '../utils';
 import { generateHandler } from '../utils/generator';
 import type { CreatePreset } from './platform';
@@ -77,6 +76,8 @@ export const createNodePreset: CreatePreset = ({
           );
         }
       }
+      // ndepe is heavy and only needed by `modern deploy`, so load it lazily.
+      const { nodeDepEmit: handleDependencies } = await import('ndepe');
       await handleDependencies({
         traceFiles: traceDeployFiles,
         appDir: appDirectory,

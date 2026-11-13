@@ -80,7 +80,7 @@
     "@modern-js/runtime-extensions": "workspace:*",
     "@modern-js/server-runtime-extensions": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@swc/core": "1.16.18"
+    "@swc/core": "1.16.21"
   },
   "peerDependencies": {
     "@modern-js/app-tools": "workspace:^3.9.3",
@@ -104,7 +104,7 @@
     "@modern-js/server-core": "workspace:*",
     "@modern-js/tsconfig": "workspace:*",
     "@modern-js/types": "workspace:*",
-    "@rsbuild/core": "2.2.13",
+    "@rsbuild/core": "2.3.2",
     "@rslib/core": "1.0.3",
     "@scripts/rstest-config": "workspace:*",
     "@types/node": "^26.6.5",

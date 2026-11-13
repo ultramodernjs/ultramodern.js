@@ -1,13 +1,17 @@
 import { Transform } from 'node:stream';
 import { initHooks } from '@modern-js/plugin/runtime';
+import { storage } from '@modern-js/runtime-utils/node';
 import React from 'react';
 import {
   getInitialContext,
   setGlobalContext,
   setGlobalInternalRuntimeContext,
 } from '../../../src/core/context';
-import { renderStreaming } from '../../../src/core/server/stream';
+import { renderStreaming as renderStreamingImpl } from '../../../src/core/server/stream';
 import { renderString } from '../../../src/core/server/string';
+
+const renderStreaming = (...args: Parameters<typeof renderStreamingImpl>) =>
+  storage.run({}, () => renderStreamingImpl(...args));
 
 const createOptions = (onError = rs.fn()) => {
   const runtimeContext = Object.assign(getInitialContext(false), {
@@ -93,6 +97,32 @@ test('string lifecycle receives original context and completes body before head/
   const html = await renderString(request, <App />, options);
   expect(html).toContain('<title>supplied</title>');
   expect(html).toContain('<main>body</main><p>completed</p>');
+});
+
+test('string template observers retain the complete app and prior chunk edits', async () => {
+  const hooks = installHooks();
+  const options = createOptions();
+  options.resource.htmlTemplate =
+    '<html><head><!--<?- chunksMap.css ?>--></head><body><!--<?- html ?>--><!--<?- chunksMap.js ?>--><!--<?- SSRDataScript ?>--></body></html>';
+  const seen: Array<{ name: string; template: string }> = [];
+  hooks.extendStringSSRCollectors.tap(() => ({
+    effect() {},
+    transformTemplateChunk(chunk) {
+      seen.push({ name: chunk.name, template: chunk.template });
+      return { ...chunk, content: `<span>${chunk.name}</span>` };
+    },
+  }));
+  const html = await renderString(
+    new Request('http://localhost/'),
+    <main>body</main>,
+    options,
+  );
+  expect(seen.map(chunk => chunk.name)).toEqual(['scripts', 'styles', 'data']);
+  for (const chunk of seen)
+    expect(chunk.template).toContain('<main>body</main>');
+  expect(seen[1].template).toContain('<span>scripts</span>');
+  expect(seen[2].template).toContain('<span>styles</span>');
+  expect(html).toContain('<span>data</span>');
 });
 
 test('string failures notify all collectors once and retain fallback effects', async () => {

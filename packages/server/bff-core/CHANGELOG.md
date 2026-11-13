@@ -1,5 +1,67 @@
 # @modern-js/bff-core
 
+## 3.11.3
+
+### Patch Changes
+
+- @modern-js/utils@3.11.3
+
+## 3.11.2
+
+### Patch Changes
+
+- @modern-js/utils@3.11.2
+
+## 3.11.1
+
+### Patch Changes
+
+- a1c2feb: fix(bff-core): type `Data`, `Query`, `Params`, `Headers` and `Upload` against Standard Schema instead of the `zod` package, so Zod 3 and Zod 4 schemas both type-check no matter which `zod` copy bff-core resolves.
+
+  fix(bff-core): `Data`、`Query`、`Params`、`Headers`、`Upload` 的参数类型改为基于 Standard Schema，不再依赖 `zod` 包本身。无论 bff-core 解析到哪个版本的 `zod`，Zod 3 和 Zod 4 的 schema 都能通过类型检查。
+
+  - @modern-js/utils@3.11.1
+
+## 3.11.0
+
+### Patch Changes
+
+- @modern-js/utils@3.11.0
+
+## 3.10.4
+
+### Patch Changes
+
+- 1a6805d: fix(bff-core): accept unknown input during schema validation to support Zod 4 declaration generation.
+
+  fix(bff-core)：校验时接收未知输入，修复升级 Zod 4 后的类型声明构建失败。
+
+  - @modern-js/utils@3.10.4
+
+## 3.10.3
+
+### Patch Changes
+
+- @modern-js/utils@3.10.3
+
+## 3.10.2
+
+### Patch Changes
+
+- @modern-js/utils@3.10.2
+
+## 3.10.1
+
+### Patch Changes
+
+- @modern-js/utils@3.10.1
+
+## 3.10.0
+
+### Patch Changes
+
+- @modern-js/utils@3.10.0
+
 ## 3.9.3
 
 ### Patch Changes

@@ -1,5 +1,6 @@
 import type { Plugin } from '@modern-js/plugin';
 import { type ServerCreateOptions, server } from '@modern-js/plugin/server';
+import { fileReader } from '@modern-js/runtime-utils/fileReader';
 import { logger } from '@modern-js/utils';
 import { Hono, type MiddlewareHandler } from 'hono';
 import { run } from './context';
@@ -23,6 +24,8 @@ export interface ServerBaseOptions extends ServerCreateOptions {
 }
 
 export class ServerBase<E extends Env = any> {
+  public readonly fileReader = fileReader;
+
   public serverOptions: ServerBaseOptions;
 
   private app: Hono<E>;
@@ -47,7 +50,11 @@ export class ServerBase<E extends Env = any> {
     this.serverOptions = options;
 
     this.app = new Hono<E>();
-    this.app.use('*', run);
+    this.app.use('*', async (context, next) => {
+      // Hono's next() resolves to a Context. Only responses may be returned
+      // from middleware, so do not forward the storage callback's result.
+      await run(context, next);
+    });
   }
 
   /**

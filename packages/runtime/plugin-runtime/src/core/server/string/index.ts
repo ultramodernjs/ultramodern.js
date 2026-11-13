@@ -23,7 +23,11 @@ import {
   HTML_PLACEHOLDER,
   SSR_DATA_PLACEHOLDER,
 } from '../constants';
-import { createReplaceHelemt, getHelmetData } from '../helmet';
+import {
+  createReplaceHelemt,
+  getHelmetData,
+  hasTitleTagBefore,
+} from '../helmet';
 import {
   type BuildHtmlCb,
   buildHtml,
@@ -179,8 +183,7 @@ async function generateHtml(
 
     const { ssrScripts, cssChunk, jsChunk } = chunkSet;
 
-    const finalHtml = await buildHtml(htmlTemplate, [
-      createReplaceHtml(html),
+    const replaceChunks: BuildHtmlCb[] = [
       template =>
         replaceSSRTemplateChunk(
           {
@@ -202,17 +205,49 @@ async function generateHtml(
           },
           lifecycle,
         ),
-      template =>
-        replaceSSRTemplateChunk(
-          {
-            name: 'data',
-            template,
-            placeholder: SSR_DATA_PLACEHOLDER,
-            content: ssrScripts,
-          },
-          lifecycle,
-        ),
-      createReplaceHelemt(helmetData),
+    ];
+    const replaceData: BuildHtmlCb = template =>
+      replaceSSRTemplateChunk(
+        {
+          name: 'data',
+          template,
+          placeholder: SSR_DATA_PLACEHOLDER,
+          content: ssrScripts,
+        },
+        lifecycle,
+      );
+    const replaceHelmet = createReplaceHelemt(helmetData);
+    const appHtmlMayHaveFirstTitle =
+      html.includes('<title') &&
+      !hasTitleTagBefore(htmlTemplate, htmlTemplate.indexOf(HTML_PLACEHOLDER));
+    // Template observers can inspect the completed app and earlier replacements.
+    // Keep that ordering for them; optimize the observer-free path only.
+    const needsCompleteTemplate =
+      appHtmlMayHaveFirstTitle ||
+      collectors.some(
+        collector => collector.transformTemplateChunk !== undefined,
+      );
+    const finalHtml = await buildHtml(htmlTemplate, [
+      ...(needsCompleteTemplate
+        ? [
+            createReplaceHtml(html),
+            ...replaceChunks,
+            replaceData,
+            replaceHelmet,
+          ]
+        : [
+            (template: string) =>
+              safeReplace(
+                safeReplace(template, HTML_PLACEHOLDER, HTML_MARKER),
+                SSR_DATA_PLACEHOLDER,
+                SSR_DATA_MARKER,
+              ),
+            ...replaceChunks,
+            replaceHelmet,
+            (template: string) =>
+              safeReplace(template, SSR_DATA_MARKER, ssrScripts),
+            (template: string) => safeReplace(template, HTML_MARKER, html),
+          ]),
       ...htmlModifiers,
     ]);
 
@@ -228,6 +263,10 @@ async function generateHtml(
     throw error;
   }
 }
+
+const markerId = Math.random().toString(36).slice(2);
+const HTML_MARKER = `<!--modern-html-${markerId}-->`;
+const SSR_DATA_MARKER = `<!--modern-ssr-data-${markerId}-->`;
 
 function createReplaceHtml(html: string): BuildHtmlCb {
   return (template: string) => safeReplace(template, HTML_PLACEHOLDER, html);

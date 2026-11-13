@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
+import { createRequire, findPackageJSON } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,27 +15,8 @@ const compositionRequire = createRequire(
 const appToolsRequire = createRequire(
   compositionRequire.resolve('@modern-js/app-tools'),
 );
-const builderRequire = createRequire(appToolsRequire.resolve('@rsbuild/core'));
-
-function packageOwner(file, name) {
-  for (
-    let directory = path.dirname(file);
-    ;
-    directory = path.dirname(directory)
-  ) {
-    const manifest = path.join(directory, 'package.json');
-    if (
-      fs.existsSync(manifest) &&
-      JSON.parse(fs.readFileSync(manifest, 'utf8')).name === name
-    )
-      return directory;
-    assert.notEqual(
-      path.dirname(directory),
-      directory,
-      `Missing ${name} owner`,
-    );
-  }
-}
+const builderEntry = appToolsRequire.resolve('@rsbuild/core');
+const builderRequire = createRequire(builderEntry);
 
 // This runs after the normal build in plain Node. Block app-root app-tools
 // lookup explicitly so ancestor node_modules and NODE_PATH cannot satisfy it.
@@ -78,14 +59,15 @@ try {
     path.join(root, 'node_modules/@modern-js/renderer-octane'),
   );
   fs.symlinkSync(
-    packageOwner(
-      builderRequire.resolve('@module-federation/enhanced/rspack'),
-      '@module-federation/enhanced',
-    ),
+    path.dirname(findPackageJSON('@module-federation/enhanced', builderEntry)),
     path.join(root, 'node_modules/@module-federation/enhanced'),
   );
 
   const applicationRequire = createRequire(path.join(root, 'package.json'));
+  assert.equal(
+    applicationRequire.resolve('@module-federation/enhanced/rspack'),
+    builderRequire.resolve('@module-federation/enhanced/rspack'),
+  );
   assert.throws(
     () => applicationRequire.resolve('@modern-js/app-tools'),
     error => {

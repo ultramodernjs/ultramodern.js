@@ -9,7 +9,6 @@ export type {
   Entrypoint,
   HtmlPartials,
   HtmlTemplates,
-  JestConfig,
   Merge,
   RouteLegacy,
   SSGConfig,
@@ -17,7 +16,6 @@ export type {
   SSGRouteOptions,
   SSGSingleEntryOptions,
   SSGSingleEntryOptionsFactory,
-  TestConfig,
 } from './base';
 
 export interface Route extends BaseRoute<React.ReactNode> {

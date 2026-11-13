@@ -160,7 +160,7 @@
     "seroval": "1.6.9"
   },
   "peerDependencies": {
-    "@rsbuild/core": "2.2.13"
+    "@rsbuild/core": "2.3.2"
   },
   "peerDependenciesMeta": {
     "@rsbuild/core": {
@@ -170,7 +170,7 @@
   "devDependencies": {
     "@modern-js/rslib": "workspace:*",
     "@modern-js/tsconfig": "workspace:*",
-    "@rsbuild/core": "2.2.13",
+    "@rsbuild/core": "2.3.2",
     "@rslib/core": "1.0.3",
     "@scripts/rstest-config": "workspace:*",
     "@types/node": "^26.6.5"

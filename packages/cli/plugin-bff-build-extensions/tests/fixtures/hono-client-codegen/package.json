@@ -1,1 +1,4 @@
-{"name":"hono-codegen-producer","version":"1.2.3"}
+{
+  "name": "hono-codegen-producer",
+  "version": "1.2.3"
+}

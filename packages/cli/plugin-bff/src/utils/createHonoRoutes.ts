@@ -7,7 +7,7 @@ import {
   ResponseMetaType,
   ValidationError,
 } from '@modern-js/bff-core';
-import type { Context, Next } from '@modern-js/server-core';
+import type { Context } from '@modern-js/server-core';
 import { parse } from 'qs';
 import { TypeIs } from 'type-is';
 
@@ -60,54 +60,65 @@ const handleResponseMeta = (c: Context, handler: Handler) => {
   return null;
 };
 
-export const createHonoHandler = (handler: Handler) => async (c: Context) => {
-  const input = await getHonoInput(c);
+const getParamNames = (routePath: string) => {
+  const paramNames = routePath.match(/:\w+/g)?.map(s => s.slice(1)) || [];
+  return Object.keys(Object.fromEntries(paramNames.map(name => [name, true])));
+};
 
-  if (isWithMetaHandler(handler)) {
-    try {
-      const response = handleResponseMeta(c, handler);
-      if (response) {
-        return response;
-      }
-      if (c.finalized) return;
+export const createHonoHandler = (handler: Handler) => {
+  let cachedRoutePath: string | undefined;
+  let paramNames: string[] = [];
 
-      const result = await handler(input);
-      if (result instanceof Response) {
-        return result;
-      }
-      return result && typeof result === 'object'
-        ? c.json(result)
-        : c.body(result);
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        c.status((error as any).status);
+  return async (c: Context) => {
+    const input = await getHonoInput(c);
 
-        return c.json({
-          message: error.message,
-        });
+    if (isWithMetaHandler(handler)) {
+      try {
+        const response = handleResponseMeta(c, handler);
+        if (response) {
+          return response;
+        }
+        if (c.finalized) return;
+
+        const result = await handler(input);
+        if (result instanceof Response) {
+          return result;
+        }
+        return result && typeof result === 'object'
+          ? c.json(result)
+          : c.body(result);
+      } catch (error) {
+        if (error instanceof ValidationError) {
+          c.status((error as any).status);
+
+          return c.json({
+            message: error.message,
+          });
+        }
+        throw error;
       }
-      throw error;
+    } else {
+      const routePath = c.req.routePath;
+      if (routePath !== cachedRoutePath) {
+        cachedRoutePath = routePath;
+        paramNames = getParamNames(routePath);
+      }
+      const args: any[] = paramNames.map(name => input.params[name]);
+      args.push(input);
+
+      const body = await handler(...args);
+      if (c.finalized) {
+        return await Promise.resolve();
+      }
+
+      if (typeof body !== 'undefined') {
+        if (body instanceof Response) {
+          return body;
+        }
+        return c.json(body);
+      }
     }
-  } else {
-    const routePath = c.req.routePath;
-    const paramNames = routePath.match(/:\w+/g)?.map(s => s.slice(1)) || [];
-    const params = Object.fromEntries(
-      paramNames.map(name => [name, input.params[name]]),
-    );
-    const args = Object.values(params).concat(input);
-
-    const body = await handler(...args);
-    if (c.finalized) {
-      return await Promise.resolve();
-    }
-
-    if (typeof body !== 'undefined') {
-      if (body instanceof Response) {
-        return body;
-      }
-      return c.json(body);
-    }
-  }
+  };
 };
 
 const getHonoInput = async (c: Context) => {
@@ -121,12 +132,16 @@ const getHonoInput = async (c: Context) => {
   try {
     const contentType = contentTypes.is(c.req.header('content-type') || '');
 
-    if (contentType === 'application/json') {
-      draft.data = await c.req.json();
-    } else if (contentType === 'multipart/form-data') {
+    const { method } = c.req;
+
+    if (contentType === 'multipart/form-data') {
       draft.formData = await c.req.parseBody();
     } else if (contentType === 'application/x-www-form-urlencoded') {
       draft.formUrlencoded = await c.req.parseBody();
+    } else if (method === 'GET' || method === 'HEAD') {
+      draft.body = null;
+    } else if (contentType === 'application/json') {
+      draft.data = await c.req.json();
     } else {
       draft.body = await c.req.json();
     }

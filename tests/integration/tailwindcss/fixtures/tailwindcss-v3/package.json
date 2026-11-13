@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "integration-tailwindcss-v3",
-  "version": "2.66.0",
+  "version": "2.66.7",
   "scripts": {
     "dev": "modern dev",
     "build": "modern build",
@@ -12,8 +12,8 @@
     "@modern-js/app-tools": "workspace:*",
     "@modern-js/runtime": "workspace:*",
     "@rsbuild/plugin-babel": "2.1.0",
-    "autoprefixer": "10.6.1",
-    "postcss": "^8.5.30",
+    "autoprefixer": "10.6.2",
+    "postcss": "^8.5.31",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "styled-components": "^6.6.0",

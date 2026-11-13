@@ -226,7 +226,7 @@
     "std-env": "4.3.0"
   },
   "peerDependencies": {
-    "@rsbuild/core": "2.2.13",
+    "@rsbuild/core": "2.3.2",
     "@loadable/component": "5.16.7",
     "@modern-js/runtime-renderer-extensions": "workspace:^3.8.3",
     "react": "^19.3.1"
@@ -249,7 +249,7 @@
     "@modern-js/rslib": "workspace:*",
     "@module-federation/modern-js-v3": "2.9.2",
     "@module-federation/runtime-tools": "2.9.2",
-    "@rsbuild/core": "2.2.13",
+    "@rsbuild/core": "2.3.2",
     "@rslib/core": "1.0.3",
     "@scripts/rstest-config": "workspace:*",
     "@types/babel__traverse": "7.28.0",

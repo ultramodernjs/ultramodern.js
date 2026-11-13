@@ -2,8 +2,6 @@
   "name": "@scripts/build",
   "private": true,
   "version": "2.66.0",
-  "main": "./src/index.js",
-  "types": "index.d.ts",
   "bin": {
     "only-allow-pnpm": "./bin/onlyAllowPnpm.js"
   },
@@ -11,5 +9,6 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^26.6.5",
     "typescript": "7.0.2"
-  }
+  },
+  "description": "Workspace publish guard for pnpm."
 }

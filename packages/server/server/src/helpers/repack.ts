@@ -1,4 +1,4 @@
-import { fileReader } from '@modern-js/runtime-utils/fileReader';
+import type { FileReader } from '@modern-js/runtime-utils/fileReader';
 import type { ServerPluginHooks } from '@modern-js/server-core';
 
 const cleanSSRCache = (distDir: string) => {
@@ -24,7 +24,11 @@ const cleanSSRCache = (distDir: string) => {
  * server hook, a rejecting handler skips the handlers after it; the generation
  * is still purged and the promise rejects with that error.
  */
-export const onRepack = async (distDir: string, hooks: ServerPluginHooks) => {
+export const onRepack = async (
+  distDir: string,
+  hooks: ServerPluginHooks,
+  reader: FileReader,
+) => {
   try {
     await hooks.onReset.call({
       event: {
@@ -33,6 +37,6 @@ export const onRepack = async (distDir: string, hooks: ServerPluginHooks) => {
     });
   } finally {
     cleanSSRCache(distDir);
-    fileReader.reset();
+    reader.reset();
   }
 };

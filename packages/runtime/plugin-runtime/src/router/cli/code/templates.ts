@@ -288,7 +288,7 @@ export const fileSystemRoutes = async ({
         ? `/* webpackMode: "eager" */  `
         : '';
 
-    return `() => import(${importOptions}'${componentPath}').then(routeModule => handleRouteModule(routeModule, "${routeId}")).catch(handleRouteModuleError)`;
+    return `() => import(${importOptions}'${componentPath}').then(routeModule => handleRouteModule(routeModule, "${routeId}"))`;
   };
 
   const traverseRouteTree = async (
@@ -550,7 +550,7 @@ export const fileSystemRoutes = async ({
   await fs.writeJSON(loadersMapFile, loadersMap);
 
   const importRuntimeRouterCode = `
-    import { createShouldRevalidate, handleRouteModule, handleRouteModuleError, resolveRouteComponent } from '@${metaName}/runtime/routerHelper';
+    import { createShouldRevalidate, handleRouteModule, resolveRouteComponent } from '@${metaName}/runtime/routerHelper';
   `;
   const routeModulesCode = `
     if(typeof document !== 'undefined'){

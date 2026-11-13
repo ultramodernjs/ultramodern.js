@@ -74,6 +74,8 @@ interface SetupI18nBeforeRenderOptions {
   ) => void;
 }
 
+const reactI18nextInstances = new WeakSet<object>();
+
 export async function setupI18nBeforeRender(
   context: RuntimeContextWithI18n,
   options: SetupI18nBeforeRenderOptions,
@@ -106,8 +108,12 @@ export async function setupI18nBeforeRender(
 
   const reactI18nextIntegration = await resolveReactI18nextIntegration();
   setI18nextProvider(reactI18nextIntegration?.I18nextProvider ?? null);
-  if (reactI18nextIntegration?.initReactI18next) {
+  if (
+    reactI18nextIntegration?.initReactI18next &&
+    !reactI18nextInstances.has(i18nInstance)
+  ) {
     i18nInstance.use(reactI18nextIntegration.initReactI18next);
+    reactI18nextInstances.add(i18nInstance);
   }
 
   const pathname = getPathname(context);

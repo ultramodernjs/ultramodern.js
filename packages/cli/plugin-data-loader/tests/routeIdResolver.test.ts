@@ -95,3 +95,40 @@ test('propagates resolver failures without dispatching another route', async () 
 
   await expect(load('alias', loaderContext)).rejects.toBe(failure);
 });
+
+test('keeps cached handlers separate for request-transformed route arrays', async () => {
+  const createTransformedRoutes = (locale: string): NestedRoute[] => [
+    {
+      type: 'nested',
+      id: `item-${locale}`,
+      path: 'items/:id',
+      loader: () => Response.json({ locale }),
+    },
+  ];
+  const firstRoutes = createTransformedRoutes('cs');
+  const secondRoutes = createTransformedRoutes('en');
+  const first = new Map<string, unknown>();
+  const second = new Map<string, unknown>();
+  setLoaderRouteIdResolver(
+    first,
+    () => 'item-cs',
+    sourceRoutes => {
+      expect(sourceRoutes).toBe(routes);
+      return firstRoutes;
+    },
+  );
+  setLoaderRouteIdResolver(
+    second,
+    () => 'item-en',
+    () => secondRoutes,
+  );
+
+  const responses = await Promise.all([
+    load('alias', first),
+    load('alias', second),
+    load('alias', first),
+  ]);
+  expect(
+    await Promise.all(responses.map(response => response?.json())),
+  ).toEqual([{ locale: 'cs' }, { locale: 'en' }, { locale: 'cs' }]);
+});

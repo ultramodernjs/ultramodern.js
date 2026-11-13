@@ -1,7 +1,7 @@
 {
   "name": "@scripts/prebundle",
   "private": true,
-  "version": "2.66.0",
+  "version": "2.66.7",
   "main": "./dist/index.js",
   "nx": {
     "targets": {
@@ -35,7 +35,7 @@
     "@types/node": "^26.6.5",
     "@vercel/ncc": "0.45.0",
     "import-meta-resolve": "^4.2.0",
-    "postcss": "^8.5.30",
+    "postcss": "^8.5.31",
     "rollup-plugin-dts": "6.5.1",
     "typescript": "7.0.2"
   },
@@ -49,7 +49,7 @@
     "@types/inquirer": "9.0.10",
     "@types/js-yaml": "4.0.9",
     "@types/less": "3.0.8",
-    "@types/lodash": "^4.17.26",
+    "@types/lodash": "^4.17.27",
     "@types/mime-types": "3.0.1",
     "@types/minimist": "1.2.5",
     "@types/normalize-path": "3.0.2",
@@ -97,7 +97,7 @@
     "react-dom": "^19.3.1",
     "react-is": "^19.3.1",
     "rollup": "^4.64.7",
-    "sass": "1.105.1",
+    "sass": "1.105.2",
     "semver": "7.8.5",
     "signal-exit": "4.1.0",
     "signale": "1.4.0",

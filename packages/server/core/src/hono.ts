@@ -10,10 +10,6 @@ export type {
 } from 'hono';
 
 // Hono utilities
-export {
-  deleteCookie,
-  getCookie,
-  setCookie,
-} from 'hono/cookie';
+export { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 
 export { languageDetector } from 'hono/language';

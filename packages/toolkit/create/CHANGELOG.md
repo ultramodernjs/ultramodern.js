@@ -1,5 +1,40 @@
 # @modern-js/create
 
+## 3.11.3
+
+## 3.11.2
+
+## 3.11.1
+
+## 3.11.0
+
+### Minor Changes
+
+- 712e1b6: Add MCP Apps support in a single `@modern-js/mcp-apps` package with build plugin, server plugin, BFF and Fetch adapters, React and Module Federation views, manifest-based UI resource registration, and an `mcp-apps` project template.
+
+  新增 MCP Apps 支持，由单一的 `@modern-js/mcp-apps` 包提供构建插件、服务端插件、BFF 和 Fetch 适配器、React 和 Module Federation 视图、基于清单的 UI 资源注册，以及 `mcp-apps` 项目模板。
+
+## 3.10.4
+
+## 3.10.3
+
+## 3.10.2
+
+## 3.10.1
+
+## 3.10.0
+
+### Minor Changes
+
+- 8525dea: Add a pre-commit hook to new standalone projects using Rstack CLI to lint and format staged files.
+- 778f778: Use Rstack CLI for linting and formatting in new projects.
+
+### Patch Changes
+
+- e6cb9d3: Add Rstack CLI documentation guidance to AGENTS.md in new projects.
+- de0d25f: Recommend the Rstack VS Code extension in new standalone projects.
+- 00017a1: Generate only AGENTS.md for AI coding guidance. Stop creating or updating CLAUDE.md in project templates and the --agents-md-only command.
+
 ## 3.9.3
 
 ## 3.9.2

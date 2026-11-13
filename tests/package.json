@@ -24,7 +24,7 @@
     "@modern-js/utils": "workspace:*",
     "@rstest/core": "0.12.3",
     "@scripts/rstest-config": "workspace:*",
-    "@swc/core": "1.16.18",
+    "@swc/core": "1.16.21",
     "@types/node": "^26.6.5",
     "cross-spawn": "^7.0.6",
     "enhanced-resolve": "5.26.0",

@@ -98,21 +98,24 @@ export function createStaticExtensionResponders(): ServerStaticPluginOptions {
     if (!patchManifest && !remoteEntry) {
       return respondPrecompressedAsset(context, asset, serve);
     }
-    const response = await serve({ contentLength: true });
+    const response = await serve({ contentLength: true, revalidate: false });
     if (!response) {
       return null;
     }
+    const { headers } = context.res;
     const bytes = Buffer.from(await response.arrayBuffer());
     const patched = patchManifest
       ? patchModuleFederationManifestPublicPath(context, bytes, pathPrefix)
       : patchModuleFederationRemoteEntryPublicPath(context, bytes, pathPrefix);
-    response.headers.set('Content-Length', String(patched.byteLength));
+    // Native validators describe the original file, not the rewritten bytes.
+    headers.delete('ETag');
+    headers.set('Content-Length', String(patched.byteLength));
     if (path.extname(asset.filename).toLowerCase() === '.cjs') {
-      response.headers.set('Content-Type', 'text/javascript; charset=UTF-8');
+      headers.set('Content-Type', 'text/javascript; charset=UTF-8');
     }
     return new Response(Uint8Array.from(patched), {
       status: response.status,
-      headers: response.headers,
+      headers,
     });
   }
 

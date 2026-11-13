@@ -19,7 +19,7 @@
   "engines": {
     "node": ">=20"
   },
-  "version": "3.9.3",
+  "version": "3.11.3",
   "main": "./dist/index.js",
   "bin": {
     "create": "./bin/run.js"
@@ -30,7 +30,8 @@
   "files": [
     "template",
     "dist",
-    "bin.js"
+    "bin.js",
+    "templates"
   ],
   "scripts": {
     "build": "rslib build",

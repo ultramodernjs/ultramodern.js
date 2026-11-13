@@ -46,6 +46,15 @@ export type RouterConfig = {
   supportHtml5History?: boolean;
   basename?: string;
   createRoutes?: () => RouteObject[];
+  /**
+   * Whether to wrap router state updates in `React.startTransition`.
+   * Passed to `<RouterProvider useTransitions>`. Defaults to React Router's behavior (enabled).
+   * Set to `false` to render route updates synchronously.
+   */
+  useTransitions?: boolean;
+  /**
+   * @deprecated Use `useTransitions` instead.
+   */
   future?: Partial<{
     v7_startTransition: boolean;
   }>;

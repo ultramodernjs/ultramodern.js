@@ -36,6 +36,7 @@ export default {
         'tests/backendDefaults.test.ts',
         'tests/redirectPolicy.test.ts',
         'tests/reactI18nextRuntimeBoundary.test.ts',
+        'tests/reactI18nextRegistration.test.ts',
         'tests/federatedI18nBoundaryResolver.test.tsx',
         'tests/detection.test.ts',
       ],

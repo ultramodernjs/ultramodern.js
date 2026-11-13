@@ -86,18 +86,6 @@ export function getHookRunners(
       const result = await (hooks as any)?.appendEntryCode.call(params);
       return result;
     },
-    // test plugin hooks
-    jestConfig: async (utils: any) => {
-      const result = await (hooks as any)?.jestConfig.call(
-        utils,
-        (utils: any) => utils,
-      );
-      return result;
-    },
-    afterTest: async () => {
-      return (hooks as any).afterTest.call();
-    },
-
     /**
      * common hooks
      */

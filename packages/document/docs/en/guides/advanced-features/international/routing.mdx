@@ -26,11 +26,11 @@ i18nPlugin({
 
 **Result:**
 
-| Visited path | Result |
-| --- | --- |
-| `/about` | Redirects to `/en/about` |
-| `/en/about` | Visits normally, language is `en` |
-| `/zh/about` | Visits normally, language is `zh` |
+| Visited path | Result                            |
+| ------------ | --------------------------------- |
+| `/about`     | Redirects to `/en/about`          |
+| `/en/about`  | Visits normally, language is `en` |
+| `/zh/about`  | Visits normally, language is `zh` |
 
 API and BFF prefixes are skipped automatically, including server API routes, the default `/api` BFF prefix when BFF is configured, and custom `bff.prefix` values. Those routes do not need locale prefixes or `localisedUrls` entries. For additional application paths that should not redirect, use `ignoreRedirectRoutes`. See [Locale Detection -> ignoreRedirectRoutes](./locale-detection.md#ignoreredirectroutes).
 
@@ -151,7 +151,9 @@ function Navigation() {
     <nav>
       <I18nLink to="/">Home</I18nLink>
       <I18nLink to="/about">About</I18nLink>
-      <I18nLink to="/contact" replace>Contact</I18nLink>
+      <I18nLink to="/contact" replace>
+        Contact
+      </I18nLink>
     </nav>
   );
 }

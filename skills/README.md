@@ -10,8 +10,8 @@
 
 UltraModern 的创建、添加 vertical/shell、Effect API、TanStack 路由与发布更新
 使用现有框架命令，见 [native workflows](../docs/ultramodern-native-workflows.md)。
-上面的两个 skill 会先区分 UltraModern 工作区与普通 Modern.js 应用，避免误跑
-函数式 BFF 启用或 v2→v3 迁移。
+`modernjs-feature-enable` 会先区分 UltraModern 工作区与普通 Modern.js 应用，避免误跑
+函数式 BFF 启用。
 
 ## 安装
 
@@ -26,4 +26,4 @@ npx skills add web-infra-dev/modern.js --list
 
 锁版本：在仓库后加 `#<tag>`（含本 Skill 的发布 tag / 分支 / commit），如
 
-> 维护者内部 Skill（服务「开发 Modern.js 仓库」的 agent，如 `dependency-audit`）不在这里，放在 `scripts/skills/`，由 `pnpm sync:skills` 同步到本地 Agent 目录。
+> 参与 Modern.js 框架开发时使用的 Skills（如依赖检查），见 [`.agents/skills/`](../.agents/skills/README.md)。

@@ -15,6 +15,12 @@ const sharedConfig = {
 };
 
 export default defineConfig({
+  source: {
+    define: {
+      // Leave the application RSC manifest for the downstream Rspack build.
+      RSPACK_RSC_MANIFEST: '__rspack_rsc_manifest__',
+    },
+  },
   lib: [
     {
       ...sharedConfig,

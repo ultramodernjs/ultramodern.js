@@ -3,11 +3,14 @@ import path from 'path';
 import type { SsgRoute } from '../types';
 
 export function writeHtmlFile(
-  htmlAry: string[],
+  htmlAry: (string | undefined)[],
   ssgRoutes: SsgRoute[],
   baseDir: string,
 ) {
-  htmlAry.forEach((html: any, index: number) => {
+  htmlAry.forEach((html, index) => {
+    if (html === undefined) {
+      return;
+    }
     const ssgRoute = ssgRoutes[index];
     const filepath = path.join(baseDir, ssgRoute.output);
     if (!fs.existsSync(path.dirname(filepath))) {
