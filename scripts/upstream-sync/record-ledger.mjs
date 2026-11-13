@@ -22,7 +22,13 @@ const pattern =
   /(<!-- fork-evidence:v1 -->\s*```json\s*)([\s\S]*?)(\s*```\s*<!-- \/fork-evidence:v1 -->)/;
 const match = pattern.exec(original);
 assert(match, 'Expected one structured fork evidence block');
-const document = JSON.parse(match[2]);
+const baseline = execFileSync('git', ['show', `${base}:${file}`], {
+  encoding: 'utf8',
+  maxBuffer: 32 * 1024 * 1024,
+});
+const baselineMatch = pattern.exec(baseline);
+assert(baselineMatch, 'Expected structured fork evidence at the PR base');
+const document = JSON.parse(baselineMatch[2]);
 const changes = measureRule5Changes({
   rootDir: process.cwd(),
   auditedBaseRef: DEFAULT_DIVERGENCE_BASE_REF,
@@ -72,14 +78,7 @@ for (const change of changes) {
     reason,
     dispositions: [exact ? 'upstream-PR' : 'inline-patch'],
   };
-  if (
-    !document.entries.some(
-      existing =>
-        existing.path === entry.path && existing.reason.includes(reason),
-    )
-  ) {
-    document.entries.push(entry);
-  }
+  document.entries.push(entry);
 }
 const json = `{\n  "schemaVersion": 1,\n  "entries": [\n${document.entries.map(entry => `    ${JSON.stringify(entry)}`).join(',\n')}\n  ]\n}`;
 const updated = original.replace(
