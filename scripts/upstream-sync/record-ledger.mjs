@@ -23,7 +23,6 @@ const pattern =
 const match = pattern.exec(original);
 assert(match, 'Expected one structured fork evidence block');
 const document = JSON.parse(match[2]);
-const entries = new Map(document.entries.map(entry => [entry.path, entry]));
 const changes = measureRule5Changes({
   rootDir: process.cwd(),
   auditedBaseRef: DEFAULT_DIVERGENCE_BASE_REF,
@@ -67,21 +66,21 @@ for (const change of changes) {
   const reason = exact
     ? `2026-11-13: Adopt exact upstream ${upstream} source for this identity without introducing fork behavior.`
     : `2026-11-13: Reconcile upstream ${upstream} while preserving ${retainedContract(current ?? change.file)}; remove superseded code rather than restoring upstream legacy paths.`;
-  const old = entries.get(change.file);
-  entries.set(change.file, {
+  const entry = {
     path: change.file,
     owner: 'bleedingdev',
-    reason:
-      old && !old.reason.includes(reason) ? `${old.reason} ${reason}` : reason,
-    dispositions: [
-      ...new Set([
-        ...(old?.dispositions ?? []),
-        exact ? 'upstream-PR' : 'inline-patch',
-      ]),
-    ],
-  });
+    reason,
+    dispositions: [exact ? 'upstream-PR' : 'inline-patch'],
+  };
+  if (
+    !document.entries.some(
+      existing =>
+        existing.path === entry.path && existing.reason.includes(reason),
+    )
+  ) {
+    document.entries.push(entry);
+  }
 }
-document.entries = [...entries.values()];
 const json = `{\n  "schemaVersion": 1,\n  "entries": [\n${document.entries.map(entry => `    ${JSON.stringify(entry)}`).join(',\n')}\n  ]\n}`;
 const updated = original.replace(
   pattern,
