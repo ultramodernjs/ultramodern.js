@@ -9,6 +9,40 @@ const {
 
 const nodeArgs = script => ['-e', script];
 
+for (const stream of ['stdout', 'stderr']) {
+  test(`runCommand captures >1 MiB of ${stream} with an explicit maxBuffer`, () => {
+    const output = 'x'.repeat(1024 * 1024 + 64 * 1024);
+    const result = runCommand(
+      process.execPath,
+      nodeArgs(`process.${stream}.write('x'.repeat(${output.length}))`),
+      { stdio: 'pipe', maxBuffer: 2 * 1024 * 1024 },
+    );
+
+    assert.equal(result.error, undefined);
+    assert.equal(result.processStatus, 0);
+    assert.equal(result.exitCode, 0);
+    assert.equal(result[stream], output);
+    assert.equal(result[stream === 'stdout' ? 'stderr' : 'stdout'], '');
+  });
+
+  for (const [label, options, outputBytes] of [
+    ['default', {}, 1024 * 1024 + 64 * 1024],
+    ['explicit smaller', { maxBuffer: 64 * 1024 }, 128 * 1024],
+  ]) {
+    test(`runCommand enforces the ${label} ${stream} buffer limit`, () => {
+      const result = runCommand(
+        process.execPath,
+        nodeArgs(`process.${stream}.write('x'.repeat(${outputBytes}))`),
+        { stdio: 'pipe', ...options },
+      );
+
+      assert.equal(result.error?.code, 'ENOBUFS');
+      assert.equal(result.processStatus, null);
+      assert.equal(result.exitCode, 1);
+    });
+  }
+}
+
 test('runCommand passes shell metacharacters as literal args', () => {
   const result = runCommand(
     process.execPath,

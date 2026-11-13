@@ -73,7 +73,7 @@ function getSerializedKeys(
   value: DeferredDataLike,
   deferredScriptKeys: Map<string, string[]> | undefined,
 ): string[] {
-  return deferredScriptKeys
+  return deferredScriptKeys !== undefined
     ? (deferredScriptKeys.get(routeId) ?? [])
     : (value.pendingKeys ?? []);
 }

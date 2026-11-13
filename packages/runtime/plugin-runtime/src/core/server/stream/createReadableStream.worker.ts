@@ -147,7 +147,7 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
           return;
         }
         const shell = splitAtShellEndMark(chunk);
-        if (!shell) return;
+        if (shell === undefined) return;
         const beforeMark = lifecycle.completedBody(shell.beforeMark, 'shell');
         const { afterMark } = shell;
         const completedShellBefore = createReplaceHelemt(

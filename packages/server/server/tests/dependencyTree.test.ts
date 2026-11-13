@@ -30,31 +30,38 @@ describe('DependencyTree', () => {
     expect(result.status).toBe(0);
   });
 
-  it('ignores generated files, dependencies and hidden directories', () => {
-    const filenames = [
-      '/app/src/index.ts',
-      '/app/src/page.test.ts',
-      '/app/coverage/index.js',
-      '/app/node_modules/package/index.js',
-      '/app/.modern-js/index.js',
-      '/app/src/.cache/index.js',
-      '/app/src/index.d.ts',
-      '/app/server.log',
-    ];
-    const tree = new DependencyTree();
-    tree.update(
-      Object.fromEntries(
-        filenames.map(filename => [filename, createModule(filename)]),
-      ),
-    );
+  it.each([
+    '/app',
+    process.cwd(),
+    path.resolve(process.cwd(), '../dependency-tree-app'),
+  ])(
+    'ignores generated files, dependencies and hidden directories under %s',
+    root => {
+      const filenames = [
+        'src/index.ts',
+        'src/page.test.ts',
+        'coverage/index.js',
+        'node_modules/package/index.js',
+        '.modern-js/index.js',
+        'src/.cache/index.js',
+        'src/index.d.ts',
+        'server.log',
+      ].map(filename => path.join(root, filename));
+      const tree = new DependencyTree();
+      tree.update(
+        Object.fromEntries(
+          filenames.map(filename => [filename, createModule(filename)]),
+        ),
+      );
 
-    for (const filename of filenames.slice(0, 2)) {
-      expect(tree.getNode(filename)?.module.filename).toBe(filename);
-    }
-    for (const filename of filenames.slice(2)) {
-      expect(tree.getNode(filename)).toBeUndefined();
-    }
-  });
+      for (const filename of filenames.slice(0, 2)) {
+        expect(tree.getNode(filename)?.module.filename).toBe(filename);
+      }
+      for (const filename of filenames.slice(2)) {
+        expect(tree.getNode(filename)).toBeUndefined();
+      }
+    },
+  );
 
   it('tracks parent relationships without retaining ignored children', () => {
     const parent = createModule('/app/server.js');

@@ -9,6 +9,13 @@ const {
   createAllowlistSnapshot,
   scanUpstreamOwnedForkImports,
 } = require('../checker');
+const {
+  DEFAULT_DIVERGENCE_BASE_REF,
+  DEFAULT_UPSTREAM_PROVENANCE_REF,
+} = require('../divergence');
+
+const MCP_UPSTREAM_COMMIT = 'ce64c5d62541341b66611379e9996c1d5a718ed7';
+const MCP_ROOT = 'packages/toolkit/mcp-apps';
 
 const git = (root, ...args) =>
   execFileSync('git', args, {
@@ -68,6 +75,149 @@ const fixture = t => {
     scanUpstreamOwnedForkImports({ rootDir: root, baseRef, headRef });
   return { root, baseRef, source, write, commit, manifest, scan };
 };
+
+// Borrow immutable objects, not refs or worktree metadata. The small target tree
+// deliberately differs from upstream; only package identity is being proved.
+const mcpFixture = t => {
+  const value = fixture(t);
+  const { root, write, manifest, commit } = value;
+  const repository = path.join(__dirname, '../../..');
+  write(
+    '.git/objects/info/alternates',
+    `${git(repository, 'rev-parse', '--path-format=absolute', '--git-path', 'objects')}\n`,
+  );
+  manifest('packages/toolkit/create', '@modern-js/create');
+  const source = 'packages/toolkit/create/src/index.ts';
+  write(source, "import '@modern-js/mcp-apps/cli';");
+  write(
+    `${MCP_ROOT}/package.json`,
+    git(repository, 'show', `${MCP_UPSTREAM_COMMIT}:${MCP_ROOT}/package.json`),
+  );
+  write(`${MCP_ROOT}/src/cli/index.ts`, 'export const mcp = true;');
+  commit();
+  const tree = git(root, 'rev-parse', 'HEAD^{tree}');
+  const target = parent =>
+    git(root, 'commit-tree', tree, '-p', parent, '-m', 'target');
+  const verifiedHead = target(MCP_UPSTREAM_COMMIT);
+  const unverifiedHead = target(DEFAULT_UPSTREAM_PROVENANCE_REF);
+  git(root, 'reset', '--soft', verifiedHead);
+  const scan = headRef =>
+    scanUpstreamOwnedForkImports({
+      rootDir: root,
+      baseRef: DEFAULT_DIVERGENCE_BASE_REF,
+      upstreamRef: DEFAULT_UPSTREAM_PROVENANCE_REF,
+      headRef,
+    });
+  return { ...value, source, scan, verifiedHead, unverifiedHead };
+};
+
+test('reviewed upstream MCP addition is native only with exact committed provenance, without waiving source edits or new fork packages', t => {
+  const { source, write, manifest, commit, scan, verifiedHead } = mcpFixture(t);
+  const report = scan(verifiedHead);
+  assert.deepEqual(report.violations, []);
+  assert.equal(report.baseRef, DEFAULT_DIVERGENCE_BASE_REF);
+  assert.equal(report.upstreamRef, DEFAULT_UPSTREAM_PROVENANCE_REF);
+  assert.equal(scan().violations.length, 0);
+
+  // Native TS7/declaration fixes need not reproduce the entire upstream tree.
+  manifest(MCP_ROOT, '@modern-js/mcp-apps', {
+    exports: { './cli': { 'modern:source': './src/cli/index.ts' } },
+    devDependencies: { '@typescript/native-preview': '7.0.0-dev.20261113.1' },
+  });
+  write(
+    `${MCP_ROOT}/tsconfig.json`,
+    '{"compilerOptions":{"declaration":true}}',
+  );
+  write(`${MCP_ROOT}/src/cli/index.ts`, 'export const editedMcp = true;');
+  assert.equal(scan(commit()).violations.length, 0);
+
+  write(
+    source,
+    "import '@modern-js/mcp-apps/cli'; import '@modern-js/ordinary';",
+  );
+  assert.deepEqual(
+    scan().violations.map(record => record.specifier),
+    ['@modern-js/ordinary'],
+  );
+  write(`${MCP_ROOT}/src/cli/index.ts`, "import '@modern-js/ordinary';");
+  assert.deepEqual(
+    scan().violations.map(record => record.file),
+    [source, `${MCP_ROOT}/src/cli/index.ts`],
+    'the newly upstream-owned package is governed, not exempted',
+  );
+});
+
+test('MCP package path and name alone cannot establish upstream ownership without the pinned commit', t => {
+  const { source, write, manifest, scan } = fixture(t);
+  manifest(MCP_ROOT, '@modern-js/mcp-apps');
+  write(`${MCP_ROOT}/src/index.ts`, 'export const fork = true;');
+  write(source, "import '@modern-js/mcp-apps';");
+  assert.equal(scan().violations[0].specifier, '@modern-js/mcp-apps');
+});
+
+test('an available MCP provenance object or remote-looking ref is not proof it is an ancestor of the target', t => {
+  const { root, scan, unverifiedHead } = mcpFixture(t);
+  git(root, 'update-ref', 'refs/remotes/upstream/main', MCP_UPSTREAM_COMMIT);
+  assert.equal(
+    scan(unverifiedHead).violations[0].specifier,
+    '@modern-js/mcp-apps/cli',
+  );
+  git(root, 'reset', '--soft', unverifiedHead);
+  assert.equal(scan().violations.length, 1);
+});
+
+test('MCP receipt cannot bless a different package name or a copy at another path', t => {
+  const { root, source, write, manifest, scan, commit } = mcpFixture(t);
+  manifest(MCP_ROOT, '@modern-js/impostor');
+  write(source, "import '@modern-js/impostor';");
+  assert.equal(scan(commit()).violations[0].specifier, '@modern-js/impostor');
+  git(root, 'mv', MCP_ROOT, 'packages/toolkit/copied-mcp');
+  manifest('packages/toolkit/copied-mcp', '@modern-js/mcp-apps');
+  write(source, "import '@modern-js/mcp-apps';");
+  assert.equal(scan(commit()).violations[0].specifier, '@modern-js/mcp-apps');
+});
+
+test('Git replacements cannot forge MCP ancestry or replace its pinned source identity', t => {
+  const { root, scan, verifiedHead, unverifiedHead } = mcpFixture(t);
+  git(root, 'replace', unverifiedHead, verifiedHead);
+  assert.equal(scan(unverifiedHead).violations.length, 1);
+  git(root, 'replace', '-d', unverifiedHead);
+  git(root, 'replace', MCP_UPSTREAM_COMMIT, unverifiedHead);
+  assert.deepEqual(scan(verifiedHead).violations, []);
+});
+
+test('Git grafts cannot manufacture reviewed MCP ancestry', t => {
+  const { write, scan, unverifiedHead } = mcpFixture(t);
+  write('.git/info/grafts', `${unverifiedHead} ${MCP_UPSTREAM_COMMIT}\n`);
+  assert.throws(() => scan(unverifiedHead), /cannot use Git grafts/);
+});
+
+test('reviewed MCP exports cannot transfer native ownership to a fork source outside its package', t => {
+  const { manifest, scan } = mcpFixture(t);
+  manifest(MCP_ROOT, '@modern-js/mcp-apps', {
+    exports: { './cli': '../innocent/src/index.ts' },
+  });
+  const violations = scan().violations;
+  assert.equal(violations.length, 1);
+  assert.deepEqual(violations[0].targets, [
+    'packages/toolkit/innocent/src/index.ts',
+  ]);
+});
+
+test('MCP ownership still uses measured metadata and rejects mutable-tree symlinks', t => {
+  const { root, manifest, scan, verifiedHead } = mcpFixture(t);
+  manifest(MCP_ROOT, '@modern-js/impostor');
+  assert.deepEqual(scan(verifiedHead).violations, []);
+  fs.renameSync(
+    path.join(root, MCP_ROOT, 'package.json'),
+    path.join(root, 'mcp-manifest.json'),
+  );
+  fs.symlinkSync(
+    '../../../mcp-manifest.json',
+    path.join(root, MCP_ROOT, 'package.json'),
+  );
+  assert.throws(scan, /without symlinks/);
+});
 
 test('ownership catches innocuous fork package names and deep source exports, while upstream names remain native', t => {
   const { source, write, scan } = fixture(t);

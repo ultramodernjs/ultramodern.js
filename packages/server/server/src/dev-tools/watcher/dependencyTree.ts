@@ -84,10 +84,15 @@ export class DependencyTree {
   }
 
   private shouldIgnore(path: string): boolean {
-    const matchPath =
+    const relativePath =
       path && nodePath.isAbsolute(path)
         ? nodePath.relative(process.cwd(), path)
         : path;
+    // Globstars cannot match ".." segments in paths outside the working directory.
+    const matchPath =
+      relativePath === '..' || relativePath.startsWith(`..${nodePath.sep}`)
+        ? path
+        : relativePath;
     return !matchPath || this.ignore.some(rule => rule.match(matchPath));
   }
 }

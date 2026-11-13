@@ -551,7 +551,7 @@ export class DeferredScriptOutputCoordinator {
     }
     // An end tag can only start at `<`, so the suffix search below would
     // keep `rawTextSearch` empty anyway.
-    if (!this.rawTextSearch && char !== '<') {
+    if (this.rawTextSearch === '' && char !== '<') {
       return;
     }
 

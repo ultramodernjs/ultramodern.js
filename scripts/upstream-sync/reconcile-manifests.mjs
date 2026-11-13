@@ -13,6 +13,7 @@ const dependencyFields = new Set([
 ]);
 const acceptedCohort = {
   '@module-federation/enhanced': 'npm:@bleedingdev/mf-enhanced@2.9.3',
+  '@module-federation/modern-js-v3': '2.9.2',
   '@rsbuild/core': '2.3.2',
   // 1.0.5 switched to typescript/sync; the accepted Effect compiler exposes
   // unstable/sync. Keep the working declaration emitter rather than bypass it.
@@ -152,14 +153,19 @@ function run() {
       .filter(file => file && fs.existsSync(file));
     for (const file of new Set(manifests)) {
       const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (manifest.name?.startsWith('@examples/')) continue;
+      const example = manifest.name?.startsWith('@examples/');
       for (const field of dependencyFields) {
         for (const [dependency, value] of Object.entries(
           manifest[field] ?? {},
         )) {
           if (
             Object.hasOwn(acceptedCohort, dependency) &&
-            !value.startsWith('workspace:')
+            (!example || dependency.startsWith('@module-federation/')) &&
+            !value.startsWith('workspace:') &&
+            !(
+              dependency === '@module-federation/modern-js-v3' &&
+              value.startsWith('npm:')
+            )
           ) {
             manifest[field][dependency] = acceptedCohort[dependency];
           }

@@ -1,3 +1,4 @@
+const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { buildProvenanceOwnership, parseNameStatus } = require('./divergence');
@@ -19,6 +20,20 @@ const sourceExtensions = [
   '.d.ts',
 ];
 const inDirectory = (file, directory) => file.startsWith(`${directory}/`);
+
+// Import identity only, not a new divergence baseline or an import exemption.
+// This package was added upstream after both immutable divergence pins.
+const reviewedUpstreamPackage = Object.freeze({
+  file: 'packages/toolkit/mcp-apps/package.json',
+  name: '@modern-js/mcp-apps',
+  commit: 'ce64c5d62541341b66611379e9996c1d5a718ed7',
+  blob: '49df628e248f85daeee2ab2fc7ca33a6c15b25be',
+});
+const gitObjectId = (type, content) =>
+  createHash('sha1')
+    .update(`${type} ${Buffer.byteLength(content)}\0`)
+    .update(content)
+    .digest('hex');
 
 // Resolve against the measured Git tree, never installed node_modules or the
 // runner's resolver. Committed verification must not read worktree metadata.
@@ -79,6 +94,55 @@ const createImportOwnership = ({
     upstreamRef,
     pathspec: ['packages'],
   });
+  const isReviewedUpstreamPackage = (file, manifest) => {
+    const receipt = reviewedUpstreamPackage;
+    if (file !== receipt.file || manifest.name !== receipt.name) return false;
+    const proofGit = (args, allowFailure = false) =>
+      runGit({
+        rootDir,
+        args: ['--no-replace-objects', ...args],
+        allowFailure,
+      });
+    const commit = proofGit(['cat-file', 'commit', receipt.commit], true);
+    if (commit.status !== 0) return false;
+    if (gitObjectId('commit', commit.stdout) !== receipt.commit)
+      throw new Error('Reviewed upstream package commit identity mismatch.');
+    const grafts = proofGit([
+      'rev-parse',
+      '--git-path',
+      'info/grafts',
+    ]).stdout.trim();
+    if (fs.existsSync(path.resolve(rootDir, grafts)))
+      throw new Error(
+        'Reviewed upstream package ancestry cannot use Git grafts.',
+      );
+    for (const [ancestor, descendant] of [
+      [upstreamRef, receipt.commit],
+      [receipt.commit, headRef ?? 'HEAD'],
+    ]) {
+      if (
+        proofGit(['merge-base', '--is-ancestor', ancestor, descendant], true)
+          .status !== 0
+      )
+        return false;
+    }
+    const entry = proofGit([
+      'ls-tree',
+      '-z',
+      receipt.commit,
+      '--',
+      receipt.file,
+    ]).stdout;
+    if (entry !== `100644 blob ${receipt.blob}\t${receipt.file}\0`)
+      throw new Error('Reviewed upstream package manifest identity mismatch.');
+    const content = proofGit(['cat-file', 'blob', receipt.blob]).stdout;
+    if (
+      gitObjectId('blob', content) !== receipt.blob ||
+      JSON.parse(content).name !== receipt.name
+    )
+      throw new Error('Reviewed upstream package source identity mismatch.');
+    return true;
+  };
   const projectRenames = (from, to) => {
     const args = ['diff', '--name-status', '-z', '-M', from];
     if (to) args.push(to);
@@ -165,7 +229,8 @@ const createImportOwnership = ({
       file,
       root: path.posix.dirname(file),
       manifest,
-      upstream: ownership.has(file),
+      upstream:
+        ownership.has(file) || isReviewedUpstreamPackage(file, manifest),
     };
     if (packages.has(manifest.name))
       throw new Error(`Ambiguous workspace package identity: ${manifest.name}`);
@@ -366,7 +431,7 @@ const createImportOwnership = ({
       // Package ownership still governs invalid or private deep imports.
       return [classify(record.file, record)];
     }
-    return resolved.map(target => classify(target, record));
+    return resolved.map(target => classify(target, packageForFile(target)));
   };
   const configs = new Map();
   const parseConfig = file => {

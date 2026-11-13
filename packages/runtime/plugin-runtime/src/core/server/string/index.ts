@@ -7,6 +7,7 @@ import {
 } from '@modern-js/runtime/context';
 import type { StaticHandlerContext } from '@modern-js/runtime-utils/router';
 import { time } from '@modern-js/runtime-utils/time';
+import { nanoid } from '@modern-js/utils';
 import { SSR_HYDRATION_ID_PREFIX } from '@modern-js/utils/universal/constants';
 import type React from 'react';
 import ReactDomServer from 'react-dom/server';
@@ -264,7 +265,7 @@ async function generateHtml(
   }
 }
 
-const markerId = Math.random().toString(36).slice(2);
+const markerId = nanoid();
 const HTML_MARKER = `<!--modern-html-${markerId}-->`;
 const SSR_DATA_MARKER = `<!--modern-ssr-data-${markerId}-->`;
 

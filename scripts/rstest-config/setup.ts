@@ -49,12 +49,10 @@ expect.addSnapshotSerializer(
   createSnapshotSerializer({
     workspace: path.join(__dirname, '..', '..'),
     afterSerialize: serialized =>
-      serialized
-        .replace(
-          /(?<=\.modern-js\/tsgo\/tsconfig\.)[a-f0-9]{10}(?=\.json)/gu,
-          '<hash>',
-        )
-        .replaceAll('<PNPM_INNER>', '<WORKSPACE>/node_modules/<PNPM_INNER>'),
+      serialized.replace(
+        /(?<=\.modern-js\/tsgo\/tsconfig\.)[a-f0-9]{10}(?=\.json)/gu,
+        '<hash>',
+      ),
     replace: [
       {
         mark: 'fragment',

@@ -4,5 +4,6 @@ export default defineConfig({
   projects: [
     'packages/**/rstest.config.{ts,mts}',
     'scripts/rslib/rstest.config.mts',
+    'scripts/rstest-config/rstest.config.mts',
   ],
 });
