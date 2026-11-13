@@ -1,12 +1,12 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { createMcpHandler } from '@modelcontextprotocol/server';
-import { requestOrigin } from './resources';
 import { requestUiOptions } from './context';
 import type { RegisterUiOptions } from './resources';
+import { requestOrigin } from './resources';
 
-export { registerUiResources } from './resources';
-export type { RegisterUiOptions } from './resources';
 export type { UiManifest, UiMetadata } from '../manifest';
+export type { RegisterUiOptions } from './resources';
+export { registerUiResources } from './resources';
 
 export type McpServerFactory = (
   request: Request,
@@ -69,7 +69,8 @@ export function createBffHandlers(
   const handle = createFetchHandler(async request => {
     const uiOptions = (await currentContext(useContext)).get('locals')
       ?.modernMcpApps as
-      Pick<RegisterUiOptions, 'manifest' | 'mode'> | undefined;
+      | Pick<RegisterUiOptions, 'manifest' | 'mode'>
+      | undefined;
     // The SDK may clone the incoming request before invoking its factory.
     if (uiOptions) requestUiOptions.set(request, uiOptions);
     return createServer(request);

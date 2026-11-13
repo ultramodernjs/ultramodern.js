@@ -1,5 +1,6 @@
-import { it, expect } from '@rstest/core';
+import { expect, it } from '@rstest/core';
 import { reduceViewState, resultProps } from '../src/ui/state';
+
 it('uses structured output and never leaks previous results into a new call', () => {
   const state = reduceViewState(
     { cancelled: false },

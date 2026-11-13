@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import {
-  validateUiMetadata,
-  validateViewsConfig,
+  type McpViewsConfig,
   type UiManifest,
   type UiMetadata,
-  type McpViewsConfig,
+  validateUiMetadata,
+  validateViewsConfig,
 } from '../manifest';
 
 export type UiCsp = NonNullable<UiMetadata['csp']>;

@@ -1,18 +1,18 @@
-import { requestUiOptions } from './context';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL, fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import {
+  RESOURCE_MIME_TYPE,
+  registerAppResource,
+} from '@modelcontextprotocol/ext-apps/server';
 import type { McpServer } from '@modelcontextprotocol/server';
 import {
-  registerAppResource,
-  RESOURCE_MIME_TYPE,
-} from '@modelcontextprotocol/ext-apps/server';
-import {
   assertHttpUrl,
-  validateUiManifest,
   type UiManifest,
   type UiMetadata,
+  validateUiManifest,
 } from '../manifest';
+import { requestUiOptions } from './context';
 
 interface ManifestCacheEntry {
   version: string;

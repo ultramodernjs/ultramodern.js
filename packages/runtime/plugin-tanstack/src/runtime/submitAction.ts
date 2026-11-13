@@ -160,10 +160,18 @@ export async function submitRouteAction({
     body,
   });
 
-  const result = await resolved.action({
-    request,
-    params: resolved.params,
-  });
+  let result: unknown;
+  try {
+    result = await resolved.action({
+      request,
+      params: resolved.params,
+    });
+  } catch (error) {
+    if (!(error instanceof Response) || !isRedirectResponse(error)) {
+      throw error;
+    }
+    result = error;
+  }
 
   if (result instanceof Response) {
     const redirectTo =

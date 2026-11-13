@@ -1,4 +1,4 @@
-import { it, expect, rs } from '@rstest/core';
+import { expect, it, rs } from '@rstest/core';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createMcpView } from '../src/ui/react';

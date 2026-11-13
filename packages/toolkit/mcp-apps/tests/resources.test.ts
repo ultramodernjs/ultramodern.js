@@ -1,12 +1,11 @@
-import { it, expect, beforeAll, afterAll } from '@rstest/core';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
-import path from 'node:path';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
-import { McpServer } from '@modelcontextprotocol/server';
+import path from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
-import { InMemoryTransport } from '@modelcontextprotocol/server';
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
+import { afterAll, beforeAll, expect, it } from '@rstest/core';
+import { type UiManifest, validateUiManifest } from '../src/manifest';
 import { registerUiResources } from '../src/server/resources';
-import { validateUiManifest, type UiManifest } from '../src/manifest';
 
 let directory: string;
 beforeAll(async () => {

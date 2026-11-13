@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, rs } from '@rstest/core';
-import { mcpAppsPlugin, type McpAppsPluginOptions } from '../src/cli';
+import { type McpAppsPluginOptions, mcpAppsPlugin } from '../src/cli';
 
 const { shellConfigs } = rs.hoisted(() => ({
   shellConfigs: [] as Array<{

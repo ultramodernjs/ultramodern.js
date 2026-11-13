@@ -1,16 +1,16 @@
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRsbuild } from '@rsbuild/core';
 import type { AppTools, CliPlugin } from '@modern-js/app-tools';
-import { validateViewsConfig, type McpViewsConfig } from '../manifest';
+import { createRsbuild } from '@rsbuild/core';
+import { type McpViewsConfig, validateViewsConfig } from '../manifest';
 import {
   createUiManifest,
   findMfManifest,
-  viewEntryName,
   type MfManifest,
   type UiCsp,
+  viewEntryName,
 } from './build';
 
 export interface McpAppsPluginOptions {

@@ -1,9 +1,9 @@
 import { createInstance } from '@module-federation/enhanced/runtime';
 import * as React from 'react';
+import * as JsxDevRuntime from 'react/jsx-dev-runtime';
+import * as JsxRuntime from 'react/jsx-runtime';
 import * as ReactDOM from 'react-dom';
 import * as ReactDOMClient from 'react-dom/client';
-import * as JsxRuntime from 'react/jsx-runtime';
-import * as JsxDevRuntime from 'react/jsx-dev-runtime';
 import { createMcpView, type McpCapabilities } from './react';
 
 export interface MfViewConfig {

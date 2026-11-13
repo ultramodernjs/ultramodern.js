@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { it, expect } from '@rstest/core';
+import { expect, it } from '@rstest/core';
 import serverPlugin from '../src/cli/server-plugin';
 
 it.each([

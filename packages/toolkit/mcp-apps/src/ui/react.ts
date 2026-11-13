@@ -1,19 +1,20 @@
+import type { App } from '@modelcontextprotocol/ext-apps';
 import {
+  type UseAppOptions,
   useApp,
   useHostStyles,
-  type UseAppOptions,
 } from '@modelcontextprotocol/ext-apps/react';
-import type { App } from '@modelcontextprotocol/ext-apps';
-import { createElement, useReducer, type ComponentType } from 'react';
+import { type ComponentType, createElement, useReducer } from 'react';
 import { reduceViewState, resultProps } from './state';
+
+export type { App } from '@modelcontextprotocol/ext-apps';
 export {
   useApp,
-  useHostStyles,
-  useHostFonts,
   useDocumentTheme,
+  useHostFonts,
+  useHostStyles,
   useHostStyleVariables,
 } from '@modelcontextprotocol/ext-apps/react';
-export type { App } from '@modelcontextprotocol/ext-apps';
 export type McpCapabilities = NonNullable<UseAppOptions['capabilities']>;
 
 export type McpViewProps<T extends object = Record<string, unknown>> = Omit<

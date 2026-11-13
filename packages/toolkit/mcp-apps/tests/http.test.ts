@@ -1,10 +1,10 @@
-import { it, expect, rs, afterEach } from '@rstest/core';
 import { McpServer } from '@modelcontextprotocol/server';
+import { afterEach, expect, it, rs } from '@rstest/core';
 import { z } from 'zod';
 import {
-  registerUiResources,
-  createFetchHandler,
   createBffHandlers,
+  createFetchHandler,
+  registerUiResources,
 } from '../src/server';
 
 const { requestContext, contextStorage } = rs.hoisted(() => {

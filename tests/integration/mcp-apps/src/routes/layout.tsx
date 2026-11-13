@@ -1,4 +1,4 @@
-import { Outlet } from '@modern-js/plugin-tanstack/runtime';
+import { Outlet } from '@modern-js/runtime/router';
 
 export default function Layout() {
   return (

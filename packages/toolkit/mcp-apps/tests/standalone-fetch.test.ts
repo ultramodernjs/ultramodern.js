@@ -1,5 +1,5 @@
-import { it, expect, rs } from '@rstest/core';
 import { McpServer } from '@modelcontextprotocol/server';
+import { expect, it, rs } from '@rstest/core';
 import { z } from 'zod';
 import { createBffHandlers, createFetchHandler } from '../src/server';
 
