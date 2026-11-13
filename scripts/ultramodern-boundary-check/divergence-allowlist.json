@@ -5,8 +5,8 @@
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
   "totalFiles": 1441,
-  "totalHunks": 4846,
-  "totalChangedLines": 103520,
+  "totalHunks": 4847,
+  "totalChangedLines": 103533,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -2790,8 +2790,8 @@
     },
     {
       "file": "packages/runtime/plugin-runtime/src/core/server/string/index.ts",
-      "hunks": 19,
-      "changedLines": 237
+      "hunks": 20,
+      "changedLines": 238
     },
     {
       "file": "packages/runtime/plugin-runtime/src/core/server/string/loadable.ts",
@@ -4236,7 +4236,7 @@
     {
       "file": "packages/server/server/src/dev-tools/watcher/dependencyTree.ts",
       "hunks": 6,
-      "changedLines": 39
+      "changedLines": 44
     },
     {
       "file": "packages/server/server/src/dev-tools/watcher/index.ts",
@@ -4296,7 +4296,7 @@
     {
       "file": "packages/server/server/tests/dependencyTree.test.ts",
       "hunks": 1,
-      "changedLines": 84
+      "changedLines": 91
     },
     {
       "file": "packages/server/server/tests/devRuntimeReload.test.ts",
