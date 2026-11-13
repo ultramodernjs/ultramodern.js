@@ -1,9 +1,4 @@
-import React, {
-  createContext,
-  type ReactNode,
-  useContext,
-  useState,
-} from 'react';
+import React, { createContext, useState } from 'react';
 import {
   createFromFetch,
   createFromReadableStream,
@@ -13,6 +8,11 @@ import {
 
 export { rscStream } from '../rsc-html-stream/client';
 export { callServer } from './callServer';
+export {
+  ElementsContext,
+  RSCServerSlot,
+  ServerElementsProvider,
+} from './serverElements';
 export { createFromFetch, createFromReadableStream, createServerReference };
 
 declare global {
@@ -43,29 +43,3 @@ export function RscClientRoot({
     </ResetRootContext.Provider>
   );
 }
-
-type Elements = Promise<ReactNode[]>;
-
-export const ElementsContext = createContext<Elements | null>(null);
-
-// For users to pass an element, not a Component.
-export const ServerElementsProvider = ({
-  elements,
-  children,
-}: {
-  elements: Elements;
-  children: ReactNode;
-}) => {
-  return (
-    <>
-      <ElementsContext.Provider value={elements}>
-        {children}
-      </ElementsContext.Provider>
-    </>
-  );
-};
-
-export const RSCServerSlot = () => {
-  const elements = React.use(ElementsContext);
-  return elements;
-};

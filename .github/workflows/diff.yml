@@ -69,7 +69,7 @@ jobs:
           RSDOCTOR=1 pnpm run build
 
       - name: Verify render build output
-        run: pnpm --filter @modern-js/render test:build
+        run: node --test packages/runtime/render/tests/build.test.mjs
 
       - name: Report Compressed Size
         uses: web-infra-dev/rsdoctor-action@2fbd50933702502f12d2bbef5273afbfd829a289 # v1.1.4

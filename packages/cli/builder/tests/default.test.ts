@@ -327,6 +327,29 @@ describe('builder rspack', () => {
     });
   });
 
+  it('preserves explicit externals for user web-worker environments', async () => {
+    const rsbuild = await createBuilder({
+      bundlerType: 'rspack',
+      config: {
+        environments: {
+          background: {
+            output: {
+              target: 'web-worker',
+              externals: { react: 'MyReact' },
+            },
+          },
+        },
+      },
+      cwd: builderPath,
+    });
+
+    const {
+      origin: { bundlerConfigs },
+    } = await rsbuild.inspectConfig();
+
+    expect(bundlerConfigs[0].externals).toMatchObject({ react: 'MyReact' });
+  });
+
   it('creates an isolated production web-worker config', async () => {
     rs.stubEnv('NODE_ENV', 'production');
 

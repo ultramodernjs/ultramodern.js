@@ -3,7 +3,7 @@ import { SSR_HYDRATION_ID_PREFIX } from '@modern-js/utils/universal/constants';
 import React, { type ReactNode } from 'react';
 import type { ReactDOMServerReadableStream } from 'react-dom/server';
 import { renderToReadableStream } from 'react-dom/server.edge';
-import { ServerElementsProvider } from '../../client/index';
+import { ServerElementsProvider } from '../../client/serverElements';
 
 function CSSLinks({ cssFiles }: { cssFiles: string[] }) {
   if (cssFiles.length === 0) {

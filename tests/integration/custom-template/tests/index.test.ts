@@ -14,16 +14,19 @@ describe('custom template', () => {
       'utf8',
     );
     const title = html.match(/<title[^>]*>([^<]*)<\/title>/iu)?.[1];
-    const viewportTag = html
+    const viewportTags = html
       .match(/<meta\b[^>]*>/giu)
-      ?.find(tag => /\bname=["']viewport["']/iu.test(tag));
-    const viewport = viewportTag?.match(/\bcontent=["']([^"']*)["']/iu)?.[1];
+      ?.filter(tag => /\bname=["']viewport["']/iu.test(tag));
+    const viewport = viewportTags?.[0]?.match(
+      /\bcontent=["']([^"']*)["']/iu,
+    )?.[1];
     const rootContent = html.match(
       /<div\b[^>]*\bid=["']root["'][^>]*>([\s\S]*?)<\/div>/iu,
     )?.[1];
 
     expect(title).toBe('Hello World');
-    expect(viewport).toContain('viewport-fit=cover');
+    expect(viewportTags).toHaveLength(1);
+    expect(viewport).toBe('width=device-width,initial-scale=1');
     expect(rootContent).toMatch(/^\s*$/u);
   });
 
