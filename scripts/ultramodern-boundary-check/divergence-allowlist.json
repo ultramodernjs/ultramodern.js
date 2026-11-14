@@ -4,9 +4,9 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1442,
-  "totalHunks": 4855,
-  "totalChangedLines": 103689,
+  "totalFiles": 1443,
+  "totalHunks": 4858,
+  "totalChangedLines": 103895,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -226,7 +226,7 @@
     {
       "file": "packages/cli/plugin-bff/src/cli/generator.ts",
       "hunks": 1,
-      "changedLines": 174
+      "changedLines": 175
     },
     {
       "file": "packages/cli/plugin-bff/src/cli/prefix.ts",
@@ -321,7 +321,7 @@
     {
       "file": "packages/cli/plugin-bff/tests/bffBuildHooks.test.ts",
       "hunks": 1,
-      "changedLines": 137
+      "changedLines": 138
     },
     {
       "file": "packages/cli/plugin-bff/tests/clientGenerator.test.ts",
@@ -4365,18 +4365,18 @@
     },
     {
       "file": "packages/server/utils/src/common/index.ts",
-      "hunks": 7,
-      "changedLines": 40
+      "hunks": 9,
+      "changedLines": 79
     },
     {
       "file": "packages/server/utils/src/compilers/rslib.ts",
       "hunks": 1,
-      "changedLines": 459
+      "changedLines": 478
     },
     {
       "file": "packages/server/utils/src/compilers/tsgo.ts",
       "hunks": 1,
-      "changedLines": 236
+      "changedLines": 222
     },
     {
       "file": "packages/server/utils/src/compilers/typescript/index.ts",
@@ -4392,6 +4392,11 @@
       "file": "packages/server/utils/src/compilers/typescript/typescriptLoader.ts",
       "hunks": 1,
       "changedLines": 30
+    },
+    {
+      "file": "packages/server/utils/tests/compilerProvider.test.ts",
+      "hunks": 1,
+      "changedLines": 154
     },
     {
       "file": "packages/server/utils/tests/declarationPasses.test.ts",
@@ -4761,7 +4766,7 @@
     {
       "file": "packages/solutions/app-tools/src/plugins/serverBuild.ts",
       "hunks": 7,
-      "changedLines": 15
+      "changedLines": 16
     },
     {
       "file": "packages/solutions/app-tools/src/plugins/serverRuntime.ts",
@@ -4816,7 +4821,7 @@
     {
       "file": "packages/solutions/app-tools/src/types/config/tools.ts",
       "hunks": 2,
-      "changedLines": 9
+      "changedLines": 12
     },
     {
       "file": "packages/solutions/app-tools/src/types/index.ts",
@@ -5001,7 +5006,7 @@
     {
       "file": "packages/solutions/app-tools/tests/serverBuild.test.ts",
       "hunks": 1,
-      "changedLines": 64
+      "changedLines": 66
     },
     {
       "file": "packages/solutions/app-tools/tests/types.test.ts",
