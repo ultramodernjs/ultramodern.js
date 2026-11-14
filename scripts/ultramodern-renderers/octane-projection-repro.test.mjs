@@ -3,7 +3,12 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { probeOctaneProjection } from './octane-projection-repro.mjs';
+import {
+  observeOctaneProjection,
+  octaneProjectionResult,
+  probeOctaneProjection,
+  replayOctaneProjection,
+} from './octane-projection-repro.mjs';
 
 const phases = [
   'getConfigFileParsingDiagnostics',
@@ -809,4 +814,32 @@ test('default loader rejects local use before resolving or importing a compiler'
     if (before === undefined) delete process.env.GITHUB_ACTIONS;
     else process.env.GITHUB_ACTIONS = before;
   }
+});
+
+test('original observation reuses native reduction without a second wrapper call', t => {
+  const f = fixture(t, { targetPair: true, rootCount: 5 });
+  const result = {
+    ...octaneProjectionResult(),
+    captureOrigin: 'original-public-cli',
+    inputs: f.load.inputs,
+    original: { status: 'observing' },
+  };
+  const observer = observeOctaneProjection(f.load.API, result, {
+    failureOnly: true,
+    onClose() {
+      result.original.status = 'closed';
+    },
+  });
+  f.load.checkOctaneProject({ project: 'tsconfig.json', cwd: f.root });
+  observer.dispose();
+  // Any attempt to call the wrapper from the replay must fail this test.
+  f.load.checkOctaneProject = () => {
+    throw new Error('Never retry original wrapper');
+  };
+  replayOctaneProjection(f.root, f.load, result);
+  f.checkCleanup();
+  assert.equal(result.wrapper.status, 'not-run');
+  assert.equal(result.original.status, 'closed');
+  assert.equal(result.rootReduction.status, 'reduced-witness');
+  assert.equal(result.rootReduction.witness.rootCount, 1);
 });

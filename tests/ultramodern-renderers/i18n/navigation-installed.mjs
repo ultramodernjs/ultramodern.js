@@ -4,6 +4,7 @@
 //   --expected-native-tuples <accepted-native-tuples.json>
 // A source-only lane can use --toolchain-root <installed-checkout> for harness
 // dependencies. Application code always comes from the authenticated cohort.
+
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -19,6 +20,7 @@ import {
   localizedNavigationSharedCheckCommand,
   verifyLocalizedNavigationCore,
 } from '../../../scripts/ultramodern-renderers/native-localized-navigation.mjs';
+import { octaneTypecheckEvidenceEnv } from '../../../scripts/ultramodern-renderers/octane-cli-evidence.mjs';
 import {
   diagnoseOctaneTypecheck,
   qualifyOctaneBatch,
@@ -253,7 +255,7 @@ try {
     args,
     cwd,
     label,
-    { logDirectory = workRoot } = {},
+    { logDirectory = workRoot, commandEnv = env } = {},
   ) => {
     const witness = path.join(workRoot, `${label}-process.json`);
     fs.mkdirSync(logDirectory, { recursive: true });
@@ -263,7 +265,7 @@ try {
       await runPackedNativeFederationCommand(executable, args, {
         witness,
         cwd,
-        env,
+        env: commandEnv,
         log,
         signal: controller.signal,
       });
@@ -433,7 +435,6 @@ try {
               'scripts/ultramodern-renderers/octane-compiler-inputs.mjs',
             ),
             appRoot,
-            '--resolve-compiler',
           ],
           appRoot,
           'feature-localized-navigation.octane-compiler-inputs',
@@ -447,6 +448,17 @@ try {
                 ['run', 'typecheck'],
                 appRoot,
                 `octane-typecheck-${iteration}`,
+                {
+                  commandEnv: octaneTypecheckEvidenceEnv(
+                    appRoot,
+                    path.join(
+                      temporary,
+                      'logs',
+                      `octane-typecheck-original-${iteration}`,
+                    ),
+                    env,
+                  ),
+                },
               ),
             ),
           () =>

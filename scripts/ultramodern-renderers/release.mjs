@@ -55,6 +55,7 @@ import {
   packedCompilerRequests,
   runPackedNativeFederationProof,
 } from './native-federation-packed.mjs';
+import { octaneTypecheckEvidenceEnv } from './octane-cli-evidence.mjs';
 import { diagnoseOctaneTypecheck } from './octane-router-probe.mjs';
 import {
   assertReleaseAgeExclusionsUnchanged,
@@ -708,7 +709,6 @@ async function main() {
                 'scripts/ultramodern-renderers/octane-compiler-inputs.mjs',
               ),
               appRoot,
-              '--resolve-compiler',
             ],
             { cwd: appRoot, env, log: `${renderer}-compiler-inputs` },
           ),
@@ -720,7 +720,14 @@ async function main() {
           const typecheck = () =>
             sh('pnpm', ['run', 'typecheck'], {
               cwd: appRoot,
-              env,
+              env:
+                renderer === 'octane'
+                  ? octaneTypecheckEvidenceEnv(
+                      appRoot,
+                      path.join(logs, 'octane-typecheck-original'),
+                      env,
+                    )
+                  : env,
               log: `${renderer}-typecheck`,
             });
           return renderer === 'octane'

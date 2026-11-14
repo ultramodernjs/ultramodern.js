@@ -119,16 +119,10 @@ async function installed(appRoot) {
   };
 }
 
-/**
- * Failure-only hosted diagnostic; does not replace acceptance.
- * The optional loader is a fake-only boundary for tests. No CLI entry or writes.
- */
-export async function probeOctaneProjection(appRoot, load) {
-  const { API, serverFS, createFileSystemLayer, checkOctaneProject, inputs } =
-    load ?? (await installed(appRoot));
-  const result = {
+/** Shared raw observer: no extra diagnostics; freeze only at API close. */
+export function octaneProjectionResult() {
+  return {
     schemaVersion: 1,
-    inputs,
     wrapper: { status: 'not-run' },
     captures: [],
     replay: { status: 'not-run' },
@@ -145,6 +139,13 @@ export async function probeOctaneProjection(appRoot, load) {
       'Observing source text may perturb native request/cache history; this cannot establish an order-dependent root cause.',
     ],
   };
+}
+
+export function observeOctaneProjection(
+  API,
+  result,
+  { failureOnly = false, onClose = () => {} } = {},
+) {
   const descriptor = Object.getOwnPropertyDescriptor(
     API.prototype,
     'createSnapshot',
@@ -153,10 +154,25 @@ export async function probeOctaneProjection(appRoot, load) {
     result.captureError = {
       message: 'Installed API lacks the supported createSnapshot getter',
     };
-    return result;
+    return { dispose() {}, closeAll() {} };
   }
   const restore = [];
   const close = [];
+  let disposed = false;
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    for (const undo of [
+      ...restore.reverse(),
+      () => Object.defineProperty(API.prototype, 'createSnapshot', descriptor),
+    ]) {
+      try {
+        undo();
+      } catch (error) {
+        result.captureError = errorInfo(error);
+      }
+    }
+  }
   function hook(object, name, value) {
     const previous = Object.getOwnPropertyDescriptor(object, name);
     Object.defineProperty(object, name, {
@@ -176,87 +192,144 @@ export async function probeOctaneProjection(appRoot, load) {
         const create = descriptor.get.call(this);
         return options => {
           const snapshot = create(options);
-          if (result.captures.length >= 1) {
-            result.captureError = { message: 'More than one wrapper snapshot' };
-            return snapshot;
-          }
-          // Renderer owns these APIs; this also closes one if observation fails.
-          const originalClose = this.close;
-          let closed = false;
-          let freeze = () => {};
-          const closeOnce = () => {
-            if (!closed) {
+          try {
+            if (result.captures.length >= 1) {
+              result.captureError = {
+                message: 'More than one observed snapshot',
+              };
+              return snapshot;
+            }
+            // Renderer owns these APIs; this also closes one if observation fails.
+            const originalClose = this.close;
+            let closed = false;
+            let freeze = () => {};
+            const closeOnce = () => {
+              if (closed) return;
               closed = true;
               try {
                 freeze();
-              } finally {
-                originalClose.call(this);
-              }
-            }
-          };
-          hook(this, 'close', closeOnce);
-          close.push(closeOnce);
-          const capture = { status: 'error', rawDiagnosticsByPhase: {} };
-          result.captures.push(capture);
-          try {
-            const [configFile] = options.openProjects ?? [];
-            if (!configFile || !allowed(configFile, true))
-              throw new Error('Snapshot has no safe effective config');
-            const project = snapshot.getConfiguredProject(configFile);
-            if (!project) throw new Error('Effective project did not load');
-            capture.openProjects = [...options.openProjects];
-            // Freeze after the wrapper's diagnostic requests, before close.
-            // Source fetches must not precede its semantic check.
-            freeze = () => {
-              try {
-                // Read through this API's overlay, never the host config.
-                const lease = this.createSourceFileFromFile(configFile);
-                let config;
-                try {
-                  config = { path: configFile, content: lease.sourceFile.text };
-                } finally {
-                  lease.dispose();
-                }
-                capture.graph = graphOf(project, config);
-                capture.status = 'captured';
               } catch (error) {
-                capture.error = errorInfo(error);
+                result.captureError = errorInfo(error);
+              }
+              try {
+                originalClose.call(this);
+              } catch (error) {
+                result.closeError = errorInfo(error);
+                throw error;
+              } finally {
+                dispose();
+                try {
+                  onClose();
+                } catch (error) {
+                  result.captureError = errorInfo(error);
+                }
               }
             };
-            for (const phase of phases) {
-              const method = project.program[phase];
-              hook(project.program, phase, (...args) => {
-                const diagnostics = method.apply(project.program, args);
-                capture.rawDiagnosticsByPhase[phase] = copy(diagnostics);
-                return diagnostics;
-              });
+            hook(this, 'close', closeOnce);
+            close.push(closeOnce);
+            const capture = { status: 'error', rawDiagnosticsByPhase: {} };
+            result.captures.push(capture);
+            try {
+              const [configFile] = options.openProjects ?? [];
+              if (!configFile || !allowed(configFile, true))
+                throw new Error('Snapshot has no safe effective config');
+              const project = snapshot.getConfiguredProject(configFile);
+              if (!project) throw new Error('Effective project did not load');
+              capture.openProjects = [...options.openProjects];
+              // Freeze after the wrapper's diagnostic requests, before close.
+              // Source fetches must not precede its semantic check.
+              freeze = () => {
+                if (
+                  failureOnly &&
+                  !capture.rawDiagnosticsByPhase.getSemanticDiagnostics?.some(
+                    diagnostic => diagnostic.category === 1,
+                  )
+                ) {
+                  capture.status = 'no-raw-semantic-failure';
+                  return;
+                }
+                try {
+                  // Read through this API's overlay, never the host config.
+                  const lease = this.createSourceFileFromFile(configFile);
+                  let config;
+                  try {
+                    config = {
+                      path: configFile,
+                      content: lease.sourceFile.text,
+                    };
+                  } finally {
+                    lease.dispose();
+                  }
+                  capture.graph = graphOf(project, config);
+                  capture.status = 'captured';
+                } catch (error) {
+                  capture.error = errorInfo(error);
+                }
+              };
+              for (const phase of phases) {
+                const method = project.program[phase];
+                hook(project.program, phase, (...args) => {
+                  const diagnostics = method.apply(project.program, args);
+                  try {
+                    capture.rawDiagnosticsByPhase[phase] = copy(diagnostics);
+                  } catch (error) {
+                    capture.error = errorInfo(error);
+                  }
+                  return diagnostics;
+                });
+              }
+            } catch (error) {
+              capture.error = errorInfo(error);
             }
           } catch (error) {
-            capture.error = errorInfo(error);
+            result.captureError = errorInfo(error);
           }
           return snapshot;
         };
       },
     });
-    try {
-      result.wrapper = {
-        status: 'checked',
-        ...copy(checkOctaneProject({ project: 'tsconfig.json', cwd: appRoot })),
-      };
-    } catch (error) {
-      result.wrapper = { status: 'error', error: errorInfo(error) };
-    }
-  } finally {
-    Object.defineProperty(API.prototype, 'createSnapshot', descriptor);
-    for (const closeOnce of close) {
-      try {
-        closeOnce();
-      } catch (error) {
-        result.closeError = errorInfo(error);
-      }
-    }
-    for (const undo of restore.reverse()) undo();
+  } catch (error) {
+    result.captureError = errorInfo(error);
+    dispose();
   }
+  return {
+    dispose,
+    closeAll() {
+      for (const closeOnce of close) {
+        try {
+          closeOnce();
+        } catch (error) {
+          result.closeError = errorInfo(error);
+        }
+      }
+      dispose();
+    },
+  };
+}
+
+/** Explicit diagnostic retry/control, never original-process evidence. */
+export async function probeOctaneProjection(appRoot, load) {
+  load ??= await installed(appRoot);
+  const result = { ...octaneProjectionResult(), inputs: load.inputs };
+  const observer = observeOctaneProjection(load.API, result);
+  try {
+    result.wrapper = {
+      status: 'checked',
+      ...copy(
+        load.checkOctaneProject({ project: 'tsconfig.json', cwd: appRoot }),
+      ),
+    };
+  } catch (error) {
+    result.wrapper = { status: 'error', error: errorInfo(error) };
+  } finally {
+    observer.closeAll();
+  }
+  return replayOctaneProjection(appRoot, load, result);
+}
+
+/** Replays a frozen capture, without re-running the renderer wrapper. */
+export function replayOctaneProjection(appRoot, load, result) {
+  const { API, serverFS, createFileSystemLayer, inputs } = load;
   const capture = result.captures[0];
   const graph = capture?.graph;
   if (
@@ -361,7 +434,9 @@ export async function probeOctaneProjection(appRoot, load) {
     result.replay.status !== 'graph-matched' ||
     result.replay.closeError ||
     result.closeError ||
-    result.wrapper.status !== 'checked' ||
+    (result.captureOrigin === 'original-public-cli'
+      ? result.original?.status !== 'closed'
+      : result.wrapper.status !== 'checked') ||
     targets.length !== 2 ||
     new Set(targets.map(hash)).size !== 2 ||
     (capturedTargets.length > 0 && !preservesTargets(targets, capturedTargets))
