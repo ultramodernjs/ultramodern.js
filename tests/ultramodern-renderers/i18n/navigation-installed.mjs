@@ -19,6 +19,7 @@ import {
   localizedNavigationSharedCheckCommand,
   verifyLocalizedNavigationCore,
 } from '../../../scripts/ultramodern-renderers/native-localized-navigation.mjs';
+import { diagnoseOctaneTypecheck } from '../../../scripts/ultramodern-renderers/octane-router-probe.mjs';
 import { assertLocalizedNavigation } from './navigation-browser.mjs';
 import { localizedNavigationFixture } from './navigation-fixtures.mjs';
 import {
@@ -413,12 +414,45 @@ try {
         appRoot,
         `${renderer}-build`,
       );
-      await command(
-        pnpm,
-        ['run', 'typecheck'],
-        appRoot,
-        `${renderer}-typecheck`,
-      );
+      if (renderer === 'octane') {
+        await command(
+          process.execPath,
+          [
+            path.join(
+              toolchain,
+              'scripts/ultramodern-renderers/octane-compiler-inputs.mjs',
+            ),
+            appRoot,
+            '--resolve-compiler',
+          ],
+          appRoot,
+          'octane-compiler-inputs',
+        );
+        await diagnoseOctaneTypecheck(
+          () =>
+            command(pnpm, ['run', 'typecheck'], appRoot, 'octane-typecheck'),
+          () =>
+            command(
+              process.execPath,
+              [
+                path.join(
+                  toolchain,
+                  'scripts/ultramodern-renderers/octane-router-probe.mjs',
+                ),
+                appRoot,
+              ],
+              appRoot,
+              'octane-native-router-probe',
+            ),
+        );
+      } else {
+        await command(
+          pnpm,
+          ['run', 'typecheck'],
+          appRoot,
+          `${renderer}-typecheck`,
+        );
+      }
       const port = await reservePort();
       const origin = `http://127.0.0.1:${port}`;
       const server = launchServer(process.execPath, installedBin(appRoot), {

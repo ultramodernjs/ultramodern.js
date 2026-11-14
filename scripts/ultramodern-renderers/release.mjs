@@ -55,6 +55,7 @@ import {
   packedCompilerRequests,
   runPackedNativeFederationProof,
 } from './native-federation-packed.mjs';
+import { diagnoseOctaneTypecheck } from './octane-router-probe.mjs';
 import {
   assertReleaseAgeExclusionsUnchanged,
   captureReleaseAgeExclusions,
@@ -715,12 +716,29 @@ async function main() {
       );
       await step(
         `${renderer} typecheck`,
-        () =>
-          sh('pnpm', ['run', 'typecheck'], {
-            cwd: appRoot,
-            env,
-            log: `${renderer}-typecheck`,
-          }),
+        () => {
+          const typecheck = () =>
+            sh('pnpm', ['run', 'typecheck'], {
+              cwd: appRoot,
+              env,
+              log: `${renderer}-typecheck`,
+            });
+          return renderer === 'octane'
+            ? diagnoseOctaneTypecheck(typecheck, () =>
+                sh(
+                  process.execPath,
+                  [
+                    path.join(
+                      root,
+                      'scripts/ultramodern-renderers/octane-router-probe.mjs',
+                    ),
+                    appRoot,
+                  ],
+                  { cwd: appRoot, env, log: 'octane-native-router-probe' },
+                ),
+              )
+            : typecheck();
+        },
         ready,
       );
       // The specs build and serve the app with its installed bin.

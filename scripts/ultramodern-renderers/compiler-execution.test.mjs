@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { compileFunction } from 'node:vm';
 import { parseSync, types } from '@babel/core';
 import provider from '../tsrs-dts/compiler.cjs';
+import { diagnoseOctaneTypecheck } from './octane-router-probe.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const releaseSource = readFileSync(
@@ -88,6 +89,7 @@ const callback = typecheckSteps[0];
 const createTypecheck = compileFunction(
   `return (${releaseSource.slice(callback.start, callback.end)});`,
   ['sh', 'process', 'appRoot', 'env', 'renderer'],
+  { contextExtensions: [{ diagnoseOctaneTypecheck, path, root }] },
 );
 
 for (const renderer of ['react', 'solid', 'octane']) {
@@ -125,6 +127,29 @@ test('packed typechecking does not hide an installed compiler failure', async ()
     'solid',
   );
   await assert.rejects(run, error => error === failure);
+});
+
+test('packed Octane probes native declarations on failure but preserves failed acceptance', async () => {
+  const failure = new Error('TS2536');
+  const calls = [];
+  const run = createTypecheck(
+    async (command, args, options) => {
+      calls.push([command, args, options]);
+      if (command === 'pnpm') throw failure;
+    },
+    process,
+    root,
+    {},
+    'octane',
+  );
+  await assert.rejects(run, error => error === failure);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1][0], process.execPath);
+  assert.deepEqual(calls[1][1], [
+    path.join(root, 'scripts/ultramodern-renderers/octane-router-probe.mjs'),
+    root,
+  ]);
+  assert.equal(calls[1][2].log, 'octane-native-router-probe');
 });
 
 const solidRoot = path.join(root, 'packages/runtime/renderer-solid');
