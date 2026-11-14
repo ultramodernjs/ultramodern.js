@@ -16,7 +16,24 @@ const phases = [
 
 function fixture(
   t,
-  { throwWrapper, throwCapture, throwReplay, mismatch, references } = {},
+  {
+    throwWrapper,
+    throwCapture,
+    throwReplay,
+    mismatch,
+    references,
+    targetPair,
+    wrapperPasses,
+    rootCount = 2,
+    replayDiagnostics,
+    trialDiagnostics,
+    throwTrialPhase,
+    throwTrialClose,
+    escapeTrial,
+    trialSourceOrder,
+    trialSourceText,
+    mutateTrialInputs,
+  } = {},
 ) {
   assert(process.env.OWNED_TEMP_DIR, 'Run through owned-temp-dir');
   const root = fs.mkdtempSync(
@@ -33,6 +50,12 @@ function fixture(
     [ordinary, 'export const a = 1;\n'],
     [projected, 'export const z: number = "projected";\n'],
   ]);
+  for (let i = 2; i < rootCount; i++) {
+    const file = path.join(root, `extra-${i}.ts`);
+    roots.push(file);
+    sourceOrder.push(file);
+    contents.set(file, `export const extra${i} = ${i};\n`);
+  }
   const compilerOptions = {
     module: 200,
     moduleResolution: 100,
@@ -58,16 +81,42 @@ function fixture(
     fileName: projected.slice(0, -4),
     text: 'mapped wrapper error',
   };
+  const targetFile = path.join(
+    root,
+    'node_modules/@tanstack/router-core/dist/esm/link.d.ts',
+  );
+  const nativeDiagnostics = targetPair
+    ? [
+        'first synthetic RouterCore index error',
+        'second synthetic RouterCore index error',
+      ].map(text => ({ ...nativeDiagnostic, fileName: targetFile, text }))
+    : [nativeDiagnostic];
+  if (targetPair) {
+    sourceOrder.push(targetFile);
+    contents.set(targetFile, '// Fake RouterCore declaration source\n');
+  }
   const instances = [];
   const programs = [];
   let leases = 0;
   const serverFS = { useOS: Symbol('OS'), noop: Symbol('noop') };
   function projectFor(replay, snapshotOptions) {
+    const trial = instances.length - 2;
+    const trialRoots = snapshotOptions.createPrograms?.[0].rootFiles;
     let semanticChecked = false;
     const program = {
       id: replay ? 'synthetic' : configPath,
-      getSourceFileNames: () =>
-        mismatch && replay ? [...sourceOrder].reverse() : sourceOrder,
+      getSourceFileNames: () => {
+        if (mismatch && replay) return [...sourceOrder].reverse();
+        const order =
+          trial > 0
+            ? sourceOrder.filter(
+                file => !roots.includes(file) || trialRoots.includes(file),
+              )
+            : sourceOrder;
+        return trial > 0 && trialSourceOrder
+          ? trialSourceOrder({ trial, order })
+          : order;
+      },
       getSourceFile: file => {
         assert(
           semanticChecked,
@@ -80,19 +129,39 @@ function fixture(
         );
         if (throwCapture && !replay) throw new Error('capture broke');
         return {
-          text: replay
-            ? snapshotOptions.fileSystem.files[file]
-            : contents.get(file),
+          text:
+            trial > 0 && trialSourceText
+              ? trialSourceText({ trial, file })
+              : replay
+                ? snapshotOptions.fileSystem.files[file]
+                : contents.get(file),
         };
       },
-      getCompilerOptions: () => compilerOptions,
+      getCompilerOptions: () =>
+        trial > 0
+          ? {
+              ...snapshotOptions.createPrograms[0].compilerOptions,
+              ...(escapeTrial ? { noCheck: true } : {}),
+            }
+          : compilerOptions,
       ...Object.fromEntries(
         phases.map(phase => [
           phase,
           () => {
+            if (trial > 0 && phase === throwTrialPhase)
+              throw new Error('trial phase broke');
             if (phase === 'getSemanticDiagnostics') {
               semanticChecked = true;
-              return [nativeDiagnostic];
+              if (!replay && wrapperPasses) return [];
+              if (trial > 0 && trialDiagnostics)
+                return trialDiagnostics({
+                  roots: trialRoots,
+                  trial,
+                  diagnostics: nativeDiagnostics,
+                });
+              return replay && replayDiagnostics
+                ? replayDiagnostics(nativeDiagnostics)
+                : nativeDiagnostics;
             }
             return [];
           },
@@ -121,6 +190,17 @@ function fixture(
         const replay = Boolean(options.createPrograms);
         this.snapshotOptions = options;
         if (replay && throwReplay) throw new Error('replay broke');
+        if (replay && instances.length > 2) {
+          const settings = options.createPrograms[0];
+          assert.notEqual(settings.rootFiles, roots);
+          assert.notEqual(settings.compilerOptions, compilerOptions);
+          if (mutateTrialInputs) {
+            settings.rootFiles.reverse();
+            settings.compilerOptions.strict = false;
+          }
+          if (throwTrialPhase === 'create-snapshot')
+            throw new Error('trial snapshot broke');
+        }
         const project = projectFor(replay, options);
         return {
           getConfiguredProject: file => {
@@ -143,6 +223,8 @@ function fixture(
     close() {
       assert(!this.closed, 'API must close exactly once');
       this.closed = true;
+      if (throwTrialClose && instances.indexOf(this) > 1)
+        throw new Error('trial close broke');
     }
   }
   const descriptor = Object.getOwnPropertyDescriptor(
@@ -166,7 +248,10 @@ function fixture(
         for (const phase of phases) program[phase]();
         if (throwWrapper)
           throw new Error('wrapper broke after native diagnostics');
-        return { files: roots, diagnostics: [mappedDiagnostic] };
+        return {
+          files: roots,
+          diagnostics: wrapperPasses ? [] : [mappedDiagnostic],
+        };
       } finally {
         api.close();
       }
@@ -185,6 +270,7 @@ function fixture(
     compilerOptions,
     sourceOrder,
     nativeDiagnostic,
+    nativeDiagnostics,
     mappedDiagnostic,
     checkCleanup() {
       assert.deepEqual(
@@ -328,6 +414,387 @@ test('over-budget graphs are capture-only, never truncated replay inputs', async
   assert.equal(result.replay.status, 'capture-only');
   assert.match(result.captures[0].error.message, /exceeds 4096 files/u);
   assert.equal(result.captures[0].graph, undefined);
+});
+
+for (const [name, options] of [
+  ['missing pair', {}],
+  ['graph mismatch', { targetPair: true, mismatch: true }],
+  ['capture error', { targetPair: true, throwCapture: true }],
+  ['replay error', { targetPair: true, throwReplay: true }],
+  ['references', { targetPair: true, references: true }],
+  ['wrapper error', { targetPair: true, throwWrapper: true }],
+  [
+    'replay lost one target',
+    {
+      targetPair: true,
+      replayDiagnostics: diagnostics => diagnostics.slice(0, 1),
+    },
+  ],
+  [
+    'replay changed target text',
+    {
+      targetPair: true,
+      replayDiagnostics: diagnostics =>
+        diagnostics.map(diagnostic => ({ ...diagnostic, text: 'different' })),
+    },
+  ],
+])
+  test(`root reduction skips ${name} without opening trial APIs`, async t => {
+    const f = fixture(t, options);
+    const result = await probeOctaneProjection(f.root, f.load);
+    f.checkCleanup();
+    assert.equal(result.rootReduction.status, 'skipped');
+    assert.deepEqual(result.rootReduction.attempts, []);
+    assert(f.instances.length <= 2);
+  });
+
+for (const [name, change] of [
+  ['one captured target', diagnostics => diagnostics.pop()],
+  [
+    'duplicate captured target',
+    diagnostics => {
+      diagnostics[1] = { ...diagnostics[0] };
+    },
+  ],
+  [
+    'unrelated TS2536 file',
+    diagnostics => {
+      diagnostics[1].fileName = '/other/link.d.ts';
+    },
+  ],
+  [
+    'non-TS2536 captured error',
+    diagnostics => {
+      diagnostics[1].code = 1000;
+    },
+  ],
+])
+  test(`root reduction skips ${name} even when replay matches`, async t => {
+    const f = fixture(t, { targetPair: true });
+    change(f.nativeDiagnostics);
+    const result = await probeOctaneProjection(f.root, f.load);
+    f.checkCleanup();
+    assert.equal(result.replay.status, 'graph-matched');
+    assert.equal(result.rootReduction.status, 'skipped');
+    assert.deepEqual(result.rootReduction.attempts, []);
+    assert.equal(f.instances.length, 2);
+  });
+
+test('reduces a failing native replay even when the wrapper retry passed', async t => {
+  const f = fixture(t, {
+    targetPair: true,
+    wrapperPasses: true,
+    rootCount: 5,
+  });
+  const result = await probeOctaneProjection(f.root, f.load);
+  f.checkCleanup();
+  assert.deepEqual(result.wrapper.diagnostics, []);
+  assert.deepEqual(
+    result.captures[0].rawDiagnosticsByPhase.getSemanticDiagnostics,
+    [],
+  );
+  assert.equal(result.replay.status, 'graph-matched');
+  assert.deepEqual(
+    result.replay.rawDiagnosticsByPhase.getSemanticDiagnostics,
+    f.nativeDiagnostics,
+  );
+  assert.equal(result.rootReduction.status, 'reduced-witness');
+  assert.equal(result.rootReduction.witness.rootCount, 1);
+});
+
+test('retains a smaller witness only after a fresh exact-pair confirmation', async t => {
+  const f = fixture(t, { targetPair: true, rootCount: 5 });
+  const originalRoots = [...f.roots];
+  const originalOptions = structuredClone(f.compilerOptions);
+  const originalOrder = [...f.sourceOrder];
+  const result = await probeOctaneProjection(f.root, f.load);
+  f.checkCleanup();
+  const reduction = result.rootReduction;
+  assert.equal(reduction.status, 'reduced-witness');
+  assert.deepEqual(
+    reduction.targets,
+    f.nativeDiagnostics.map(({ fileName, code, text }) => ({
+      fileName,
+      code,
+      text,
+    })),
+  );
+  assert.equal(reduction.witness.rootCount, 1);
+  const confirmation =
+    reduction.attempts[reduction.witness.confirmationAttempt - 1];
+  const removal = reduction.attempts[reduction.witness.confirmationAttempt - 2];
+  assert.equal(confirmation.kind, 'confirmation');
+  assert.equal(removal.kind, 'removal');
+  assert.equal(confirmation.status, 'reproducing');
+  assert.deepEqual(confirmation.roots, removal.roots);
+  assert.deepEqual(reduction.witness.roots, confirmation.roots);
+  assert.equal(confirmation.graphIdentity, removal.graphIdentity);
+  assert.equal(f.instances.length, reduction.attempts.length + 2);
+  for (const attempt of reduction.attempts) {
+    assert.deepEqual(
+      attempt.roots,
+      originalRoots.filter(file => attempt.roots.includes(file)),
+      'Candidate roots retain their original order',
+    );
+    assert(attempt.rootCount < originalRoots.length);
+    assert.equal(attempt.phase, 'complete');
+    assert.equal(attempt.sourceCount, attempt.sourceOrder.length);
+    assert.match(attempt.sourceOrderHash, /^[a-f0-9]{64}$/u);
+    assert.match(attempt.rootHash, /^[a-f0-9]{64}$/u);
+  }
+  for (const api of f.instances.slice(2)) {
+    assert.equal(api.options.tsserverPath, '/effect-enabled-tsrs');
+    assert.equal(api.options.fs.writeFile, f.load.serverFS.noop);
+    assert.equal(api.options.fs.removeFile, f.load.serverFS.noop);
+    assert.equal(api.options.fs.readFile('/not-captured.ts'), undefined);
+    assert.equal(api.options.fs.readFile('/.env/package.json'), undefined);
+    assert.deepEqual(
+      api.snapshotOptions.createPrograms[0].compilerOptions,
+      originalOptions,
+    );
+    assert.deepEqual(
+      api.snapshotOptions.fileSystem.files,
+      f.instances[1].snapshotOptions.fileSystem.files,
+    );
+    assert.notEqual(
+      api.snapshotOptions.createPrograms[0].compilerOptions,
+      result.captures[0].graph.compilerOptions,
+    );
+  }
+  assert.deepEqual(f.roots, originalRoots);
+  assert.deepEqual(f.compilerOptions, originalOptions);
+  assert.deepEqual(f.sourceOrder, originalOrder);
+  assert.deepEqual(result.captures[0].graph.roots, originalRoots);
+  assert.deepEqual(result.captures[0].graph.sourceOrder, originalOrder);
+  assert.deepEqual(result.captures[0].graph.compilerOptions, originalOptions);
+  for (const record of [result.captures[0], result.replay])
+    assert.deepEqual(
+      record.rawDiagnosticsByPhase.getSemanticDiagnostics,
+      f.nativeDiagnostics,
+    );
+  assert.equal(result.replay.status, 'graph-matched');
+  assert.match(reduction.proofGap, /not a fix, global minimum/u);
+});
+
+for (const [name, change] of [
+  ['empty diagnostics', () => []],
+  ['one target only', diagnostics => diagnostics.slice(0, 1)],
+  ['duplicate first target', diagnostics => [diagnostics[0], diagnostics[0]]],
+  [
+    'different text',
+    diagnostics => diagnostics.map(d => ({ ...d, text: 'other' })),
+  ],
+  [
+    'different file',
+    diagnostics =>
+      diagnostics.map(d => ({ ...d, fileName: '/other/link.d.ts' })),
+  ],
+  [
+    'different code',
+    diagnostics => diagnostics.map(d => ({ ...d, code: 1000 })),
+  ],
+])
+  test(`does not accept ${name} as a reduced witness`, async t => {
+    const f = fixture(t, {
+      targetPair: true,
+      trialDiagnostics: ({ diagnostics }) => change(diagnostics),
+    });
+    const result = await probeOctaneProjection(f.root, f.load);
+    f.checkCleanup();
+    const reduction = result.rootReduction;
+    assert.equal(reduction.status, 'not-reduced');
+    assert.equal(reduction.witness, undefined);
+    assert.equal(reduction.attempts.length, 2);
+    assert(
+      reduction.attempts.every(attempt => attempt.status === 'nonreproducing'),
+    );
+    assert(reduction.attempts.every(attempt => attempt.kind === 'removal'));
+  });
+
+test('stops after twelve fresh trials, including confirmations', async t => {
+  const f = fixture(t, {
+    targetPair: true,
+    rootCount: 17,
+    trialDiagnostics: ({ trial, diagnostics }) =>
+      trial <= 2 || trial >= 11 ? diagnostics : [],
+  });
+  const result = await probeOctaneProjection(f.root, f.load);
+  f.checkCleanup();
+  assert.equal(result.rootReduction.maxTrials, 12);
+  assert.equal(result.rootReduction.attempts.length, 12);
+  assert.equal(result.rootReduction.stopReason, 'trial-budget');
+  assert.equal(f.instances.length, 14);
+  assert.equal(result.rootReduction.witness.confirmationAttempt, 12);
+});
+
+test('nonreproducing removals exhaust the budget without a witness or green retry', async t => {
+  const f = fixture(t, {
+    targetPair: true,
+    rootCount: 17,
+    trialDiagnostics: () => [],
+  });
+  const result = await probeOctaneProjection(f.root, f.load);
+  f.checkCleanup();
+  assert.equal(result.rootReduction.status, 'not-reduced');
+  assert.equal(result.rootReduction.stopReason, 'trial-budget');
+  assert.equal(result.rootReduction.witness, undefined);
+  assert.equal(result.rootReduction.attempts.length, 11);
+  assert.equal(f.instances.length, 13);
+});
+
+test('an intermittent candidate is inconclusive, never retried until green', async t => {
+  const f = fixture(t, {
+    targetPair: true,
+    trialDiagnostics: ({ trial, diagnostics }) =>
+      trial === 1 ? diagnostics : [],
+  });
+  const result = await probeOctaneProjection(f.root, f.load);
+  f.checkCleanup();
+  const reduction = result.rootReduction;
+  assert.equal(reduction.status, 'inconclusive');
+  assert.equal(reduction.stopReason, 'unconfirmed-candidate');
+  assert.equal(reduction.witness, undefined);
+  assert.deepEqual(
+    reduction.attempts.map(({ kind, status }) => [kind, status]),
+    [
+      ['removal', 'reproducing'],
+      ['confirmation', 'nonreproducing'],
+    ],
+  );
+  assert.equal(result.replay.status, 'graph-matched');
+  assert.deepEqual(
+    result.replay.rawDiagnosticsByPhase.getSemanticDiagnostics,
+    f.nativeDiagnostics,
+  );
+});
+
+test('a previously nonreproducing subset is not retried after other reductions', async t => {
+  const f = fixture(t, {
+    targetPair: true,
+    rootCount: 5,
+    trialDiagnostics: ({ trial, roots, diagnostics }) =>
+      trial > 2 && roots.length >= 3 ? diagnostics : [],
+  });
+  const result = await probeOctaneProjection(f.root, f.load);
+  f.checkCleanup();
+  const removals = result.rootReduction.attempts.filter(
+    attempt => attempt.kind === 'removal',
+  );
+  assert.equal(
+    new Set(removals.map(attempt => attempt.rootHash)).size,
+    removals.length,
+  );
+  assert.equal(result.rootReduction.status, 'reduced-witness');
+  assert.equal(result.rootReduction.witness.rootCount, 3);
+});
+
+for (const phase of ['create-snapshot', ...phases])
+  test(`trial error in ${phase} retains evidence and closes the API`, async t => {
+    const f = fixture(t, { targetPair: true, throwTrialPhase: phase });
+    const result = await probeOctaneProjection(f.root, f.load);
+    f.checkCleanup();
+    const reduction = result.rootReduction;
+    assert.equal(reduction.status, 'inconclusive');
+    assert.equal(reduction.attempts.length, 1);
+    assert.equal(reduction.attempts[0].phase, phase);
+    assert.match(reduction.attempts[0].error.message, /trial .*broke/u);
+    assert.equal(result.replay.status, 'graph-matched');
+  });
+
+test('a close error is inconclusive and retains the trial diagnostics', async t => {
+  const f = fixture(t, { targetPair: true, throwTrialClose: true });
+  const result = await probeOctaneProjection(f.root, f.load);
+  f.checkCleanup();
+  assert.equal(result.rootReduction.status, 'inconclusive');
+  const [attempt] = result.rootReduction.attempts;
+  assert.equal(attempt.status, 'inconclusive');
+  assert.match(attempt.closeError.message, /trial close broke/u);
+  assert.deepEqual(
+    attempt.rawDiagnosticsByPhase.getSemanticDiagnostics,
+    f.nativeDiagnostics,
+  );
+});
+
+test('a trial outside the frozen options closure is inconclusive', async t => {
+  const f = fixture(t, { targetPair: true, escapeTrial: true });
+  const result = await probeOctaneProjection(f.root, f.load);
+  f.checkCleanup();
+  assert.equal(result.rootReduction.status, 'inconclusive');
+  const [attempt] = result.rootReduction.attempts;
+  assert.equal(attempt.phase, 'observe-graph');
+  assert.match(attempt.error.message, /frozen inputs\/options closure/u);
+  assert.equal(result.rootReduction.witness, undefined);
+  assert.equal(result.captures[0].graph.compilerOptions.noCheck, false);
+});
+
+test('changed source contents cannot become a reduced witness', async t => {
+  const f = fixture(t, {
+    targetPair: true,
+    trialSourceText: () => '// not the captured bytes\n',
+  });
+  const result = await probeOctaneProjection(f.root, f.load);
+  f.checkCleanup();
+  assert.equal(result.rootReduction.status, 'inconclusive');
+  assert.match(
+    result.rootReduction.attempts[0].error.message,
+    /frozen inputs\/options closure/u,
+  );
+  assert.equal(result.rootReduction.witness, undefined);
+});
+
+test('native trial mutation cannot change the original graph or options', async t => {
+  const f = fixture(t, {
+    targetPair: true,
+    rootCount: 5,
+    mutateTrialInputs: true,
+  });
+  const originalRoots = [...f.roots];
+  const originalOptions = structuredClone(f.compilerOptions);
+  const result = await probeOctaneProjection(f.root, f.load);
+  f.checkCleanup();
+  assert.equal(result.rootReduction.status, 'inconclusive');
+  assert.deepEqual(result.captures[0].graph.roots, originalRoots);
+  assert.deepEqual(result.captures[0].graph.compilerOptions, originalOptions);
+  assert.deepEqual(result.replay.roots, originalRoots);
+  assert.deepEqual(result.replay.compilerOptions, originalOptions);
+  assert.deepEqual(f.roots, originalRoots);
+  assert.deepEqual(f.compilerOptions, originalOptions);
+});
+
+test('sensitive trial source names are rejected before source observation', async t => {
+  const f = fixture(t, {
+    targetPair: true,
+    trialSourceOrder: () => ['/.env.private.ts'],
+  });
+  const result = await probeOctaneProjection(f.root, f.load);
+  f.checkCleanup();
+  assert.equal(result.rootReduction.status, 'inconclusive');
+  assert.match(
+    result.rootReduction.attempts[0].error.message,
+    /Excluded source input/u,
+  );
+  assert.equal(result.rootReduction.witness, undefined);
+});
+
+test('fresh confirmation must reproduce the same reduced source graph', async t => {
+  const f = fixture(t, {
+    targetPair: true,
+    rootCount: 5,
+    trialSourceOrder: ({ trial, order }) =>
+      trial === 2 ? [...order].reverse() : order,
+  });
+  const result = await probeOctaneProjection(f.root, f.load);
+  f.checkCleanup();
+  const reduction = result.rootReduction;
+  assert.equal(reduction.status, 'inconclusive');
+  assert.equal(reduction.stopReason, 'unconfirmed-candidate');
+  assert.equal(reduction.attempts.length, 2);
+  assert(reduction.attempts.every(attempt => attempt.status === 'reproducing'));
+  assert.notEqual(
+    reduction.attempts[0].sourceOrderHash,
+    reduction.attempts[1].sourceOrderHash,
+  );
+  assert.equal(reduction.witness, undefined);
 });
 
 test('default loader rejects local use before resolving or importing a compiler', async () => {

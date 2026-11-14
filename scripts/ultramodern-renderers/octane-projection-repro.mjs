@@ -14,6 +14,7 @@ const phases = [
 ];
 const maxFiles = 4096;
 const maxBytes = 32 * 1024 * 1024;
+const maxRootTrials = 12;
 const hash = value =>
   createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const copy = value => JSON.parse(JSON.stringify(value));
@@ -21,6 +22,33 @@ const errorInfo = error => ({
   name: error?.name ?? 'Error',
   message: error?.message ?? String(error),
 });
+
+// Bind the search to the native baseline pair, not just any TS2536 result.
+function routerTargets(diagnostics = []) {
+  return diagnostics
+    .filter(
+      diagnostic =>
+        diagnostic.code === 2536 &&
+        /\/@tanstack\/router-core\/dist\/esm\/link\.d\.ts$/u.test(
+          diagnostic.fileName?.replaceAll('\\', '/') ?? '',
+        ) &&
+        typeof diagnostic.text === 'string' &&
+        diagnostic.text.length > 0,
+    )
+    .map(({ fileName, code, text }) => ({ fileName, code, text }));
+}
+
+function preservesTargets(diagnostics, targets) {
+  const remaining = diagnostics.map(({ fileName, code, text }) =>
+    hash({ fileName, code, text }),
+  );
+  return targets.every(target => {
+    const index = remaining.indexOf(hash(target));
+    if (index < 0) return false;
+    remaining.splice(index, 1);
+    return true;
+  });
+}
 
 // Do not even ask a compiler to read credential-like inputs.
 function allowed(file, config = false) {
@@ -104,6 +132,13 @@ export async function probeOctaneProjection(appRoot, load) {
     wrapper: { status: 'not-run' },
     captures: [],
     replay: { status: 'not-run' },
+    rootReduction: {
+      status: 'skipped',
+      maxTrials: maxRootTrials,
+      attempts: [],
+      reason:
+        'Requires a complete graph-matched replay reporting both RouterCore TS2536 diagnostics.',
+    },
     proofGaps: [
       'This is a diagnostic retry, not the original failed compiler process.',
       'Source contents are frozen; host package metadata, symlinks and resolution history are not. Graph identity is not full compiler-state equivalence.',
@@ -224,7 +259,13 @@ export async function probeOctaneProjection(appRoot, load) {
   }
   const capture = result.captures[0];
   const graph = capture?.graph;
-  if (!graph || result.captureError || graph.projectReferences.length) {
+  if (
+    !graph ||
+    capture.status !== 'captured' ||
+    capture.error ||
+    result.captureError ||
+    graph.projectReferences.length
+  ) {
     result.replay = {
       status: 'capture-only',
       proofGap:
@@ -234,9 +275,8 @@ export async function probeOctaneProjection(appRoot, load) {
   }
   // No source/config fallback, no emit/removal. Only package metadata may read
   // from the host. A mismatch below remains a mismatch, never a passing repro.
-  let api;
-  try {
-    api = new API({
+  function newReplayAPI() {
+    return new API({
       cwd: appRoot,
       tsserverPath: inputs.compiler.path,
       fs: {
@@ -253,21 +293,30 @@ export async function probeOctaneProjection(appRoot, load) {
         removeFile: serverFS.noop,
       },
     });
-    const snapshot = api.createSnapshot({
+  }
+  function replaySnapshot(api, roots) {
+    return api.createSnapshot({
       fileSystem: createFileSystemLayer([
         [graph.config.path, graph.config.content],
         ...graph.files.map(file => [file.path, file.content]),
       ]),
       createPrograms: [
         {
-          rootFiles: graph.roots,
-          compilerOptions: graph.compilerOptions,
+          rootFiles: [...roots],
+          compilerOptions: copy(graph.compilerOptions),
           options: {
-            configFileParsingDiagnostics: graph.configFileParsingDiagnostics,
+            configFileParsingDiagnostics: copy(
+              graph.configFileParsingDiagnostics,
+            ),
           },
         },
       ],
     });
+  }
+  let api;
+  try {
+    api = newReplayAPI();
+    const snapshot = replaySnapshot(api, graph.roots);
     const program = snapshot.operation.createdPrograms[0];
     if (!program) throw new Error('Native replay returned no program');
     // Synthetic programs expose their project through the snapshot too.
@@ -300,5 +349,149 @@ export async function probeOctaneProjection(appRoot, load) {
       result.replay.closeError = errorInfo(error);
     }
   }
+  const capturedTargets = routerTargets(
+    capture.rawDiagnosticsByPhase.getSemanticDiagnostics,
+  );
+  // The hosted wrapper retry passed while the matching native replay failed.
+  // Its absence of errors must not prevent reduction of that native witness.
+  const targets = routerTargets(
+    result.replay.rawDiagnosticsByPhase?.getSemanticDiagnostics,
+  );
+  if (
+    result.replay.status !== 'graph-matched' ||
+    result.replay.closeError ||
+    result.closeError ||
+    result.wrapper.status !== 'checked' ||
+    targets.length !== 2 ||
+    new Set(targets.map(hash)).size !== 2 ||
+    (capturedTargets.length > 0 && !preservesTargets(targets, capturedTargets))
+  )
+    return result;
+
+  const reduction = result.rootReduction;
+  delete reduction.reason;
+  reduction.status = 'not-reduced';
+  reduction.targets = targets;
+  reduction.baselineGraphIdentity = graph.identity;
+  reduction.proofGap =
+    'Bounded root-removal observations only, not a fix, global minimum, deterministic root cause or compiler-state equivalence.';
+  const frozenFiles = new Map(
+    graph.files.map(file => [file.path, file.sha256]),
+  );
+  function trial(roots, kind) {
+    const attempt = {
+      kind,
+      roots: [...roots],
+      rootCount: roots.length,
+      rootHash: hash(roots),
+      status: 'inconclusive',
+      phase: 'create-api',
+      rawDiagnosticsByPhase: {},
+    };
+    reduction.attempts.push(attempt);
+    let native;
+    try {
+      native = newReplayAPI();
+      attempt.phase = 'create-snapshot';
+      const snapshot = replaySnapshot(native, roots);
+      const program = snapshot.operation.createdPrograms[0];
+      if (!program) throw new Error('Native root trial returned no program');
+      const project = snapshot.getProject(program.id);
+      if (!project) throw new Error('Native root trial returned no project');
+      for (const phase of phases) {
+        attempt.phase = phase;
+        attempt.rawDiagnosticsByPhase[phase] = copy(program[phase]());
+      }
+      attempt.phase = 'observe-graph';
+      const actual = graphOf(project, graph.config);
+      attempt.sourceOrder = actual.sourceOrder;
+      attempt.sourceCount = actual.sourceOrder.length;
+      attempt.sourceOrderHash = hash(actual.sourceOrder);
+      attempt.graphIdentity = actual.identity;
+      if (
+        hash(actual.roots) !== hash(roots) ||
+        hash(actual.compilerOptions) !== hash(graph.compilerOptions) ||
+        actual.projectReferences.length ||
+        hash(actual.configFileParsingDiagnostics) !==
+          hash(graph.configFileParsingDiagnostics) ||
+        actual.files.some(file => frozenFiles.get(file.path) !== file.sha256)
+      )
+        throw new Error('Root trial escaped the frozen inputs/options closure');
+      attempt.status = preservesTargets(
+        attempt.rawDiagnosticsByPhase.getSemanticDiagnostics,
+        targets,
+      )
+        ? 'reproducing'
+        : 'nonreproducing';
+      attempt.phase = 'complete';
+    } catch (error) {
+      attempt.error = errorInfo(error);
+    } finally {
+      try {
+        native?.close();
+      } catch (error) {
+        attempt.closeError = errorInfo(error);
+        attempt.status = 'inconclusive';
+      }
+    }
+    return attempt;
+  }
+
+  let roots = [...graph.roots];
+  const attemptedRoots = new Set();
+  // Coarse-to-fine contiguous removals; never reorder roots or tune options.
+  for (
+    let size = Math.ceil(roots.length / 2);
+    size >= 1;
+    size = Math.floor(size / 2)
+  ) {
+    for (let start = 0; start < roots.length; ) {
+      if (roots.length <= 1) break;
+      // Reserve a fresh confirmation for any candidate worth retaining.
+      if (reduction.attempts.length + 2 > maxRootTrials) {
+        reduction.stopReason = 'trial-budget';
+        return result;
+      }
+      const candidate = roots.filter(
+        (_, index) => index < start || index >= start + size,
+      );
+      const candidateHash = hash(candidate);
+      if (!candidate.length || attemptedRoots.has(candidateHash)) {
+        start += size;
+        continue;
+      }
+      attemptedRoots.add(candidateHash);
+      const observed = trial(candidate, 'removal');
+      if (observed.status === 'inconclusive') {
+        reduction.status = 'inconclusive';
+        reduction.stopReason = 'trial-error';
+        return result;
+      }
+      if (observed.status === 'nonreproducing') {
+        start += size;
+        continue;
+      }
+      const confirmation = trial(candidate, 'confirmation');
+      if (
+        confirmation.status !== 'reproducing' ||
+        confirmation.graphIdentity !== observed.graphIdentity
+      ) {
+        reduction.status = 'inconclusive';
+        reduction.stopReason = 'unconfirmed-candidate';
+        return result;
+      }
+      roots = candidate;
+      reduction.status = 'reduced-witness';
+      reduction.witness = {
+        roots: [...roots],
+        rootCount: roots.length,
+        graphIdentity: confirmation.graphIdentity,
+        confirmationAttempt: reduction.attempts.length,
+      };
+      start = 0;
+    }
+  }
+  reduction.stopReason =
+    roots.length === 1 ? 'single-root' : 'scheduled-removals-exhausted';
   return result;
 }
