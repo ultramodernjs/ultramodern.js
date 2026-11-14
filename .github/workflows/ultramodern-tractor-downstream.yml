@@ -1,6 +1,31 @@
 name: UltraModern Tractor Downstream Acceptance
 
 on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Retain an accepted published-cohort Tractor source commit
+        required: true
+        type: choice
+        options: [published]
+        default: published
+      release_bundle_run_id:
+        description: Successful live publication run containing the exact bundle
+        required: true
+        type: string
+      release_bundle_run_attempt:
+        description: Attempt that produced the bundle in that publication run
+        required: true
+        type: string
+        default: '1'
+      expected_source_revision:
+        description: Exact framework source SHA recorded by the published bundle
+        required: true
+        type: string
+      expected_version:
+        description: Exact published UltraModern cohort version
+        required: true
+        type: string
   workflow_call:
     inputs:
       mode:
@@ -47,7 +72,15 @@ permissions:
 jobs:
   tractor-downstream:
     name: Exact cohort passes Tractor Node and workerd acceptance
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    # Reusable calls inherit the caller's event, including workflow_dispatch.
+    # Only reusable calls supply the required same-run release_bundle_artifact.
+    if: >-
+      github.event_name != 'workflow_dispatch' || inputs.release_bundle_artifact != '' ||
+      (github.repository == 'ultramodernjs/ultramodern.js' &&
+       github.actor == 'BleedingDev' &&
+       github.triggering_actor == 'BleedingDev' &&
+       github.ref == 'refs/heads/main-ultramodern')
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.release_bundle_artifact == '' && 'ubuntu-24.04' || github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
     # The rehearsal additionally starts and seeds a registry from the bundle
     # before the same downstream work begins.
     timeout-minutes: ${{ inputs.mode == 'source' && 75 || 45 }}
@@ -77,6 +110,32 @@ jobs:
             echo "::error::a source-mode rehearsal never waits on the published registry cohort" >&2
             exit 1
           fi
+
+      - name: Validate retained adoption inputs and publication run
+        if: github.event_name == 'workflow_dispatch' && inputs.release_bundle_artifact == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCER_RUN_ID: ${{ inputs.release_bundle_run_id }}
+          PRODUCER_RUN_ATTEMPT: ${{ inputs.release_bundle_run_attempt }}
+          EXPECTED_SOURCE: ${{ inputs.expected_source_revision }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: |
+          set -euo pipefail
+          [[ "$PRODUCER_RUN_ID" =~ ^[1-9][0-9]*$ ]] || exit 1
+          [[ "$PRODUCER_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]] || exit 1
+          [[ "$EXPECTED_SOURCE" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$EXPECTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-ultramodern\.[1-9][0-9]*$ ]] || exit 1
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PRODUCER_RUN_ID" |
+            jq -e --arg sha "$EXPECTED_SOURCE" --arg attempt "$PRODUCER_RUN_ATTEMPT" '
+              .conclusion == "success" and
+              .run_attempt >= ($attempt | tonumber) and
+              .head_sha == $sha and
+              .head_branch == "main-ultramodern" and
+              .event == "workflow_dispatch" and
+              .path == ".github/workflows/publish-bleedingdev.yml"
+            '
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PRODUCER_RUN_ID/jobs?filter=latest&per_page=100" |
+            jq -e 'any(.jobs[]; .name == "Publish accepted @bleedingdev tarballs" and .conclusion == "success")'
 
       - name: Checkout acceptance runner
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -114,10 +173,21 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           github-token: ${{ github.token }}
-          name: ${{ inputs.release_bundle_artifact }}
+          name: ${{ inputs.release_bundle_artifact || format('bleedingdev-release-bundle-run-{0}-attempt-{1}', inputs.release_bundle_run_id, inputs.release_bundle_run_attempt) }}
           path: modernjs/.modern/bleedingdev-publish
           repository: ${{ github.repository }}
-          run-id: ${{ github.run_id }}
+          run-id: ${{ github.event_name == 'workflow_dispatch' && inputs.release_bundle_artifact == '' && inputs.release_bundle_run_id || github.run_id }}
+
+      - name: Verify retained adoption release identity
+        if: github.event_name == 'workflow_dispatch' && inputs.release_bundle_artifact == ''
+        working-directory: modernjs
+        env:
+          EXPECTED_SOURCE: ${{ inputs.expected_source_revision }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: |
+          jq -e --arg sha "$EXPECTED_SOURCE" --arg version "$EXPECTED_VERSION" '
+            .source.commit == $sha and .release.version == $version
+          ' .modern/bleedingdev-publish/manifest.json
 
       # The exact same pinned interpreter prepare-release and every bundle job
       # use. It matters here because a rehearsal seeds its ephemeral registry
@@ -215,3 +285,16 @@ jobs:
           path: modernjs/.modern/production-readiness/tractor-downstream-acceptance.json
           if-no-files-found: error
           include-hidden-files: true
+
+      - name: Retain the accepted Tractor source commit
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.release_bundle_artifact == ''
+        working-directory: modernjs
+        run: '"$ULTRAMODERN_ACCEPTANCE_NODE" scripts/ultramodern-publish/export-tractor-acceptance-source.mjs'
+
+      - name: Upload the accepted Tractor source
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.release_bundle_artifact == ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tractor-retained-source-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: modernjs/.modern/production-readiness/tractor-source
+          if-no-files-found: error
