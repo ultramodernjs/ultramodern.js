@@ -2993,7 +2993,9 @@ five previously invalid advisory rows remain non-authorizing historical prose.
     {"path":"packages/solutions/app-tools/src/plugins/serverBuild.ts","owner":"bleedingdev","reason":"2026-11-14: Forward the existing tools configuration compiler provider into custom-server compilation while retaining exclusions and vanilla defaults.","dispositions":["inline-patch"]},
     {"path":"packages/solutions/app-tools/src/types/config/tools.ts","owner":"bleedingdev","reason":"2026-11-14: Publish the neutral optional serverCompiler type; concrete Effect discovery, native config adaptation and compiler identity remain fork-owned.","dispositions":["inline-patch"]},
     {"path":"packages/solutions/app-tools/tests/serverBuild.test.ts","owner":"bleedingdev","reason":"2026-11-14: Verify custom-server build forwards the exact configured compiler alongside existing options.","dispositions":["inline-patch"]},
-    {"path":"packages/toolkit/mcp-apps/package.json","owner":"bleedingdev","reason":"2026-11-14: Route the existing no-emit check through the verified repository Effect tsrs launcher without changing dependencies, exports or MCP runtime behavior.","dispositions":["inline-patch"]}
+    {"path":"packages/toolkit/mcp-apps/package.json","owner":"bleedingdev","reason":"2026-11-14: Route the existing no-emit check through the verified repository Effect tsrs launcher without changing dependencies, exports or MCP runtime behavior.","dispositions":["inline-patch"]},
+    {"path":"packages/server/utils/package.json","owner":"bleedingdev","reason":"2026-11-14: Export the neutral compiler-provider type contract directly so app-tools does not load server implementation and React declarations through the root barrel.","dispositions":["inline-patch"]},
+    {"path":"packages/server/utils/src/compiler.ts","owner":"bleedingdev","reason":"2026-11-14: Extract the existing neutral server compiler-provider interfaces into an import-free public type entry; preserve the original common re-exports and keep Effect-specific selection in fork-owned packages.","dispositions":["inline-patch"]}
   ]
 }
 ```
@@ -4897,6 +4899,8 @@ five previously invalid advisory rows remain non-authorizing historical prose.
 | `packages/solutions/app-tools/src/types/config/tools.ts` | bleedingdev | 2026-11-14: Publish the neutral optional serverCompiler type; concrete Effect discovery, native config adaptation and compiler identity remain fork-owned. | `inline-patch` |
 | `packages/solutions/app-tools/tests/serverBuild.test.ts` | bleedingdev | 2026-11-14: Verify custom-server build forwards the exact configured compiler alongside existing options. | `inline-patch` |
 | `packages/toolkit/mcp-apps/package.json` | bleedingdev | 2026-11-14: Route the existing no-emit check through the verified repository Effect tsrs launcher without changing dependencies, exports or MCP runtime behavior. | `inline-patch` |
+| `packages/server/utils/package.json` | bleedingdev | 2026-11-14: Export the neutral compiler-provider type contract directly so app-tools does not load server implementation and React declarations through the root barrel. | `inline-patch` |
+| `packages/server/utils/src/compiler.ts` | bleedingdev | 2026-11-14: Extract the existing neutral server compiler-provider interfaces into an import-free public type entry; preserve the original common re-exports and keep Effect-specific selection in fork-owned packages. | `inline-patch` |
 <!-- /fork-evidence:table -->
 
 ### 2026-10-11 published stable Modern.js v3.9.3 integration
