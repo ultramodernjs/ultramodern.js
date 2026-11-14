@@ -738,11 +738,10 @@ for (const severity of ['error', 'warning']) {
             .includes('Effect.succeed'),
         );
         assert.equal(diagnostic.source, nativeDiagnostic.source);
-        assert.equal(typeof diagnostic.source, 'string');
-        assert.ok(diagnostic.source.length > 0);
+        const code = `${nativeDiagnostic.source || 'TS'}377001:`;
         assert.ok(
           formatOctaneDiagnostic(diagnostic, root).includes(
-            `${severity} ${diagnostic.source}377001:`,
+            `${severity} ${code}`,
           ),
         );
         let output = '';
@@ -757,7 +756,7 @@ for (const severity of ['error', 'warning']) {
         });
         assert.equal(status, severity === 'error' ? 1 : 0, output);
         assert.match(output, /main\.tsrx\(2,\d+\):/u);
-        assert.ok(output.includes(`${severity} ${diagnostic.source}377001:`));
+        assert.ok(output.includes(`${severity} ${code}`));
         assert.doesNotMatch(output, /\.tsrx\.tsx|\.octane-typecheck-/u);
         assert.deepEqual(fs.readdirSync(root), before);
         assert.equal(

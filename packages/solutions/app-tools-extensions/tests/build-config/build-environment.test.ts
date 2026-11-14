@@ -105,16 +105,13 @@ test('the strict API resolver rejects an Effect-Go-only installation', async () 
 test('the strict API resolver rejects an explicitly configured Effect-Go binary', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'app-tools-strict-tsrs-go-'));
   try {
-    const compiler = join(directory, compilerBasename);
-    copyFileSync(
-      join(
-        dirname(fixtureRequire.resolve(`${effectPlatformName}/package.json`)),
-        'lib',
-        compilerBasename,
-      ),
-      compiler,
+    // The native compiler needs its adjacent standard libraries even for
+    // --version. Use the installed artifact rather than a relocated binary.
+    const compiler = join(
+      dirname(fixtureRequire.resolve(`${effectPlatformName}/package.json`)),
+      'lib',
+      compilerBasename,
     );
-    chmodSync(compiler, 0o700);
     await withEnvironment('EFFECT_TSGO_BIN', compiler, () => {
       assert.throws(
         () =>
