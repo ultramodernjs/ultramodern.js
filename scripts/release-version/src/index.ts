@@ -1,5 +1,5 @@
 import assembleReleasePlan from '@changesets/assemble-release-plan';
-import { read } from '@changesets/config';
+import { readConfig } from '@changesets/config';
 import readChangesets from '@changesets/read';
 import { getPackages } from '@manypkg/get-packages';
 import path from 'path';
@@ -9,7 +9,11 @@ async function run() {
   const repoDir = path.join(cwd, '../../');
   const changesets = await readChangesets(repoDir, process.env.BASE_BRANCH);
   const packages = await getPackages(repoDir);
-  const config = await read(repoDir, packages);
+  const result = await readConfig(repoDir, packages);
+  if (result.errors) {
+    throw new Error(result.errors.join('\n'));
+  }
+  const config = result.config;
   const releasePlan = assembleReleasePlan(
     changesets,
     packages,
