@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 const helperUrl = new URL('../tsrs-dts/rslib-options.mjs', import.meta.url);
+const defaultCompilerOptions = {
+  tsgo: true,
+  typescriptPath: fileURLToPath(
+    new URL('../tsrs-dts/version.cjs', import.meta.url),
+  ),
+};
 const configUrls = [
   '../../packages/cli/adapter-rstest/rslib.config.mts',
   '../../packages/runtime/plugin-image/rslib.config.mts',
@@ -28,8 +35,8 @@ function importInChild(source, compiler) {
 }
 
 for (const [name, compiler, expected] of [
-  ['unset', undefined, {}],
-  ['empty', '', {}],
+  ['unset', undefined, defaultCompilerOptions],
+  ['empty', '', defaultCompilerOptions],
   [
     'configured',
     compilerModule,
@@ -58,7 +65,10 @@ test('helper reads the supplied environment without mutation or shared results',
     tsgo: true,
     typescriptPath: compilerModule,
   });
-  assert.deepEqual(getDtsCompilerOptions(Object.freeze({})), {});
+  assert.deepEqual(
+    getDtsCompilerOptions(Object.freeze({})),
+    defaultCompilerOptions,
+  );
 });
 
 for (const [name, compiler] of [
@@ -76,7 +86,9 @@ for (const [name, compiler] of [
          console.log(JSON.stringify(configs));`,
       compiler,
     );
-    const options = compiler ? { tsgo: true, typescriptPath: compiler } : {};
+    const options = compiler
+      ? { tsgo: true, typescriptPath: compiler }
+      : defaultCompilerOptions;
     const [adapter, image, solid] = configs;
     assert.deepEqual(adapter.lib, [
       {

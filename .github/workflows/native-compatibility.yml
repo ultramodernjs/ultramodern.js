@@ -73,6 +73,7 @@ jobs:
           controls_work="$(mktemp -d "$RUNNER_TEMP/renderer-controls-XXXXXX")"
           trap 'rm -rf -- "$controls_work"' EXIT
           OWNED_TEMP_DIR="$controls_work" node --test \
+            scripts/__tests__/rslib-tsrs-options.test.mjs \
             scripts/native-compatibility/packed-workflows.test.mjs \
             scripts/ultramodern-renderers/*.test.mjs
 
