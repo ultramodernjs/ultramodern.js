@@ -38,6 +38,10 @@ function fixture(
     trialSourceOrder,
     trialSourceText,
     mutateTrialInputs,
+    orderedDiagnostics,
+    orderedError,
+    orderedMismatch,
+    orderedCloseError,
   } = {},
 ) {
   assert(process.env.OWNED_TEMP_DIR, 'Run through owned-temp-dir');
@@ -107,10 +111,13 @@ function fixture(
   function projectFor(replay, snapshotOptions) {
     const trial = instances.length - 2;
     const trialRoots = snapshotOptions.createPrograms?.[0].rootFiles;
+    const instance = instances.at(-1);
     let semanticChecked = false;
     const program = {
       id: replay ? 'synthetic' : configPath,
       getSourceFileNames: () => {
+        if (instance.ordered && orderedMismatch)
+          return [...sourceOrder].reverse();
         if (mismatch && replay) return [...sourceOrder].reverse();
         const order =
           trial > 0
@@ -152,11 +159,20 @@ function fixture(
       ...Object.fromEntries(
         phases.map(phase => [
           phase,
-          () => {
+          (...args) => {
+            instance.calls ??= [];
+            instance.calls.push([phase, ...args]);
             if (trial > 0 && phase === throwTrialPhase)
               throw new Error('trial phase broke');
             if (phase === 'getSemanticDiagnostics') {
               semanticChecked = true;
+              if (Array.isArray(args[0])) {
+                instance.ordered = true;
+                if (orderedError) throw new Error('ordered request broke');
+                return orderedDiagnostics
+                  ? orderedDiagnostics(args[0], nativeDiagnostics)
+                  : nativeDiagnostics;
+              }
               if (!replay && wrapperPasses) return [];
               if (trial > 0 && trialDiagnostics)
                 return trialDiagnostics({
@@ -228,6 +244,8 @@ function fixture(
     close() {
       assert(!this.closed, 'API must close exactly once');
       this.closed = true;
+      if (this.ordered && orderedCloseError)
+        throw new Error('ordered close broke');
       if (throwTrialClose && instances.indexOf(this) > 1)
         throw new Error('trial close broke');
     }
@@ -842,4 +860,135 @@ test('original observation reuses native reduction without a second wrapper call
   assert.equal(result.original.status, 'closed');
   assert.equal(result.rootReduction.status, 'reduced-witness');
   assert.equal(result.rootReduction.witness.rootCount, 1);
+});
+
+function replayOriginal(f) {
+  const result = {
+    ...octaneProjectionResult(),
+    captureOrigin: 'original-public-cli',
+    inputs: f.load.inputs,
+    original: { status: 'observing', exitCode: 1 },
+  };
+  const observer = observeOctaneProjection(f.load.API, result, {
+    failureOnly: true,
+    onClose() {
+      result.original.status = 'closed';
+    },
+  });
+  f.load.checkOctaneProject({ project: 'tsconfig.json', cwd: f.root });
+  observer.dispose();
+  f.load.checkOctaneProject = () => {
+    throw new Error('Never retry original wrapper');
+  };
+  return replayOctaneProjection(f.root, f.load, result);
+}
+
+test('two fixed cold traversal arms run even when baseline native replay passes', t => {
+  const f = fixture(t, {
+    targetPair: true,
+    replayDiagnostics: () => [],
+    orderedDiagnostics: (files, diagnostics) =>
+      files[0].endsWith('a.ts') ? diagnostics : [],
+  });
+  const originalOrder = [...f.sourceOrder];
+  const originalRoots = [...f.roots];
+  const result = replayOriginal(f);
+  f.checkCleanup();
+  assert.equal(
+    result.traversalComparison.status,
+    'target-pair-order-dependent',
+  );
+  assert.equal(result.traversalComparison.arms.length, 2);
+  assert.deepEqual(
+    result.traversalComparison.arms.map(arm => arm.targetPairPresent),
+    [true, false],
+  );
+  const arms = f.instances.filter(instance => instance.ordered);
+  assert.equal(arms.length, 2);
+  assert.equal(f.instances.length, 4, 'Original + baseline + exactly two arms');
+  for (const [index, instance] of arms.entries()) {
+    const ordered = instance.calls.find(
+      ([phase, files]) =>
+        phase === 'getSemanticDiagnostics' && Array.isArray(files),
+    );
+    assert.deepEqual(
+      ordered[1],
+      index === 0 ? originalOrder : [...originalOrder].reverse(),
+    );
+    const firstGlobal = instance.calls.findIndex(
+      ([phase]) => phase === 'getGlobalDiagnostics',
+    );
+    assert(firstGlobal > instance.calls.indexOf(ordered));
+    assert.equal(
+      instance.calls.filter(
+        ([phase, files]) =>
+          phase === 'getSemanticDiagnostics' && Array.isArray(files),
+      ).length,
+      1,
+    );
+    assert.deepEqual(
+      instance.snapshotOptions.createPrograms[0].rootFiles,
+      originalRoots,
+    );
+    assert.equal(instance.options.fs.writeFile, f.load.serverFS.noop);
+    assert.equal(instance.options.fs.removeFile, f.load.serverFS.noop);
+  }
+  assert.deepEqual(f.sourceOrder, originalOrder);
+  assert.deepEqual(f.roots, originalRoots);
+  assert.equal(result.original.exitCode, 1);
+  assert.equal(result.replay.status, 'graph-matched');
+  assert.deepEqual(
+    result.replay.rawDiagnosticsByPhase.getSemanticDiagnostics,
+    [],
+  );
+  assert.deepEqual(
+    result.captures[0].rawDiagnosticsByPhase.getSemanticDiagnostics,
+    f.nativeDiagnostics,
+  );
+  assert.equal(result.rootReduction.status, 'skipped');
+});
+
+for (const diagnostics of ['both-fail', 'both-pass'])
+  test(`agreeing traversal arms (${diagnostics}) stop without permutation search`, t => {
+    const f = fixture(t, {
+      targetPair: true,
+      replayDiagnostics: () => [],
+      orderedDiagnostics: (_files, raw) =>
+        diagnostics === 'both-fail' ? raw : [],
+    });
+    const result = replayOriginal(f);
+    f.checkCleanup();
+    assert.equal(
+      result.traversalComparison.status,
+      'no-target-pair-difference',
+    );
+    assert.equal(f.instances.length, 4);
+    assert.equal(result.rootReduction.attempts.length, 0);
+  });
+
+for (const failure of ['orderedError', 'orderedMismatch', 'orderedCloseError'])
+  test(`traversal ${failure} stays inconclusive and retains original failure`, t => {
+    const f = fixture(t, {
+      targetPair: true,
+      replayDiagnostics: () => [],
+      [failure]: true,
+    });
+    const result = replayOriginal(f);
+    f.checkCleanup();
+    assert.equal(result.traversalComparison.status, 'inconclusive');
+    assert.equal(result.traversalComparison.arms.length, 2);
+    assert.equal(f.instances.length, 4);
+    assert.equal(result.original.exitCode, 1);
+    assert.deepEqual(
+      result.captures[0].rawDiagnosticsByPhase.getSemanticDiagnostics,
+      f.nativeDiagnostics,
+    );
+  });
+
+test('a diagnostic retry does not launch the original-process traversal experiment', async t => {
+  const f = fixture(t, { targetPair: true, replayDiagnostics: () => [] });
+  const result = await probeOctaneProjection(f.root, f.load);
+  f.checkCleanup();
+  assert.equal(result.traversalComparison, undefined);
+  assert.equal(f.instances.length, 2);
 });

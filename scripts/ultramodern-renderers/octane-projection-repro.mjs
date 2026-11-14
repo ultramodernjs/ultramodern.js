@@ -425,6 +425,92 @@ export function replayOctaneProjection(appRoot, load, result) {
   const capturedTargets = routerTargets(
     capture.rawDiagnosticsByPhase.getSemanticDiagnostics,
   );
+  if (
+    result.captureOrigin === 'original-public-cli' &&
+    result.original?.status === 'closed' &&
+    result.replay.status === 'graph-matched' &&
+    !result.replay.closeError &&
+    !result.closeError &&
+    capturedTargets.length === 2 &&
+    new Set(capturedTargets.map(hash)).size === 2
+  ) {
+    const comparison = {
+      status: 'inconclusive',
+      arms: [],
+      proofGap:
+        'Two fixed diagnostic visitation orders only; neither is a production fix or proof of the original schedule, specific cache defect, or full compiler-state equality.',
+    };
+    result.traversalComparison = comparison;
+    for (const order of ['forward', 'reverse']) {
+      const files = [...graph.sourceOrder];
+      if (order === 'reverse') files.reverse();
+      const arm = {
+        order,
+        fileOrderHash: hash(files),
+        status: 'error',
+        phase: 'create-api',
+        rawDiagnosticsByPhase: {},
+      };
+      comparison.arms.push(arm);
+      let native;
+      try {
+        native = newReplayAPI();
+        arm.phase = 'create-snapshot';
+        const snapshot = replaySnapshot(native, graph.roots);
+        const program = snapshot.operation.createdPrograms[0];
+        if (!program) throw new Error('Ordered replay returned no program');
+        const project = snapshot.getProject(program.id);
+        if (!project) throw new Error('Ordered replay returned no project');
+        // getGlobalDiagnostics secretly runs semantics. It must not warm the
+        // checker before the explicit, sequential file-array request.
+        for (const phase of phases.filter(
+          name =>
+            name !== 'getGlobalDiagnostics' &&
+            name !== 'getSemanticDiagnostics',
+        )) {
+          arm.phase = phase;
+          arm.rawDiagnosticsByPhase[phase] = copy(program[phase]());
+        }
+        arm.phase = 'ordered-semantics';
+        arm.orderedSemanticDiagnostics = copy(
+          program.getSemanticDiagnostics(files),
+        );
+        arm.targetPairPresent = preservesTargets(
+          arm.orderedSemanticDiagnostics,
+          capturedTargets,
+        );
+        for (const phase of [
+          'getGlobalDiagnostics',
+          'getSemanticDiagnostics',
+        ]) {
+          arm.phase = phase;
+          arm.rawDiagnosticsByPhase[phase] = copy(program[phase]());
+        }
+        arm.phase = 'observe-graph';
+        arm.graphIdentity = graphOf(project, graph.config).identity;
+        arm.status =
+          arm.graphIdentity === graph.identity
+            ? 'graph-matched'
+            : 'graph-mismatch';
+        arm.phase = 'complete';
+      } catch (error) {
+        arm.error = errorInfo(error);
+      } finally {
+        try {
+          native?.close();
+        } catch (error) {
+          arm.closeError = errorInfo(error);
+          arm.status = 'error';
+        }
+      }
+    }
+    if (comparison.arms.every(arm => arm.status === 'graph-matched'))
+      comparison.status =
+        comparison.arms[0].targetPairPresent !==
+        comparison.arms[1].targetPairPresent
+          ? 'target-pair-order-dependent'
+          : 'no-target-pair-difference';
+  }
   // The hosted wrapper retry passed while the matching native replay failed.
   // Its absence of errors must not prevent reduction of that native witness.
   const targets = routerTargets(
