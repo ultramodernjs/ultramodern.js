@@ -178,3 +178,37 @@ export function resolveEffectTsgoCompiler(
     );
   }
 }
+
+/**
+ * Resolves the executable paired with tsrs/sync without modifying the host.
+ * API consumers cannot substitute Effect-Go or materialize compiler copies.
+ */
+export function resolveEffectTsrsCompiler(
+  options: ResolveEffectTsgoCompilerOptions,
+): string {
+  try {
+    const configuredCompiler =
+      getBuildConfigEnvironment('EFFECT_TSGO_BIN')?.trim() || undefined;
+    const compiler =
+      configuredCompiler ??
+      resolveInstalledEffectCompiler(options.from, 'tsrs');
+    const artifact = lstatSync(realpathSync(compiler));
+    if (!artifact.isFile() || artifact.size === 0) {
+      throw new Error(
+        `Effect tsrs is not a nonempty regular file: ${compiler}`,
+      );
+    }
+    if (process.platform !== 'win32') {
+      accessSync(compiler, constants.X_OK);
+    }
+    if (configuredCompiler) {
+      validateConfiguredEffectCompiler(compiler, options.from, 'tsrs');
+    }
+    return compiler;
+  } catch (cause) {
+    throw new Error(
+      `Unable to resolve an executable Effect tsrs API provider for ${String(options.from)}. Install a matching executable artifact; this resolver does not create or chmod compiler copies.`,
+      { cause },
+    );
+  }
+}

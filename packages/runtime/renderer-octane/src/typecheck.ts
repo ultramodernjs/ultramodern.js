@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveEffectTsrsCompiler } from '@modern-js/app-tools-extensions/build-config';
 import {
   type CodeInformation,
   type Mapping,
@@ -15,12 +16,9 @@ import {
   parseTree,
 } from 'jsonc-parser';
 import { compileToVolarMappings } from 'octane/compiler/volar';
-import { version } from 'typescript';
-import {
-  createVirtualFileSystem,
-  type FileSystem,
-} from 'typescript/unstable/fs';
-import { API, type Diagnostic } from 'typescript/unstable/sync';
+import { typescriptVersion } from 'tsrs';
+import { type FileSystemCallbacks, serverFS } from 'tsrs/fs';
+import { API, type Diagnostic } from 'tsrs/sync';
 
 export interface OctaneTypeDiagnostic {
   fileName?: string;
@@ -29,6 +27,7 @@ export interface OctaneTypeDiagnostic {
   line?: number;
   column?: number;
   code: number | string;
+  source?: string;
   category: 'error' | 'warning' | 'message';
   text: string;
   origin: 'typescript' | 'octane' | 'projection';
@@ -175,14 +174,10 @@ function diagnosticText(diagnostic: Diagnostic): string {
   ].join('\n');
 }
 
-/** Checks authored TSRX through Octane's public language projection and native TS7. */
+/** Checks authored TSRX through Octane's projection and the Effect-enabled tsrs API. */
 export function checkOctaneProject(
   options: OctaneTypecheckOptions,
 ): OctaneTypecheckResult {
-  if (version !== '7.0.2')
-    throw new Error(
-      `Octane typechecking requires TypeScript 7.0.2; found ${version}`,
-    );
   const cwd = path.resolve(options.cwd ?? process.cwd());
   let project = path.resolve(cwd, options.project);
   if (fs.existsSync(project) && fs.statSync(project).isDirectory())
@@ -221,9 +216,14 @@ export function checkOctaneProject(
       skipDefaultLibCheck: false,
     },
   };
-  const virtual = createVirtualFileSystem({
-    [effectiveConfig]: JSON.stringify(effectiveOptions),
+  // Resolve relative to the API client's own installation, so the native
+  // protocol and its compiler metadata always belong to the same tsrs cohort.
+  const tsserverPath = resolveEffectTsrsCompiler({
+    from: typeof __filename === 'string' ? __filename : import.meta.url,
   });
+  const virtual = new Map([
+    [effectiveConfig, JSON.stringify(effectiveOptions)],
+  ]);
   const projections = new Map<string, Projection>();
   const configurations = new Map<string, TextProjection>();
   const configFiles = new Set([project]);
@@ -282,12 +282,12 @@ export function checkOctaneProject(
       map: new SourceMap(compiled.mappings),
     };
     projections.set(file, result);
-    virtual.writeFile?.(file, compiled.code);
+    virtual.set(path.normalize(file), compiled.code);
     return result;
   }
-  const overlay: FileSystem = {
+  const overlay: FileSystemCallbacks = {
     readFile(file) {
-      const content = virtual.readFile?.(file);
+      const content = virtual.get(path.normalize(file));
       if (content !== undefined) return content;
       const compiled = projection(file);
       if (compiled) return compiled.code;
@@ -332,21 +332,35 @@ export function checkOctaneProject(
           return config?.code ?? source;
         }
       }
-      return undefined;
+      return serverFS.useOS;
     },
     fileExists(file) {
-      if (virtual.fileExists?.(file)) return true;
-      if (authoredName(file) !== file) return true;
-      return undefined;
+      if (virtual.has(path.normalize(file)) || authoredName(file) !== file)
+        return true;
+      return serverFS.useOS;
     },
     directoryExists(directory) {
-      return virtual.directoryExists?.(directory) || undefined;
+      const prefix = `${path.normalize(directory).replace(/[\\/]$/u, '')}${path.sep}`;
+      return [...virtual.keys()].some(file => file.startsWith(prefix))
+        ? true
+        : serverFS.useOS;
     },
     getAccessibleEntries(directory) {
-      const files = new Set(virtual.getAccessibleEntries?.(directory)?.files);
-      const directories = new Set(
-        virtual.getAccessibleEntries?.(directory)?.directories,
-      );
+      const files = new Set<string>();
+      const directories = new Set<string>();
+      const symlinks: string[] = [];
+      for (const file of virtual.keys()) {
+        const relative = path.relative(directory, file);
+        if (
+          !relative ||
+          relative.startsWith(`..${path.sep}`) ||
+          relative === '..' ||
+          path.isAbsolute(relative)
+        )
+          continue;
+        const [first, ...rest] = relative.split(path.sep);
+        if (first) (rest.length ? directories : files).add(first);
+      }
       try {
         for (const entry of fs.readdirSync(directory, {
           withFileTypes: true,
@@ -367,6 +381,7 @@ export function checkOctaneProject(
               throw error;
             }
           }
+          if (entry.isSymbolicLink()) symlinks.push(entry.name);
           if (isDirectory) directories.add(entry.name);
           else {
             files.add(entry.name);
@@ -397,6 +412,7 @@ export function checkOctaneProject(
           )
           .sort(),
         directories: [...directories].sort(),
+        symlinks: symlinks.length ? symlinks.sort() : undefined,
       };
     },
     realpath(file) {
@@ -405,10 +421,28 @@ export function checkOctaneProject(
         try {
           return `${fs.realpathSync(authored)}.tsx`;
         } catch {
-          return undefined;
+          return serverFS.useOS;
         }
       }
-      return virtual.fileExists?.(file) ? file : undefined;
+      return virtual.has(path.normalize(file)) ? file : serverFS.useOS;
+    },
+    stat(file) {
+      const content =
+        virtual.get(path.normalize(file)) ?? projection(file)?.code;
+      return content === undefined
+        ? serverFS.useOS
+        : {
+            mode: 0o100444,
+            size: Buffer.byteLength(content),
+            mtime: new Date(0),
+          };
+    },
+    // Compiler writes/removals can only affect this invocation's memory.
+    writeFile(file, content) {
+      virtual.set(path.normalize(file), content);
+    },
+    removeFile(file) {
+      virtual.delete(path.normalize(file));
     },
   };
   // The native matcher runs over original names and suffix-transposed TSRX
@@ -417,7 +451,7 @@ export function checkOctaneProject(
   const roots = new Set<string>();
   for (const mode of ['ordinary', 'native'] as const) {
     discovery = mode;
-    const parser = new API({ cwd, fs: overlay });
+    const parser = new API({ cwd, fs: overlay, tsserverPath });
     try {
       for (const file of parser.parseConfigFile(effectiveConfig).fileNames)
         if (mode === 'ordinary' || authoredName(file) !== file) roots.add(file);
@@ -438,7 +472,7 @@ export function checkOctaneProject(
     }
   }
   discovery = 'complete';
-  virtual.writeFile?.(
+  virtual.set(
     effectiveConfig,
     JSON.stringify({
       ...effectiveOptions,
@@ -447,13 +481,13 @@ export function checkOctaneProject(
       exclude: [],
     }),
   );
-  const api = new API({ cwd, fs: overlay });
+  const api = new API({ cwd, fs: overlay, tsserverPath });
   try {
-    const snapshot = api.updateSnapshot({
+    const snapshot = api.createSnapshot({
       openProjects: [effectiveConfig],
       openFiles: [...roots],
     });
-    const program = snapshot.getProject(effectiveConfig)?.program;
+    const program = snapshot.getConfiguredProject(effectiveConfig)?.program;
     if (!program)
       throw new Error(`Native TypeScript did not load project ${project}`);
     function remap(diagnostic: Diagnostic): OctaneTypeDiagnostic | undefined {
@@ -483,14 +517,15 @@ export function checkOctaneProject(
           if (!compiled.map.toSourceRange(pos, end, true).next().done)
             return undefined;
           origin = 'projection';
-          message = `Cannot map native TS${diagnostic.code} at generated offsets ${pos}-${end}: ${text}`;
+          message = `Cannot map native ${diagnostic.source || 'TS'}${diagnostic.code} at generated offsets ${pos}-${end}: ${text}`;
           pos = 0;
           end = 0;
         }
       }
       const fileName =
         compiled?.fileName ??
-        (diagnostic.fileName === effectiveConfig
+        (diagnostic.fileName &&
+        path.normalize(diagnostic.fileName) === effectiveConfig
           ? undefined
           : diagnostic.fileName);
       const source =
@@ -501,6 +536,7 @@ export function checkOctaneProject(
         end,
         ...(source !== undefined ? location(source, pos) : {}),
         code: diagnostic.code,
+        ...(diagnostic.source ? { source: diagnostic.source } : {}),
         category:
           origin === 'projection' || diagnostic.category === 1
             ? 'error'
@@ -562,7 +598,7 @@ export function checkOctaneProject(
       diagnostics.map(diagnostic => [JSON.stringify(diagnostic), diagnostic]),
     );
     return {
-      compilerVersion: version,
+      compilerVersion: typescriptVersion,
       files: [
         ...new Set(
           nativeFiles.map(file => projections.get(file)?.fileName ?? file),
@@ -589,7 +625,7 @@ export function formatOctaneDiagnostic(
     : '';
   const code =
     typeof diagnostic.code === 'number'
-      ? `TS${diagnostic.code}`
+      ? `${diagnostic.source || 'TS'}${diagnostic.code}`
       : diagnostic.code;
   const related = diagnostic.relatedInformation
     ?.map(info => `  ${formatOctaneDiagnostic(info, cwd)}`)
@@ -647,7 +683,7 @@ export function runOctaneTypecheck(
     for (let index = 0; index < argv.length; index++) {
       const argument = argv[index];
       if (argument === '--version' || argument === '-v') {
-        stdout(`Version ${version}\n`);
+        stdout(`Version ${typescriptVersion}\n`);
         return 0;
       }
       if (argument === '--help' || argument === '-h') {

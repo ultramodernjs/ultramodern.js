@@ -22,6 +22,7 @@ import { pathToFileURL } from 'node:url';
 import {
   getBuildConfigEnvironment,
   resolveEffectTsgoCompiler,
+  resolveEffectTsrsCompiler,
 } from '../../src/build-config/public';
 
 const nativePlatformName = `@typescript/typescript-${process.platform}-${process.arch}`;
@@ -51,6 +52,119 @@ const tsrsSupported =
   tsrsManifest.optionalDependencies[getPlatformPackageName()] ===
     tsrsManifest.version;
 const tsrsTest = tsrsSupported ? test : test.skip;
+
+tsrsTest(
+  'the strict API resolver selects the metadata-bound tsrs artifact',
+  async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'app-tools-strict-tsrs-'));
+    try {
+      writeEffectTsgoPackage(directory);
+      const compiler = writeTsrsPackage(directory);
+      const from = join(directory, 'consumer.mjs');
+      await withEnvironment('EFFECT_TSGO_BIN', undefined, () =>
+        withEnvironment('TSRS_BINARY', undefined, () => {
+          assert.equal(
+            realpathSync(resolveEffectTsrsCompiler({ from })),
+            realpathSync(compiler),
+          );
+        }),
+      );
+      await withEnvironment('EFFECT_TSGO_BIN', compiler, () => {
+        assert.equal(resolveEffectTsrsCompiler({ from }), compiler);
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+test('the strict API resolver rejects an Effect-Go-only installation', async () => {
+  const directory = mkdtempSync(
+    join(tmpdir(), 'app-tools-strict-tsrs-absent-'),
+  );
+  try {
+    writeEffectTsgoPackage(directory);
+    writeCompiler(effectCompilerPath(directory), 0o700);
+    await withEnvironment('EFFECT_TSGO_BIN', undefined, () =>
+      withEnvironment('TSRS_BINARY', undefined, () => {
+        assert.throws(
+          () =>
+            resolveEffectTsrsCompiler({
+              from: join(directory, 'consumer.mjs'),
+            }),
+          /Unable to resolve an executable Effect tsrs API provider/u,
+        );
+      }),
+    );
+    assert.equal(existsSync(join(directory, 'cli-started')), false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('the strict API resolver rejects an explicitly configured Effect-Go binary', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'app-tools-strict-tsrs-go-'));
+  try {
+    const compiler = join(directory, compilerBasename);
+    copyFileSync(
+      join(
+        dirname(fixtureRequire.resolve(`${effectPlatformName}/package.json`)),
+        'lib',
+        compilerBasename,
+      ),
+      compiler,
+    );
+    chmodSync(compiler, 0o700);
+    await withEnvironment('EFFECT_TSGO_BIN', compiler, () => {
+      assert.throws(
+        () =>
+          resolveEffectTsrsCompiler({ from: join(directory, 'consumer.mjs') }),
+        error => {
+          assert.ok(error instanceof Error);
+          assert.ok(error.cause instanceof Error);
+          assert.match(error.cause.message, /not Effect-Go/u);
+          return true;
+        },
+      );
+    });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+if (process.platform !== 'win32') {
+  test('the strict API resolver never materializes a nonexecutable configured artifact', async () => {
+    const directory = mkdtempSync(
+      join(tmpdir(), 'app-tools-strict-tsrs-readonly-'),
+    );
+    try {
+      const compiler = join(directory, 'compiler');
+      const source = `not executable ${directory}\n`;
+      writeFileSync(compiler, source, { mode: 0o600 });
+      const cacheDirectory = join(
+        tmpdir(),
+        'modern-js',
+        'effect-tsgo',
+        createHash('sha256').update(source).digest('hex'),
+      );
+      assert.equal(existsSync(cacheDirectory), false);
+      await withEnvironment('EFFECT_TSGO_BIN', compiler, () => {
+        assert.throws(
+          () =>
+            resolveEffectTsrsCompiler({
+              from: join(directory, 'consumer.mjs'),
+            }),
+          /does not create or chmod compiler copies/u,
+        );
+      });
+      assert.equal(readFileSync(compiler, 'utf8'), source);
+      assert.equal(existsSync(cacheDirectory), false);
+      assert.throws(() => accessSync(compiler, constants.X_OK));
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
 
 test('resolves the repository root origin to its actual declared Effect compiler cohort', async () => {
   const from = join(import.meta.dirname, '../../../../../package.json');

@@ -1,4 +1,5 @@
 import type { URL } from 'node:url';
+import { resolveEffectTsrsCompiler } from '@modern-js/app-tools-extensions/build-config';
 import {
   builderPluginAdapterPrecompress,
   type PrecompressConfig,
@@ -30,6 +31,10 @@ const environmentValue: string | undefined = getBuildConfigEnvironment(
 
 void compilerOriginContract;
 void compilerPath;
+const apiCompilerPath: string = resolveEffectTsrsCompiler({
+  from: import.meta.url,
+});
+void apiCompilerPath;
 void environmentValue;
 
 const cloudflareConfig: CloudflareDeployConfig = {

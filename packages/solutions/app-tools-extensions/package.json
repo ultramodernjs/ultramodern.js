@@ -128,6 +128,12 @@
       "import": "./dist/esm-node/policy-defaults.mjs",
       "require": "./dist/cjs/policy-defaults.js"
     },
+    "./build-config": {
+      "types": "./dist/types/build-config/index.d.ts",
+      "modern:source": "./src/build-config/index.ts",
+      "import": "./dist/esm-node/build-config/index.mjs",
+      "require": "./dist/cjs/build-config/index.js"
+    },
     "./build-config/precompress/plugin": {
       "types": "./dist/types/build-config/precompress/plugin.d.ts",
       "modern:source": "./src/build-config/precompress/plugin.ts",
@@ -176,6 +182,9 @@
       "*": [
         "./dist/types/*",
         "./src/*"
+      ],
+      "build-config": [
+        "./dist/types/build-config/index.d.ts"
       ],
       "build-config/precompress/plugin": [
         "./dist/types/build-config/precompress/plugin.d.ts"
