@@ -102,7 +102,7 @@
     "@modern-js/server-utils": "workspace:*",
     "@modern-js/utils": "workspace:*",
     "@swc/core": "1.16.21",
-    "qs": "^6.16.1",
+    "qs": "^6.16.2",
     "type-is": "^3.0.0"
   },
   "peerDependencies": {
