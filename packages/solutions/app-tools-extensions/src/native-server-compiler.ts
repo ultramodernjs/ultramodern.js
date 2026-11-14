@@ -4,10 +4,10 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import type { compile } from '@modern-js/server-utils';
+import type { ServerCompilerProvider } from '@modern-js/server-utils/compiler';
 import { resolveEffectTsrsCompiler } from './build-config/build-environment';
 
-type CompilerProvider = NonNullable<Parameters<typeof compile>[2]['compiler']>;
+type CompilerProvider = ServerCompilerProvider;
 type Compiler = Awaited<ReturnType<CompilerProvider>>;
 type CompilerConfig = Awaited<ReturnType<Compiler['readConfig']>>;
 
@@ -21,7 +21,12 @@ const isStrings = (value: unknown): value is string[] =>
 // Validate the fields consumed by the neutral projection at the child-process
 // boundary. Other native compiler options remain opaque JSON for the CLI.
 function isCompilerConfig(value: unknown): value is CompilerConfig {
-  if (!isRecord(value) || !isRecord(value.compilerOptions)) return false;
+  if (
+    !isRecord(value) ||
+    !isRecord(value.compilerOptions) ||
+    (value.extends !== undefined && typeof value.extends !== 'string')
+  )
+    return false;
   const options = value.compilerOptions;
   if (
     ![
@@ -72,8 +77,10 @@ function isCompilerConfig(value: unknown): value is CompilerConfig {
 // absolute file paths, not a JSON tsconfig. Serialize those using the matching
 // package's enum tables before the neutral server compiler projects its roots.
 const inspectConfig = `
+  import { readFileSync } from 'node:fs';
+  import { resolve } from 'node:path';
   import { pathToFileURL } from 'node:url';
-  const [apiPath, protoPath, executable, configFile] = process.argv.slice(1);
+  const [apiPath, protoPath, schemaPath, executable, configFile] = process.argv.slice(1);
   const { API, formatDiagnostics } = await import(pathToFileURL(apiPath).href);
   const enums = await import(pathToFileURL(protoPath).href);
   const api = new API({ tsserverPath: executable });
@@ -83,12 +90,19 @@ const inspectConfig = `
       process.stdout.write(formatDiagnostics(config.errors, api));
       process.exitCode = 1;
     } else {
-      const options = { ...config.options };
-      delete options.configFilePath;
-      // The protocol's typed PluginImport carries only "name". Retain the
-      // native parser's raw plugin settings, including Effect severity policy.
-      if (config.raw?.compilerOptions?.plugins) {
-        options.plugins = config.raw.compilerOptions.plugins;
+      // API options contain internal fields that the CLI cannot read. Use the
+      // matching compiler's schema, and inherit plugins from the original
+      // tsconfig: the protocol's PluginImport loses their arbitrary settings.
+      const schema = JSON.parse(readFileSync(schemaPath, 'utf8'));
+      const supported = schema.definitions.compilerOptions.properties;
+      const options = Object.fromEntries(Object.entries(config.options)
+        .filter(([key]) => Object.hasOwn(supported, key) && key !== 'plugins'));
+      // Native paths retain their declaration-site base separately. Flatten
+      // it before projecting a config beside a possibly different child file.
+      if (options.paths && config.options.pathsBasePath) {
+        options.paths = Object.fromEntries(Object.entries(options.paths)
+          .map(([key, targets]) => [key, targets.map(target =>
+            resolve(config.options.pathsBasePath, target))]));
       }
       const enumOptions = {
         jsx: 'JsxEmit', module: 'ModuleKind',
@@ -113,6 +127,7 @@ const inspectConfig = `
           file.replace(/^.*[/\\\\]/u, '').replace(/^lib\\./u, '').replace(/\\.d\\.ts$/u, ''));
       }
       process.stdout.write(JSON.stringify({
+        extends: configFile,
         compilerOptions: options, files: config.fileNames,
         references: config.projectReferences,
       }));
@@ -133,6 +148,7 @@ export const nativeServerCompiler: CompilerProvider = async appDirectory => {
   const appRequire = createRequire(from);
   const configApi = appRequire.resolve('tsrs/sync');
   const configProto = appRequire.resolve('tsrs/proto');
+  const configSchema = appRequire.resolve('tsrs/schemas/tsconfig.schema.json');
   const manifest: unknown = JSON.parse(
     await readFile(appRequire.resolve('tsrs/package.json'), 'utf8'),
   );
@@ -188,6 +204,7 @@ export const nativeServerCompiler: CompilerProvider = async appDirectory => {
             inspectConfig,
             configApi,
             configProto,
+            configSchema,
             executable,
             tsconfigPath,
           ],

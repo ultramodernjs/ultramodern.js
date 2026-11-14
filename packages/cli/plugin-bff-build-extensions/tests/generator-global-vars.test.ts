@@ -60,6 +60,7 @@ async function createRuntimeIdentityFixture(
     sharedDirectory,
   };
   const config = {
+    tools: {},
     resolve: {},
     server: { tsconfigPath },
     source: { globalVars },
@@ -440,6 +441,7 @@ describe('BFF compiler global variables', () => {
         sharedDirectory,
       }),
       getNormalizedConfig: () => ({
+        tools: {},
         bff: {
           runtimeFramework: 'effect',
         },
@@ -540,6 +542,7 @@ describe('BFF compiler global variables', () => {
         sharedDirectory,
       }),
       getNormalizedConfig: () => ({
+        tools: {},
         resolve: {},
         server: {
           tsconfigPath,

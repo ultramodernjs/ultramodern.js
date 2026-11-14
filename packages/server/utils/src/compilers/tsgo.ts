@@ -47,9 +47,16 @@ export const createResolvedTsgoConfig = async (
   options.noEmit = options.declaration !== true;
   // Server sources may import TSX; `jsx` unset fails every such import.
   options.jsx ??= 'react-jsx';
-  delete options.emitDeclarationOnly;
-  delete options.outDir;
-  delete options.tsBuildInfoFile;
+  if (config.extends) {
+    // Deletion would restore the authored values through inheritance.
+    options.emitDeclarationOnly = false;
+    options.outDir = null;
+    options.tsBuildInfoFile = null;
+  } else {
+    delete options.emitDeclarationOnly;
+    delete options.outDir;
+    delete options.tsBuildInfoFile;
+  }
   // `--showConfig` emits `files` relative to the tsconfig directory.
   config.files = filterSourceFiles(
     tsconfigDir,
@@ -57,7 +64,7 @@ export const createResolvedTsgoConfig = async (
     config.files,
     excludeFiles,
   );
-  delete config.include;
+  config.include = [];
   // Project references make TS-Go require declaration outputs of sibling
   // workspace packages that this check never builds (TS6305 on a clean
   // checkout). Their sources stay reachable through module resolution.
@@ -65,7 +72,7 @@ export const createResolvedTsgoConfig = async (
 
   // TS-Go v7 removed baseUrl. Rebase `paths` onto the tsconfig directory so
   // TS-Go and Rspack's tsconfig resolver both see the mapping the app wrote.
-  if (options.baseUrl !== undefined) {
+  if (options.baseUrl != null) {
     const baseUrl = path.resolve(tsconfigDir, options.baseUrl);
     if (options.paths) {
       options.paths = Object.fromEntries(
@@ -81,12 +88,14 @@ export const createResolvedTsgoConfig = async (
         ]),
       );
     }
-    delete options.baseUrl;
+    if (config.extends) options.baseUrl = null;
+    else delete options.baseUrl;
   }
   if (
     ['node', 'node10'].includes(String(options.moduleResolution).toLowerCase())
   ) {
-    delete options.moduleResolution;
+    if (config.extends) options.moduleResolution = null;
+    else delete options.moduleResolution;
   }
 
   // Keep the generated config beside the app tsconfig so the relative `files`

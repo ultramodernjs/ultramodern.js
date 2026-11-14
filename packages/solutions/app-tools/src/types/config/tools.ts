@@ -1,12 +1,12 @@
 import type { BuilderConfig } from '@modern-js/builder';
-import type { compile } from '@modern-js/server-utils';
+import type { ServerCompilerProvider } from '@modern-js/server-utils/compiler';
 import type { UnwrapBuilderConfig } from '../utils';
 
 type BuilderToolsConfig = UnwrapBuilderConfig<BuilderConfig, 'tools'>;
 
 export interface ToolsUserConfig extends Omit<BuilderToolsConfig, 'swc'> {
   /** Compiler provider for BFF and custom-server config, checks and DTS. */
-  serverCompiler?: Parameters<typeof compile>[2]['compiler'];
+  serverCompiler?: ServerCompilerProvider;
   /**
    * Used to custom SWC configurations.
    * @requires `swc` plugin.

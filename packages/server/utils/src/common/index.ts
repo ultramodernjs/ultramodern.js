@@ -1,3 +1,11 @@
+import type { ServerCompilerProvider } from '../compiler';
+
+export type {
+  ServerCompiler,
+  ServerCompilerConfig,
+  ServerCompilerProvider,
+} from '../compiler';
+
 import type {
   SourceNormalizedConfig,
   ToolsNormalizedConfig,
@@ -17,48 +25,9 @@ export interface IConfig {
   sourceMap?: NonNullable<LibConfig['output']>['sourceMap'];
 }
 
-/** A parsed JSON tsconfig, with paths based at its owning config file. */
-export interface ServerCompilerConfig {
-  compilerOptions?: {
-    allowJs?: boolean;
-    baseUrl?: string;
-    composite?: boolean;
-    declaration?: boolean;
-    declarationMap?: boolean;
-    emitDeclarationOnly?: boolean;
-    experimentalDecorators?: boolean;
-    incremental?: boolean;
-    jsx?: string;
-    moduleResolution?: string;
-    noEmit?: boolean;
-    noEmitOnError?: boolean;
-    outDir?: string;
-    paths?: Record<string, string[]>;
-    rootDir?: string;
-    tsBuildInfoFile?: string;
-    [option: string]: unknown;
-  };
-  files?: string[];
-  include?: string[];
-  references?: Array<{ path: string }>;
-}
-
-/** Config parsing, checking and declarations must belong to one compiler. */
-export interface ServerCompiler {
-  command: {
-    executable: string;
-    args: readonly string[];
-    env?: NodeJS.ProcessEnv;
-  };
-  readConfig: (tsconfigPath: string) => Promise<ServerCompilerConfig>;
-  /** Rslib-compatible module exporting version, with adjacent getExePath.js. */
-  typescriptPath: string;
-  dispose?: () => Promise<void>;
-}
-
 export interface CompileOptions {
   /** Omit to retain the stable TypeScript compiler shipped by server-utils. */
-  compiler?: (appDirectory: string) => ServerCompiler | Promise<ServerCompiler>;
+  compiler?: ServerCompilerProvider;
   sourceDirs: string[];
   distDir: string;
   /** Absolute files excluded as roots; imported dependencies remain checked. */

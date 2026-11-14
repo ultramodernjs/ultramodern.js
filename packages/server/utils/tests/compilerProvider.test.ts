@@ -2,8 +2,56 @@ import { fs } from '@modern-js/utils';
 import os from 'os';
 import path from 'path';
 import { compile, type ServerCompiler } from '../src/common';
+import { createResolvedTsgoConfig } from '../src/compilers/tsgo';
 
 describe('neutral server compiler provider', () => {
+  it('clears inherited emit, cache and deprecated options without restoring client roots', async () => {
+    const appDirectory = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'server-compiler-inherited-'),
+    );
+    try {
+      const { config } = await createResolvedTsgoConfig(
+        appDirectory,
+        path.join(appDirectory, 'tsconfig.json'),
+        [path.join(appDirectory, 'api')],
+        {
+          readConfig: async () => ({
+            extends: './base.json',
+            compilerOptions: {
+              declaration: true,
+              incremental: true,
+              composite: true,
+              emitDeclarationOnly: true,
+              tsBuildInfoFile: './cache/server.tsbuildinfo',
+              outDir: './authored-output',
+              baseUrl: '.',
+              paths: { '@shared/*': ['./shared/*'] },
+              moduleResolution: 'node10',
+            },
+            files: ['api/index.ts', 'client/index.ts'],
+            include: ['client'],
+            references: [{ path: './referenced' }],
+          }),
+        },
+      );
+      expect(config.compilerOptions).toMatchObject({
+        incremental: false,
+        composite: false,
+        emitDeclarationOnly: false,
+        tsBuildInfoFile: null,
+        outDir: null,
+        baseUrl: null,
+        moduleResolution: null,
+        paths: { '@shared/*': ['./shared/*'] },
+      });
+      expect(config.files).toEqual(['api/index.ts']);
+      expect(config.include).toEqual([]);
+      expect(config.references).toBeUndefined();
+    } finally {
+      await fs.remove(appDirectory);
+    }
+  });
+
   it('keeps the real stable TypeScript default when no provider is configured', async () => {
     const appDirectory = await fs.realpath(
       await fs.mkdtemp(path.join(os.tmpdir(), 'server-compiler-stable-')),

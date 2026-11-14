@@ -32,22 +32,36 @@ async function fixture() {
       private: true,
       type: 'commonjs',
     });
-    await fs.outputJSON(path.join(appDirectory, 'config/base.json'), {
+    await fs.outputJSON(path.join(appDirectory, 'config/preset/base.json'), {
       compilerOptions: {
         target: 'ESNext',
         module: 'CommonJS',
         moduleResolution: 'NodeNext',
         strict: true,
         declaration: true,
+        emitDeclarationOnly: true,
+        incremental: true,
+        tsBuildInfoFile: './cache/server.tsbuildinfo',
+        outDir: './authored-output',
         noEmitOnError: true,
         types: [],
         jsx: 'react-jsx',
         lib: ['ESNext'],
+        paths: { '@shared/*': ['../../shared/*'] },
+        plugins: [
+          {
+            name: '@effect/language-service',
+            diagnosticSeverity: {
+              floatingEffect: 'error',
+              unstableApiUsage: 'message',
+            },
+          },
+        ],
       },
     });
     const tsconfigPath = path.join(appDirectory, 'config/tsconfig.json');
     await fs.outputJSON(tsconfigPath, {
-      extends: './base.json',
+      extends: './preset/base.json',
       // Keep NodeNext's module/resolution pair valid.
       compilerOptions: { module: 'NodeNext' },
       include: ['../api', '../server', '../shared'],
@@ -72,6 +86,10 @@ async function fixture() {
     await fs.outputFile(
       path.join(appDirectory, 'shared/index.ts'),
       'export const shared: number = 7;\n',
+    );
+    await fs.outputFile(
+      path.join(appDirectory, 'client-only.ts'),
+      'export const unchecked: string = 1;\n',
     );
     return { appDirectory, tsconfigPath };
   } catch (error) {
@@ -131,6 +149,12 @@ process.stdout.write(JSON.stringify({ executable, assignment: process.env.TSRS_C
       declaration: true,
     });
     expect(parsed.references).toHaveLength(1);
+    expect(parsed.extends).toBe(tsconfigPath);
+    expect(parsed.compilerOptions?.['pathsBasePath']).toBeUndefined();
+    expect(parsed.compilerOptions?.['plugins']).toBeUndefined();
+    expect(parsed.compilerOptions?.paths).toEqual({
+      '@shared/*': [path.join(appDirectory, 'shared/*')],
+    });
     return selected;
   };
   const excluded = path.join(appDirectory, 'api/generated.d.ts');
@@ -160,6 +184,14 @@ process.stdout.write(JSON.stringify({ executable, assignment: process.env.TSRS_C
     ).toContain('export declare const answer: number;');
     expect(
       await fs.pathExists(path.join(appDirectory, 'referenced/index.d.ts')),
+    ).toBe(false);
+    expect(
+      await fs.pathExists(path.join(appDirectory, 'config/preset/cache')),
+    ).toBe(false);
+    expect(
+      await fs.pathExists(
+        path.join(appDirectory, 'config/preset/authored-output'),
+      ),
     ).toBe(false);
     expect(
       (await fs.readdir(path.dirname(tsconfigPath))).filter(file =>
@@ -200,16 +232,10 @@ test('preserves real TypeScript and Effect diagnostics and cleans adapters after
   };
   try {
     await fs.writeJSON(tsconfigPath, {
-      extends: './base.json',
+      extends: './preset/base.json',
       compilerOptions: {
         module: 'NodeNext',
         declaration: false,
-        plugins: [
-          {
-            name: '@effect/language-service',
-            diagnosticSeverity: { floatingEffect: 'error' },
-          },
-        ],
       },
       include: ['../api'],
     });
@@ -242,6 +268,50 @@ test('preserves real TypeScript and Effect diagnostics and cleans adapters after
     ).toEqual([]);
   } finally {
     for (const selected of providers) await selected.dispose?.();
+    await fs.remove(appDirectory);
+  }
+});
+
+test('inherits Effect severity policy without broadening the selected server roots', async () => {
+  const { appDirectory, tsconfigPath } = await fixture();
+  try {
+    await fs.writeJSON(tsconfigPath, {
+      extends: './preset/base.json',
+      compilerOptions: { module: 'NodeNext' },
+      include: ['../api', '../client-only.ts'],
+    });
+    await fs.writeFile(
+      path.join(appDirectory, 'api/index.ts'),
+      `import { HttpApi } from 'effect/http-api';
+import type { Shared } from '@shared/types';
+export type ApiValue = Shared;
+export const api = HttpApi.make('NativeApi');
+`,
+    );
+    await fs.outputFile(
+      path.join(appDirectory, 'shared/types.ts'),
+      'export interface Shared { readonly value: number }\n',
+    );
+    await expect(
+      compile(
+        appDirectory,
+        {},
+        {
+          compiler: nativeServerCompiler,
+          sourceDirs: [path.join(appDirectory, 'api')],
+          distDir: path.join(appDirectory, 'dist'),
+          tsconfigPath,
+          throwErrorInsteadOfExit: true,
+        },
+      ),
+    ).resolves.toBeUndefined();
+    expect(
+      await fs.pathExists(path.join(appDirectory, 'dist/api/index.d.ts')),
+    ).toBe(true);
+    expect(
+      await fs.pathExists(path.join(appDirectory, 'dist/client-only.js')),
+    ).toBe(false);
+  } finally {
     await fs.remove(appDirectory);
   }
 });
