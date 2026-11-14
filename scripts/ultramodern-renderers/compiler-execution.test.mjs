@@ -76,6 +76,7 @@ test('packed Octane records installed compiler inputs without replacing its type
           'scripts/ultramodern-renderers/octane-compiler-inputs.mjs',
         ),
         appRoot,
+        '--resolve-compiler',
       ],
       { cwd: appRoot, env, log: 'octane-compiler-inputs' },
     ],

@@ -32,7 +32,14 @@ function context(root) {
     files: inputNames.flatMap(name => {
       const file = path.join(root, name);
       return fs.lstatSync(file, { throwIfNoEntry: false })?.isFile()
-        ? [fingerprint(file)]
+        ? [
+            {
+              ...fingerprint(file),
+              ...(name === 'pnpm-lock.yaml'
+                ? { content: fs.readFileSync(file, 'utf8') }
+                : {}),
+            },
+          ]
         : [];
     }),
   };
@@ -150,13 +157,66 @@ export function captureOctaneCompilerInputs(appRoot) {
   };
 }
 
+/**
+ * Hosted qualification only: use the same strict resolver and ESM client anchor
+ * as octane-tsc. Resolution validates --version, but never typechecks or emits.
+ */
+export async function captureResolvedOctaneCompilerInputs(
+  appRoot,
+  resolveCompiler,
+) {
+  const capture = captureOctaneCompilerInputs(appRoot);
+  const client = fs.realpathSync(
+    path.join(capture.packages[renderer].root, 'dist/esm-node/typecheck.mjs'),
+  );
+  // Match the ESM build-config entry imported by the installed ESM client.
+  const resolve =
+    resolveCompiler ??
+    (
+      await import(
+        pathToFileURL(
+          path.join(
+            capture.packages['@modern-js/app-tools-extensions'].root,
+            'dist/esm-node/build-config/index.mjs',
+          ),
+        ).href
+      )
+    ).resolveEffectTsrsCompiler;
+  const compiler = fs.realpathSync(
+    await resolve({ from: pathToFileURL(client).href }),
+  );
+  if (!fs.statSync(compiler).isFile())
+    throw new Error(`Selected compiler is not a regular file: ${compiler}`);
+  return {
+    ...capture,
+    compiler: fingerprint(compiler),
+    compilerEnvironment: Object.fromEntries(
+      [
+        'EFFECT_TSGO_BIN',
+        'TSRS_BINARY',
+        'TSRS_CHECKER_ASSIGNMENT',
+        'GOMAXPROCS',
+      ].map(name => [name, process.env[name] ?? null]),
+    ),
+  };
+}
+
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
-  if (process.argv.length !== 3)
-    throw new Error('Usage: node octane-compiler-inputs.mjs <appRoot>');
+  const resolveCompiler = process.argv[3] === '--resolve-compiler';
+  if (process.argv.length !== (resolveCompiler ? 4 : 3))
+    throw new Error(
+      'Usage: node octane-compiler-inputs.mjs <appRoot> [--resolve-compiler]',
+    );
   console.log(
-    JSON.stringify(captureOctaneCompilerInputs(process.argv[2]), null, 2),
+    JSON.stringify(
+      resolveCompiler
+        ? await captureResolvedOctaneCompilerInputs(process.argv[2])
+        : captureOctaneCompilerInputs(process.argv[2]),
+      null,
+      2,
+    ),
   );
 }

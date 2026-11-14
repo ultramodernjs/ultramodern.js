@@ -707,6 +707,7 @@ async function main() {
                 'scripts/ultramodern-renderers/octane-compiler-inputs.mjs',
               ),
               appRoot,
+              '--resolve-compiler',
             ],
             { cwd: appRoot, env, log: `${renderer}-compiler-inputs` },
           ),

@@ -4,7 +4,8 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import * as inventory from './octane-compiler-inputs.mjs';
 import { captureOctaneCompilerInputs } from './octane-compiler-inputs.mjs';
 
 assert(process.env.OWNED_TEMP_DIR, 'Run through owned-temp-dir');
@@ -217,4 +218,112 @@ test('CLI emits only the captured JSON for its positional appRoot', t => {
     { encoding: 'utf8' },
   );
   assert.deepEqual(JSON.parse(stdout), captureOctaneCompilerInputs(f.app));
+});
+
+test('retains generated lockfile contents, not just an unexplained hash', t => {
+  const f = fixture(t);
+  const content = 'lockfileVersion: 9\nsnapshots:\n  example@1.2.3: {}\n';
+  f.write(path.join(f.workspace, 'pnpm-lock.yaml'), content);
+  const capture = captureOctaneCompilerInputs(f.app);
+  const lock = capture.workspace.files.find(
+    file => path.basename(file.path) === 'pnpm-lock.yaml',
+  );
+  assert.equal(lock.content, content);
+  assert.equal(
+    lock.sha256,
+    createHash('sha256').update(lock.content).digest('hex'),
+  );
+  assert(
+    !capture.workspace.files.find(
+      file => path.basename(file.path) === 'package.json',
+    ).content,
+  );
+});
+
+test('resolved capture hashes the strict provider selection using the CLI typecheck anchor', async t => {
+  const f = fixture(t);
+  const client = f.write(
+    path.join(f.rendererRoot, 'dist/esm-node/typecheck.mjs'),
+    "throw new Error('Never run typechecking in an inventory test');",
+  );
+  const binary = f.write(path.join(f.root, 'native/compiler'), 'native bytes');
+  const calls = [];
+  const capture = await inventory.captureResolvedOctaneCompilerInputs(
+    f.app,
+    options => {
+      calls.push(options);
+      return binary;
+    },
+  );
+  assert.deepEqual(calls, [
+    {
+      from: pathToFileURL(fs.realpathSync(client)).href,
+    },
+  ]);
+  assert.equal(capture.compiler.path, fs.realpathSync(binary));
+  assert.equal(
+    capture.compiler.sha256,
+    createHash('sha256').update('native bytes').digest('hex'),
+  );
+  f.write(binary, 'different native bytes');
+  const changed = await inventory.captureResolvedOctaneCompilerInputs(
+    f.app,
+    () => binary,
+  );
+  assert.notEqual(changed.compiler.sha256, capture.compiler.sha256);
+});
+
+test('resolved capture propagates provider refusal without fallback', async t => {
+  const f = fixture(t);
+  f.write(path.join(f.rendererRoot, 'dist/esm-node/typecheck.mjs'), '');
+  const refusal = new Error('Wrong Effect backend');
+  await assert.rejects(
+    inventory.captureResolvedOctaneCompilerInputs(f.app, () => {
+      throw refusal;
+    }),
+    error => error === refusal,
+  );
+});
+
+test('hosted CLI uses the installed ESM resolver without running the compiler', t => {
+  const f = fixture(t);
+  const client = f.write(
+    path.join(f.rendererRoot, 'dist/esm-node/typecheck.mjs'),
+    "throw new Error('Do not import the typechecker');",
+  );
+  const binary = f.write(
+    path.join(f.root, 'native/compiler'),
+    'not executable',
+  );
+  f.write(
+    path.join(
+      f.expected['@modern-js/app-tools-extensions'],
+      'dist/esm-node/build-config/index.mjs',
+    ),
+    `export function resolveEffectTsrsCompiler({from}) {
+      if (from !== ${JSON.stringify(pathToFileURL(fs.realpathSync(client)).href)})
+        throw new Error('Wrong client anchor');
+      return ${JSON.stringify(binary)};
+    }`,
+  );
+  const capture = JSON.parse(
+    execFileSync(
+      process.execPath,
+      [
+        fileURLToPath(new URL('./octane-compiler-inputs.mjs', import.meta.url)),
+        f.app,
+        '--resolve-compiler',
+      ],
+      {
+        encoding: 'utf8',
+        env: { ...process.env, OCTANE_DIAGNOSTIC_SECRET: 'must-not-leak' },
+      },
+    ),
+  );
+  assert.equal(capture.compiler.path, fs.realpathSync(binary));
+  assert(!JSON.stringify(capture).includes('must-not-leak'));
+  assert.equal(
+    capture.compiler.sha256,
+    createHash('sha256').update('not executable').digest('hex'),
+  );
 });
