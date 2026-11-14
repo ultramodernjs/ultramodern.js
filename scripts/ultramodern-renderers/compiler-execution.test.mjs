@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -107,4 +108,18 @@ test('Solid source type contracts pass without emitting', () => {
   );
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stdout + result.stderr);
+});
+
+// TypeScript is a declared SDK peer identity, not the selected checker.
+test('Octane and its native i18n factory share the same peer-bound i18next types', () => {
+  const octane = createRequire(
+    path.join(root, 'packages/runtime/renderer-octane/package.json'),
+  );
+  const nativeI18n = createRequire(
+    path.join(root, 'packages/runtime/i18n-extensions/package.json'),
+  );
+  assert.equal(
+    realpathSync(octane.resolve('i18next/package.json')),
+    realpathSync(nativeI18n.resolve('i18next/package.json')),
+  );
 });

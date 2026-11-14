@@ -246,6 +246,7 @@
     }
   },
   "devDependencies": {
+    "typescript": "7.0.2",
     "@modern-js/i18n-runtime-extensions": "workspace:*",
     "@octanejs/rspack-plugin": "https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz",
     "@octanejs/tanstack-router": "https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz",
