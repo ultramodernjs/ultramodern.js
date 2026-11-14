@@ -277,7 +277,11 @@ test('inherits Effect severity policy without broadening the selected server roo
   try {
     await fs.writeJSON(tsconfigPath, {
       extends: './preset/base.json',
-      compilerOptions: { module: 'NodeNext' },
+      compilerOptions: {
+        module: 'NodeNext',
+        // Effect's HTTP declarations use URL, fetch and stream globals.
+        lib: ['ESNext', 'DOM', 'DOM.Iterable'],
+      },
       include: ['../api', '../client-only.ts'],
     });
     await fs.writeFile(
@@ -292,19 +296,17 @@ export const api = HttpApi.make('NativeApi');
       path.join(appDirectory, 'shared/types.ts'),
       'export interface Shared { readonly value: number }\n',
     );
-    await expect(
-      compile(
-        appDirectory,
-        {},
-        {
-          compiler: nativeServerCompiler,
-          sourceDirs: [path.join(appDirectory, 'api')],
-          distDir: path.join(appDirectory, 'dist'),
-          tsconfigPath,
-          throwErrorInsteadOfExit: true,
-        },
-      ),
-    ).resolves.toBeUndefined();
+    await compile(
+      appDirectory,
+      {},
+      {
+        compiler: nativeServerCompiler,
+        sourceDirs: [path.join(appDirectory, 'api')],
+        distDir: path.join(appDirectory, 'dist'),
+        tsconfigPath,
+        throwErrorInsteadOfExit: true,
+      },
+    );
     expect(
       await fs.pathExists(path.join(appDirectory, 'dist/api/index.d.ts')),
     ).toBe(true);
