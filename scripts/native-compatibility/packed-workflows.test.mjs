@@ -147,6 +147,10 @@ test('required native PR checks run focused renderer acceptance controls', () =>
     controls.run,
     /scripts\/native-compatibility\/packed-workflows\.test\.mjs/u,
   );
+  assert.match(
+    controls.run,
+    /scripts\/__tests__\/rslib-tsrs-options\.test\.mjs/u,
+  );
   assert.match(controls.run, /trap 'rm -rf -- "\$controls_work"' EXIT/u);
 });
 
