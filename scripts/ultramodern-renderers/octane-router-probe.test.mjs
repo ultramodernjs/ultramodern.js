@@ -85,6 +85,10 @@ test('native discriminator uses fresh read-only APIs, an in-memory import, and r
     fileName: '/link.d.ts',
   };
   const load = {
+    probeProjection: async appRoot => {
+      assert.equal(appRoot, root);
+      return { status: 'fake-captured-projected-graph' };
+    },
     capture: async () => ({
       compiler: { path: '/selected/native', sha256: 'native-hash' },
       packages: {
@@ -132,6 +136,7 @@ test('native discriminator uses fresh read-only APIs, an in-memory import, and r
     },
   };
   const result = await probeOctaneRouter(root, load);
+  assert.equal(result.projection.status, 'fake-captured-projected-graph');
   assert.equal(instances.length, 4);
   assert.deepEqual(instances[0].calls, ['getSemanticDiagnostics']);
   assert.deepEqual(instances[1].calls, [

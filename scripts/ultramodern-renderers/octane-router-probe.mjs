@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { captureResolvedOctaneCompilerInputs } from './octane-compiler-inputs.mjs';
+import { probeOctaneProjection } from './octane-projection-repro.mjs';
 
 export async function qualifyOctaneBatch(typecheck) {
   for (let iteration = 1; iteration <= 8; iteration++)
@@ -140,11 +141,23 @@ export async function probeOctaneRouter(appRoot, load) {
       api.close();
     }
   }
+  let projection;
+  try {
+    projection = await (load?.probeProjection ?? probeOctaneProjection)(
+      appRoot,
+    );
+  } catch (error) {
+    projection = {
+      status: 'error',
+      error: { name: error.name, message: error.message },
+    };
+  }
   return {
     interpretation:
       'Native OS project and isolated Router Core import; neither proves TSRX application acceptance.',
     inputs,
     observations,
+    projection,
   };
 }
 
