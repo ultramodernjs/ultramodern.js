@@ -4,6 +4,7 @@ export {
   resolveEffectTsgoCompiler,
 } from './build-config/public';
 export { createRemoteManifestUrl } from './build-config/remote-address';
+export { createNativeModuleCache } from './config/native-module-cache';
 export type { DeployTarget } from './deploy-output/target';
 export { resolveDeployTarget } from './deploy-output/target';
 

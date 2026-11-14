@@ -1,3 +1,4 @@
+import { channel } from 'node:diagnostics_channel';
 import {
   chokidar,
   type FSWatcher,
@@ -74,6 +75,10 @@ export default class Watcher {
 
     const cache = new StatsCache();
     const watcher = chokidar.watch(filenames, options);
+    const notify = (changed: string, event: WatchEvent) => {
+      channel('modern-js:dev:invalidate').publish(changed);
+      callback(changed, event);
+    };
 
     watcher.on('ready', () => {
       cache.add(getWatchedFiles(watcher));
@@ -82,20 +87,20 @@ export default class Watcher {
     watcher.on('change', changed => {
       if (!fs.existsSync(changed) || cache.isDiff(changed)) {
         cache.refresh(changed);
-        callback(changed, 'change');
+        notify(changed, 'change');
       }
     });
 
     watcher.on('add', changed => {
       if (!cache.has(changed)) {
         cache.add([changed]);
-        callback(changed, 'add');
+        notify(changed, 'add');
       }
     });
 
     watcher.on('unlink', changed => {
       cache.del(changed);
-      callback(changed, 'unlink');
+      notify(changed, 'unlink');
     });
 
     this.watcher = watcher;

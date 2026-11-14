@@ -17,6 +17,13 @@
   ],
   "bridges": [
     {
+      "file": "packages/solutions/app-tools/src/esm/register-esm.mjs",
+      "specifier": "@modern-js/app-tools-extensions/config",
+      "target": "packages/solutions/app-tools-extensions/src/config.ts",
+      "owner": "bleedingdev",
+      "reason": "Register fork-owned native module invalidation with the existing Node loader so awaited development reloads refresh changed server imports without replacing the native TypeScript runtime."
+    },
+    {
       "file": "packages/runtime/plugin-i18n/src/cli/localisedRoutes.ts",
       "specifier": "@modern-js/i18n-runtime-extensions",
       "target": "packages/runtime/i18n-extensions/src/index.ts",
