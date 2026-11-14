@@ -4,9 +4,9 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1441,
-  "totalHunks": 4847,
-  "totalChangedLines": 103533,
+  "totalFiles": 1442,
+  "totalHunks": 4855,
+  "totalChangedLines": 103689,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -61,7 +61,7 @@
     {
       "file": "packages/cli/builder/src/plugins/environmentDefaults.ts",
       "hunks": 5,
-      "changedLines": 19
+      "changedLines": 22
     },
     {
       "file": "packages/cli/builder/src/plugins/htmlMinify.ts",
@@ -146,7 +146,7 @@
     {
       "file": "packages/cli/builder/tests/default.test.ts",
       "hunks": 17,
-      "changedLines": 427
+      "changedLines": 450
     },
     {
       "file": "packages/cli/builder/tests/environment.test.ts",
@@ -3395,8 +3395,13 @@
     },
     {
       "file": "packages/runtime/render/src/client/index.tsx",
-      "hunks": 6,
-      "changedLines": 17
+      "hunks": 7,
+      "changedLines": 43
+    },
+    {
+      "file": "packages/runtime/render/src/client/serverElements.tsx",
+      "hunks": 1,
+      "changedLines": 27
     },
     {
       "file": "packages/runtime/render/src/rsc-html-stream/server.ts",
@@ -3416,7 +3421,7 @@
     {
       "file": "packages/runtime/render/src/server/rsc/csr.shared.tsx",
       "hunks": 1,
-      "changedLines": 41
+      "changedLines": 44
     },
     {
       "file": "packages/runtime/render/src/server/rsc/csr.tsx",
@@ -3445,8 +3450,8 @@
     },
     {
       "file": "packages/runtime/render/src/server/ssr/ssr.tsx",
-      "hunks": 10,
-      "changedLines": 59
+      "hunks": 11,
+      "changedLines": 61
     },
     {
       "file": "packages/runtime/render/src/ssr.ts",
@@ -3456,7 +3461,7 @@
     {
       "file": "packages/runtime/render/tests/build.test.mjs",
       "hunks": 1,
-      "changedLines": 51
+      "changedLines": 96
     },
     {
       "file": "packages/runtime/render/tests/fixtures/rsc-client.ts",
@@ -4240,8 +4245,8 @@
     },
     {
       "file": "packages/server/server/src/dev-tools/watcher/index.ts",
-      "hunks": 6,
-      "changedLines": 18
+      "hunks": 10,
+      "changedLines": 29
     },
     {
       "file": "packages/server/server/src/dev.ts",
@@ -4645,8 +4650,8 @@
     },
     {
       "file": "packages/solutions/app-tools/src/esm/register-esm.mjs",
-      "hunks": 2,
-      "changedLines": 52
+      "hunks": 3,
+      "changedLines": 66
     },
     {
       "file": "packages/solutions/app-tools/src/esm/ts-node-loader.mjs",
@@ -5321,7 +5326,7 @@
     {
       "file": "packages/toolkit/mcp-apps/src/server/index.ts",
       "hunks": 1,
-      "changedLines": 94
+      "changedLines": 95
     },
     {
       "file": "packages/toolkit/mcp-apps/src/server/resources.ts",
@@ -5341,7 +5346,7 @@
     {
       "file": "packages/toolkit/mcp-apps/src/ui/react.ts",
       "hunks": 1,
-      "changedLines": 64
+      "changedLines": 65
     },
     {
       "file": "packages/toolkit/mcp-apps/src/ui/state.ts",
@@ -5401,7 +5406,7 @@
     {
       "file": "packages/toolkit/mcp-apps/tests/resources.test.ts",
       "hunks": 1,
-      "changedLines": 293
+      "changedLines": 292
     },
     {
       "file": "packages/toolkit/mcp-apps/tests/server-plugin.test.ts",
@@ -5416,7 +5421,7 @@
     {
       "file": "packages/toolkit/mcp-apps/tests/state.test.ts",
       "hunks": 1,
-      "changedLines": 28
+      "changedLines": 29
     },
     {
       "file": "packages/toolkit/mcp-apps/tsconfig.json",
