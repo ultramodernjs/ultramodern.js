@@ -4,6 +4,11 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { captureResolvedOctaneCompilerInputs } from './octane-compiler-inputs.mjs';
 
+export async function qualifyOctaneBatch(typecheck) {
+  for (let iteration = 1; iteration <= 8; iteration++)
+    await typecheck(iteration);
+}
+
 /** Keep the original acceptance failure even when its diagnostic probe passes. */
 export async function diagnoseOctaneTypecheck(typecheck, probe) {
   try {
@@ -57,7 +62,7 @@ export async function probeOctaneRouter(appRoot, load) {
     ],
     [
       entry,
-      "export type { AnyRouter, ResolveRoute, ResolveToParams } from '@tanstack/router-core';\n",
+      "export type { AnyRouter, ResolveRoute } from '@tanstack/router-core';\n",
     ],
   ]);
   const options = {
@@ -82,27 +87,52 @@ export async function probeOctaneRouter(appRoot, load) {
     },
   };
   const observations = [];
-  for (const project of [path.join(appRoot, 'tsconfig.json'), config]) {
+  for (const { project, diagnosticMode } of [
+    path.join(appRoot, 'tsconfig.json'),
+    config,
+  ].flatMap(project =>
+    ['semantic-only', 'full-pipeline'].map(diagnosticMode => ({
+      project,
+      diagnosticMode,
+    })),
+  )) {
     const api = new API(options);
     try {
       const snapshot = api.createSnapshot({ openProjects: [project] });
       const program = snapshot.getConfiguredProject(project)?.program;
       if (!program) throw new Error(`Native probe could not load ${project}`);
       const sourceFiles = program.getSourceFileNames();
+      const methods =
+        diagnosticMode === 'semantic-only'
+          ? ['getSemanticDiagnostics']
+          : [
+              'getConfigFileParsingDiagnostics',
+              'getProgramDiagnostics',
+              'getGlobalDiagnostics',
+              'getSyntacticDiagnostics',
+              'getBindDiagnostics',
+              'getSemanticDiagnostics',
+            ];
+      const diagnosticsByPhase = Object.fromEntries(
+        methods.map(method => [method, program[method]()]),
+      );
       observations.push({
         project,
+        diagnosticMode,
         status: 'checked',
         sourceFiles,
         routerDeclarationLoaded: sourceFiles.some(file =>
           /[/\\]router-core[/\\]dist[/\\]esm[/\\]link\.d\.ts$/u.test(file),
         ),
-        diagnostics: program.getSemanticDiagnostics(),
+        diagnosticsByPhase,
+        diagnostics: Object.values(diagnosticsByPhase).flat(),
       });
     } catch (error) {
       // An authored TSRX-only config may have no native OS inputs. Still run
       // the independent import probe and retain both observations.
       observations.push({
         project,
+        diagnosticMode,
         status: 'error',
         error: { name: error.name, message: error.message, stack: error.stack },
       });

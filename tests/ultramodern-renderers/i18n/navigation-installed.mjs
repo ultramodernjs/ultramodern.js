@@ -19,7 +19,10 @@ import {
   localizedNavigationSharedCheckCommand,
   verifyLocalizedNavigationCore,
 } from '../../../scripts/ultramodern-renderers/native-localized-navigation.mjs';
-import { diagnoseOctaneTypecheck } from '../../../scripts/ultramodern-renderers/octane-router-probe.mjs';
+import {
+  diagnoseOctaneTypecheck,
+  qualifyOctaneBatch,
+} from '../../../scripts/ultramodern-renderers/octane-router-probe.mjs';
 import { assertLocalizedNavigation } from './navigation-browser.mjs';
 import { localizedNavigationFixture } from './navigation-fixtures.mjs';
 import {
@@ -438,7 +441,14 @@ try {
         );
         await diagnoseOctaneTypecheck(
           () =>
-            command(pnpm, ['run', 'typecheck'], appRoot, 'octane-typecheck'),
+            qualifyOctaneBatch(iteration =>
+              command(
+                pnpm,
+                ['run', 'typecheck'],
+                appRoot,
+                `octane-typecheck-${iteration}`,
+              ),
+            ),
           () =>
             command(
               process.execPath,

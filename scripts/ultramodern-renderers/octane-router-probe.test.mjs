@@ -5,7 +5,24 @@ import test from 'node:test';
 import {
   diagnoseOctaneTypecheck,
   probeOctaneRouter,
+  qualifyOctaneBatch,
 } from './octane-router-probe.mjs';
+
+test('batch qualification requires all eight checks, never success after a failed attempt', async () => {
+  const checks = [];
+  await qualifyOctaneBatch(async iteration => checks.push(iteration));
+  assert.deepEqual(checks, [1, 2, 3, 4, 5, 6, 7, 8]);
+  const failedChecks = [];
+  const failure = new Error('TS2536');
+  await assert.rejects(
+    qualifyOctaneBatch(async iteration => {
+      failedChecks.push(iteration);
+      if (iteration === 2) throw failure;
+    }),
+    error => error === failure,
+  );
+  assert.deepEqual(failedChecks, [1, 2]);
+});
 
 test('successful typechecking does not run a diagnostic retry', async () => {
   await diagnoseOctaneTypecheck(
@@ -78,6 +95,7 @@ test('native discriminator uses fresh read-only APIs, an in-memory import, and r
     API: class {
       constructor(options) {
         this.options = options;
+        this.calls = [];
         instances.push(this);
       }
       createSnapshot({ openProjects: [project] }) {
@@ -86,7 +104,24 @@ test('native discriminator uses fresh read-only APIs, an in-memory import, and r
           getConfiguredProject: () => ({
             program: {
               getSourceFileNames: () => ['/router-core/dist/esm/link.d.ts'],
-              getSemanticDiagnostics: () => [diagnostic],
+              ...Object.fromEntries(
+                [
+                  'getConfigFileParsingDiagnostics',
+                  'getProgramDiagnostics',
+                  'getGlobalDiagnostics',
+                  'getSyntacticDiagnostics',
+                  'getBindDiagnostics',
+                  'getSemanticDiagnostics',
+                ].map(method => [
+                  method,
+                  () => {
+                    this.calls.push(method);
+                    return method === 'getSemanticDiagnostics'
+                      ? [diagnostic]
+                      : [];
+                  },
+                ]),
+              ),
             },
           }),
         };
@@ -97,7 +132,16 @@ test('native discriminator uses fresh read-only APIs, an in-memory import, and r
     },
   };
   const result = await probeOctaneRouter(root, load);
-  assert.equal(instances.length, 2);
+  assert.equal(instances.length, 4);
+  assert.deepEqual(instances[0].calls, ['getSemanticDiagnostics']);
+  assert.deepEqual(instances[1].calls, [
+    'getConfigFileParsingDiagnostics',
+    'getProgramDiagnostics',
+    'getGlobalDiagnostics',
+    'getSyntacticDiagnostics',
+    'getBindDiagnostics',
+    'getSemanticDiagnostics',
+  ]);
   assert(instances.every(instance => instance.closed));
   for (const { options } of instances) {
     assert.equal(options.tsserverPath, '/selected/native');
@@ -107,16 +151,16 @@ test('native discriminator uses fresh read-only APIs, an in-memory import, and r
     assert.equal(Object.keys(options.fs).length, 8);
   }
   const config = JSON.parse(
-    instances[1].options.fs.readFile(instances[1].project),
+    instances[2].options.fs.readFile(instances[2].project),
   );
   assert.equal(config.extends, path.join(root, 'tsconfig.json'));
   assert.equal(config.compilerOptions.skipLibCheck, false);
   assert.match(
-    instances[1].options.fs.readFile(config.files[0]),
+    instances[2].options.fs.readFile(config.files[0]),
     /@tanstack\/router-core/,
   );
   assert(!fs.existsSync(config.files[0]));
-  assert(!fs.existsSync(instances[1].project));
+  assert(!fs.existsSync(instances[2].project));
   assert(result.observations.every(item => item.diagnostics[0] === diagnostic));
   assert(result.observations.every(item => item.routerDeclarationLoaded));
   const OriginalAPI = load.API;
@@ -129,7 +173,7 @@ test('native discriminator uses fresh read-only APIs, an in-memory import, and r
   };
   const partial = await probeOctaneRouter(root, load);
   assert.equal(partial.observations[0].status, 'error');
-  assert.equal(partial.observations[1].status, 'checked');
+  assert.equal(partial.observations[2].status, 'checked');
   assert(instances.every(instance => instance.closed));
 });
 
