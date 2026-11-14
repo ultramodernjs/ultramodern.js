@@ -3,7 +3,7 @@ export default [
     packageName: 'rsbuild-plugin-dts',
     version: '1.0.3',
     path: 'patches/rsbuild-plugin-dts@1.0.3.patch',
-    sha256: '132d5eae576f300ea36ddb948e94931fcf376b8a9ca60aad1a26d7e5c0c8f6af',
+    sha256: '8255452172489739b9b7e007327f907e527e2497e129cdaa0c31715162763278',
     repository: true,
     workspace: null,
     reason:
