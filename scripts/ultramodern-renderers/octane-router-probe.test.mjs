@@ -84,10 +84,16 @@ test('native discriminator uses fresh read-only APIs, an in-memory import, and r
     text: 'native diagnostic',
     fileName: '/link.d.ts',
   };
+  let liveCalls = 0;
   const load = {
+    probeLiveTraversal: async appRoot => {
+      assert.equal(appRoot, root);
+      liveCalls++;
+      return { status: 'fake-live-traversal' };
+    },
     probeProjection: async appRoot => {
       assert.equal(appRoot, root);
-      return { status: 'fake-captured-projected-graph' };
+      return { replay: { status: 'capture-only' } };
     },
     capture: async () => ({
       compiler: { path: '/selected/native', sha256: 'native-hash' },
@@ -136,7 +142,13 @@ test('native discriminator uses fresh read-only APIs, an in-memory import, and r
     },
   };
   const result = await probeOctaneRouter(root, load);
-  assert.equal(result.projection.status, 'fake-captured-projected-graph');
+  assert.equal(result.liveTraversal.status, 'fake-live-traversal');
+  assert.equal(result.projection.replay.status, 'capture-only');
+  assert.equal(
+    liveCalls,
+    1,
+    'capture-only projection must not gate live traversal',
+  );
   assert.equal(instances.length, 4);
   assert.deepEqual(instances[0].calls, ['getSemanticDiagnostics']);
   assert.deepEqual(instances[1].calls, [
@@ -179,6 +191,21 @@ test('native discriminator uses fresh read-only APIs, an in-memory import, and r
   const partial = await probeOctaneRouter(root, load);
   assert.equal(partial.observations[0].status, 'error');
   assert.equal(partial.observations[2].status, 'checked');
+  assert(instances.every(instance => instance.closed));
+  assert.equal(liveCalls, 2);
+  load.probeProjection = async () => {
+    throw new Error('frozen projection failed');
+  };
+  load.probeLiveTraversal = async () => {
+    liveCalls++;
+    throw new Error('live capture failed');
+  };
+  const errors = await probeOctaneRouter(root, load);
+  assert.equal(liveCalls, 3, 'projection failure still runs live once');
+  assert.equal(errors.projection.error.message, 'frozen projection failed');
+  assert.equal(errors.liveTraversal.status, 'inconclusive');
+  assert.equal(errors.liveTraversal.error.message, 'live capture failed');
+  assert.equal(errors.observations.length, 4);
   assert(instances.every(instance => instance.closed));
 });
 

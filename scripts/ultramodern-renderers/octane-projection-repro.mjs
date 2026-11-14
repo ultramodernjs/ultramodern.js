@@ -101,6 +101,85 @@ function graphOf(project, config) {
   };
 }
 
+// Only the wrapper-generated config's full path is incidental. All other paths,
+// source ordering and text remain significant, including arbitrary UUIDs.
+function liveInputIdentity(graph, configFile) {
+  const generated =
+    /(?:^|[/\\])\.octane-typecheck-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}\.json$/iu;
+  const replacements = generated.test(configFile)
+    ? [configFile, JSON.stringify(configFile).slice(1, -1)]
+    : [];
+  function normalize(value) {
+    if (typeof value === 'string') {
+      for (const from of replacements)
+        value = value.replaceAll(from, '<generated-octane-config>');
+      return value;
+    }
+    if (Array.isArray(value)) return value.map(normalize);
+    if (value && typeof value === 'object')
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [key, normalize(item)]),
+      );
+    return value;
+  }
+  // Content digests are retained in evidence, but computed again after the sole
+  // permitted normalization for comparison (rather than comparing raw hashes).
+  const { bytes, ...inputs } = graph;
+  return hash(
+    normalize({
+      ...inputs,
+      files: graph.files.map(({ sha256, ...file }) => file),
+      configs: graph.configs.map(({ sha256, ...file }) => file),
+    }),
+  );
+}
+
+function liveGraphOf(project, openProjects, configFile) {
+  const program = project.program;
+  const sourceOrder = [...program.getSourceFileNames()];
+  const configNames = [...program.getConfigFileNames()];
+  if (!configNames.includes(configFile))
+    throw new Error('Snapshot config closure omits the effective config');
+  if (sourceOrder.length + configNames.length > maxFiles)
+    throw new Error(`Visible source/config graph exceeds ${maxFiles} files`);
+  let bytes = 0;
+  function read(file, config) {
+    if (!allowed(file, config))
+      throw new Error(
+        `Excluded ${config ? 'config' : 'source'} input: ${file}`,
+      );
+    const content = (
+      config ? program.getConfigSourceFile(file) : program.getSourceFile(file)
+    )?.text;
+    if (typeof content !== 'string')
+      throw new Error(
+        `Snapshot ${config ? 'config' : 'source'} text unavailable: ${file}`,
+      );
+    bytes += Buffer.byteLength(content);
+    if (bytes > maxBytes)
+      throw new Error(`Visible source/config graph exceeds ${maxBytes} bytes`);
+    return {
+      path: file,
+      content,
+      sha256: createHash('sha256').update(content).digest('hex'),
+    };
+  }
+  if (typeof project.currentDirectory !== 'string')
+    throw new Error('Snapshot project currentDirectory unavailable');
+  const graph = {
+    currentDirectory: project.currentDirectory,
+    openProjects: [...openProjects],
+    roots: [...project.parsedCommandLine.fileNames],
+    compilerOptions: copy(program.getCompilerOptions()),
+    projectReferences: copy(project.parsedCommandLine.projectReferences ?? []),
+    configFileParsingDiagnostics: copy(project.parsedCommandLine.errors ?? []),
+    sourceOrder,
+    files: sourceOrder.map(file => read(file, false)),
+    configs: configNames.map(file => read(file, true)),
+  };
+  return { ...graph, bytes, identity: liveInputIdentity(graph, configFile) };
+}
+
 async function installed(appRoot) {
   if (
     process.env.GITHUB_ACTIONS !== 'true' ||
@@ -144,7 +223,7 @@ export function octaneProjectionResult() {
 export function observeOctaneProjection(
   API,
   result,
-  { failureOnly = false, onClose = () => {} } = {},
+  { failureOnly = false, onClose = () => {}, liveArm } = {},
 ) {
   const descriptor = Object.getOwnPropertyDescriptor(
     API.prototype,
@@ -239,6 +318,53 @@ export function observeOctaneProjection(
               // Freeze after the wrapper's diagnostic requests, before close.
               // Source fetches must not precede its semantic check.
               freeze = () => {
+                if (liveArm) {
+                  if (
+                    !phases.every(phase =>
+                      Array.isArray(capture.rawDiagnosticsByPhase[phase]),
+                    ) ||
+                    !Array.isArray(liveArm.orderedSemanticDiagnostics)
+                  ) {
+                    capture.status = 'incomplete';
+                    capture.error = {
+                      message:
+                        'Live diagnostic pipeline incomplete; no text capture attempted',
+                    };
+                    return;
+                  }
+                  liveArm.phase = 'observe-visible-inputs';
+                  try {
+                    capture.graph = liveGraphOf(
+                      project,
+                      options.openProjects,
+                      configFile,
+                    );
+                    if (
+                      hash(capture.graph.sourceOrder) !==
+                      liveArm.sourceOrderHash
+                    )
+                      throw new Error(
+                        'Visible source order changed after ordered semantics',
+                      );
+                    capture.status = 'captured';
+                    // Metadata only; never open reference projects or flatten
+                    // their roots into the main program.
+                    if (snapshot.getProjects)
+                      liveArm.loadedProjects = snapshot
+                        .getProjects()
+                        .map(item => ({
+                          currentDirectory: item.currentDirectory,
+                          roots: copy(item.parsedCommandLine.fileNames),
+                          projectReferences: copy(
+                            item.parsedCommandLine.projectReferences ?? [],
+                          ),
+                        }));
+                  } catch (error) {
+                    capture.status = 'incomplete';
+                    capture.error = errorInfo(error);
+                  }
+                  return;
+                }
                 if (
                   failureOnly &&
                   !capture.rawDiagnosticsByPhase.getSemanticDiagnostics?.some(
@@ -266,16 +392,47 @@ export function observeOctaneProjection(
                   capture.error = errorInfo(error);
                 }
               };
+              const realSemantic = liveArm
+                ? project.program.getSemanticDiagnostics
+                : undefined;
               for (const phase of phases) {
                 const method = project.program[phase];
                 hook(project.program, phase, (...args) => {
-                  const diagnostics = method.apply(project.program, args);
                   try {
-                    capture.rawDiagnosticsByPhase[phase] = copy(diagnostics);
+                    if (liveArm) liveArm.phase = phase;
+                    if (
+                      liveArm &&
+                      phase === 'getGlobalDiagnostics' &&
+                      !liveArm.orderedAttempted
+                    ) {
+                      liveArm.orderedAttempted = true;
+                      liveArm.phase = 'observe-source-file-list';
+                      const files = [...project.program.getSourceFileNames()];
+                      if (files.length > maxFiles)
+                        throw new Error(
+                          `Source list exceeds ${maxFiles} files`,
+                        );
+                      liveArm.sourceOrderHash = hash(files);
+                      if (liveArm.order === 'reverse') files.reverse();
+                      liveArm.fileOrder = [...files];
+                      liveArm.fileOrderHash = hash(files);
+                      liveArm.phase = 'ordered-semantics';
+                      liveArm.orderedSemanticDiagnostics = copy(
+                        realSemantic.call(project.program, files),
+                      );
+                      liveArm.phase = phase;
+                    }
+                    const diagnostics = method.apply(project.program, args);
+                    try {
+                      capture.rawDiagnosticsByPhase[phase] = copy(diagnostics);
+                    } catch (error) {
+                      capture.error = errorInfo(error);
+                    }
+                    return diagnostics;
                   } catch (error) {
-                    capture.error = errorInfo(error);
+                    if (liveArm) liveArm.errorPhase = liveArm.phase;
+                    throw error;
                   }
-                  return diagnostics;
                 });
               }
             } catch (error) {
@@ -305,6 +462,106 @@ export function observeOctaneProjection(
       dispose();
     },
   };
+}
+
+/** Two live, reference-aware research runs, never acceptance or frozen replay. */
+export async function probeOctaneLiveTraversal(appRoot, load) {
+  load ??= await installed(appRoot);
+  const comparison = {
+    schemaVersion: 1,
+    status: 'inconclusive',
+    inputs: load.inputs,
+    arms: [],
+    closure: {
+      status: 'incomplete',
+      scope: 'observed-main-program-and-snapshot-configs',
+      reason:
+        'Full reference-program and resolver filesystem closure is not proven.',
+    },
+    proofGaps: [
+      'Two fresh live wrapper research runs, not the original public CLI state, offline replay, a root fix, or acceptance.',
+      'getSourceFileNames is observed BEFORE ordered semantics; even this early file-list observation may perturb native request/cache history.',
+      'Visible main-program inputs and snapshot config/extends texts only. Full reference-program and resolver filesystem closure is not proven; matching identities are not hermeticity or compiler-state equality.',
+      'Agreement of these two orders is inconclusive about nondeterminism; no retries, permutations or root reduction are performed by this experiment.',
+    ],
+  };
+  for (const order of ['forward', 'reverse']) {
+    const arm = {
+      order,
+      status: 'error',
+      phase: 'install-observer',
+      rawDiagnosticsByPhase: {},
+    };
+    comparison.arms.push(arm);
+    const observed = octaneProjectionResult();
+    const observer = observeOctaneProjection(load.API, observed, {
+      liveArm: arm,
+    });
+    try {
+      arm.phase = 'check-wrapper';
+      arm.wrapper = {
+        status: 'checked',
+        ...copy(
+          load.checkOctaneProject({ project: 'tsconfig.json', cwd: appRoot }),
+        ),
+      };
+    } catch (error) {
+      arm.error = errorInfo(error);
+      arm.errorPhase ??= arm.phase;
+    } finally {
+      observer.closeAll();
+    }
+    const capture = observed.captures[0];
+    arm.rawDiagnosticsByPhase = capture?.rawDiagnosticsByPhase ?? {};
+    arm.visibleInputs = capture?.graph;
+    arm.captureStatus = capture?.status ?? 'incomplete';
+    arm.captureError = capture?.error ?? observed.captureError;
+    arm.closeError = observed.closeError;
+    if (
+      !arm.error &&
+      !arm.captureError &&
+      !arm.closeError &&
+      arm.wrapper?.status === 'checked' &&
+      capture?.status === 'captured' &&
+      arm.orderedAttempted &&
+      Array.isArray(arm.orderedSemanticDiagnostics) &&
+      phases.every(phase => Array.isArray(arm.rawDiagnosticsByPhase[phase]))
+    ) {
+      arm.status = 'captured';
+      arm.phase = 'complete';
+    }
+  }
+  if (!comparison.arms.every(arm => arm.status === 'captured'))
+    return comparison;
+  const [forward, reverse] = comparison.arms;
+  if (forward.visibleInputs.identity !== reverse.visibleInputs.identity) {
+    comparison.reason = 'visible-input-mismatch';
+    return comparison;
+  }
+  const targets = [
+    ...new Map(
+      comparison.arms.flatMap(arm =>
+        routerTargets(arm.orderedSemanticDiagnostics).map(target => [
+          hash(target),
+          target,
+        ]),
+      ),
+    ).values(),
+  ];
+  comparison.targets = targets;
+  if (targets.length !== 0 && targets.length !== 2) {
+    comparison.reason = 'No unique observed RouterCore TS2536 target pair';
+    return comparison;
+  }
+  for (const arm of comparison.arms)
+    arm.targetPairPresent =
+      targets.length === 2 &&
+      preservesTargets(arm.orderedSemanticDiagnostics, targets);
+  comparison.status =
+    forward.targetPairPresent !== reverse.targetPairPresent
+      ? 'live-target-pair-order-dependent'
+      : 'no-target-pair-difference';
+  return comparison;
 }
 
 /** Explicit diagnostic retry/control, never original-process evidence. */

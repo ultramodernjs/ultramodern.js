@@ -6,6 +6,7 @@ import test from 'node:test';
 import {
   observeOctaneProjection,
   octaneProjectionResult,
+  probeOctaneLiveTraversal,
   probeOctaneProjection,
   replayOctaneProjection,
 } from './octane-projection-repro.mjs';
@@ -992,3 +993,442 @@ test('a diagnostic retry does not launch the original-process traversal experime
   assert.equal(result.traversalComparison, undefined);
   assert.equal(f.instances.length, 2);
 });
+
+// Live traversal controls below are fake-only: no installed compiler loading.
+const livePair = ['first actual index error', 'second actual index error'].map(
+  text => ({
+    code: 2536,
+    category: 1,
+    text,
+    fileName: '/app/node_modules/@tanstack/router-core/dist/esm/link.d.ts',
+    pos: 123,
+    end: 145,
+    relatedInformation: [{ code: 12, text: 'keep me' }],
+  }),
+);
+const liveUnrelated = {
+  code: 9999,
+  text: 'keep unrelated raw failure',
+  category: 1,
+};
+const liveDigest = value =>
+  createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
+function liveFixture(settings = {}) {
+  const instances = [];
+  const programs = [];
+  const roots = ['/app/z.ts', '/app/a.ts'];
+  const sources = [...roots].reverse();
+  const refs = [
+    { path: '/ref-one/tsconfig.json' },
+    { path: '/ref-two/tsconfig.json' },
+  ];
+  const originals = [];
+  class API {
+    constructor() {
+      this.index = instances.length;
+      this.calls = [];
+      this.closes = 0;
+      instances.push(this);
+    }
+    get createSnapshot() {
+      return options => {
+        this.open = structuredClone(options);
+        const config = `/app/.octane-typecheck-00000000-0000-4000-8000-${String(this.index).padStart(12, '0')}.json`;
+        assert.deepEqual(options, { openProjects: [config] });
+        const configs = [config, '/config/extends.json'];
+        if (settings.credentialConfig) configs.push('/app/.env.secret.json');
+        this.config = config;
+        this.finished = false;
+        const program = {
+          getSourceFileNames: () => {
+            this.calls.push('file-list');
+            if (settings.changedSourceOrder && this.index === 1)
+              return [...sources].reverse();
+            if (settings.driftSourceOrder && this.finished)
+              return [...sources].reverse();
+            return settings.tooManyFiles
+              ? Array.from({ length: 4096 }, (_, i) => `/app/f${i}.ts`)
+              : [
+                  ...sources,
+                  ...(settings.credentialSource ? ['/app/.env.ts'] : []),
+                ];
+          },
+          getCompilerOptions: () => ({
+            strict: true,
+            configFilePath: config,
+            ...(settings.changedOptions && this.index === 1
+              ? { noCheck: true }
+              : {}),
+          }),
+          getConfigFileNames: () => {
+            assert(this.finished, 'config list after later wrapper semantics');
+            return settings.missingConfigList ? configs.slice(1) : configs;
+          },
+          getConfigSourceFile: file => {
+            assert(this.finished && !this.closes);
+            assert(!file.includes('.env'), 'reject credential before fetch');
+            this.calls.push(`config:${file}`);
+            if (settings.missingConfig && file.endsWith('extends.json'))
+              return undefined;
+            return {
+              text:
+                file === config
+                  ? JSON.stringify({
+                      files: roots,
+                      references: refs,
+                      configFilePath: config,
+                      extends: '/config/extends.json',
+                    })
+                  : `{"compilerOptions":{"strict":true},"virtualOverlayOnly":${settings.changedConfig && this.index === 1 ? 'false' : 'true'}}`,
+            };
+          },
+          getSourceFile: file => {
+            assert(
+              this.finished && !this.closes,
+              'source text after all diagnostics before close',
+            );
+            assert(!file.includes('.env'), 'reject credential before fetch');
+            this.calls.push(`text:${file}`);
+            if (settings.captureThrow) throw new Error('source fetch failed');
+            return {
+              text: settings.tooManyBytes
+                ? 'x'.repeat(16 * 1024 * 1024)
+                : `// ${file} ${settings.changedSource && this.index === 1 ? 'changed' : 'stable'} ${settings.arbitraryUuid ? `00000000-0000-4000-8000-${String(this.index).padStart(12, '0')}` : ''}\n`,
+            };
+          },
+          ...Object.fromEntries(
+            phases.map(phase => [
+              phase,
+              files => {
+                this.calls.push(files ? ['ordered', [...files]] : phase);
+                if (
+                  settings.throwPhase === phase &&
+                  (!settings.orderedThrow || files)
+                )
+                  throw new Error(`failed ${phase}`);
+                if (phase === 'getSemanticDiagnostics' && files) {
+                  assert.equal(
+                    this.ordered,
+                    undefined,
+                    'one ordered request per owner',
+                  );
+                  this.ordered = [...files];
+                  if (settings.diagnostics)
+                    return settings.diagnostics(this.index);
+                  return [
+                    ...(settings.mode === 'both' ||
+                    (settings.mode !== 'neither' && this.index === 0)
+                      ? livePair
+                      : []),
+                    liveUnrelated,
+                  ];
+                }
+                if (phase === 'getGlobalDiagnostics') {
+                  assert(this.ordered, 'ordered request precedes real globals');
+                  return [{ code: 77, text: 'real globals retained' }];
+                }
+                if (phase === 'getSemanticDiagnostics') {
+                  this.finished = true;
+                  return [liveUnrelated];
+                }
+                return [];
+              },
+            ]),
+          ),
+        };
+        programs.push(program);
+        originals.push(phases.map(phase => program[phase]));
+        const project = {
+          currentDirectory:
+            settings.changedCwd && this.index === 1 ? '/elsewhere' : '/app',
+          program,
+          parsedCommandLine: {
+            fileNames:
+              settings.changedRoots && this.index === 1
+                ? [...roots].reverse()
+                : roots,
+            projectReferences:
+              settings.changedRefs && this.index === 1 ? refs.slice(1) : refs,
+            errors: [],
+          },
+        };
+        return {
+          getConfiguredProject: file => {
+            assert.equal(file, config, 'never open reference projects');
+            return project;
+          },
+          getProjects: () => [
+            project,
+            {
+              currentDirectory: '/ref-one',
+              parsedCommandLine: {
+                fileNames: ['/ref-one/only.ts'],
+                projectReferences: [],
+              },
+            },
+            {
+              currentDirectory: '/ref-two',
+              parsedCommandLine: {
+                fileNames: ['/ref-two/only.ts'],
+                projectReferences: [],
+              },
+            },
+          ],
+        };
+      };
+    }
+    createSourceFileFromFile() {
+      assert.fail(
+        'live config capture must use snapshot program, not independent host parsing',
+      );
+    }
+    close() {
+      assert.equal(++this.closes, 1);
+      if (settings.closeThrow) throw new Error('close failed');
+    }
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(
+    API.prototype,
+    'createSnapshot',
+  );
+  const load = {
+    API,
+    checkOctaneProject(options) {
+      assert.deepEqual(options, { project: 'tsconfig.json', cwd: '/app' });
+      const api = new API();
+      try {
+        if (settings.beforeSnapshotThrow)
+          throw new Error('wrapper early failure');
+        const config = `/app/.octane-typecheck-00000000-0000-4000-8000-${String(api.index).padStart(12, '0')}.json`;
+        const snapshot = api.createSnapshot({ openProjects: [config] });
+        const program = snapshot.getConfiguredProject(config).program;
+        const diagnostics = phases.flatMap(phase => program[phase]());
+        if (settings.wrapperThrow) throw new Error('wrapper failed');
+        return { diagnostics, files: roots };
+      } finally {
+        api.close();
+      }
+    },
+  };
+  function cleanup() {
+    assert.equal(
+      instances.length,
+      2,
+      'exactly two fresh owners/wrapper invocations',
+    );
+    assert(
+      instances.every(api => api.closes === 1),
+      'each API closes exactly once',
+    );
+    assert(
+      instances.every(api => api.close === API.prototype.close),
+      'no instance close hook leaks',
+    );
+    assert.deepEqual(
+      Object.getOwnPropertyDescriptor(API.prototype, 'createSnapshot'),
+      descriptor,
+    );
+    for (const [i, program] of programs.entries())
+      assert.deepEqual(
+        phases.map(phase => program[phase]),
+        originals[i],
+        'no diagnostic hook leaks',
+      );
+  }
+  return { load, instances, roots, sources, refs, cleanup };
+}
+
+test('live reference-aware orders preserve real wrapper opening and retain raw phases/config overlays', async () => {
+  const f = liveFixture();
+  const result = await probeOctaneLiveTraversal('/app', f.load);
+  f.cleanup();
+  assert.equal(result.status, 'live-target-pair-order-dependent');
+  assert.deepEqual(
+    result.targets,
+    livePair.map(({ fileName, code, text }) => ({ fileName, code, text })),
+  );
+  assert.equal(
+    result.arms[0].visibleInputs.identity,
+    result.arms[1].visibleInputs.identity,
+  );
+  for (const [i, arm] of result.arms.entries()) {
+    const order = i ? [...f.sources].reverse() : f.sources;
+    assert.deepEqual(arm.fileOrder, order);
+    assert.equal(arm.fileOrderHash, liveDigest(order));
+    assert.deepEqual(arm.visibleInputs.roots, f.roots);
+    assert.deepEqual(arm.visibleInputs.projectReferences, f.refs);
+    assert.deepEqual(
+      arm.loadedProjects.map(project => project.roots),
+      [f.roots, ['/ref-one/only.ts'], ['/ref-two/only.ts']],
+    );
+    assert.equal(arm.visibleInputs.openProjects.length, 1);
+    assert.equal(arm.visibleInputs.currentDirectory, '/app');
+    assert.match(
+      arm.visibleInputs.configs[1].content,
+      /"virtualOverlayOnly":true/u,
+    );
+    assert.equal(arm.visibleInputs.configs.length, 2);
+    assert.deepEqual(arm.orderedSemanticDiagnostics, [
+      ...(i ? [] : livePair),
+      liveUnrelated,
+    ]);
+    assert.deepEqual(arm.rawDiagnosticsByPhase.getSemanticDiagnostics, [
+      liveUnrelated,
+    ]);
+    assert.deepEqual(arm.rawDiagnosticsByPhase.getGlobalDiagnostics, [
+      { code: 77, text: 'real globals retained' },
+    ]);
+    assert.deepEqual(arm.wrapper.diagnostics, [
+      { code: 77, text: 'real globals retained' },
+      liveUnrelated,
+    ]);
+    assert.deepEqual(f.instances[i].calls.slice(0, 9), [
+      'getConfigFileParsingDiagnostics',
+      'getProgramDiagnostics',
+      'file-list',
+      ['ordered', order],
+      'getGlobalDiagnostics',
+      'getSyntacticDiagnostics',
+      'getBindDiagnostics',
+      'getSemanticDiagnostics',
+      'file-list',
+    ]);
+  }
+  assert(result.proofGaps.some(gap => /BEFORE.*may perturb/u.test(gap)));
+  assert(result.proofGaps.some(gap => /closure is not proven/u.test(gap)));
+});
+
+for (const mode of ['both', 'neither'])
+  test(`agreeing ${mode} does not establish absence of nondeterminism`, async () => {
+    const f = liveFixture({ mode });
+    const result = await probeOctaneLiveTraversal('/app', f.load);
+    f.cleanup();
+    assert.equal(result.status, 'no-target-pair-difference');
+    assert(
+      result.proofGaps.some(gap =>
+        /inconclusive about nondeterminism/u.test(gap),
+      ),
+    );
+  });
+
+test('reverse-only target pair is also order dependent', async () => {
+  const f = liveFixture({
+    diagnostics: index => (index === 1 ? livePair : []),
+  });
+  const result = await probeOctaneLiveTraversal('/app', f.load);
+  f.cleanup();
+  assert.equal(result.status, 'live-target-pair-order-dependent');
+  assert.deepEqual(
+    result.arms.map(arm => arm.targetPairPresent),
+    [false, true],
+  );
+});
+
+for (const [name, diagnostics] of [
+  ['one target', index => (index === 0 ? livePair.slice(0, 1) : [])],
+  ['duplicate target', () => [livePair[0], livePair[0]]],
+  [
+    'different target texts',
+    index => livePair.map(item => ({ ...item, text: `${item.text} ${index}` })),
+  ],
+]) {
+  test(`${name} cannot substitute for one unique exact target pair`, async () => {
+    const f = liveFixture({ diagnostics });
+    const result = await probeOctaneLiveTraversal('/app', f.load);
+    f.cleanup();
+    assert.equal(result.status, 'inconclusive');
+    assert.match(result.reason, /unique observed/u);
+    assert.deepEqual(
+      result.arms.map(arm => arm.orderedSemanticDiagnostics),
+      [diagnostics(0), diagnostics(1)],
+    );
+  });
+}
+
+for (const setting of [
+  'changedOptions',
+  'changedSource',
+  'changedConfig',
+  'changedCwd',
+  'changedRefs',
+  'changedRoots',
+  'changedSourceOrder',
+  'arbitraryUuid',
+])
+  test(`changed visible input ${setting} is inconclusive (only generated UUID is normalized)`, async () => {
+    const f = liveFixture({ [setting]: true });
+    const result = await probeOctaneLiveTraversal('/app', f.load);
+    f.cleanup();
+    assert.equal(result.status, 'inconclusive');
+    assert.equal(result.reason, 'visible-input-mismatch');
+  });
+
+for (const setting of [
+  'credentialSource',
+  'credentialConfig',
+  'missingConfig',
+  'missingConfigList',
+  'tooManyFiles',
+  'tooManyBytes',
+  'captureThrow',
+  'closeThrow',
+  'wrapperThrow',
+  'beforeSnapshotThrow',
+  'driftSourceOrder',
+])
+  test(`live ${setting} retains error and cannot classify order dependence`, async () => {
+    const f = liveFixture({ [setting]: true });
+    const result = await probeOctaneLiveTraversal('/app', f.load);
+    f.cleanup();
+    assert.equal(result.status, 'inconclusive');
+    assert(
+      result.arms.every(arm => arm.error || arm.captureError || arm.closeError),
+    );
+    if (setting === 'tooManyBytes')
+      assert.match(result.arms[0].captureError.message, /33554432 bytes/u);
+    if (setting === 'tooManyFiles')
+      assert.match(result.arms[0].captureError.message, /4096 files/u);
+  });
+
+test('default live loader is hosted-only before any installed package/compiler loading', async () => {
+  const old = process.env.GITHUB_ACTIONS;
+  process.env.GITHUB_ACTIONS = 'false';
+  try {
+    await assert.rejects(
+      probeOctaneLiveTraversal('/does/not/exist'),
+      /hosted-only/u,
+    );
+  } finally {
+    if (old === undefined) delete process.env.GITHUB_ACTIONS;
+    else process.env.GITHUB_ACTIONS = old;
+  }
+});
+
+for (const [throwPhase, orderedThrow] of [
+  ['getSemanticDiagnostics', true],
+  ['getGlobalDiagnostics', false],
+  ['getProgramDiagnostics', false],
+])
+  test(`throwing ${orderedThrow ? 'ordered-semantics' : throwPhase} preserves phase, skips text capture and restores hooks`, async () => {
+    const f = liveFixture({ throwPhase, orderedThrow });
+    const result = await probeOctaneLiveTraversal('/app', f.load);
+    f.cleanup();
+    assert.equal(result.status, 'inconclusive');
+    for (const arm of result.arms) {
+      assert.equal(
+        arm.errorPhase,
+        orderedThrow ? 'ordered-semantics' : throwPhase,
+      );
+      assert.equal(arm.captureStatus, 'incomplete');
+      assert.match(arm.error.message, /failed/u);
+    }
+    assert(
+      f.instances.every(
+        api =>
+          !api.calls.some(
+            call => typeof call === 'string' && /^(text|config):/u.test(call),
+          ),
+      ),
+    );
+  });
