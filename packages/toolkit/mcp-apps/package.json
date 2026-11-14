@@ -49,7 +49,7 @@
   "scripts": {
     "build": "rslib build",
     "test": "rstest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "node ../../../scripts/with-effect-tsrs.mjs --project tsconfig.json --noEmit"
   },
   "dependencies": {
     "@rsbuild/core": "2.3.2"

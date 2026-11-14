@@ -175,6 +175,12 @@
       "modern:source": "./src/module-federation-config/index.ts",
       "import": "./dist/esm-node/module-federation-config/index.mjs",
       "require": "./dist/cjs/module-federation-config/index.js"
+    },
+    "./native-server-compiler": {
+      "types": "./dist/types/native-server-compiler.d.ts",
+      "modern:source": "./src/native-server-compiler.ts",
+      "import": "./dist/esm-node/native-server-compiler.mjs",
+      "require": "./dist/cjs/native-server-compiler.js"
     }
   },
   "typesVersions": {
@@ -200,6 +206,9 @@
       ],
       "deploy-output/trace-files": [
         "./dist/types/deploy-output/trace-files.d.ts"
+      ],
+      "native-server-compiler": [
+        "./dist/types/native-server-compiler.d.ts"
       ]
     }
   },
@@ -232,13 +241,16 @@
     "compression-webpack-plugin": "^12.0.0",
     "esbuild": "^0.28.2",
     "jsonc-parser": "3.3.1",
-    "std-env": "4.3.0"
+    "std-env": "4.3.0",
+    "@modern-js/server-utils": "workspace:*"
   },
   "peerDependencies": {
     "@rsbuild/core": "2.3.2",
     "@loadable/component": "5.16.7",
     "@modern-js/runtime-renderer-extensions": "workspace:^3.8.3",
-    "react": "^19.3.1"
+    "react": "^19.3.1",
+    "@effect/tsgo": "0.67.0",
+    "tsrs": "0.21.0-ts7.1.0-beta"
   },
   "peerDependenciesMeta": {
     "@loadable/component": {
@@ -248,6 +260,12 @@
       "optional": true
     },
     "react": {
+      "optional": true
+    },
+    "@effect/tsgo": {
+      "optional": true
+    },
+    "tsrs": {
       "optional": true
     }
   },
@@ -271,7 +289,9 @@
     "@modern-js/runtime-renderer-extensions": "workspace:*",
     "pg": "8.23.1",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "@effect/tsgo": "0.67.0",
+    "tsrs": "0.21.0-ts7.1.0-beta"
   },
   "sideEffects": false,
   "publishConfig": {

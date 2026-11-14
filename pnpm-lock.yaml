@@ -3192,6 +3192,9 @@ importers:
       '@modern-js/server-runtime-extensions':
         specifier: workspace:*
         version: link:../../server/runtime-extensions
+      '@modern-js/server-utils':
+        specifier: workspace:*
+        version: link:../../server/utils
       '@modern-js/surface-resolution':
         specifier: workspace:*
         version: link:../../toolkit/surface-resolution
@@ -3220,6 +3223,9 @@ importers:
         specifier: 4.3.0
         version: 4.3.0
     devDependencies:
+      '@effect/tsgo':
+        specifier: 0.67.0
+        version: 0.67.0
       '@loadable/component':
         specifier: 5.16.7
         version: 5.16.7(react@19.3.1)
@@ -3280,6 +3286,9 @@ importers:
       react-dom:
         specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
+      tsrs:
+        specifier: 0.21.0-ts7.1.0-beta
+        version: 0.21.0-ts7.1.0-beta
 
   packages/solutions/ultramodern-app-tools:
     dependencies:
@@ -4287,6 +4296,10 @@ importers:
         version: 4.23.15
 
   scripts/rslib:
+    dependencies:
+      '@scripts/effect-tsrs-dts':
+        specifier: workspace:*
+        version: link:../tsrs-dts
     devDependencies:
       '@rsbuild/plugin-react':
         specifier: 2.1.1

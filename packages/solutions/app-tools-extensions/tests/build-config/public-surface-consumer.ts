@@ -10,6 +10,7 @@ import {
   type ResolveEffectTsgoCompilerOptions,
   resolveEffectTsgoCompiler,
 } from '@modern-js/app-tools-extensions/config';
+import { nativeServerCompiler } from '@modern-js/app-tools-extensions/native-server-compiler';
 
 type Equal<Left, Right> =
   (<Value>() => Value extends Left ? 1 : 2) extends <
@@ -35,6 +36,8 @@ const apiCompilerPath: string = resolveEffectTsrsCompiler({
   from: import.meta.url,
 });
 void apiCompilerPath;
+const serverCompilerResult = nativeServerCompiler('/consumer');
+void serverCompilerResult;
 void environmentValue;
 
 const cloudflareConfig: CloudflareDeployConfig = {

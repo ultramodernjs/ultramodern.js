@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { nativeServerCompiler } from '@modern-js/app-tools-extensions/native-server-compiler';
 import type { UltramodernNativeTypeChecker } from '@modern-js/app-tools-extensions/native-type-checker';
 import { rspack } from '@rsbuild/core';
 import { rendererTypeCheckerPlugin } from '../../src/native-composition/type-checker';
@@ -70,6 +71,7 @@ async function verifyAppCohort(selection: 'automatic' | 'effect-go') {
       },
       getAppContext: () => ({ appDirectory }),
     });
+    expect(tools.serverCompiler).toBe(nativeServerCompiler);
     let checker: UltramodernNativeTypeChecker | undefined;
     let command: { executable: string; args: string[] } | undefined;
     const checkerPlugin = {

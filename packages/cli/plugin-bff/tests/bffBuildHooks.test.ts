@@ -42,6 +42,7 @@ async function fixture(
       source: {},
       resolve: {},
       server: {},
+      tools: {},
       output: { sourceMap },
       bff: {},
     }),

@@ -6,12 +6,10 @@ export const ts7DtsConfig: Exclude<Dts, boolean> = {
   abortOnError: true,
   bundle: false,
   distPath: './dist/types',
-  ...(process.env.ULTRAMODERN_DTS_COMPILER_MODULE
-    ? {
-        tsgo: true,
-        typescriptPath: process.env.ULTRAMODERN_DTS_COMPILER_MODULE,
-      }
-    : {}),
+  tsgo: true,
+  typescriptPath:
+    process.env.ULTRAMODERN_DTS_COMPILER_MODULE ||
+    require.resolve('@scripts/effect-tsrs-dts/version.cjs'),
 };
 
 export const RSLIB_CODE_ENTRY_GLOB =

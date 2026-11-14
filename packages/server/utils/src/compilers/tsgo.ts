@@ -1,30 +1,7 @@
 import { fs } from '@modern-js/utils';
 import { spawn } from 'child_process';
 import path from 'path';
-
-type TsgoConfig = {
-  compilerOptions?: {
-    allowJs?: boolean;
-    baseUrl?: string;
-    composite?: boolean;
-    declaration?: boolean;
-    declarationMap?: boolean;
-    emitDeclarationOnly?: boolean;
-    experimentalDecorators?: boolean;
-    incremental?: boolean;
-    jsx?: string;
-    moduleResolution?: string;
-    noEmit?: boolean;
-    noEmitOnError?: boolean;
-    outDir?: string;
-    paths?: Record<string, string[]>;
-    rootDir?: string;
-    tsBuildInfoFile?: string;
-  };
-  files?: string[];
-  include?: string[];
-  references?: Array<{ path: string }>;
-};
+import type { ServerCompiler, ServerCompilerConfig } from '../common';
 
 type TypeScriptPackageJson = {
   name?: string;
@@ -45,16 +22,20 @@ export const createResolvedTsgoConfig = async (
   appDirectory: string,
   tsconfigPath: string,
   sourceDirs: string[],
-  tsgoBinPath: string,
+  tsgoBinPath: string | Pick<ServerCompiler, 'readConfig'>,
   excludeFiles: string[] = [],
 ) => {
   const tsconfigDir = path.dirname(tsconfigPath);
-  const output = await runTsgo(
-    tsgoBinPath,
-    ['--showConfig', '-p', tsconfigPath],
-    { cwd: tsconfigDir },
-  );
-  const config = JSON.parse(output.stdout) as TsgoConfig;
+  const config: ServerCompilerConfig =
+    typeof tsgoBinPath === 'string'
+      ? JSON.parse(
+          (
+            await runTsgo(tsgoBinPath, ['--showConfig', '-p', tsconfigPath], {
+              cwd: tsconfigDir,
+            })
+          ).stdout,
+        )
+      : await tsgoBinPath.readConfig(tsconfigPath);
 
   config.compilerOptions ??= {};
   const options = config.compilerOptions;
@@ -145,7 +126,7 @@ const filterSourceFiles = (
 };
 
 export const runTsgo = (
-  tsgoBinPath: string,
+  tsgoBinPath: string | ServerCompiler['command'],
   args: string[],
   options: {
     cwd: string;
@@ -154,8 +135,13 @@ export const runTsgo = (
 ) =>
   new Promise<{ stdout: string; stderr: string; code: number }>(
     (resolve, reject) => {
-      const child = spawn(process.execPath, [tsgoBinPath, ...args], {
+      const command =
+        typeof tsgoBinPath === 'string'
+          ? { executable: process.execPath, args: [tsgoBinPath] }
+          : tsgoBinPath;
+      const child = spawn(command.executable, [...command.args, ...args], {
         cwd: options.cwd,
+        ...(typeof tsgoBinPath === 'string' ? {} : { env: tsgoBinPath.env }),
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       let stdout = '';

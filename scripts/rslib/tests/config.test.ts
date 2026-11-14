@@ -3,6 +3,18 @@ import mcpConfig from '../../../packages/toolkit/mcp-apps/rslib.config.mts';
 import { getDtsCompilerOptions } from '../../tsrs-dts/rslib-options.mjs';
 import { rslibConfig } from '../src';
 
+test('direct builds select the Effect declaration adapter without a launcher environment', () => {
+  expect(getDtsCompilerOptions({})).toEqual({
+    tsgo: true,
+    typescriptPath: require.resolve('@scripts/effect-tsrs-dts/version.cjs'),
+  });
+  expect(
+    getDtsCompilerOptions({
+      ULTRAMODERN_DTS_COMPILER_MODULE: '/selected/compiler.cjs',
+    }),
+  ).toEqual({ tsgo: true, typescriptPath: '/selected/compiler.cjs' });
+});
+
 test('generates shared declarations from a single library target', () => {
   const declarationTargets = rslibConfig.lib.filter(config => config.dts);
 

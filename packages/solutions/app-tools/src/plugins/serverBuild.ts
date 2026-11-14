@@ -69,6 +69,7 @@ export default (): CliPlugin<AppTools> => ({
             distDir,
             tsconfigPath,
             moduleType,
+            compiler: modernConfig.tools.serverCompiler,
             excludeFiles: api.getAppContext().serverCompileExcludedFiles,
           },
         );

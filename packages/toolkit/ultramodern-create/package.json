@@ -89,7 +89,7 @@
     "dev": "rslib build -c rslib.config.mts -w",
     "start": "node ./dist/esm-node/index.js",
     "test": "pnpm build && rstest",
-    "type-check": "tsc --noEmit -p tsconfig.json"
+    "type-check": "node ../../../scripts/with-effect-tsrs.mjs --project tsconfig.json --noEmit"
   },
   "dependencies": {
     "@babel/parser": "^8.0.7",

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "modern dev",
     "build": "modern build",
-    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
+    "typecheck": "node ../../../../scripts/with-effect-tsrs.mjs --project tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
     "@effect/opentelemetry": "4.0.7",

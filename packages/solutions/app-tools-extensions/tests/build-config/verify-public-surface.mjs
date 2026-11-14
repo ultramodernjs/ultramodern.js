@@ -36,6 +36,13 @@ for (const surface of [cjsCompiler, esmCompiler]) {
   assert.equal(typeof surface.resolveEffectTsrsCompiler, 'function');
 }
 
+for (const surface of [
+  require('@modern-js/app-tools-extensions/native-server-compiler'),
+  await import('@modern-js/app-tools-extensions/native-server-compiler'),
+]) {
+  assert.equal(typeof surface.nativeServerCompiler, 'function');
+}
+
 const cjsConfig = require('@modern-js/app-tools-extensions/config');
 const esmConfig = await import('@modern-js/app-tools-extensions/config');
 

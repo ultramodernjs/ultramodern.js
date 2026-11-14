@@ -123,3 +123,46 @@ test('Octane and its native i18n factory share the same peer-bound i18next types
     realpathSync(nativeI18n.resolve('i18next/package.json')),
   );
 });
+
+for (const [directory, script] of [
+  ['packages/runtime/render', 'test'],
+  ...['mf-host', 'mf-remote', 'mf-remote-2'].map(name => [
+    `tests/integration/routes-tanstack-mf/${name}`,
+    'typecheck',
+  ]),
+]) {
+  const cwd = path.join(root, directory);
+  const manifest = JSON.parse(
+    readFileSync(path.join(cwd, 'package.json'), 'utf8'),
+  );
+  // The render test command continues with Rstest after its real type check.
+  const [prefix] = manifest.scripts[script].split(' && ');
+  const [command, ...args] = prefix.split(/\s+/u);
+
+  test(`${directory} direct type check selects the Effect compiler`, () => {
+    assert.equal(command, 'node');
+    assert.equal(
+      path.resolve(cwd, args[0]),
+      path.join(root, 'scripts/with-effect-tsrs.mjs'),
+    );
+    assert.equal(args[1], '--project');
+    const result = spawnSync(process.execPath, [...args, '--version'], {
+      cwd,
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /\+effect-tsgo\.0\.67\.0/u);
+  });
+
+  test(`${directory} direct type check accepts its real project`, () => {
+    const result = spawnSync(process.execPath, args, {
+      cwd,
+      encoding: 'utf8',
+      timeout: 120000,
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  });
+}

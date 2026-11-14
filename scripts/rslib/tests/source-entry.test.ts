@@ -5,6 +5,7 @@ import os from 'os';
 import path from 'path';
 import { setTimeout as delay } from 'timers/promises';
 import { pathToFileURL } from 'url';
+import { getDtsCompilerOptions } from '../../tsrs-dts/rslib-options.mjs';
 import { rslibConfig } from '../src/index';
 
 const fixtureDirectory = path.join(__dirname, 'fixtures/source-entry');
@@ -30,6 +31,7 @@ function createFixtureBuildConfig(outputRoot: string): RslibConfig {
         typeof libConfig.dts === 'object'
           ? {
               ...libConfig.dts,
+              ...getDtsCompilerOptions({}),
               distPath: declarationRoot,
             }
           : libConfig.dts,

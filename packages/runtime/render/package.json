@@ -24,7 +24,7 @@
     "prepublishOnly": "only-allow-pnpm",
     "dev": "rslib build --watch",
     "build": "rslib build",
-    "test": "tsc --noEmit -p tsconfig.json && rstest"
+    "test": "node ../../../scripts/with-effect-tsrs.mjs --project tsconfig.json --noEmit && rstest"
   },
   "dependencies": {
     "@modern-js/types": "workspace:*",
