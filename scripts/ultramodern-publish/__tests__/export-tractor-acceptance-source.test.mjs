@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { exportTractorAcceptanceSource } from '../export-tractor-acceptance-source.mjs';
@@ -12,9 +13,8 @@ const exporter = path.resolve(
 );
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 function fixture(t) {
-  assert.ok(process.env.OWNED_TEMP_DIR, 'Run through owned-temp-dir');
   const root = fs.mkdtempSync(
-    path.join(process.env.OWNED_TEMP_DIR, 'retention-'),
+    path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'retention-'),
   );
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const workspace = path.join(root, 'tractor');
