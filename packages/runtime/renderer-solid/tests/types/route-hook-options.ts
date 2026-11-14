@@ -62,3 +62,17 @@ export function readSelectedLoaderData() {
   const selected: number = length();
   return selected;
 }
+
+// Loose hooks cannot request throwing, even when their generics are forwarded.
+export function rejectThrowingLooseMatch() {
+  useParams<AppRouter, undefined, false, true>({
+    strict: false,
+    // @ts-expect-error Loose matches must remain non-throwing.
+    shouldThrow: true,
+  });
+  useSearch<AppRouter, undefined, false, true>({
+    strict: false,
+    // @ts-expect-error Loose matches must remain non-throwing.
+    shouldThrow: true,
+  });
+}

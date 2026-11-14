@@ -314,8 +314,14 @@ function resolveTsrsCompiler(
 export function validateConfiguredEffectCompiler(
   compiler: string,
   from: string | URL,
+  requiredBackend?: 'tsrs',
 ): void {
   const version = compilerVersion(compiler);
+  if (requiredBackend === 'tsrs' && !version.includes('(tsrs ')) {
+    throw new Error(
+      `The tsrs API requires an Effect-enabled tsrs executable, not Effect-Go: ${compiler}`,
+    );
+  }
   if (
     !/^Version \d+\.\d+\.\d+[\w.-]*\+effect-tsgo\.\d+\.\d+\.\d+(?:\s|$)/u.test(
       version,
@@ -341,7 +347,10 @@ export function validateConfiguredEffectCompiler(
 }
 
 /** Selects the exact native replacement without invoking the provider CLI. */
-export function resolveInstalledEffectCompiler(from: string | URL): string {
+export function resolveInstalledEffectCompiler(
+  from: string | URL,
+  requiredBackend?: 'tsrs',
+): string {
   let stage = 'Package CLI resolution';
   try {
     const effect = resolveEffectTsgoPackage(from);
@@ -366,6 +375,11 @@ export function resolveInstalledEffectCompiler(from: string | URL): string {
       // TSRS_BINARY remains an explicit candidate selection. Automatic
       // discovery uses the Effect provider's bundled native replacement.
       return resolveTsrsCompiler(tsrsManifest, effect, configuredTsrsCompiler);
+    }
+    if (requiredBackend === 'tsrs') {
+      throw new Error(
+        `The tsrs API requires a supported metadata-bound Effect tsrs artifact for ${String(from)}; Effect-Go cannot provide this API.`,
+      );
     }
     if (
       tsrsTarget &&

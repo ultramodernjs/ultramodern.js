@@ -1,30 +1,7 @@
 import { fs } from '@modern-js/utils';
 import { spawn } from 'child_process';
 import path from 'path';
-
-type TsgoConfig = {
-  compilerOptions?: {
-    allowJs?: boolean;
-    baseUrl?: string;
-    composite?: boolean;
-    declaration?: boolean;
-    declarationMap?: boolean;
-    emitDeclarationOnly?: boolean;
-    experimentalDecorators?: boolean;
-    incremental?: boolean;
-    jsx?: string;
-    moduleResolution?: string;
-    noEmit?: boolean;
-    noEmitOnError?: boolean;
-    outDir?: string;
-    paths?: Record<string, string[]>;
-    rootDir?: string;
-    tsBuildInfoFile?: string;
-  };
-  files?: string[];
-  include?: string[];
-  references?: Array<{ path: string }>;
-};
+import type { ServerCompiler, ServerCompilerConfig } from '../common';
 
 type TypeScriptPackageJson = {
   name?: string;
@@ -45,16 +22,20 @@ export const createResolvedTsgoConfig = async (
   appDirectory: string,
   tsconfigPath: string,
   sourceDirs: string[],
-  tsgoBinPath: string,
+  tsgoBinPath: string | Pick<ServerCompiler, 'readConfig'>,
   excludeFiles: string[] = [],
 ) => {
   const tsconfigDir = path.dirname(tsconfigPath);
-  const output = await runTsgo(
-    tsgoBinPath,
-    ['--showConfig', '-p', tsconfigPath],
-    { cwd: tsconfigDir },
-  );
-  const config = JSON.parse(output.stdout) as TsgoConfig;
+  const config: ServerCompilerConfig =
+    typeof tsgoBinPath === 'string'
+      ? JSON.parse(
+          (
+            await runTsgo(tsgoBinPath, ['--showConfig', '-p', tsconfigPath], {
+              cwd: tsconfigDir,
+            })
+          ).stdout,
+        )
+      : await tsgoBinPath.readConfig(tsconfigPath);
 
   config.compilerOptions ??= {};
   const options = config.compilerOptions;
@@ -66,9 +47,16 @@ export const createResolvedTsgoConfig = async (
   options.noEmit = options.declaration !== true;
   // Server sources may import TSX; `jsx` unset fails every such import.
   options.jsx ??= 'react-jsx';
-  delete options.emitDeclarationOnly;
-  delete options.outDir;
-  delete options.tsBuildInfoFile;
+  if (config.extends) {
+    // Deletion would restore the authored values through inheritance.
+    options.emitDeclarationOnly = false;
+    options.outDir = null;
+    options.tsBuildInfoFile = null;
+  } else {
+    delete options.emitDeclarationOnly;
+    delete options.outDir;
+    delete options.tsBuildInfoFile;
+  }
   // `--showConfig` emits `files` relative to the tsconfig directory.
   config.files = filterSourceFiles(
     tsconfigDir,
@@ -76,7 +64,7 @@ export const createResolvedTsgoConfig = async (
     config.files,
     excludeFiles,
   );
-  delete config.include;
+  config.include = [];
   // Project references make TS-Go require declaration outputs of sibling
   // workspace packages that this check never builds (TS6305 on a clean
   // checkout). Their sources stay reachable through module resolution.
@@ -84,7 +72,7 @@ export const createResolvedTsgoConfig = async (
 
   // TS-Go v7 removed baseUrl. Rebase `paths` onto the tsconfig directory so
   // TS-Go and Rspack's tsconfig resolver both see the mapping the app wrote.
-  if (options.baseUrl !== undefined) {
+  if (options.baseUrl != null) {
     const baseUrl = path.resolve(tsconfigDir, options.baseUrl);
     if (options.paths) {
       options.paths = Object.fromEntries(
@@ -100,12 +88,14 @@ export const createResolvedTsgoConfig = async (
         ]),
       );
     }
-    delete options.baseUrl;
+    if (config.extends) options.baseUrl = null;
+    else delete options.baseUrl;
   }
   if (
     ['node', 'node10'].includes(String(options.moduleResolution).toLowerCase())
   ) {
-    delete options.moduleResolution;
+    if (config.extends) options.moduleResolution = null;
+    else delete options.moduleResolution;
   }
 
   // Keep the generated config beside the app tsconfig so the relative `files`
@@ -145,7 +135,7 @@ const filterSourceFiles = (
 };
 
 export const runTsgo = (
-  tsgoBinPath: string,
+  tsgoBinPath: string | ServerCompiler['command'],
   args: string[],
   options: {
     cwd: string;
@@ -154,8 +144,13 @@ export const runTsgo = (
 ) =>
   new Promise<{ stdout: string; stderr: string; code: number }>(
     (resolve, reject) => {
-      const child = spawn(process.execPath, [tsgoBinPath, ...args], {
+      const command =
+        typeof tsgoBinPath === 'string'
+          ? { executable: process.execPath, args: [tsgoBinPath] }
+          : tsgoBinPath;
+      const child = spawn(command.executable, [...command.args, ...args], {
         cwd: options.cwd,
+        ...(typeof tsgoBinPath === 'string' ? {} : { env: tsgoBinPath.env }),
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       let stdout = '';

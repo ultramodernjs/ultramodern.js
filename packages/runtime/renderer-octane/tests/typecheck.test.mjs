@@ -3,12 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { API } from 'typescript/unstable/sync';
+import { typescriptVersion } from 'tsrs';
+import { API } from 'tsrs/sync';
 import {
   checkOctaneProject,
   formatOctaneDiagnostic,
   runOctaneTypecheck,
-} from '../src/typecheck.ts';
+} from '../dist/esm-node/typecheck.mjs';
 
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
 
@@ -55,7 +56,7 @@ test('native TS7 accepts imported Octane component props without writing project
   withProject({ 'Component.tsrx': component, 'main.tsrx': main }, root => {
     const before = fs.readdirSync(root);
     const result = checkOctaneProject({ project: 'tsconfig.json', cwd: root });
-    assert.equal(result.compilerVersion, '7.0.2');
+    assert.equal(result.compilerVersion, typescriptVersion);
     assert.deepEqual(result.diagnostics, []);
     assert.ok(result.files.includes(path.join(root, 'Component.tsrx')));
     assert.ok(result.files.includes(path.join(root, 'main.tsrx')));
@@ -84,11 +85,11 @@ test('native TS7 rejects imported component props at the authored UTF16 location
       formatOctaneDiagnostic(diagnostic, root),
       /^main\.tsrx\(3,\d+\): error TS2322:/u,
     );
-    assert.ok(
-      diagnostic.relatedInformation?.some(
-        info => info.fileName === path.join(root, 'Component.tsrx'),
-      ),
+    const related = diagnostic.relatedInformation?.find(
+      info => info.fileName === path.join(root, 'Component.tsrx'),
     );
+    assert.ok(related);
+    assert.equal(component.slice(related.pos, related.end), 'title');
   });
 });
 
@@ -223,20 +224,26 @@ test('imported JSON objects and arrays keep their authored types and contents', 
         config.compilerOptions.resolveJsonModule = true;
         fs.writeFileSync(configFile, JSON.stringify(config));
         const checkedJSON = new Map();
-        const updateSnapshot = API.prototype.updateSnapshot;
-        const observer = t.mock.method(
+        const createSnapshot = Object.getOwnPropertyDescriptor(
           API.prototype,
-          'updateSnapshot',
-          function (options) {
-            const snapshot = updateSnapshot.call(this, options);
-            const program = snapshot.getProject(
-              options.openProjects[0],
-            )?.program;
-            for (const name of ['object.json', 'array.json']) {
-              const source = program?.getSourceFile(path.join(root, name));
-              if (source) checkedJSON.set(name, source.text);
-            }
-            return snapshot;
+          'createSnapshot',
+        ).get;
+        const observer = t.mock.getter(
+          API.prototype,
+          'createSnapshot',
+          function () {
+            const create = createSnapshot.call(this);
+            return options => {
+              const snapshot = create(options);
+              const program = snapshot.getConfiguredProject(
+                options.openProjects[0],
+              )?.program;
+              for (const name of ['object.json', 'array.json']) {
+                const source = program?.getSourceFile(path.join(root, name));
+                if (source) checkedJSON.set(name, source.text);
+              }
+              return snapshot;
+            };
           },
         );
         let result;
@@ -398,30 +405,36 @@ test('referenced projects preserve authored TSX glob membership in native progra
           let referencedFiles;
           let referencedDiagnostics;
           const referenceFile = path.join(root, 'reference/tsconfig.json');
-          const updateSnapshot = API.prototype.updateSnapshot;
-          const observer = t.mock.method(
+          const createSnapshot = Object.getOwnPropertyDescriptor(
             API.prototype,
-            'updateSnapshot',
-            function (options) {
-              const snapshot = updateSnapshot.call(this, {
-                ...options,
-                openProjects: [...options.openProjects, referenceFile],
-              });
-              const reference = snapshot.getProject(referenceFile);
-              assert.ok(
-                reference,
-                'The native snapshot must load the actual referenced project',
-              );
-              referencedFiles = reference.program.getSourceFileNames();
-              referencedDiagnostics = [
-                ...reference.program.getConfigFileParsingDiagnostics(),
-                ...reference.program.getProgramDiagnostics(),
-                ...reference.program.getGlobalDiagnostics(),
-                ...reference.program.getSyntacticDiagnostics(),
-                ...reference.program.getBindDiagnostics(),
-                ...reference.program.getSemanticDiagnostics(),
-              ];
-              return snapshot;
+            'createSnapshot',
+          ).get;
+          const observer = t.mock.getter(
+            API.prototype,
+            'createSnapshot',
+            function () {
+              const create = createSnapshot.call(this);
+              return options => {
+                const snapshot = create({
+                  ...options,
+                  openProjects: [...options.openProjects, referenceFile],
+                });
+                const reference = snapshot.getConfiguredProject(referenceFile);
+                assert.ok(
+                  reference,
+                  'The native snapshot must load the actual referenced project',
+                );
+                referencedFiles = reference.program.getSourceFileNames();
+                referencedDiagnostics = [
+                  ...reference.program.getConfigFileParsingDiagnostics(),
+                  ...reference.program.getProgramDiagnostics(),
+                  ...reference.program.getGlobalDiagnostics(),
+                  ...reference.program.getSyntacticDiagnostics(),
+                  ...reference.program.getBindDiagnostics(),
+                  ...reference.program.getSemanticDiagnostics(),
+                ];
+                return snapshot;
+              };
             },
           );
           let result;
@@ -648,5 +661,176 @@ test('CLI checks actual programs and rejects unsupported or check-suppressing fl
       assert.equal(runOctaneTypecheck(['--skipLibCheck'], io), 1);
       assert.match(output, /incompatible with full Octane typechecking/u);
     },
+  );
+});
+
+// These tests must exercise the native --api path. Do not replace a missing
+// Effect diagnostic with CLI scraping or a synthesized projection diagnostic.
+for (const severity of ['error', 'warning']) {
+  test(`Effect tsrs reports authored floatingEffect as ${severity} through the real API`, t => {
+    const source =
+      "import * as Effect from 'effect/Effect';\n/* 🐈 */ Effect.succeed(42);\nexport const App = () => <div>Native</div>;\n";
+    withProject({ 'main.tsrx': source }, root => {
+      const configFile = path.join(root, 'tsconfig.json');
+      const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+      config.compilerOptions.plugins = [
+        {
+          name: '@effect/language-service',
+          diagnostics: true,
+          diagnosticSeverity: { floatingEffect: severity },
+        },
+      ];
+      fs.writeFileSync(configFile, JSON.stringify(config));
+      const before = fs.readdirSync(root);
+      let nativeDiagnostic;
+      const createSnapshot = Object.getOwnPropertyDescriptor(
+        API.prototype,
+        'createSnapshot',
+      ).get;
+      const observer = t.mock.getter(
+        API.prototype,
+        'createSnapshot',
+        function () {
+          const create = createSnapshot.call(this);
+          return options => {
+            const snapshot = create(options);
+            nativeDiagnostic = snapshot
+              .getConfiguredProject(options.openProjects[0])
+              ?.program.getSemanticDiagnostics()
+              .find(info => info.code === 377001);
+            assert.ok(
+              nativeDiagnostic,
+              'The actual native getSemanticDiagnostics must return floatingEffect (377001)',
+            );
+            return snapshot;
+          };
+        },
+      );
+      const write = t.mock.method(fs, 'writeFileSync', () => {
+        assert.fail('Octane typechecking must not write host files');
+      });
+      const mkdir = t.mock.method(fs, 'mkdirSync', () => {
+        assert.fail('Octane typechecking must not create host directories');
+      });
+      try {
+        const result = checkOctaneProject({
+          project: 'tsconfig.json',
+          cwd: root,
+        });
+        const diagnostic = result.diagnostics.find(
+          info => info.code === 377001,
+        );
+        assert.ok(
+          diagnostic,
+          `Real Effect tsrs semantic diagnostics must include floatingEffect (377001): ${JSON.stringify(result.diagnostics)}`,
+        );
+        assert.equal(diagnostic.origin, 'typescript');
+        assert.equal(diagnostic.category, severity);
+        assert.equal(diagnostic.fileName, path.join(root, 'main.tsrx'));
+        assert.equal(diagnostic.line, 2);
+        assert.equal(
+          diagnostic.column,
+          source.split('\n')[1].indexOf('Effect') + 1,
+        );
+        assert.ok(
+          source
+            .slice(diagnostic.pos, diagnostic.end)
+            .includes('Effect.succeed'),
+        );
+        assert.equal(diagnostic.source, nativeDiagnostic.source);
+        const code = `${nativeDiagnostic.source || 'TS'}377001:`;
+        assert.ok(
+          formatOctaneDiagnostic(diagnostic, root).includes(
+            `${severity} ${code}`,
+          ),
+        );
+        let output = '';
+        const status = runOctaneTypecheck(['--project', 'tsconfig.json'], {
+          cwd: root,
+          stdout: text => {
+            output += text;
+          },
+          stderr: text => {
+            output += text;
+          },
+        });
+        assert.equal(status, severity === 'error' ? 1 : 0, output);
+        assert.match(output, /main\.tsrx\(2,\d+\):/u);
+        assert.ok(output.includes(`${severity} ${code}`));
+        assert.doesNotMatch(output, /\.tsrx\.tsx|\.octane-typecheck-/u);
+        assert.deepEqual(fs.readdirSync(root), before);
+        assert.equal(
+          fs.readFileSync(path.join(root, 'main.tsrx'), 'utf8'),
+          source,
+        );
+        assert.equal(
+          fs.readFileSync(configFile, 'utf8'),
+          JSON.stringify(config),
+        );
+      } finally {
+        observer.mock.restore();
+        write.mock.restore();
+        mkdir.mock.restore();
+      }
+    });
+  });
+}
+
+test('real Effect API does not report floatingEffect for an assigned Effect', () => {
+  withProject(
+    {
+      'main.tsrx':
+        "import * as Effect from 'effect/Effect';\nexport const selected = Effect.succeed(42);\nexport const App = () => <div>Native</div>;\n",
+    },
+    root => {
+      const configFile = path.join(root, 'tsconfig.json');
+      const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+      config.compilerOptions.plugins = [
+        {
+          name: '@effect/language-service',
+          diagnostics: true,
+          diagnosticSeverity: { floatingEffect: 'error' },
+        },
+      ];
+      fs.writeFileSync(configFile, JSON.stringify(config));
+      const result = checkOctaneProject({
+        project: 'tsconfig.json',
+        cwd: root,
+      });
+      assert.deepEqual(result.diagnostics, []);
+      assert.ok(result.files.includes(path.join(root, 'main.tsrx')));
+    },
+  );
+});
+
+test('diagnostic formatting keeps custom native sources and related information', () => {
+  const diagnostic = {
+    fileName: '/app/main.tsrx',
+    pos: 0,
+    end: 1,
+    line: 1,
+    column: 1,
+    code: 377001,
+    source: 'effect',
+    category: 'warning',
+    origin: 'typescript',
+    text: 'Floating Effect',
+    relatedInformation: [
+      {
+        fileName: '/app/Component.tsrx',
+        pos: 0,
+        end: 1,
+        line: 1,
+        column: 1,
+        code: 2322,
+        category: 'message',
+        origin: 'typescript',
+        text: 'Authored reference',
+      },
+    ],
+  };
+  assert.equal(
+    formatOctaneDiagnostic(diagnostic, '/app'),
+    'main.tsrx(1,1): warning effect377001: Floating Effect\n  Component.tsrx(1,1): message TS2322: Authored reference',
   );
 });

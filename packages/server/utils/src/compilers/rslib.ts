@@ -1,7 +1,7 @@
 import { fs, logger, mergeAlias, semver } from '@modern-js/utils';
 import type { LibConfig, Rspack } from '@rslib/core';
 import path from 'path';
-import type { CompileOptions, IConfig } from '../common';
+import type { CompileOptions, IConfig, ServerCompiler } from '../common';
 import {
   createResolvedTsgoConfig,
   getTsgoBinPath,
@@ -222,6 +222,20 @@ export const compileServerSources = async (
   config: IConfig,
   options: CompileOptions & { tsconfigPath: string },
 ) => {
+  const compiler = await options.compiler?.(appDirectory);
+  try {
+    await compileWithCompiler(appDirectory, config, options, compiler);
+  } finally {
+    await compiler?.dispose?.();
+  }
+};
+
+const compileWithCompiler = async (
+  appDirectory: string,
+  config: IConfig,
+  options: CompileOptions & { tsconfigPath: string },
+  compiler: ServerCompiler | undefined,
+) => {
   const {
     sourceDirs,
     distDir,
@@ -235,13 +249,17 @@ export const compileServerSources = async (
       await copyAssets(sourceDir, appDirectory, distDir);
     }
   };
-  const tsgoBinPath = getTsgoBinPath(appDirectory);
+  const selectedCompiler = compiler ?? getTsgoBinPath(appDirectory);
+  const tsgoBinPath =
+    typeof selectedCompiler === 'string'
+      ? selectedCompiler
+      : selectedCompiler.command;
   const { config: tsconfig, resolvedConfigPath } =
     await createResolvedTsgoConfig(
       appDirectory,
       tsconfigPath,
       sourceDirs,
-      tsgoBinPath,
+      selectedCompiler,
       excludeFiles,
     );
   const compilerOptions = tsconfig.compilerOptions ?? {};
@@ -290,7 +308,8 @@ export const compileServerSources = async (
         bundle: false,
         distPath: distDir,
         tsgo: true,
-        typescriptPath: getTsgoModulePath(appDirectory),
+        typescriptPath:
+          compiler?.typescriptPath ?? getTsgoModulePath(appDirectory),
         // Emit-only diagnostics (such as TS2742) surface only here.
         abortOnError: failOnTypeError,
       };

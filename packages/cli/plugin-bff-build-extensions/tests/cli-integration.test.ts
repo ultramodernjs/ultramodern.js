@@ -60,6 +60,7 @@ async function createFixture(
   manager.addPlugins([useFork ? bffPlugin() : nativeBffPlugin()]);
   const plugins = manager.getPlugins();
   const config = {
+    tools: {},
     bff: { runtimeFramework, crossProject: true },
     source: {},
     resolve: {},

@@ -3,8 +3,8 @@
   "version": "2.66.0",
   "private": true,
   "scripts": {
-    "dev": "tsc --watch",
-    "build": "tsc",
+    "dev": "node ../with-effect-tsrs.mjs --project tsconfig.json --watch",
+    "build": "node ../with-effect-tsrs.mjs --project tsconfig.json",
     "start": "tsx ./src/index.ts"
   },
   "devDependencies": {

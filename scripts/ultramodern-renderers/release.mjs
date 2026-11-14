@@ -699,15 +699,11 @@ async function main() {
       await step(
         `${renderer} typecheck`,
         () =>
-          sh(
-            process.execPath,
-            ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json'],
-            {
-              cwd: appRoot,
-              env,
-              log: `${renderer}-typecheck`,
-            },
-          ),
+          sh('pnpm', ['run', 'typecheck'], {
+            cwd: appRoot,
+            env,
+            log: `${renderer}-typecheck`,
+          }),
         ready,
       );
       // The specs build and serve the app with its installed bin.

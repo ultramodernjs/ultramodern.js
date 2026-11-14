@@ -2343,6 +2343,12 @@ importers:
 
   packages/runtime/renderer-octane:
     dependencies:
+      '@effect/tsgo':
+        specifier: 0.67.0
+        version: 0.67.0
+      '@modern-js/app-tools-extensions':
+        specifier: workspace:*
+        version: link:../../solutions/app-tools-extensions
       '@modern-js/renderer-core':
         specifier: workspace:*
         version: link:../renderer-core
@@ -2358,9 +2364,9 @@ importers:
       seroval-plugins:
         specifier: 1.6.9
         version: 1.6.9(seroval@1.6.9)
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
+      tsrs:
+        specifier: 0.21.0-ts7.1.0-beta
+        version: 0.21.0-ts7.1.0-beta
     devDependencies:
       '@modern-js/i18n-runtime-extensions':
         specifier: workspace:*
@@ -2395,6 +2401,9 @@ importers:
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
+      effect:
+        specifier: 4.0.7
+        version: 4.0.7
       happy-dom:
         specifier: ^21.0.4
         version: 21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)
@@ -2407,6 +2416,9 @@ importers:
       octane:
         specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz
         version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.20.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
 
   packages/runtime/renderer-solid:
     dependencies:
@@ -3180,6 +3192,9 @@ importers:
       '@modern-js/server-runtime-extensions':
         specifier: workspace:*
         version: link:../../server/runtime-extensions
+      '@modern-js/server-utils':
+        specifier: workspace:*
+        version: link:../../server/utils
       '@modern-js/surface-resolution':
         specifier: workspace:*
         version: link:../../toolkit/surface-resolution
@@ -3208,6 +3223,9 @@ importers:
         specifier: 4.3.0
         version: 4.3.0
     devDependencies:
+      '@effect/tsgo':
+        specifier: 0.67.0
+        version: 0.67.0
       '@loadable/component':
         specifier: 5.16.7
         version: 5.16.7(react@19.3.1)
@@ -3268,6 +3286,9 @@ importers:
       react-dom:
         specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
+      tsrs:
+        specifier: 0.21.0-ts7.1.0-beta
+        version: 0.21.0-ts7.1.0-beta
 
   packages/solutions/ultramodern-app-tools:
     dependencies:
@@ -3997,6 +4018,9 @@ importers:
         specifier: ^11.4.1
         version: 11.4.1
     devDependencies:
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -4272,6 +4296,10 @@ importers:
         version: 4.23.15
 
   scripts/rslib:
+    dependencies:
+      '@scripts/effect-tsrs-dts':
+        specifier: workspace:*
+        version: link:../tsrs-dts
     devDependencies:
       '@rsbuild/plugin-react':
         specifier: 2.1.1
@@ -32670,7 +32698,7 @@ snapshots:
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
-      postcss: 8.5.30
+      postcss: 8.5.32
       rolldown: 1.2.14
       tinyglobby: 0.2.17
     optionalDependencies:

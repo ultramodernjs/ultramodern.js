@@ -60,7 +60,7 @@ export function useSearch<
 ): Accessor<
   ThrowOrOptional<UseSearchResult<TRouter, TFrom, TStrict, TSelected>, TThrow>
 > {
-  return useMatch({
+  return useMatch<TRouter, TFrom, TStrict, TThrow>({
     ...opts,
     select: match => {
       const search = match.search;

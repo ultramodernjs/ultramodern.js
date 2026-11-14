@@ -68,6 +68,7 @@ export const createBffGenerator = (api: CLIPluginAPI<AppTools>) => {
         distDir,
         tsconfigPath,
         moduleType,
+        compiler: config.tools.serverCompiler,
         excludeFiles: api.getAppContext().serverCompileExcludedFiles,
         throwErrorInsteadOfExit: true,
       },

@@ -60,7 +60,7 @@ const fixtureSource = `
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -113,7 +113,8 @@ try {
     const sourcePackageJson = JSON.parse(readFileSync(join(sourceDirectory, 'package.json'), 'utf8'));
     const destination = join(fixtureRoot, 'node_modules', name);
     mkdirSync(dirname(destination), { recursive: true });
-    symlinkSync(sourceDirectory, destination, 'dir');
+    // The compiler cohort may also be declared as an optional package peer.
+    if (!existsSync(destination)) symlinkSync(sourceDirectory, destination, 'dir');
     assert.equal(realpathSync(destination), sourceDirectory);
     return { sourceDirectory, sourcePackageJson };
   };

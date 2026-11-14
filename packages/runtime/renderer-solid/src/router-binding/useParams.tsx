@@ -60,7 +60,7 @@ export function useParams<
 ): Accessor<
   ThrowOrOptional<UseParamsResult<TRouter, TFrom, TStrict, TSelected>, TThrow>
 > {
-  return useMatch({
+  return useMatch<TRouter, TFrom, TStrict, TThrow>({
     ...opts,
     select: match => {
       const params = opts.strict === false ? match.params : match._strictParams;

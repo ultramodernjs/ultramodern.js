@@ -27,12 +27,21 @@
         "require": "./dist/cjs/index.js"
       },
       "default": "./dist/cjs/index.js"
+    },
+    "./compiler": {
+      "types": "./dist/types/compiler.d.ts",
+      "modern:source": "./src/compiler.ts",
+      "import": "./dist/esm-node/compiler.mjs",
+      "require": "./dist/cjs/compiler.js"
     }
   },
   "typesVersions": {
     "*": {
       ".": [
         "./dist/types/index.d.ts"
+      ],
+      "compiler": [
+        "./dist/types/compiler.d.ts"
       ]
     }
   },

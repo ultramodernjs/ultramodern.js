@@ -25,8 +25,8 @@
     }
   },
   "scripts": {
-    "dev": "tsc --watch",
-    "build": "tsc",
+    "dev": "node ../with-effect-tsrs.mjs --project tsconfig.json --watch",
+    "build": "node ../with-effect-tsrs.mjs --project tsconfig.json",
     "start": "pnpm build && node ./dist/index.js"
   },
   "dependencies": {

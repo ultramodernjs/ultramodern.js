@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { AppTools, CliPlugin } from '@modern-js/app-tools';
+import { nativeServerCompiler } from '@modern-js/app-tools-extensions/native-server-compiler';
 import {
   configureUltramodernTypeChecker,
   resolveNativeTypeCheckerCommand,
@@ -27,6 +28,7 @@ export const rendererTypeCheckerPlugin = (
   setup(api) {
     api.config(() => ({
       tools: {
+        serverCompiler: nativeServerCompiler,
         tsChecker: rendererTypeCheckerOptions(renderer),
         bundlerChain(chain, utils) {
           const pluginId = utils.CHAIN_ID.PLUGIN.TS_CHECKER;

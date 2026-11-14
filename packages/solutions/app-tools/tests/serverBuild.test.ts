@@ -27,11 +27,13 @@ describe('server build compilation policy', () => {
       moduleType: 'commonjs',
     };
     let afterBuild: (() => Promise<void>) | undefined;
+    const compiler = rstest.fn();
     const api = {
       getAppContext: () => context,
       getNormalizedConfig: () => ({
         source: { alias: {} },
         output: { sourceMap: false },
+        tools: { serverCompiler: compiler },
       }),
       onAfterBuild: (callback: () => Promise<void>) => {
         afterBuild = callback;
@@ -55,7 +57,7 @@ describe('server build compilation policy', () => {
       expect(compile).toHaveBeenCalledWith(
         appDirectory,
         { alias: {}, sourceMap: false },
-        expect.objectContaining({ excludeFiles }),
+        expect.objectContaining({ excludeFiles, compiler }),
       );
     } finally {
       await rm(appDirectory, { recursive: true, force: true });

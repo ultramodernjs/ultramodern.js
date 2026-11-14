@@ -61,6 +61,13 @@ jobs:
       - name: Prepare
         run: pnpm run prepare-build
 
+      - name: Test emitted Octane Effect-tsrs diagnostics
+        run: |
+          pnpm --filter @modern-js/app-tools-extensions build
+          node packages/solutions/app-tools-extensions/tests/native-server-compiler-public.mjs
+          pnpm --filter @modern-js/renderer-octane build
+          pnpm --filter @modern-js/renderer-octane test:typecheck
+
       - name: Test renderer acceptance controls
         run: |
           controls_work="$(mktemp -d "$RUNNER_TEMP/renderer-controls-XXXXXX")"

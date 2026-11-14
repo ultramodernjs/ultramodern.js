@@ -1,3 +1,11 @@
+import type { ServerCompilerProvider } from '../compiler';
+
+export type {
+  ServerCompiler,
+  ServerCompilerConfig,
+  ServerCompilerProvider,
+} from '../compiler';
+
 import type {
   SourceNormalizedConfig,
   ToolsNormalizedConfig,
@@ -18,6 +26,8 @@ export interface IConfig {
 }
 
 export interface CompileOptions {
+  /** Omit to retain the stable TypeScript compiler shipped by server-utils. */
+  compiler?: ServerCompilerProvider;
   sourceDirs: string[];
   distDir: string;
   /** Absolute files excluded as roots; imported dependencies remain checked. */

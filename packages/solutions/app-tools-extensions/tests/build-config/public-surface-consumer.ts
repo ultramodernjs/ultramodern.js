@@ -1,4 +1,5 @@
 import type { URL } from 'node:url';
+import { resolveEffectTsrsCompiler } from '@modern-js/app-tools-extensions/build-config';
 import {
   builderPluginAdapterPrecompress,
   type PrecompressConfig,
@@ -9,6 +10,7 @@ import {
   type ResolveEffectTsgoCompilerOptions,
   resolveEffectTsgoCompiler,
 } from '@modern-js/app-tools-extensions/config';
+import { nativeServerCompiler } from '@modern-js/app-tools-extensions/native-server-compiler';
 
 type Equal<Left, Right> =
   (<Value>() => Value extends Left ? 1 : 2) extends <
@@ -30,6 +32,12 @@ const environmentValue: string | undefined = getBuildConfigEnvironment(
 
 void compilerOriginContract;
 void compilerPath;
+const apiCompilerPath: string = resolveEffectTsrsCompiler({
+  from: import.meta.url,
+});
+void apiCompilerPath;
+const serverCompilerResult = nativeServerCompiler('/consumer');
+void serverCompilerResult;
 void environmentValue;
 
 const cloudflareConfig: CloudflareDeployConfig = {
