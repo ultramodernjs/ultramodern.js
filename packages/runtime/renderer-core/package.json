@@ -157,7 +157,7 @@
     "node": ">=26.12.0"
   },
   "dependencies": {
-    "seroval": "1.6.9"
+    "seroval": "1.6.11"
   },
   "peerDependencies": {
     "@rsbuild/core": "2.3.2"
