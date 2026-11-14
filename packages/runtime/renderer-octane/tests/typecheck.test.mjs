@@ -53,6 +53,46 @@ function withProject(files, run, config = {}) {
 const component =
   'export const Native = (props: { title: string }) => <div>{props.title}</div>;\n';
 
+test('batch checking does not open an additional authored language-server project', t => {
+  withProject(
+    { 'main.tsrx': "export const count: number = 'batch-error';\n" },
+    root => {
+      const authoredConfig = path.join(root, 'tsconfig.json');
+      const createSnapshot = Object.getOwnPropertyDescriptor(
+        API.prototype,
+        'createSnapshot',
+      ).get;
+      let snapshots = 0;
+      const observer = t.mock.getter(
+        API.prototype,
+        'createSnapshot',
+        function () {
+          const create = createSnapshot.call(this);
+          return options => {
+            const snapshot = create(options);
+            snapshots++;
+            assert.equal(
+              snapshot.getConfiguredProject(authoredConfig),
+              undefined,
+              'Batch roots must not acquire a second project through LSP openFiles',
+            );
+            return snapshot;
+          };
+        },
+      );
+      let result;
+      try {
+        result = checkOctaneProject({ project: 'tsconfig.json', cwd: root });
+      } finally {
+        observer.mock.restore();
+      }
+      assert.equal(snapshots, 1);
+      assert(result.files.includes(path.join(root, 'main.tsrx')));
+      assert(result.diagnostics.some(item => item.code === 2322));
+    },
+  );
+});
+
 test('native API and Octane repeatedly check the installed router declarations', t => {
   withProject(
     {

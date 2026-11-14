@@ -4,6 +4,7 @@
 //   --expected-native-tuples <accepted-native-tuples.json>
 // A source-only lane can use --toolchain-root <installed-checkout> for harness
 // dependencies. Application code always comes from the authenticated cohort.
+
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -19,6 +20,11 @@ import {
   localizedNavigationSharedCheckCommand,
   verifyLocalizedNavigationCore,
 } from '../../../scripts/ultramodern-renderers/native-localized-navigation.mjs';
+import { octaneTypecheckEvidenceEnv } from '../../../scripts/ultramodern-renderers/octane-cli-evidence.mjs';
+import {
+  diagnoseOctaneTypecheck,
+  qualifyOctaneBatch,
+} from '../../../scripts/ultramodern-renderers/octane-router-probe.mjs';
 import { assertLocalizedNavigation } from './navigation-browser.mjs';
 import { localizedNavigationFixture } from './navigation-fixtures.mjs';
 import {
@@ -244,15 +250,22 @@ try {
       }),
     ),
   };
-  const command = async (executable, args, cwd, label) => {
+  const command = async (
+    executable,
+    args,
+    cwd,
+    label,
+    { logDirectory = workRoot, commandEnv = env } = {},
+  ) => {
     const witness = path.join(workRoot, `${label}-process.json`);
-    const log = path.join(workRoot, `${label}.log`);
+    fs.mkdirSync(logDirectory, { recursive: true });
+    const log = path.join(logDirectory, `${label}.log`);
     witnesses.push(witness);
     try {
       await runPackedNativeFederationCommand(executable, args, {
         witness,
         cwd,
-        env,
+        env: commandEnv,
         log,
         signal: controller.signal,
       });
@@ -413,12 +426,64 @@ try {
         appRoot,
         `${renderer}-build`,
       );
-      await command(
-        pnpm,
-        ['run', 'typecheck'],
-        appRoot,
-        `${renderer}-typecheck`,
-      );
+      if (renderer === 'octane') {
+        await command(
+          process.execPath,
+          [
+            path.join(
+              toolchain,
+              'scripts/ultramodern-renderers/octane-compiler-inputs.mjs',
+            ),
+            appRoot,
+          ],
+          appRoot,
+          'feature-localized-navigation.octane-compiler-inputs',
+          { logDirectory: path.join(temporary, 'logs') },
+        );
+        await diagnoseOctaneTypecheck(
+          () =>
+            qualifyOctaneBatch(iteration =>
+              command(
+                pnpm,
+                ['run', 'typecheck'],
+                appRoot,
+                `octane-typecheck-${iteration}`,
+                {
+                  commandEnv: octaneTypecheckEvidenceEnv(
+                    appRoot,
+                    path.join(
+                      temporary,
+                      'logs',
+                      `octane-typecheck-original-${iteration}`,
+                    ),
+                    env,
+                  ),
+                },
+              ),
+            ),
+          () =>
+            command(
+              process.execPath,
+              [
+                path.join(
+                  toolchain,
+                  'scripts/ultramodern-renderers/octane-router-probe.mjs',
+                ),
+                appRoot,
+              ],
+              appRoot,
+              'feature-localized-navigation.octane-native-router-probe',
+              { logDirectory: path.join(temporary, 'logs') },
+            ),
+        );
+      } else {
+        await command(
+          pnpm,
+          ['run', 'typecheck'],
+          appRoot,
+          `${renderer}-typecheck`,
+        );
+      }
       const port = await reservePort();
       const origin = `http://127.0.0.1:${port}`;
       const server = launchServer(process.execPath, installedBin(appRoot), {

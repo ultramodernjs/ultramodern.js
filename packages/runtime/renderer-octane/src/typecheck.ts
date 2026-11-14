@@ -485,7 +485,6 @@ export function checkOctaneProject(
   try {
     const snapshot = api.createSnapshot({
       openProjects: [effectiveConfig],
-      openFiles: [...roots],
     });
     const program = snapshot.getConfiguredProject(effectiveConfig)?.program;
     if (!program)
