@@ -1077,8 +1077,10 @@ function liveFixture(settings = {}) {
                   ? JSON.stringify({
                       files: roots,
                       references: refs,
-                      configFilePath: config,
                       extends: '/config/extends.json',
+                      ...(settings.configPathText
+                        ? { unrelatedPath: `${config}.backup` }
+                        : {}),
                     })
                   : `{"compilerOptions":{"strict":true},"virtualOverlayOnly":${settings.changedConfig && this.index === 1 ? 'false' : 'true'}}`,
             };
@@ -1091,6 +1093,10 @@ function liveFixture(settings = {}) {
             assert(!file.includes('.env'), 'reject credential before fetch');
             this.calls.push(`text:${file}`);
             if (settings.captureThrow) throw new Error('source fetch failed');
+            if (settings.sourceConfigPath !== undefined)
+              return {
+                text: `export type UnrelatedPath = ${JSON.stringify(config + settings.sourceConfigPath)};\n`,
+              };
             return {
               text: settings.tooManyBytes
                 ? 'x'.repeat(16 * 1024 * 1024)
@@ -1346,6 +1352,19 @@ for (const [name, diagnostics] of [
   });
 }
 
+for (const suffix of ['', '.backup'])
+  test(`generated config path inside source text (${suffix || 'exact'}) stays byte-significant`, async () => {
+    const f = liveFixture({ sourceConfigPath: suffix });
+    const result = await probeOctaneLiveTraversal('/app', f.load);
+    f.cleanup();
+    assert.notEqual(
+      result.arms[0].visibleInputs.files[0].sha256,
+      result.arms[1].visibleInputs.files[0].sha256,
+    );
+    assert.equal(result.status, 'inconclusive');
+    assert.equal(result.reason, 'visible-input-mismatch');
+  });
+
 for (const setting of [
   'changedOptions',
   'changedSource',
@@ -1355,6 +1374,7 @@ for (const setting of [
   'changedRoots',
   'changedSourceOrder',
   'arbitraryUuid',
+  'configPathText',
 ])
   test(`changed visible input ${setting} is inconclusive (only generated UUID is normalized)`, async () => {
     const f = liveFixture({ [setting]: true });

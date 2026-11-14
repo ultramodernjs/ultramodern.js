@@ -101,37 +101,28 @@ function graphOf(project, config) {
   };
 }
 
-// Only the wrapper-generated config's full path is incidental. All other paths,
-// source ordering and text remain significant, including arbitrary UUIDs.
+// Only explicit fields naming the generated config are incidental. Source and
+// config contents stay byte-significant, even when they mention that path.
 function liveInputIdentity(graph, configFile) {
   const generated =
     /(?:^|[/\\])\.octane-typecheck-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}\.json$/iu;
-  const replacements = generated.test(configFile)
-    ? [configFile, JSON.stringify(configFile).slice(1, -1)]
-    : [];
-  function normalize(value) {
-    if (typeof value === 'string') {
-      for (const from of replacements)
-        value = value.replaceAll(from, '<generated-octane-config>');
-      return value;
-    }
-    if (Array.isArray(value)) return value.map(normalize);
-    if (value && typeof value === 'object')
-      return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [key, normalize(item)]),
-      );
-    return value;
-  }
-  // Content digests are retained in evidence, but computed again after the sole
-  // permitted normalization for comparison (rather than comparing raw hashes).
+  const normalizeConfigPath = value =>
+    generated.test(configFile) && value === configFile
+      ? '<generated-octane-config>'
+      : value;
   const { bytes, ...inputs } = graph;
-  return hash(
-    normalize({
-      ...inputs,
-      files: graph.files.map(({ sha256, ...file }) => file),
-      configs: graph.configs.map(({ sha256, ...file }) => file),
-    }),
-  );
+  return hash({
+    ...inputs,
+    openProjects: graph.openProjects.map(normalizeConfigPath),
+    compilerOptions: {
+      ...graph.compilerOptions,
+      configFilePath: normalizeConfigPath(graph.compilerOptions.configFilePath),
+    },
+    configs: graph.configs.map(file => ({
+      ...file,
+      path: normalizeConfigPath(file.path),
+    })),
+  });
 }
 
 function liveGraphOf(project, openProjects, configFile) {
