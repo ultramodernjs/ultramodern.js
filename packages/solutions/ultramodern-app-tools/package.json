@@ -258,7 +258,7 @@
   },
   "peerDependencies": {
     "typescript": "7.0.2",
-    "@modern-js/runtime": "workspace:^3.9.3",
+    "@modern-js/runtime": "workspace:^3.11.3",
     "@modern-js/i18n-integration": "workspace:^3.8.3",
     "@modern-js/runtime-renderer-extensions": "workspace:^3.8.3",
     "@modern-js/renderer-solid": "workspace:^3.8.3",

@@ -106,7 +106,7 @@
     "type-is": "^3.0.0"
   },
   "peerDependencies": {
-    "@modern-js/app-tools": "workspace:^3.9.3"
+    "@modern-js/app-tools": "workspace:^3.11.3"
   },
   "peerDependenciesMeta": {
     "@modern-js/app-tools": {

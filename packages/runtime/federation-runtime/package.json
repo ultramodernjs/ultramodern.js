@@ -153,7 +153,7 @@
     "@modern-js/surface-resolution": "workspace:*"
   },
   "peerDependencies": {
-    "@modern-js/runtime": "workspace:^3.9.3",
+    "@modern-js/runtime": "workspace:^3.11.3",
     "react": "^19.3.1"
   },
   "peerDependenciesMeta": {

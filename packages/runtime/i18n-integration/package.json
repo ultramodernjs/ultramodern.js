@@ -111,8 +111,8 @@
     "@modern-js/runtime-extensions": "workspace:*"
   },
   "peerDependencies": {
-    "@modern-js/app-tools": "workspace:^3.9.3",
-    "@modern-js/runtime": "workspace:^3.9.3",
+    "@modern-js/app-tools": "workspace:^3.11.3",
+    "@modern-js/runtime": "workspace:^3.11.3",
     "react": "^19.3.1"
   },
   "peerDependenciesMeta": {},
