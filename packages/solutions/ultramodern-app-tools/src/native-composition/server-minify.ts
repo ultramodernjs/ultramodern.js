@@ -8,14 +8,15 @@ type MinifyConfig = NonNullable<NonNullable<RsbuildConfig['output']>['minify']>;
  * Rsbuild leaves server bundles unminified, so SSR and backend chunks ship
  * dead framework branches and whitespace that every cold start parses. Names
  * are kept: server logs, error classes and `constructor.name` checks read them,
- * and keeping them costs a few percent of the minified size.
+ * and class static initializers must retain their original lexical binding.
  */
 export const ULTRAMODERN_SERVER_MINIFY = {
   js: true,
   jsOptions: {
     minimizerOptions: {
       compress: { keep_classnames: true, keep_fnames: true },
-      mangle: { keep_classnames: true, keep_fnames: true },
+      // SWC's keep_classnames mangling can move static self-references into TDZ.
+      mangle: false,
     },
   },
 } as const satisfies MinifyConfig;
