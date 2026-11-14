@@ -88,10 +88,23 @@ export async function probeOctaneRouter(appRoot, load) {
       const snapshot = api.createSnapshot({ openProjects: [project] });
       const program = snapshot.getConfiguredProject(project)?.program;
       if (!program) throw new Error(`Native probe could not load ${project}`);
+      const sourceFiles = program.getSourceFileNames();
       observations.push({
         project,
-        sourceFiles: program.getSourceFileNames(),
+        status: 'checked',
+        sourceFiles,
+        routerDeclarationLoaded: sourceFiles.some(file =>
+          /[/\\]router-core[/\\]dist[/\\]esm[/\\]link\.d\.ts$/u.test(file),
+        ),
         diagnostics: program.getSemanticDiagnostics(),
+      });
+    } catch (error) {
+      // An authored TSRX-only config may have no native OS inputs. Still run
+      // the independent import probe and retain both observations.
+      observations.push({
+        project,
+        status: 'error',
+        error: { name: error.name, message: error.message, stack: error.stack },
       });
     } finally {
       api.close();

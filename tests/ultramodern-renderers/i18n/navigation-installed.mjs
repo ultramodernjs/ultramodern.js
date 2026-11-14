@@ -245,9 +245,16 @@ try {
       }),
     ),
   };
-  const command = async (executable, args, cwd, label) => {
+  const command = async (
+    executable,
+    args,
+    cwd,
+    label,
+    { logDirectory = workRoot } = {},
+  ) => {
     const witness = path.join(workRoot, `${label}-process.json`);
-    const log = path.join(workRoot, `${label}.log`);
+    fs.mkdirSync(logDirectory, { recursive: true });
+    const log = path.join(logDirectory, `${label}.log`);
     witnesses.push(witness);
     try {
       await runPackedNativeFederationCommand(executable, args, {
@@ -426,7 +433,8 @@ try {
             '--resolve-compiler',
           ],
           appRoot,
-          'octane-compiler-inputs',
+          'feature-localized-navigation.octane-compiler-inputs',
+          { logDirectory: path.join(temporary, 'logs') },
         );
         await diagnoseOctaneTypecheck(
           () =>
@@ -442,7 +450,8 @@ try {
                 appRoot,
               ],
               appRoot,
-              'octane-native-router-probe',
+              'feature-localized-navigation.octane-native-router-probe',
+              { logDirectory: path.join(temporary, 'logs') },
             ),
         );
       } else {

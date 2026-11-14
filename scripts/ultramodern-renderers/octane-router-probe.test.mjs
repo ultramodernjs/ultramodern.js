@@ -118,4 +118,77 @@ test('native discriminator uses fresh read-only APIs, an in-memory import, and r
   assert(!fs.existsSync(config.files[0]));
   assert(!fs.existsSync(instances[1].project));
   assert(result.observations.every(item => item.diagnostics[0] === diagnostic));
+  assert(result.observations.every(item => item.routerDeclarationLoaded));
+  const OriginalAPI = load.API;
+  load.API = class extends OriginalAPI {
+    createSnapshot(options) {
+      if (options.openProjects[0] === path.join(root, 'tsconfig.json'))
+        return { getConfiguredProject: () => undefined };
+      return super.createSnapshot(options);
+    }
+  };
+  const partial = await probeOctaneRouter(root, load);
+  assert.equal(partial.observations[0].status, 'error');
+  assert.equal(partial.observations[1].status, 'checked');
+  assert(instances.every(instance => instance.closed));
+});
+
+test('successful navigation diagnostic output survives disposable workspace cleanup', async t => {
+  assert(process.env.OWNED_TEMP_DIR);
+  const root = fs.mkdtempSync(
+    path.join(process.env.OWNED_TEMP_DIR, 'retained-probe-'),
+  );
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const workRoot = path.join(root, 'navigation');
+  const logDirectory = path.join(root, 'logs');
+  fs.mkdirSync(workRoot);
+  const source = fs.readFileSync(
+    new URL(
+      '../../tests/ultramodern-renderers/i18n/navigation-installed.mjs',
+      import.meta.url,
+    ),
+    'utf8',
+  );
+  const commandSource = source.slice(
+    source.indexOf('const command = async '),
+    source.indexOf(
+      'const generatorRoot',
+      source.indexOf('const command = async '),
+    ),
+  );
+  const command = new Function(
+    'path',
+    'fs',
+    'workRoot',
+    'witnesses',
+    'runPackedNativeFederationCommand',
+    'env',
+    'controller',
+    `${commandSource}; return command;`,
+  )(
+    path,
+    fs,
+    workRoot,
+    [],
+    async (_command, _args, { log }) =>
+      fs.writeFileSync(log, '{"diagnostics":[{"code":2536}]}'),
+    {},
+    new AbortController(),
+  );
+  for (const label of [
+    'feature-localized-navigation.octane-compiler-inputs',
+    'feature-localized-navigation.octane-native-router-probe',
+  ])
+    await command('fake-node', [], root, label, { logDirectory });
+  fs.rmSync(workRoot, { recursive: true });
+  for (const label of [
+    'feature-localized-navigation.octane-compiler-inputs',
+    'feature-localized-navigation.octane-native-router-probe',
+  ])
+    assert.equal(
+      JSON.parse(
+        fs.readFileSync(path.join(logDirectory, `${label}.log`), 'utf8'),
+      ).diagnostics[0].code,
+      2536,
+    );
 });
