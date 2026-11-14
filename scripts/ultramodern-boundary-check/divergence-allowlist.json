@@ -4,9 +4,9 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1443,
-  "totalHunks": 4858,
-  "totalChangedLines": 103895,
+  "totalFiles": 1444,
+  "totalHunks": 4860,
+  "totalChangedLines": 103975,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -4360,13 +4360,18 @@
     },
     {
       "file": "packages/server/utils/package.json",
-      "hunks": 5,
-      "changedLines": 13
+      "hunks": 7,
+      "changedLines": 22
     },
     {
       "file": "packages/server/utils/src/common/index.ts",
-      "hunks": 9,
-      "changedLines": 79
+      "hunks": 8,
+      "changedLines": 50
+    },
+    {
+      "file": "packages/server/utils/src/compiler.ts",
+      "hunks": 1,
+      "changedLines": 43
     },
     {
       "file": "packages/server/utils/src/compilers/rslib.ts",
@@ -4376,7 +4381,7 @@
     {
       "file": "packages/server/utils/src/compilers/tsgo.ts",
       "hunks": 1,
-      "changedLines": 222
+      "changedLines": 231
     },
     {
       "file": "packages/server/utils/src/compilers/typescript/index.ts",
@@ -4396,7 +4401,7 @@
     {
       "file": "packages/server/utils/tests/compilerProvider.test.ts",
       "hunks": 1,
-      "changedLines": 154
+      "changedLines": 202
     },
     {
       "file": "packages/server/utils/tests/declarationPasses.test.ts",
