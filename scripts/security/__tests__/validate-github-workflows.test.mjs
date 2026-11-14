@@ -28,6 +28,45 @@ jobs:
         run: echo ok
 `;
 
+test('accepted-tarball dry-run validation installs the frozen publication CLI first', () => {
+  const workflow = yaml.load(
+    fs.readFileSync(
+      new URL(
+        '../../../.github/workflows/publish-bleedingdev.yml',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  );
+  const job = workflow.jobs['validate-release'];
+  const steps = job.steps;
+  const validateIndex = steps.findIndex(step =>
+    step.run?.includes(
+      'scripts/ultramodern-publish/prepare-bleedingdev-packages.mjs',
+    ),
+  );
+  const installIndex = steps.findIndex(step =>
+    step.run?.includes('--filter modern-js-monorepo'),
+  );
+  assert.ok(installIndex >= 0 && installIndex < validateIndex);
+  const install = steps[installIndex];
+  assert.equal(
+    install.run,
+    'mise exec -- pnpm install --frozen-lockfile --ignore-scripts --prod --filter modern-js-monorepo --package-import-method=clone-or-copy',
+  );
+  assert.equal(install.if, undefined);
+  assert.notEqual(install['continue-on-error'], true);
+  assert.ok(
+    steps
+      .slice(0, installIndex)
+      .some(step => step.uses?.startsWith('jdx/mise-action@')),
+  );
+  assert.ok(steps[validateIndex].run.includes('--publish-existing'));
+  assert.ok(steps[validateIndex].run.includes('--dry-run'));
+  assert.equal(job.environment, undefined);
+  assert.equal(job.permissions?.['id-token'], undefined);
+});
+
 test('Tractor installs the frozen publication CLI before waiting for the registry cohort', () => {
   const workflow = yaml.load(
     fs.readFileSync(
