@@ -1,3 +1,4 @@
+import { redirect } from '@tanstack/router-core';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React, { act } from 'react';
 import type { Fetcher } from '../../src/runtime/dataMutation';
@@ -280,6 +281,10 @@ describe('tanstack data mutation fetcher', () => {
   });
 
   test.each([
+    {
+      name: 'native TanStack redirect',
+      error: () => redirect({ to: '/about', replace: true }),
+    },
     {
       name: 'validation Response',
       error: () =>
