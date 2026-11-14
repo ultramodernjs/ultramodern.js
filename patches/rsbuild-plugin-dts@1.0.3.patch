@@ -1,0 +1,12 @@
+diff --git a/dist/e.js b/dist/e.js
+--- a/dist/e.js
++++ b/dist/e.js
+@@ -5324,7 +5324,7 @@ async function calcLongestCommonPath(files) {
+ }
+ const globDtsFiles = async (cwd, dir, patterns)=>{
+     const dtsFiles = await Promise.all(patterns.map(async (pattern)=>glob(convertPath(join(dir, pattern)), {
+-            cwd,
++            cwd: dir,
+             absolute: true,
+             dot: true
+         })));

@@ -1283,7 +1283,16 @@ describe('native development', () => {
   }, 300_000);
 
   it('retains a superseded graph whose hot update a runtime already applied', async () => {
-    const app = await replacementApp(false, true, true);
+    let holdPublication = false;
+    const resumePublication = Promise.withResolvers<void>();
+    // Keep every aggregate unpublished until the runtime consumes A's live
+    // delta; duplicate watcher notifications must not race that assertion.
+    const app = await replacementApp(false, true, true, false, {
+      async hold() {
+        if (holdPublication) await resumePublication.promise;
+      },
+      manifestRequest() {},
+    });
     await until(app, 'first:replacement-compiler');
     const manifestUrl = new URL(
       '/replacement-assets/mf-manifest.json',
@@ -1391,6 +1400,7 @@ describe('native development', () => {
         await app.startInvalidatedClientRun();
         superseded.resolve();
       });
+      holdPublication = true;
       app.editRemoteLazy('REMOTE_LAZY_SUPERSEDED');
       await superseded.promise;
       // Consume A's live delta before later compiles can clean it away. The
@@ -1399,6 +1409,8 @@ describe('native development', () => {
       expect(
         (await (await fetch(manifestUrl)).json()).metaData.publicPath,
       ).toBe(initialPublicPath);
+      holdPublication = false;
+      resumePublication.resolve();
       app.editRemoteLazy('REMOTE_LAZY_PUBLISHED');
       for (;;) {
         const manifest = await (await fetch(manifestUrl)).json();
@@ -1433,6 +1445,8 @@ describe('native development', () => {
         { cause: error },
       );
     } finally {
+      holdPublication = false;
+      resumePublication.resolve();
       for (const timer of pending) clearTimeout(timer);
     }
   }, 300_000);
