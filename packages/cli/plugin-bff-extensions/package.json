@@ -233,7 +233,7 @@
     "@modern-js/types": "workspace:*",
     "@modern-js/utils": "workspace:*",
     "@module-federation/runtime": "2.9.2",
-    "@swc/core": "1.16.18",
+    "@swc/core": "1.16.21",
     "esbuild": "^0.28.2"
   },
   "peerDependencies": {
@@ -252,7 +252,7 @@
     "@effect/opentelemetry": "4.0.7",
     "@modern-js/plugin": "workspace:*",
     "@modern-js/rslib": "workspace:*",
-    "@rsbuild/core": "2.2.13",
+    "@rsbuild/core": "2.3.2",
     "@rslib/core": "1.0.3",
     "@scripts/rstest-config": "workspace:*",
     "@types/node": "^26.6.5",

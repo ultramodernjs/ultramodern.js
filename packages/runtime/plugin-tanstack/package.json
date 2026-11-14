@@ -109,8 +109,8 @@
     "@tanstack/router-core": "1.171.37"
   },
   "peerDependencies": {
-    "@modern-js/app-tools": "workspace:^3.9.3",
-    "@modern-js/runtime": "workspace:^3.9.3",
+    "@modern-js/app-tools": "workspace:^3.11.3",
+    "@modern-js/runtime": "workspace:^3.11.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-server-dom-rspack": "0.1.0"

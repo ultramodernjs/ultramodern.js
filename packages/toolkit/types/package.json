@@ -15,7 +15,7 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.3",
+  "version": "3.11.3",
   "types": "./index.d.ts",
   "exports": {
     ".": {
@@ -59,7 +59,6 @@
     }
   },
   "dependencies": {
-    "@jest/types": "^30.5.1",
     "type-fest": "5.10.0"
   },
   "devDependencies": {

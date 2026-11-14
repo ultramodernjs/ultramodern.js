@@ -1,1 +1,8 @@
-{"name":"@modern-js/compiled-pkg-up","version":"0.0.0","private":true,"main":"index.js","types":"index.d.ts","license":"MIT"}
+{
+  "name": "@modern-js/compiled-pkg-up",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT"
+}

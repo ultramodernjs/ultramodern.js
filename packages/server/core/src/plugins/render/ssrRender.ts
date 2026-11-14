@@ -22,7 +22,7 @@ import type {
   RequestHandlerConfig,
   RequestHandlerOptions,
 } from '../../types/requestHandler';
-import { getPathname, parseHeaders } from '../../utils';
+import { getPathname } from '../../utils';
 import { getCacheResult, matchCacheControl, shouldUseCache } from './ssrCache';
 import { createRequestHandlerConfig } from './utils';
 
@@ -83,16 +83,6 @@ export async function ssrRender(
   const routeManifest = serverManifest.routeManifest || {};
   const moduleFederationCssAssets =
     serverManifest.moduleFederationCssAssets || [];
-
-  const headers = parseHeaders(request);
-
-  if (nodeReq) {
-    for (const key in nodeReq.headers) {
-      if (!headers[key]) {
-        headers[key] = nodeReq.headers[key] as string;
-      }
-    }
-  }
 
   const renderBundle =
     serverManifest.renderBundles?.[entryName || MAIN_ENTRY_NAME];

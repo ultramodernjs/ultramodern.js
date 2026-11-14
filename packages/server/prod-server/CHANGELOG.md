@@ -1,5 +1,95 @@
 # @modern-js/prod-server
 
+## 3.11.3
+
+### Patch Changes
+
+- @modern-js/server-core@3.11.3
+- @modern-js/runtime-utils@3.11.3
+- @modern-js/utils@3.11.3
+
+## 3.11.2
+
+### Patch Changes
+
+- @modern-js/server-core@3.11.2
+- @modern-js/runtime-utils@3.11.2
+- @modern-js/utils@3.11.2
+
+## 3.11.1
+
+### Patch Changes
+
+- 1391159: fix(prod-server): default production server logging to info and document MODERN_SERVER_LOG_LEVEL. Set MODERN_SERVER_LOG_LEVEL=verbose to restore per-request logs.
+
+  fix(prod-server)：生产服务器默认使用 info 日志级别，并补充 MODERN_SERVER_LOG_LEVEL 文档。设置 MODERN_SERVER_LOG_LEVEL=verbose 可恢复逐请求日志。
+
+- Updated dependencies [b11c3cd]
+  - @modern-js/server-core@3.11.1
+  - @modern-js/runtime-utils@3.11.1
+  - @modern-js/utils@3.11.1
+
+## 3.11.0
+
+### Patch Changes
+
+- Updated dependencies [6a50ea0]
+  - @modern-js/runtime-utils@3.11.0
+  - @modern-js/server-core@3.11.0
+  - @modern-js/utils@3.11.0
+
+## 3.10.4
+
+### Patch Changes
+
+- @modern-js/server-core@3.10.4
+- @modern-js/runtime-utils@3.10.4
+- @modern-js/utils@3.10.4
+
+## 3.10.3
+
+### Patch Changes
+
+- Updated dependencies [52b4a4e]
+  - @modern-js/server-core@3.10.3
+  - @modern-js/runtime-utils@3.10.3
+  - @modern-js/utils@3.10.3
+
+## 3.10.2
+
+### Patch Changes
+
+- Updated dependencies [76c675d]
+- Updated dependencies [2f314e5]
+- Updated dependencies [b1c1018]
+- Updated dependencies [23587d0]
+- Updated dependencies [3b42ce4]
+- Updated dependencies [6a891f0]
+  - @modern-js/runtime-utils@3.10.2
+  - @modern-js/server-core@3.10.2
+  - @modern-js/utils@3.10.2
+
+## 3.10.1
+
+### Patch Changes
+
+- Updated dependencies [e046a11]
+  - @modern-js/server-core@3.10.1
+  - @modern-js/runtime-utils@3.10.1
+  - @modern-js/utils@3.10.1
+
+## 3.10.0
+
+### Patch Changes
+
+- Updated dependencies [b5f56d5]
+- Updated dependencies [9a766ec]
+- Updated dependencies [9a766ec]
+- Updated dependencies [1d7a38e]
+  - @modern-js/server-core@3.10.0
+  - @modern-js/runtime-utils@3.10.0
+  - @modern-js/utils@3.10.0
+
 ## 3.9.3
 
 ### Patch Changes

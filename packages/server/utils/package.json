@@ -15,7 +15,7 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.3",
+  "version": "3.11.3",
   "types": "./src/index.ts",
   "main": "./dist/cjs/index.js",
   "exports": {
@@ -52,7 +52,8 @@
     "@modern-js/rslib": "workspace:*",
     "@modern-js/server-core": "workspace:*",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.6.5"
+    "@types/node": "^26.6.5",
+    "@rslib/core": "1.0.3"
   },
   "sideEffects": false,
   "publishConfig": {

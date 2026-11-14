@@ -39,7 +39,35 @@ test('externals', async ({ page }) => {
   builder.close();
 });
 
-test('should not external dependencies when target is web worker', async ({
+test('should preserve externals when target is web worker', async () => {
+  const builder = await build({
+    cwd: fixtures,
+    entry: { index: resolve(fixtures, './src/web-worker-react.js') },
+    builderConfig: {
+      output: {
+        target: 'web-worker',
+        externals: {
+          react: 'MyReact',
+        },
+      },
+    },
+  });
+  try {
+    const files = await builder.unwrapOutputJSON();
+    const workerFile = Object.keys(files).find(
+      file => file.includes('/static/js/index.') && file.endsWith('.js'),
+    );
+    expect(workerFile).toBeDefined();
+    if (!workerFile) {
+      throw new Error('Missing web worker output');
+    }
+    expect(files[workerFile]).toContain('MyReact');
+  } finally {
+    builder.clean();
+  }
+});
+
+test('should bundle dependencies when a web worker has no externals', async ({
   page,
 }) => {
   const builder = await build({
@@ -49,9 +77,6 @@ test('should not external dependencies when target is web worker', async ({
     builderConfig: {
       output: {
         target: 'web-worker',
-        externals: {
-          react: 'MyReact',
-        },
       },
     },
   });

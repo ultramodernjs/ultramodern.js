@@ -28,7 +28,7 @@ const requireBundleGeneration = () => {
 };
 
 afterEach(async () => {
-  await onRepack(distDir, federationHooks);
+  await onRepack(distDir, federationHooks, fileReader);
 });
 
 describe('onRepack', () => {
@@ -39,7 +39,7 @@ describe('onRepack', () => {
       generation: previous.react.generation,
     });
 
-    await onRepack(distDir, federationHooks);
+    await onRepack(distDir, federationHooks, fileReader);
     expect((globalThis as any).host).toBeUndefined();
     expect(previous.federation.moduleCache.size).toBe(0);
     const next = requireBundleGeneration();
@@ -53,7 +53,7 @@ describe('onRepack', () => {
 
     // No plugin resets it, so the next generation joins the previous one's
     // share scope and gets its react: a mixed generation.
-    await onRepack(distDir, hooks);
+    await onRepack(distDir, hooks, fileReader);
     const next = requireBundleGeneration();
 
     expect(next.loadReact()).toBe(previous.react);
@@ -71,7 +71,7 @@ describe('onRepack', () => {
     } as any;
     const reset = rstest.spyOn(fileReader, 'reset');
     try {
-      const repack = onRepack(distDir, slowHooks);
+      const repack = onRepack(distDir, slowHooks, fileReader);
       await new Promise(resolve => setTimeout(resolve, 10));
       expect(reset).not.toHaveBeenCalled();
 
@@ -90,7 +90,9 @@ describe('onRepack', () => {
     };
     const reset = rstest.spyOn(fileReader, 'reset');
     try {
-      await expect(onRepack(distDir, failingHooks as any)).rejects.toBe(error);
+      await expect(
+        onRepack(distDir, failingHooks as any, fileReader),
+      ).rejects.toBe(error);
       expect(reset).toHaveBeenCalledTimes(1);
     } finally {
       reset.mockRestore();

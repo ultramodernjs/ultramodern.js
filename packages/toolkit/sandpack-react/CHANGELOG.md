@@ -1,5 +1,28 @@
 # @modern-js/sandpack-react
 
+## 3.11.3
+
+## 3.11.2
+
+## 3.11.1
+
+## 3.11.0
+
+## 3.10.4
+
+## 3.10.3
+
+## 3.10.2
+
+## 3.10.1
+
+## 3.10.0
+
+### Patch Changes
+
+- 00017a1: Generate only AGENTS.md for AI coding guidance. Stop creating or updating CLAUDE.md in project templates and the --agents-md-only command.
+- 778f778: Use Rstack CLI for linting and formatting in new projects.
+
 ## 3.9.3
 
 ## 3.9.2

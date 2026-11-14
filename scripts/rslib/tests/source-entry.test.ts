@@ -213,6 +213,27 @@ describe('Rslib bundleless source entries', () => {
     ).toContain('export declare function Greeting');
   });
 
+  it('rewrites declaration aliases with relative output directories', async () => {
+    const workspace = createTemporaryFixtureWorkspace(
+      'modernjs-rslib-relative-output-',
+    );
+    try {
+      const rslib = await createRslib({
+        cwd: workspace,
+        config: createFixtureBuildConfig('./dist'),
+      });
+      await rslib.build();
+      const declaration = fs.readFileSync(
+        path.join(workspace, 'dist/types/entry.d.ts'),
+        'utf8',
+      );
+      expect(declaration).toContain("from './component.js'");
+      expect(declaration).not.toContain('@fixture/component');
+    } finally {
+      fs.rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
   it('regenerates TypeScript 7 declarations during Rslib watch builds', async () => {
     const watchWorkspace = createTemporaryFixtureWorkspace(
       'modernjs-rslib-watch-',

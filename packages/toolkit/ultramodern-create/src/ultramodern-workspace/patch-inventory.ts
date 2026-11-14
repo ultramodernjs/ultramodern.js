@@ -1,5 +1,15 @@
 export default [
   {
+    packageName: 'rsbuild-plugin-dts',
+    version: '1.0.3',
+    path: 'patches/rsbuild-plugin-dts@1.0.3.patch',
+    sha256: '1719dac1e9c0258a47bd650aaa70272885df4d98e8c6d0492a3cb81888b18bf4',
+    repository: true,
+    workspace: null,
+    reason:
+      'Resolve declaration outputs against the project root before alias rewriting and anchor discovery at that output so Windows short-path ancestors remain traversable. Preserve checked TypeScript 7 emit and alias rewriting; retire when the accepted Rslib dependency includes the same short-path fix.',
+  },
+  {
     packageName: '@tanstack/redact',
     version: '0.2.1',
     path: 'patches/@tanstack__redact@0.2.1.patch',

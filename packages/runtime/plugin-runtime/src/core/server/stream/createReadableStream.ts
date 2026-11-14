@@ -19,7 +19,7 @@ import {
   observeSSRStream,
   orderSSRStreamTransforms,
 } from '../shared';
-import { enqueueFromEntries } from './deferredScript';
+import { enqueueFromEntries, hasDeferredResolvers } from './deferredScript';
 import { DeferredScriptOutputCoordinator } from './deferredScriptOutputCoordinator';
 import {
   type CreateReadableStreamFromElement,
@@ -286,8 +286,6 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
           if (error !== undefined && error !== null && !failed) fail(error);
         });
         deliver(Readable.toWeb(body) as ReadableStream<Uint8Array>);
-        reactStream!.pipe(passThrough);
-
         try {
           const storageContext = storage.useContext?.();
           const activeDeferreds = storageContext?.activeDeferreds;
@@ -296,7 +294,7 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
             activeDeferreds instanceof Map
               ? Array.from(activeDeferreds.entries())
               : [];
-          if (entries.length > 0) {
+          if (hasDeferredResolvers(entries, deferredScriptKeys)) {
             deferredResolversComplete = enqueueFromEntries(
               entries,
               deferredScriptKeys,
@@ -308,10 +306,13 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
                 else pendingScripts.push(script);
               },
             );
+          } else {
+            coordinator.markNoResolvers();
           }
         } catch (error) {
           getMonitors().error('cannot inject router data script', error);
         }
+        reactStream!.pipe(passThrough);
       };
       const renderFallback = async (error: unknown) => {
         if (failed || hasStartedPipe) return;

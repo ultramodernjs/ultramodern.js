@@ -1,6 +1,9 @@
 import type { ReactElement } from 'react';
 import { injectCSS, injectRSCPayload } from '../../rsc-html-stream/server';
 
+// Rslib emits this as the application-owned global without parsing it as its own runtime.
+declare const RSPACK_RSC_MANIFEST: typeof __rspack_rsc_manifest__;
+
 type RenderRsc = (options: { element: ReactElement }) => ReadableStream;
 
 export const createRenderCSRWithRSC =
@@ -10,7 +13,7 @@ export const createRenderCSRWithRSC =
     rscRoot: ReactElement;
   }): Promise<Response> => {
     // Collect CSS files from entryCssFiles
-    const entryCssFiles = __rspack_rsc_manifest__?.entryCssFiles;
+    const entryCssFiles = RSPACK_RSC_MANIFEST?.entryCssFiles;
     const cssFiles = entryCssFiles ? Object.values(entryCssFiles).flat() : [];
 
     // Render RSC stream

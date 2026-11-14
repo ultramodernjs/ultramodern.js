@@ -77,7 +77,10 @@ function getDefaultAppContext() {
 }
 
 function makeFakeRuntimeServer() {
-  return { hooks: { onReset: { call: rstest.fn() } } } as any;
+  return {
+    fileReader: { reset: rstest.fn().mockResolvedValue(undefined) },
+    hooks: { onReset: { call: rstest.fn() } },
+  } as any;
 }
 
 function makeBuilderDevServer(withMiddleware = true) {
@@ -119,6 +122,7 @@ describe('devRuntimeMiddlewarePlugin (per-runtime injection)', () => {
       devRuntimeMiddlewarePlugin(
         { pwd: '', dev: {}, builderDevServer } as any,
         null,
+        server,
       ),
       probe,
     ]);
@@ -165,6 +169,7 @@ describe('devRuntimeMiddlewarePlugin (per-runtime injection)', () => {
       devRuntimeMiddlewarePlugin(
         { pwd: '', dev: {}, builderDevServer } as any,
         null,
+        server,
       ),
     ]);
     await server.init();
@@ -279,6 +284,7 @@ describe('setupDevInfra (process-level singletons)', () => {
             builderDevServer: builderDevServerForRuntime,
           } as any,
           null,
+          runtimeServer,
         ),
       ]);
       await runtimeServer.init();
@@ -324,6 +330,7 @@ describe('setupDevInfra (process-level singletons)', () => {
     onCompileDone(clientStats);
     await flush();
     expect(first.hooks.onReset.call).toHaveBeenCalledTimes(1);
+    expect(first.fileReader.reset).toHaveBeenCalledTimes(1);
 
     // After a reload swaps the runtime, onRepack must hit the NEW runtime.
     const second = makeFakeRuntimeServer();
@@ -331,12 +338,15 @@ describe('setupDevInfra (process-level singletons)', () => {
     onCompileDone(clientStats);
     await flush();
     expect(second.hooks.onReset.call).toHaveBeenCalledTimes(1);
+    expect(second.fileReader.reset).toHaveBeenCalledTimes(1);
+    expect(first.fileReader.reset).toHaveBeenCalledTimes(1);
     expect(first.hooks.onReset.call).toHaveBeenCalledTimes(1);
   });
 
   it('holds requests until a slow async repack onReset handler settles', async () => {
     let releaseReset!: () => void;
     const runtimeServer = {
+      fileReader: { reset: rstest.fn() },
       hooks: {
         onReset: {
           call: rstest.fn(

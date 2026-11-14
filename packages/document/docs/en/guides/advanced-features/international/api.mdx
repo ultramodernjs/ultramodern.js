@@ -202,11 +202,11 @@ Type of the custom backend loader function:
 type I18nSdkLoader = (options: I18nSdkLoadOptions) => Promise<Resources>;
 
 interface I18nSdkLoadOptions {
-  lng?: string;      // Single language code
-  ns?: string;       // Single namespace
-  lngs?: string[];   // Multiple language codes
-  nss?: string[];    // Multiple namespaces
-  all?: boolean;     // Load all resources
+  lng?: string; // Single language code
+  ns?: string; // Single namespace
+  lngs?: string[]; // Multiple language codes
+  nss?: string[]; // Multiple namespaces
+  all?: boolean; // Load all resources
 }
 
 type Resources = {
@@ -221,14 +221,14 @@ type Resources = {
 ```ts
 interface LanguageDetectorOptions {
   order?: string[];
-  lookupQuerystring?: string;   // Default: 'lng'
-  lookupCookie?: string;        // Default: 'i18next'
-  lookupLocalStorage?: string;  // Default: 'i18nextLng'
+  lookupQuerystring?: string; // Default: 'lng'
+  lookupCookie?: string; // Default: 'i18next'
+  lookupLocalStorage?: string; // Default: 'i18nextLng'
   lookupSession?: string;
-  lookupHeader?: string;        // Default: 'accept-language'
+  lookupHeader?: string; // Default: 'accept-language'
   lookupFromPathIndex?: number; // Default: 0
   caches?: false | string[];
-  cookieMinutes?: number;       // Default: 525600 (1 year)
+  cookieMinutes?: number; // Default: 525600 (1 year)
   cookieExpirationDate?: Date;
   cookieDomain?: string;
 }
@@ -248,8 +248,8 @@ import { useTranslation } from 'react-i18next';
 import { useModernI18n } from '@modern-js/plugin-i18n/runtime';
 
 function App() {
-  const { t } = useTranslation();                          // Translate text
-  const { language, changeLanguage } = useModernI18n();    // Switch language
+  const { t } = useTranslation(); // Translate text
+  const { language, changeLanguage } = useModernI18n(); // Switch language
 
   return (
     <div>
@@ -267,5 +267,11 @@ You can also get the i18next instance from `useModernI18n` and call capabilities
 const { i18nInstance } = useModernI18n();
 
 // Dynamically add translation resources.
-i18nInstance.addResourceBundle('zh', 'translation', { key: 'Value' }, true, true);
+i18nInstance.addResourceBundle(
+  'zh',
+  'translation',
+  { key: 'Value' },
+  true,
+  true,
+);
 ```

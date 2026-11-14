@@ -63,6 +63,14 @@ describe('setupTsRuntime', () => {
     expect(resolveTsRuntimeRegisterMode()).toBe('unsupported');
   });
 
+  it('should reject disabled native TypeScript support without a version fallback', async () => {
+    setNativeTypeScriptSupport(false);
+    const { resolveTsRuntimeRegisterMode } = await import(
+      '../../src/utils/register'
+    );
+    expect(resolveTsRuntimeRegisterMode()).toBe('unsupported');
+  });
+
   beforeEach(() => {
     rstest.clearAllMocks();
     setNativeTypeScriptSupport(originalTypeScriptFeature);
@@ -80,6 +88,7 @@ describe('setupTsRuntime', () => {
   });
 
   it('should use node loader when native capability is available', async () => {
+    setNativeTypeScriptSupport(true);
     const { setupTsRuntime } = await import('../../src/utils/register');
 
     await setupTsRuntime('/project', '/project/dist', []);

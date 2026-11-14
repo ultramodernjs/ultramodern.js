@@ -90,6 +90,44 @@ export function hasFileExtension(pathname: string): boolean {
   return extension !== '.html';
 }
 
+type StaticHandler = ReturnType<typeof createStaticHandler>;
+
+// The routes config is static per server bundle and basename is the urlPath of
+// a server route, so the static handler can be reused by all requests. Loaders
+// do not capture request state, they read it from their arguments
+// (request, params, context) and the async local storage at call time.
+const staticHandlerCache = new WeakMap<
+  ServerLoaderBundle['routes'],
+  Map<string, StaticHandler>
+>();
+
+function getStaticHandler(
+  routesConfig: ServerLoaderBundle['routes'],
+  basename: string,
+): StaticHandler {
+  // The dev server reloads the loader bundle after a rebuild, but Node keeps the
+  // old bundle reachable (from the children of its parent module), so a cached
+  // handler would be retained with every old bundle.
+  if (process.env.NODE_ENV === 'development') {
+    return createStaticHandler(transformNestedRoutes(routesConfig), {
+      basename,
+    });
+  }
+
+  let handlers = staticHandlerCache.get(routesConfig);
+  if (!handlers) {
+    handlers = new Map();
+    staticHandlerCache.set(routesConfig, handlers);
+  }
+  let handler = handlers.get(basename);
+  if (!handler) {
+    const routes = transformNestedRoutes(routesConfig);
+    handler = createStaticHandler(routes, { basename });
+    handlers.set(basename, handler);
+  }
+  return handler;
+}
+
 export const handleRequest: ServerLoaderBundle['handleRequest'] = async ({
   request,
   serverRoutes,
@@ -136,20 +174,19 @@ export const handleRequest: ServerLoaderBundle['handleRequest'] = async ({
         | undefined;
       const loaderRoutes =
         resolver?.transformRoutes?.(routesConfig) ?? routesConfig;
-      const routes = transformNestedRoutes(loaderRoutes);
       const resolveRouteId = resolver?.resolveRouteId;
       const routeId = resolveRouteId
         ? resolveRouteId(requestedRouteId, {
             routes: loaderRoutes,
             matchedRouteIds:
-              matchRoutes(routes, url.pathname, basename)?.map(
-                match => match.route.id,
-              ) ?? [],
+              matchRoutes(
+                transformNestedRoutes(loaderRoutes),
+                url.pathname,
+                basename,
+              )?.map(match => match.route.id) ?? [],
           })
         : requestedRouteId;
-      const { queryRoute } = createStaticHandler(routes, {
-        basename,
-      });
+      const { queryRoute } = getStaticHandler(loaderRoutes, basename);
 
       const requestContext = createRequestContext(loaderContext);
       // TODO: we may remove it or put it to other runtime plugins in next version

@@ -13,18 +13,17 @@ import {
   type createSSRRenderLifecycle,
   replaceSSRTemplateChunk,
 } from '../shared';
-import { checkIsNode, hasStylesheetLink } from '../utils';
+import { checkIsNode, hasStylesheetLink, readAssetWithCache } from '../utils';
 
 const readAsset = async (chunk: string) => {
   // working node env
-  const fs = await import('fs/promises');
   const path = await import('path');
 
   // only working in 'production' env
   // we need ensure the assetsDir is same as ssr bundles.
   const filepath = path.join(__dirname, chunk);
 
-  return fs.readFile(filepath, 'utf-8');
+  return readAssetWithCache(filepath);
 };
 
 const checkIsInline = (

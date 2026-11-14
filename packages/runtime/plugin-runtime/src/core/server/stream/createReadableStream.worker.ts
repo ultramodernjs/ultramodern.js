@@ -18,10 +18,11 @@ import {
   observeSSRStream,
   orderSSRStreamTransforms,
 } from '../shared';
-import { enqueueFromEntries } from './deferredScript';
+import { enqueueFromEntries, hasDeferredResolvers } from './deferredScript';
 import { DeferredScriptOutputCoordinator } from './deferredScriptOutputCoordinator';
 import {
   type CreateReadableStreamFromElement,
+  createShellEndMarkSplitter,
   getReadableStreamFromString,
   resolveStreamingMode,
   SHELL_PROGRESSIVE_CHUNK_SIZE,
@@ -128,10 +129,7 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
       const decoder = new TextDecoder();
       const encoder = new TextEncoder();
       const pendingScripts: string[] = [];
-      const buffered: string[] = [];
-      let bufferedLength = 0;
-      // Characters that may hold the start of a marker split across chunks.
-      let markerTail = '';
+      const splitAtShellEndMark = createShellEndMarkSplitter();
       let shellChunkStatus = ShellChunkStatus.START;
       let bodyController: TransformStreamDefaultController<Uint8Array>;
       let deferredResolversComplete = Promise.resolve();
@@ -148,35 +146,14 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
           if (chunk.length > 0) coordinator?.writeReact(chunk);
           return;
         }
-        // Scan only the new characters: rescanning the whole buffer made
-        // shell buffering quadratic in the shell size.
-        const window = markerTail + chunk;
-        const windowIndex = window.indexOf(ESCAPED_SHELL_STREAM_END_MARK);
-        const markerIndex = bufferedLength - markerTail.length + windowIndex;
-        buffered.push(chunk);
-        bufferedLength += chunk.length;
-        if (windowIndex === -1) {
-          markerTail = window.slice(
-            Math.max(
-              0,
-              window.length - ESCAPED_SHELL_STREAM_END_MARK.length + 1,
-            ),
-          );
-          return;
-        }
-        const shell = buffered.join('');
-        const beforeMark = lifecycle.completedBody(
-          shell.slice(0, markerIndex),
-          'shell',
-        );
-        const afterMark = shell.slice(
-          markerIndex + ESCAPED_SHELL_STREAM_END_MARK.length,
-        );
+        const shell = splitAtShellEndMark(chunk);
+        if (shell === undefined) return;
+        const beforeMark = lifecycle.completedBody(shell.beforeMark, 'shell');
+        const { afterMark } = shell;
         const completedShellBefore = createReplaceHelemt(
           getHelmetData(extenders),
         )(shellBefore);
         shellChunkStatus = ShellChunkStatus.FINISH;
-        buffered.length = 0;
         coordinator?.writeReact(
           `${completedShellBefore}${beforeMark}${shellAfter}`,
         );
@@ -213,7 +190,7 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
         activeDeferreds instanceof Map
           ? Array.from(activeDeferreds.entries())
           : [];
-      if (entries.length > 0) {
+      if (hasDeferredResolvers(entries, deferredScriptKeys)) {
         deferredResolversComplete = enqueueFromEntries(
           entries,
           deferredScriptKeys,
@@ -225,6 +202,8 @@ export const createReadableStreamFromElement: CreateReadableStreamFromElement =
             else pendingScripts.push(script);
           },
         );
+      } else {
+        coordinator.markNoResolvers();
       }
       for (const extender of extenders)
         pendingSource =

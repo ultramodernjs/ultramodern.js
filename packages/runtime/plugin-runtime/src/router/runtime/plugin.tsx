@@ -140,7 +140,10 @@ export const routerPlugin = (
           basename = '',
           routesConfig,
           createRoutes,
+          future,
         } = mergedConfig;
+        const useTransitions =
+          mergedConfig.useTransitions ?? future?.v7_startTransition;
 
         finalRouteConfig = {
           routes: getGlobalRoutes() as ModernRoute[] | undefined,
@@ -200,7 +203,7 @@ export const routerPlugin = (
           // To void hydration failed, we must guarantee that the node tree when browser hydrate must have same struct with node tree when ssr render.
           const routerContent = (
             <>
-              <RouterProvider router={router} />
+              <RouterProvider router={router} useTransitions={useTransitions} />
               <EmptyComponent />
               <EmptyComponent />
             </>

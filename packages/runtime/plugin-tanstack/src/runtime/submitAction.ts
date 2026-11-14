@@ -6,7 +6,7 @@ import {
   formDataToUrlSearchParams,
   toFormData,
 } from './formData';
-import { isRedirectResponse } from './loaderBridge';
+import { isRedirectResponse, isTanstackRedirect } from './loaderBridge';
 
 export class RouteActionResponseError<TData = unknown> extends Error {
   readonly response: Response;
@@ -160,10 +160,22 @@ export async function submitRouteAction({
     body,
   });
 
-  const result = await resolved.action({
-    request,
-    params: resolved.params,
-  });
+  let result: unknown;
+  try {
+    result = await resolved.action({
+      request,
+      params: resolved.params,
+    });
+  } catch (error) {
+    if (
+      !(error instanceof Response) ||
+      !isRedirectResponse(error) ||
+      isTanstackRedirect(error)
+    ) {
+      throw error;
+    }
+    result = error;
+  }
 
   if (result instanceof Response) {
     const redirectTo =

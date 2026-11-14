@@ -1,3 +1,5 @@
+import { createNativeModuleCache } from '@modern-js/app-tools-extensions/config';
+
 let registeredPathHooks;
 
 export const registerPathsLoader = async ({ appDir, baseUrl, paths }) => {
@@ -12,9 +14,23 @@ export const registerPathsLoader = async ({ appDir, baseUrl, paths }) => {
       paths,
     });
 
-    registeredPathHooks ??= registerHooks({
-      resolve: loader.resolve,
-    });
+    if (!registeredPathHooks) {
+      const cache = createNativeModuleCache(appDir);
+      const hooks = registerHooks({
+        resolve: (specifier, context, nextResolve) =>
+          cache.resolve(specifier, context, (value, currentContext) =>
+            loader.resolve(value, currentContext, nextResolve),
+          ),
+        load: cache.load,
+      });
+      registeredPathHooks = {
+        deregister() {
+          hooks.deregister();
+          cache.dispose();
+          registeredPathHooks = undefined;
+        },
+      };
+    }
 
     return registeredPathHooks;
   }

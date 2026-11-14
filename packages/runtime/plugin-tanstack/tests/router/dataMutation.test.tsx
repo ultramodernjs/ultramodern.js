@@ -1,3 +1,4 @@
+import { redirect } from '@tanstack/router-core';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React, { act } from 'react';
 import type { Fetcher } from '../../src/runtime/dataMutation';
@@ -202,6 +203,119 @@ describe('tanstack data mutation fetcher', () => {
       requestUrl: expectedRequestUrl,
     });
     expect(currentRouter.invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  describe.each([
+    { outcome: 'returned', thrown: false },
+    { outcome: 'thrown', thrown: true },
+  ])('$outcome action redirects', ({ thrown }) => {
+    test.each([301, 302, 303, 307, 308])(
+      'navigates for HTTP %s without invalidating the previous route',
+      async status => {
+        const response = new Response(null, {
+          status,
+          headers: {
+            Location: '/about',
+            'X-Action': 'saved',
+          },
+        });
+        currentRouter = createRouter({
+          action: () => {
+            if (thrown) throw response;
+            return response;
+          },
+        });
+        render(<FetcherHarness />);
+
+        let submissionError: unknown;
+        await act(async () => {
+          try {
+            await latestFetcher!.submit(
+              { name: 'Grace', intent: 'redirect' },
+              { method: 'post', action: '/' },
+            );
+          } catch (error) {
+            submissionError = error;
+          }
+        });
+
+        expect(currentRouter.navigate).toHaveBeenCalledExactlyOnceWith({
+          to: '/about',
+        });
+        expect(submissionError).toBeUndefined();
+        expect(currentRouter.invalidate).not.toHaveBeenCalled();
+        expect(latestFetcher?.state).toBe('idle');
+        expect(latestFetcher?.error).toBeUndefined();
+        expect(latestFetcher?.data).toBe('');
+        expect(response.headers.get('Location')).toBe('/about');
+        expect(response.headers.get('X-Action')).toBe('saved');
+      },
+    );
+  });
+
+  test('prefers the Modern redirect header on a returned transport response', async () => {
+    currentRouter = createRouter({
+      action: () =>
+        new Response(null, {
+          status: 204,
+          headers: {
+            'X-Modernjs-Redirect': '/about',
+            Location: '/other',
+          },
+        }),
+    });
+    render(<FetcherHarness />);
+
+    await act(async () => {
+      await latestFetcher!.submit(
+        { name: 'Grace' },
+        { method: 'post', action: '/' },
+      );
+    });
+
+    expect(currentRouter.navigate).toHaveBeenCalledExactlyOnceWith({
+      to: '/about',
+    });
+    expect(currentRouter.invalidate).not.toHaveBeenCalled();
+    expect(latestFetcher?.data).toBeNull();
+  });
+
+  test.each([
+    {
+      name: 'native TanStack redirect',
+      error: () => redirect({ to: '/about', replace: true }),
+    },
+    {
+      name: 'validation Response',
+      error: () =>
+        Response.json({ fieldErrors: { name: 'Required' } }, { status: 422 }),
+    },
+    {
+      name: 'nonredirect Response with a Location header',
+      error: () =>
+        new Response(null, { status: 200, headers: { Location: '/about' } }),
+    },
+    { name: 'ordinary error', error: () => new Error('Native action failure') },
+  ])('preserves a thrown $name without navigating', async ({ error }) => {
+    const failure = error();
+    currentRouter = createRouter({
+      action: async () => {
+        throw failure;
+      },
+    });
+    render(<FetcherHarness />);
+
+    await act(async () => {
+      await expect(
+        latestFetcher!.submit({ name: '' }, { method: 'post', action: '/' }),
+      ).rejects.toBe(failure);
+    });
+
+    expect(currentRouter.navigate).not.toHaveBeenCalled();
+    expect(currentRouter.invalidate).not.toHaveBeenCalled();
+    expect(latestFetcher?.error).toBe(failure);
+    expect(latestFetcher?.state).toBe('idle');
+    if (failure instanceof Response) expect(failure.bodyUsed).toBe(false);
   });
 
   test('surfaces non-2xx action responses as fetcher errors', async () => {

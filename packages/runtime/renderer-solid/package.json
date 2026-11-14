@@ -92,7 +92,7 @@
   },
   "peerDependencies": {
     "@modern-js/i18n-runtime-extensions": "workspace:^3.8.3",
-    "@rsbuild/core": "2.2.13",
+    "@rsbuild/core": "2.3.2",
     "@solidjs/compiler": "2.0.0-rc.15",
     "i18next": ">=25.7.4",
     "@tanstack/router-core": "1.171.38"
@@ -114,7 +114,7 @@
   "devDependencies": {
     "@modern-js/i18n-runtime-extensions": "workspace:*",
     "@modern-js/tsconfig": "workspace:*",
-    "@rsbuild/core": "2.2.13",
+    "@rsbuild/core": "2.3.2",
     "@rslib/core": "1.0.3",
     "@scripts/rstest-config": "workspace:*",
     "@solidjs/compiler": "2.0.0-rc.15",

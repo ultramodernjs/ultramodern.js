@@ -13,6 +13,12 @@ import type {
 } from '../../../types';
 import { sortRoutes } from '../../../utils';
 import { getPublicDirPatterns } from '../../../utils/publicDir';
+import {
+  createHashedAssetMatcher,
+  type ResolvedStaticCacheControl,
+  resolveStaticCacheControl,
+  setStaticFileHeaders,
+} from './staticCache';
 
 /** A selected file and the native response conventions to use for it. */
 export type StaticAsset = {
@@ -21,8 +27,11 @@ export type StaticAsset = {
   /** An alternate representation retains the original resource's MIME type. */
   mimeFilename?: string;
   responseHeaders?: ServerRoute['responseHeaders'];
-  /** True uses the served byte length; omitted preserves native length defaults. */
+  /** Controls whether to include the served byte length. */
   contentLength?: boolean;
+  cacheControl?: string;
+  /** Disable conditional responses when an extension will rewrite the body. */
+  revalidate?: boolean;
   /** Optional lexical containment boundary. Use real paths to contain symlinks. */
   root?: string;
   /** Resolve symlinks before checking root. Implies a regular file is required. */
@@ -33,7 +42,9 @@ export type StaticAssetRequest = { root: string; pathPrefix: string };
 
 /** Native serving of the selected file, optionally choosing another representation. */
 export type ServeStaticAsset = (
-  representation?: Partial<Pick<StaticAsset, 'filename' | 'contentLength'>>,
+  representation?: Partial<
+    Pick<StaticAsset, 'filename' | 'contentLength' | 'revalidate'>
+  >,
 ) => Promise<Response | null>;
 
 /**
@@ -102,8 +113,11 @@ export async function serveStaticAsset(
       return null;
     }
   }
-  if (kind === 'static' && !(await fs.pathExists(filename))) {
-    return null;
+  if (kind === 'static' && !asset.realpath) {
+    const stat = await fs.stat(filename).catch(() => null);
+    if (!stat?.isFile()) {
+      return null;
+    }
   }
   if (respond) {
     return respond(asset, representation =>
@@ -115,31 +129,25 @@ export async function serveStaticAsset(
       }),
     );
   }
-  const mimeType = getMimeType(asset.mimeFilename ?? filename);
-  if (kind === 'static' && mimeType) {
-    context.header('Content-Type', mimeType);
-  }
-  const size = kind === 'static' ? (await fs.lstat(filename)).size : undefined;
   const data =
     kind === 'static'
       ? await fileReader.readFileFromSystem(filename, 'buffer')
       : await fileReader.readFile(filename, 'buffer');
-  if (kind === 'static' && (asset.contentLength ?? true)) {
-    context.header(
-      'Content-Length',
-      String(asset.contentLength === true && data ? data.byteLength : size),
-    );
-  }
   if (data === null) {
     return null;
   }
-  if (kind === 'public' && mimeType) {
+  const mimeType = getMimeType(asset.mimeFilename ?? filename);
+  if (mimeType) {
     context.header('Content-Type', mimeType);
   }
   Object.entries(asset.responseHeaders || {}).forEach(([key, value]) => {
     context.header(key, value as string);
   });
-  if (kind === 'public' && asset.contentLength) {
+  const notModified = setStaticFileHeaders(context, data, asset.cacheControl);
+  if (notModified && asset.revalidate !== false) {
+    return context.body(null, 304);
+  }
+  if (asset.contentLength ?? kind === 'static') {
     context.header('Content-Length', String(data.byteLength));
   }
   // Hono does not accept Buffer<ArrayBufferLike>; retain native view conversion.
@@ -194,24 +202,31 @@ export type PublicMiddlewareOptions = {
   pwd: string;
   routes: ServerRoute[];
   pathPrefix?: string;
+  cacheControl?: ResolvedStaticCacheControl;
 } & ServerStaticPluginOptions;
 
 export function createPublicMiddleware({
   pwd,
   routes,
   pathPrefix = '/',
+  cacheControl,
   respondAsset,
   respondPublicFallback,
 }: PublicMiddlewareOptions): Middleware {
+  const publicRoutes = routes
+    .filter(route => !route.isSSR && route.entryPath?.startsWith('public'))
+    .sort(sortRoutes);
+
   return async (c, next) => {
     const respondPublic = async (): Promise<Response | null> => {
-      const route = matchPublicRoute(c.req, routes);
+      const route = matchPublicRoute(c.req, publicRoutes);
       if (!route) {
         return null;
       }
       const asset: StaticAsset = {
         filename: path.join(pwd, route.entryPath),
         kind: 'public',
+        cacheControl: cacheControl?.unhashed,
         responseHeaders: route.responseHeaders,
       };
       const serve: ServeStaticAsset = representation =>
@@ -233,17 +248,8 @@ export function createPublicMiddleware({
   };
 }
 
-function matchPublicRoute(req: HonoRequest, routes: ServerRoute[]) {
-  for (const route of routes.sort(sortRoutes)) {
-    if (
-      !route.isSSR &&
-      route.entryPath.startsWith('public') &&
-      req.path.startsWith(route.urlPath)
-    ) {
-      return route;
-    }
-  }
-  return undefined;
+function matchPublicRoute(req: HonoRequest, publicRoutes: ServerRoute[]) {
+  return publicRoutes.find(route => req.path.startsWith(route.urlPath));
 }
 
 // Remove domain name from assetPrefix if it exists
@@ -284,6 +290,9 @@ export function createStaticMiddleware(
   options: ServerStaticOptions,
 ): Middleware {
   const { pwd, routes } = options;
+  const cacheControl = resolveStaticCacheControl(
+    options.server.staticCacheControl,
+  );
   const prefix = options.output.assetPrefix || '/';
   const pathPrefix = extractPathname(prefix);
 
@@ -298,6 +307,11 @@ export function createStaticMiddleware(
   // Convert publicDir paths to regex patterns for matching
   // e.g., './locales' or 'locales' -> 'locales/'
   const publicDirPatterns = getPublicDirPatterns(publicDir);
+  const isHashedAsset = createHashedAssetMatcher(staticFiles as string[], [
+    'public/',
+    'upload/',
+    ...publicDirPatterns,
+  ]);
 
   // TODO: If possible, we should not use `...staticFiles` here, file should only be read in static and upload dir.
   const staticReg = [
@@ -312,6 +326,15 @@ export function createStaticMiddleware(
   const staticPathRegExp = new RegExp(
     `^${regPrefix}(${[...staticReg, ...iconReg].join('|')})`,
   );
+
+  const publicMiddleware = createPublicMiddleware({
+    pwd,
+    routes: routes || [],
+    pathPrefix,
+    cacheControl,
+    respondAsset: options.respondAsset,
+    respondPublicFallback: options.respondPublicFallback,
+  });
 
   /**
    * The function is modified based on
@@ -333,25 +356,32 @@ export function createStaticMiddleware(
 
     // FIXME: shoudn't hit, when cssPath, jsPath, mediaPath as '.'
     if (hit) {
-      const filepath = path.join(
-        pwd,
-        pathname.replace(pathPrefix, () => ''),
-      );
+      const relativePath = pathname
+        .replace(pathPrefix, () => '')
+        .replace(/^\/+/, '');
+      const filepath = path.join(pwd, relativePath);
       // Prevent path traversal: `pathname` is user-controlled and may contain
       // `../` sequences (Hono decodes `%2e%2e` in `c.req.path`), which
       // `path.join` resolves. Reject any resolved path that escapes `pwd`.
       if (!isPathInside(filepath, pwd)) {
         return next();
       }
-      if (!(await fs.pathExists(filepath))) {
-        // FIXME: we shoud return a response with status is 404, if we can't found static asset
-        // return c.html(createErrorHtml(404), 404);
-
-        // In some case, page route would hit the staticPathRegExp.
-        // So we call next().
-        return next();
+      // Responders only select representations of an existing native asset.
+      if (options.respondAsset) {
+        const stat = await fs.stat(filepath).catch(() => null);
+        if (!stat?.isFile()) {
+          return next();
+        }
       }
-      const asset: StaticAsset = { filename: filepath, kind: 'static' };
+      const asset: StaticAsset = {
+        filename: filepath,
+        kind: 'static',
+        cacheControl:
+          cacheControl &&
+          (isHashedAsset(relativePath)
+            ? cacheControl.hashed
+            : cacheControl.unhashed),
+      };
       const serve: ServeStaticAsset = representation =>
         serveStaticAsset(c, {
           ...asset,
@@ -364,13 +394,7 @@ export function createStaticMiddleware(
         : undefined;
       return (response === undefined ? await serve() : response) ?? next();
     } else {
-      return createPublicMiddleware({
-        pwd,
-        routes: routes || [],
-        pathPrefix,
-        respondAsset: options.respondAsset,
-        respondPublicFallback: options.respondPublicFallback,
-      })(c, next);
+      return publicMiddleware(c, next);
     }
   };
 }

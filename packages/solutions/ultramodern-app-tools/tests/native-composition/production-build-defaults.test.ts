@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -98,11 +99,11 @@ describe('UltraModern production build defaults', () => {
   it('exports names-preserving server minifier options', () => {
     expect(ULTRAMODERN_SERVER_MINIFY.jsOptions.minimizerOptions).toEqual({
       compress: { keep_classnames: true, keep_fnames: true },
-      mangle: { keep_classnames: true, keep_fnames: true },
+      mangle: false,
     });
   });
 
-  it('keeps "use strict" in force after the release identity banner', async () => {
+  it('keeps strict mode and named class static self-references after server minification', async () => {
     const previous = process.env.ULTRAMODERN_SOURCE_REVISION;
     const workspaceRoot = fs.realpathSync(
       fs.mkdtempSync(
@@ -117,11 +118,13 @@ describe('UltraModern production build defaults', () => {
       const entry = path.join(workspaceRoot, 'entry.js');
       fs.writeFileSync(
         entry,
-        'export const load = () => import("./lazy.js");\n',
+        'export const strictThis = function () { return this; };\n' +
+          'export class BadRequest { static singleton = new BadRequest(); }\n' +
+          'export const load = () => import("./lazy.js");\n',
       );
       fs.writeFileSync(
         path.join(workspaceRoot, 'lazy.js'),
-        'export const sloppy = function () { return this; };\n',
+        'export const strictThis = function () { return this; };\n',
       );
       const preset = createPresetUltramodernConfig({
         deliveryUnit: {
@@ -151,8 +154,21 @@ describe('UltraModern production build defaults', () => {
               entry,
               mode: 'production',
               target: 'node',
-              optimization: { minimize: true },
-              output: { path: outputPath, chunkFormat: 'commonjs' },
+              optimization: {
+                minimize: true,
+                minimizer: [
+                  new rspack.SwcJsMinimizerRspackPlugin({
+                    minimizerOptions:
+                      ULTRAMODERN_SERVER_MINIFY.jsOptions.minimizerOptions,
+                  }),
+                ],
+              },
+              output: {
+                path: outputPath,
+                chunkFormat: 'commonjs',
+                // Keep the exported lazy import reachable under tree shaking.
+                library: { type: 'commonjs2' },
+              },
               plugins: plugins as never,
             },
             (error, stats) =>
@@ -170,6 +186,19 @@ describe('UltraModern production build defaults', () => {
         .readdirSync(stamped)
         .filter(file => file.endsWith('.js'));
       expect(chunks.length).toBeGreaterThan(1);
+
+      const require = createRequire(entry);
+      for (const outputPath of [plain, stamped]) {
+        const { strictThis, load, BadRequest } = require(
+          path.join(outputPath, 'main.js'),
+        );
+        expect(strictThis()).toBeUndefined();
+        expect(BadRequest.name).toBe('BadRequest');
+        expect(BadRequest.singleton).toBeInstanceOf(BadRequest);
+        const { strictThis: lazyStrictThis } = await load();
+        expect(lazyStrictThis()).toBeUndefined();
+      }
+
       for (const chunk of chunks) {
         const before = fs.readFileSync(path.join(plain, chunk), 'utf8');
         const after = fs.readFileSync(path.join(stamped, chunk), 'utf8');

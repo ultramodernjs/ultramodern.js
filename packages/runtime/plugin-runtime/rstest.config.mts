@@ -28,6 +28,7 @@ export default {
         'tests/router/plugin.client.test.tsx',
         'tests/router/prefetch.test.tsx',
         'tests/router/prefetch-realm-isolation.test.tsx',
+        'tests/router/useTransitions.test.tsx',
       ],
       extends: commonConfig,
       plugins: [
@@ -82,6 +83,7 @@ export default {
         'tests/router/plugin.client.test.tsx',
         'tests/router/prefetch.test.tsx',
         'tests/router/prefetch-realm-isolation.test.tsx',
+        'tests/router/useTransitions.test.tsx',
       ],
       extends: commonConfig,
       plugins: [

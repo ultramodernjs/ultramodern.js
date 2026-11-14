@@ -132,6 +132,11 @@ export const handleRouteModule = (routeModule: unknown, routeId: string) => {
   return component !== undefined ? { default: component } : routeModule;
 };
 
+/**
+ * @deprecated Generated routes no longer use this. Swallowing the import error
+ * here replaced a `ChunkLoadError` with an unrelated `TypeError` by the time it
+ * reached the route error boundary. Kept only for code that imports it directly.
+ */
 export const handleRouteModuleError = (error: Error) => {
   console.error(error);
   return null;

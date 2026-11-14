@@ -135,6 +135,7 @@ const myPlugin = (): RuntimePlugin => ({
 ```
 
 **注意事项：**
+
 - 确保 i18n 插件在使用 `context.changeLanguage` 的插件之前注册
 - `changeLanguage` 在服务端不会更新 URL 路径，需要配合路由插件或手动处理
 
@@ -199,11 +200,11 @@ interface I18nInstance {
 type I18nSdkLoader = (options: I18nSdkLoadOptions) => Promise<Resources>;
 
 interface I18nSdkLoadOptions {
-  lng?: string;      // 单个语言代码
-  ns?: string;       // 单个命名空间
-  lngs?: string[];   // 多个语言代码
-  nss?: string[];    // 多个命名空间
-  all?: boolean;     // 加载所有资源
+  lng?: string; // 单个语言代码
+  ns?: string; // 单个命名空间
+  lngs?: string[]; // 多个语言代码
+  nss?: string[]; // 多个命名空间
+  all?: boolean; // 加载所有资源
 }
 
 type Resources = {
@@ -218,14 +219,14 @@ type Resources = {
 ```ts
 interface LanguageDetectorOptions {
   order?: string[];
-  lookupQuerystring?: string;   // 默认 'lng'
-  lookupCookie?: string;        // 默认 'i18next'
-  lookupLocalStorage?: string;  // 默认 'i18nextLng'
+  lookupQuerystring?: string; // 默认 'lng'
+  lookupCookie?: string; // 默认 'i18next'
+  lookupLocalStorage?: string; // 默认 'i18nextLng'
   lookupSession?: string;
-  lookupHeader?: string;        // 默认 'accept-language'
+  lookupHeader?: string; // 默认 'accept-language'
   lookupFromPathIndex?: number; // 默认 0
   caches?: false | string[];
-  cookieMinutes?: number;       // 默认 525600（1年）
+  cookieMinutes?: number; // 默认 525600（1年）
   cookieExpirationDate?: Date;
   cookieDomain?: string;
 }
@@ -245,8 +246,8 @@ import { useTranslation } from 'react-i18next';
 import { useModernI18n } from '@modern-js/plugin-i18n/runtime';
 
 function App() {
-  const { t } = useTranslation();                          // 翻译文本
-  const { language, changeLanguage } = useModernI18n();    // 语言切换
+  const { t } = useTranslation(); // 翻译文本
+  const { language, changeLanguage } = useModernI18n(); // 语言切换
 
   return (
     <div>

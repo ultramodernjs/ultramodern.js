@@ -3,13 +3,14 @@ import type { NodeRequest } from '@modern-js/types/server';
 import { cutNameByHyphen } from '@modern-js/utils/universal';
 import type { Router } from 'hono/router';
 import { TrieRouter } from 'hono/router/trie-router';
+import { getPath } from 'hono/utils/url';
 import { X_MODERNJS_RENDER } from '../../constants';
 import type { CacheConfig, Render, UserConfig } from '../../types';
 import type { Params } from '../../types/requestHandler';
 import {
   createErrorHtml,
   ErrorDigest,
-  getPathname,
+  getRoutePath,
   getRuntimeEnv,
   parseHeaders,
   parseQuery,
@@ -60,11 +61,7 @@ function getRouter(routes: ServerRoute[]): Router<ServerRoute> {
   const router = new TrieRouter<ServerRoute>();
 
   for (const route of finalRoutes) {
-    const { urlPath: originUrlPath } = route;
-
-    const urlPath = originUrlPath.endsWith('/')
-      ? `${originUrlPath}*`
-      : `${originUrlPath}/*`;
+    const urlPath = getRoutePath(route);
     router.add('*', urlPath, route);
   }
 
@@ -122,6 +119,8 @@ export async function createRender({
   config,
 }: CreateRenderOptions): Promise<Render> {
   const router = getRouter(routes);
+  const framework = cutNameByHyphen(metaName || 'modern-js');
+  const fallbackHeader = `x-${framework}-ssr-fallback`;
 
   return async (
     req,
@@ -142,15 +141,14 @@ export async function createRender({
       reporter,
     },
   ) => {
-    const forMatchpathname = matchPathname ?? getPathname(req);
+    // Match the normalized path used by Hono's outer middleware router.
+    const forMatchpathname = matchPathname ?? getPath(req);
     const [routeInfo, params] = matchRoute(
       router,
       forMatchpathname,
       matchEntryName,
     );
     serverContext?.set('renderRoute', routeInfo);
-    const framework = cutNameByHyphen(metaName || 'modern-js');
-    const fallbackHeader = `x-${framework}-ssr-fallback`;
     let fallbackReason = null;
 
     const fallbackWrapper: FallbackWrapper = reason => {
@@ -192,8 +190,6 @@ export async function createRender({
       contextForceCSR,
     );
 
-    const headerData = parseHeaders(req);
-
     const onError = (e: unknown, key?: string) => {
       monitors?.error(
         `SSR Error - ${
@@ -201,7 +197,7 @@ export async function createRender({
         }, error = %s, req.url = %s, req.headers = %o`,
         e instanceof Error ? e.stack || e.message : e,
         forMatchpathname,
-        getHeadersWithoutCookie(headerData),
+        getHeadersWithoutCookie(parseHeaders(req)),
       );
     };
 

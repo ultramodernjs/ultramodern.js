@@ -132,6 +132,13 @@ const ssrBuilderPlugin = (
         },
         output: outputConfig,
         tools: {
+          // A loader can preload a route before SSR renders it. If module
+          // initialization throws, subsequent imports must rethrow that error
+          // instead of returning the partially initialized module's exports.
+          rspack:
+            isServerEnvironment && isUseSSRBundle(userConfig)
+              ? { output: { strictModuleErrorHandling: true } }
+              : undefined,
           bundlerChain: useLoadablePlugin
             ? (chain: RspackChain) => {
                 chain

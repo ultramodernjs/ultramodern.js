@@ -136,10 +136,10 @@
     "@modern-js/renderer-core": "workspace:*",
     "@modern-js/runtime-extensions": "workspace:*",
     "@modern-js/runtime-utils": "workspace:*",
-    "i18next-browser-languagedetector": "^8.2.1"
+    "i18next-browser-languagedetector": "^8.3.0"
   },
   "peerDependencies": {
-    "@modern-js/runtime": "workspace:^3.9.3",
+    "@modern-js/runtime": "workspace:^3.11.3",
     "react": "^19.3.1",
     "i18next": ">=25.7.4"
   },

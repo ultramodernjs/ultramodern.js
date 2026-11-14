@@ -70,6 +70,9 @@ function runCommand(command, args = [], options = {}) {
         : createProcessEnv(options.env || {}),
     encoding: options.encoding || 'utf8',
     stdio: options.stdio || 'inherit',
+    ...(options.maxBuffer === undefined
+      ? {}
+      : { maxBuffer: options.maxBuffer }),
   });
 
   return {

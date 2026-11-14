@@ -38,6 +38,7 @@ const runGit = ({ rootDir, args, allowFailure = false }) => {
     cwd: rootDir,
     encoding: 'utf8',
     stdio: 'pipe',
+    maxBuffer: 32 * 1024 * 1024,
   });
   const status = result.processStatus;
 

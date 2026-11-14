@@ -9,8 +9,9 @@ const IgnoreFiles = [
   '.nvmrc',
   '.vscode/extensions.json',
   '.vscode/settings.json',
-  '.husky/pre-commit',
+  '.rstack/hooks/pre-commit',
   'README.md',
+  'rstack.config.mts',
 ];
 
 function renderTemplate(
@@ -164,6 +165,8 @@ async function handleCreateTemplate() {
   const files = await handleTemplate(templateDir, {
     packageName: 'modern-app',
     version,
+    // Online demos omit repository-level linting and formatting tools.
+    isSubproject: true,
   });
 
   return files;

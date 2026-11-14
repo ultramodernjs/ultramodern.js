@@ -7,7 +7,6 @@ import {
   getMeta,
   isApiOnly,
   isDevCommand,
-  minimist,
 } from '@modern-js/utils';
 import type { RsbuildPlugin } from '@rsbuild/core';
 import * as path from 'path';
@@ -20,7 +19,10 @@ import type {
   CliPlugin,
 } from '../../types';
 import { emitResolvedConfig } from '../../utils/config';
-import { getSelectedEntries } from '../../utils/getSelectedEntries';
+import {
+  getSelectedEntries,
+  parseEntryOption,
+} from '../../utils/getSelectedEntries';
 import { printInstructions } from '../../utils/printInstructions';
 import { generateRoutes } from '../../utils/routes';
 import { checkIsBuildCommands, checkIsServeCommand } from './utils';
@@ -185,9 +187,8 @@ export default (): CliPlugin<AppTools> => ({
 
       let checkedEntries = entrypoints.map(point => point.entryName);
       if (isDevCommand()) {
-        const { entry } = minimist(getArgv());
         checkedEntries = await getSelectedEntries(
-          typeof entry === 'string' ? entry.split(',') : entry,
+          parseEntryOption(getArgv()),
           entrypoints,
         );
       }

@@ -137,6 +137,12 @@ export type FullHooks = Assert<Same<
     & BasePlugin.AppToolsExtendHooksBase<ReactRoutes>
 >>;
 export type ConfigIsStrict = Assert<Same<IsAny<LegacyConfig.AppToolsUserConfig>, false>>;
+export type NoLegacyTestingOption = Assert<Same<
+  Extract<'testing', keyof LegacyConfig.AppToolsUserConfig>, never
+>>;
+export type NoLegacyJestOption = Assert<Same<
+  Extract<'jest', keyof NonNullable<LegacyConfig.AppToolsUserConfig['tools']>>, never
+>>;
 export type DevServerAliases = Assert<Same<[
   LegacyDev.CorsOptions, LegacyDev.DevServerConfig,
   LegacyDev.DevServerOptions, LegacyDev.DevServerHttpsOptions
@@ -305,6 +311,12 @@ type Same<A, B> = [A] extends [B] ? [B] extends [A] ? true : false : false;
 type NeutralRoutes = CLIFileSystemRoute<CLIElement>;
 export type EmptyRegistry = Assert<Same<keyof CLIElementTypes, never>>;
 export type NoRendererElement = Assert<Same<CLIElement, never>>;
+export type NoNeutralTestingOption = Assert<Same<
+  Extract<'testing', keyof AppToolsUserConfig>, never
+>>;
+export type NoNeutralJestOption = Assert<Same<
+  Extract<'jest', keyof NonNullable<AppToolsUserConfig['tools']>>, never
+>>;
 export type NoElementSlot = Assert<Same<NonNullable<NeutralRoutes['element']>, never>>;
 export type NoErrorElementSlot = Assert<Same<NonNullable<NeutralRoutes['errorElement']>, never>>;
 export type NoRecursiveElementSlot = Assert<Same<

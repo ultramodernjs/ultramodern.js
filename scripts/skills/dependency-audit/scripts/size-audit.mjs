@@ -14,12 +14,6 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  findInstallRoot,
-  findLockfile,
-  mb,
-  measureInstalled,
-} from './lib/size-kit.mjs';
 
 function parseArgs(argv) {
   const rest = argv.slice(2);
@@ -36,6 +30,102 @@ function parseArgs(argv) {
   };
 }
 
+function findLockfile(dir) {
+  let cur = dir;
+  for (;;) {
+    const p = path.join(cur, 'pnpm-lock.yaml');
+    if (fs.existsSync(p)) return p;
+    const parent = path.dirname(cur);
+    if (parent === cur) return null;
+    cur = parent;
+  }
+}
+
+// 向上找含 node_modules 的安装根（pnpm workspace 下包在 packages/<x>，装在仓库根）
+function findInstallRoot(dir) {
+  let cur = dir;
+  let fallback = null;
+  for (;;) {
+    const nodeModules = path.join(cur, 'node_modules');
+    if (fs.existsSync(path.join(nodeModules, '.pnpm'))) return cur;
+    if (!fallback && fs.existsSync(nodeModules)) fallback = cur;
+    const parent = path.dirname(cur);
+    if (parent === cur) return fallback;
+    cur = parent;
+  }
+}
+
+// 递归测量真实字节；符号链接不跟随（pnpm store 之外的链接返回 0，避免重复/环）
+function dirSize(p) {
+  let st;
+  try {
+    st = fs.lstatSync(p);
+  } catch {
+    return 0;
+  }
+  if (st.isSymbolicLink()) return 0;
+  if (st.isFile()) return st.size;
+  if (st.isDirectory()) {
+    let total = 0;
+    for (const e of fs.readdirSync(p)) total += dirSize(path.join(p, e));
+    return total;
+  }
+  return 0;
+}
+
+// pnpm store 目录名 → { name, version }；scoped 用 + 编码
+function parseStoreEntry(entry) {
+  // 去掉 peer 后缀：name@ver(peer) / name@ver_peer
+  const cleaned = entry.replace(/[(_].*$/, '');
+  if (cleaned.startsWith('@')) {
+    const at = cleaned.indexOf('@', 1);
+    if (at === -1) return null;
+    return {
+      name: cleaned.slice(0, at).replace('+', '/'),
+      version: cleaned.slice(at + 1),
+    };
+  }
+  const at = cleaned.indexOf('@');
+  if (at <= 0) return null;
+  return { name: cleaned.slice(0, at), version: cleaned.slice(at + 1) };
+}
+
+// 测量 install 结果（无 node_modules 返回 null —— 不推断）
+function measureInstalled(dir) {
+  const nm = path.join(dir, 'node_modules');
+  if (!fs.existsSync(nm)) return null;
+  const store = path.join(nm, '.pnpm');
+  const sizes = new Map(); // name -> bytes（同名多版本累加）
+
+  if (fs.existsSync(store)) {
+    for (const entry of fs.readdirSync(store)) {
+      const parsed = parseStoreEntry(entry);
+      if (!parsed) continue;
+      const pkgDir = path.join(
+        store,
+        entry,
+        'node_modules',
+        ...parsed.name.split('/'),
+      );
+      if (!fs.existsSync(pkgDir)) continue;
+      sizes.set(parsed.name, (sizes.get(parsed.name) || 0) + dirSize(pkgDir));
+    }
+  } else {
+    // 扁平 node_modules（npm/yarn）
+    for (const e of fs.readdirSync(nm)) {
+      if (e.startsWith('.')) continue;
+      if (e.startsWith('@')) {
+        for (const s of fs.readdirSync(path.join(nm, e))) {
+          sizes.set(`${e}/${s}`, dirSize(path.join(nm, e, s)));
+        }
+      } else {
+        sizes.set(e, dirSize(path.join(nm, e)));
+      }
+    }
+  }
+  return sizes;
+}
+
 function readLockNames(lockPath) {
   const text = fs.readFileSync(lockPath, 'utf-8');
   const names = new Set();
@@ -44,6 +134,8 @@ function readLockNames(lockPath) {
   while ((m = re.exec(text))) names.add(m[1]);
   return names;
 }
+
+const mb = b => `${(b / 1024 / 1024).toFixed(2)} MB`;
 
 function main() {
   const {

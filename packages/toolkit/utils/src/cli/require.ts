@@ -68,13 +68,12 @@ async function compatibleRequireCJS(
   } catch (err: any) {
     // Node's require(esm) rejects ESM graphs that use top-level await.
     if (
-      err.code === 'ERR_REQUIRE_ESM' ||
-      err.code === 'ERR_REQUIRE_ASYNC_MODULE'
+      err?.code === 'ERR_REQUIRE_ESM' ||
+      err?.code === 'ERR_REQUIRE_ASYNC_MODULE'
     ) {
       return await compatibleRequireESM(path, interop);
-    } else {
-      throw err;
     }
+    throw err;
   }
 }
 

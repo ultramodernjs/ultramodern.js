@@ -15,6 +15,7 @@ const createRequestContext = (pathname: string) =>
 
 describe('cli modifyFileSystemRoutes', () => {
   test('uses the no-react runtime entry when reactI18next is disabled', () => {
+    const configs: unknown[] = [];
     let runtimePlugin:
       | {
           path: string;
@@ -23,6 +24,7 @@ describe('cli modifyFileSystemRoutes', () => {
       | undefined;
 
     i18nCliPlugin({ reactI18next: false }).setup({
+      config: (getConfig: () => unknown) => configs.push(getConfig()),
       _internalRuntimePlugins: (fn: any) => {
         const plugins: Array<{
           path: string;
@@ -47,9 +49,13 @@ describe('cli modifyFileSystemRoutes', () => {
       '@modern-js/plugin-i18n/runtime/no-react-i18next',
     );
     expect(runtimePlugin?.config.reactI18next).toBe(false);
+    expect(configs).toEqual([
+      { tools: { bundlerChain: expect.any(Function) } },
+    ]);
   });
 
   test('upstream-style configs without a map keep routes untouched', async () => {
+    const configs: unknown[] = [];
     // The hook is registered unconditionally now that route expansion is a
     // native feature; what matters is that a config with no `localisedUrls`
     // map gets its routes back byte-for-byte instead of a locale-expanded tree.
@@ -62,6 +68,7 @@ describe('cli modifyFileSystemRoutes', () => {
     i18nCliPlugin({
       localeDetection: { localePathRedirect: true, languages: ['en', 'cs'] },
     }).setup({
+      config: (getConfig: () => unknown) => configs.push(getConfig()),
       _internalRuntimePlugins: () => {},
       _internalServerPlugins: () => {},
       modifyFileSystemRoutes: (fn: any) => {
@@ -76,6 +83,9 @@ describe('cli modifyFileSystemRoutes', () => {
     });
 
     expect(result?.routes).toEqual(routes);
+    expect(configs).toEqual([
+      { tools: { bundlerChain: expect.any(Function) } },
+    ]);
   });
 });
 

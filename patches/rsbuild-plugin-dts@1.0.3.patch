@@ -1,0 +1,22 @@
+diff --git a/dist/e.js b/dist/e.js
+--- a/dist/e.js
++++ b/dist/e.js
+@@ -5324,7 +5324,8 @@ async function calcLongestCommonPath(files) {
+ }
+ const globDtsFiles = async (cwd, dir, patterns)=>{
++    dir = resolve(cwd, dir);
+     const dtsFiles = await Promise.all(patterns.map(async (pattern)=>glob(convertPath(join(dir, pattern)), {
+-            cwd,
++            cwd: dir,
+             absolute: true,
+             dot: true
+         })));
+@@ -5467,7 +5468,7 @@ async function prepareDtsContext(data) {
+         if (bundle) throw Error('Can not set "dts.bundle: true" when "dts.build: true"');
+         if ((!rawCompilerOptions.outDir || normalize(rawCompilerOptions.outDir) !== resolvedDtsEmitPath) && (!rawCompilerOptions.declarationDir || normalize(rawCompilerOptions.declarationDir) !== resolvedDtsEmitPath)) throw Error(`Please set "declarationDir": "${dtsEmitPath}" in ${color.underline(tsconfigPath)} to keep it same as "dts.distPath" or "output.distPath" field in lib config.`);
+     }
+-    const declarationDir = bundle ? ensureTempDeclarationDir(cwd, name) : dtsEmitPath;
++    const declarationDir = bundle ? ensureTempDeclarationDir(cwd, name) : resolve(cwd, dtsEmitPath);
+     const bundledDtsEntries = bundle ? dtsEntry.map((entryObj)=>{
+         const { name: entryName, path: entryPath } = entryObj;
+         if (!entryPath) return null;

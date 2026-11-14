@@ -15,7 +15,7 @@
     "modern",
     "modern.js"
   ],
-  "version": "3.9.3",
+  "version": "3.11.3",
   "files": [
     "dist",
     "hook.d.ts"
@@ -35,7 +35,6 @@
     "@modern-js/rslib": "workspace:*",
     "@modern-js/server-core": "workspace:*",
     "@rslib/core": "1.0.3",
-    "@scripts/build": "workspace:*",
     "@scripts/rstest-config": "workspace:*",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",

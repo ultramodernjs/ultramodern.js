@@ -113,7 +113,11 @@ export async function createDevServer(
     );
     const runtimeServer = createServerBase(runtimeOptions);
     runtimeServer.addPlugins([
-      devRuntimeMiddlewarePlugin({ ...options, builderDevServer }, compiler),
+      devRuntimeMiddlewarePlugin(
+        { ...options, builderDevServer },
+        compiler,
+        runtimeServer,
+      ),
     ]);
     try {
       await applyPlugins(runtimeServer, runtimeOptions, nodeServer);

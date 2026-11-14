@@ -72,7 +72,10 @@ export const pluginEnvironmentDefaults = (
       order: 'post',
     });
     api.modifyEnvironmentConfig(async (config, { name }) => {
-      if (config.output.target === 'web-worker') {
+      if (
+        name === SERVICE_WORKER_ENVIRONMENT_NAME &&
+        config.output.target === 'web-worker'
+      ) {
         config.output.externals = undefined;
       }
       config.output.overrideBrowserslist ??= await getBrowserslistWithDefault(

@@ -78,6 +78,35 @@ describe('static plugin precompressed assets', () => {
     expect(Buffer.from(await response.arrayBuffer()).equals(brBody)).toBe(true);
   });
 
+  it('revalidates the selected compressed bytes without reusing their validator for identity', async () => {
+    const pwd = await createTempDir();
+    const original = Buffer.from('compressed validator body');
+    const compressed = brotliCompressSync(original);
+    const filename = path.join(pwd, 'static', 'validator.js');
+    await mkdir(path.dirname(filename), { recursive: true });
+    await writeFile(filename, original);
+    await writeFile(`${filename}.br`, compressed);
+    const server = await createStaticServer(pwd);
+    const first = await server.request('/static/validator.js', {
+      headers: { 'accept-encoding': 'br' },
+    });
+    const etag = first.headers.get('etag');
+    expect(etag).not.toBeNull();
+    const headers = new Headers({ 'accept-encoding': 'br' });
+    if (etag) headers.set('if-none-match', etag);
+    const cached = await server.request('/static/validator.js', { headers });
+    expect(cached.status).toBe(304);
+    expect(cached.headers.get('content-encoding')).toBe('br');
+    expect(cached.headers.get('vary')).toContain('Accept-Encoding');
+    expect(await cached.text()).toBe('');
+
+    headers.set('accept-encoding', 'identity');
+    const identity = await server.request('/static/validator.js', { headers });
+    expect(identity.status).toBe(200);
+    expect(identity.headers.get('etag')).not.toBe(etag);
+    expect(await identity.text()).toBe(original.toString());
+  });
+
   it('respects accept-encoding quality values', async () => {
     const pwd = await createTempDir();
     const originBody = Buffer.from('hello quality');

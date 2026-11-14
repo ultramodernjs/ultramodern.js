@@ -4,6 +4,8 @@ const ignoreDeps = [
   'fs-extra',
   'tailwindcss',
   '@module-federation/modern-js-v3',
+  // MCP SDK requires zod 4, while existing BFF APIs still use zod 3.
+  'zod',
 ];
 
 const {
