@@ -445,6 +445,7 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
   let lastDoneCompiler: Rspack.Compiler | undefined;
   let clientCompiler: Rspack.Compiler | undefined;
   let beforeAggregateCompile: (() => Promise<void>) | undefined;
+  let beforeClientCompileDone: (() => Promise<void>) | undefined;
   let afterAggregateCompile: (() => void) | undefined;
   let duringNextCompile: (() => void) | undefined;
   const compilerArtifacts = createReplacementCompilerArtifacts();
@@ -475,6 +476,15 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
         compilers = 'compilers' in compiler ? compiler.compilers : [compiler];
         clientCompiler = compilers.find(
           candidate => candidate.options.name === 'client',
+        );
+        // Control the finished client before MultiCompiler's aggregate done.
+        clientCompiler?.hooks.done.tapPromise(
+          { name: 'ReplacementCompilerControl', stage: -Infinity },
+          async () => {
+            const callback = beforeClientCompileDone;
+            beforeClientCompileDone = undefined;
+            await callback?.();
+          },
         );
         if (initialPublication)
           for (const candidate of compilers)
@@ -762,6 +772,9 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
     },
     beforeNextAggregateCompile(callback: () => Promise<void>) {
       beforeAggregateCompile = callback;
+    },
+    beforeNextClientCompileDone(callback: () => Promise<void>) {
+      beforeClientCompileDone = callback;
     },
     afterNextAggregateCompile(callback: () => void) {
       afterAggregateCompile = callback;
@@ -1373,18 +1386,31 @@ describe('native development', () => {
       ).toBe(false);
       // Compile A finishes, but a later edit supersedes it before it is
       // published. Its hot update still chains from the initial graph.
-      app.beforeNextAggregateCompile(async () => {
+      const superseded = Promise.withResolvers<void>();
+      app.beforeNextClientCompileDone(async () => {
         await app.startInvalidatedClientRun();
-        app.editRemoteLazy('REMOTE_LAZY_PUBLISHED');
+        superseded.resolve();
       });
       app.editRemoteLazy('REMOTE_LAZY_SUPERSEDED');
+      await superseded.promise;
+      // Consume A's live delta before later compiles can clean it away. The
+      // contract under test retains applied graphs, not historical HMR deltas.
+      expect(await widget.hotUpdate()).not.toBeNull();
+      expect(
+        (await (await fetch(manifestUrl)).json()).metaData.publicPath,
+      ).toBe(initialPublicPath);
+      app.editRemoteLazy('REMOTE_LAZY_PUBLISHED');
       for (;;) {
         const manifest = await (await fetch(manifestUrl)).json();
         nextPublicPath = manifest.metaData.publicPath;
         if (nextPublicPath !== initialPublicPath) break;
         await new Promise(resolve => setTimeout(resolve, 50));
       }
-      expect(await widget.hotUpdate()).not.toBeNull();
+      // An extra watcher rebuild may retire A's live delta, but not its graph.
+      const completed = Promise.withResolvers<void>();
+      app.afterNextAggregateCompile(() => completed.resolve());
+      app.invalidateClient();
+      await completed.promise;
       const beforeLazy = scripts.length;
       expect((await widget.lazy()).default).toBe('REMOTE_LAZY_SUPERSEDED');
       const lazyScripts = scripts.slice(beforeLazy);
@@ -1401,6 +1427,8 @@ describe('native development', () => {
           nextPublicPath,
           loadedScripts: scripts.map(script => script.url),
           scriptFailures,
+          clientHashes: app.clientCompilationHashes(),
+          failure: inspect(error),
         })}`,
         { cause: error },
       );
