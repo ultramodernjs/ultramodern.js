@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { resolveEffectTsrsCompiler } from '@modern-js/app-tools-extensions/build-config';
 import { typescriptVersion } from 'tsrs';
+import { serverFS } from 'tsrs/fs';
 import { API } from 'tsrs/sync';
 import {
   checkOctaneProject,
@@ -49,6 +52,82 @@ function withProject(files, run, config = {}) {
 
 const component =
   'export const Native = (props: { title: string }) => <div>{props.title}</div>;\n';
+
+test('native API and Octane repeatedly check the installed router declarations', t => {
+  withProject(
+    {
+      'main.ts':
+        "export type { AnyRouter, ResolveRoute } from '@tanstack/router-core';\n",
+    },
+    root => {
+      const tsserverPath = resolveEffectTsrsCompiler({
+        from: import.meta.url,
+      });
+      t.diagnostic(
+        JSON.stringify({
+          compiler: tsserverPath,
+          sha256: createHash('sha256')
+            .update(fs.readFileSync(tsserverPath))
+            .digest('hex'),
+        }),
+      );
+      const observations = [];
+      for (let iteration = 0; iteration < 8; iteration++) {
+        const api = new API({
+          cwd: root,
+          tsserverPath,
+          fs: {
+            readFile: serverFS.useOS,
+            fileExists: serverFS.useOS,
+            directoryExists: serverFS.useOS,
+            getAccessibleEntries: serverFS.useOS,
+            realpath: serverFS.useOS,
+            stat: serverFS.useOS,
+            writeFile: serverFS.noop,
+            removeFile: serverFS.noop,
+          },
+        });
+        try {
+          const project = path.join(root, 'tsconfig.json');
+          const snapshot = api.createSnapshot({ openProjects: [project] });
+          const program = snapshot.getConfiguredProject(project)?.program;
+          assert.ok(program, 'The direct native API must load the project');
+          const raw = program.getSemanticDiagnostics();
+          const octane = checkOctaneProject({
+            project: 'tsconfig.json',
+            cwd: root,
+          });
+          observations.push({
+            iteration,
+            raw: raw.map(({ code, text, fileName }) => ({
+              code,
+              text,
+              fileName,
+            })),
+            octane: octane.diagnostics,
+          });
+          assert.ok(
+            program
+              .getSourceFileNames()
+              .some(file => file.endsWith('/router-core/dist/esm/link.d.ts')),
+            'The direct native API must check the actual router declarations',
+          );
+        } finally {
+          api.close();
+        }
+      }
+      t.diagnostic(JSON.stringify(observations));
+      assert.ok(
+        observations.every(
+          observation =>
+            observation.raw.length === 0 && observation.octane.length === 0,
+        ),
+        JSON.stringify(observations, null, 2),
+      );
+    },
+    { include: ['./main.ts'] },
+  );
+});
 
 test('native TS7 accepts imported Octane component props without writing projections', () => {
   const main =

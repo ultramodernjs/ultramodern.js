@@ -20,6 +20,7 @@ const releaseAst = parseSync(releaseSource, {
   sourceType: 'module',
 });
 const typecheckSteps = [];
+const compilerInputSteps = [];
 types.traverseFast(releaseAst, node => {
   if (
     types.isCallExpression(node) &&
@@ -29,12 +30,57 @@ types.traverseFast(releaseAst, node => {
   ) {
     typecheckSteps.push(node.arguments[1]);
   }
+  if (
+    types.isCallExpression(node) &&
+    types.isIdentifier(node.callee, { name: 'step' }) &&
+    types.isTemplateLiteral(node.arguments[0]) &&
+    node.arguments[0].quasis.at(-1)?.value.cooked === ' compiler inputs'
+  ) {
+    compilerInputSteps.push(node.arguments[1]);
+    assert.equal(
+      releaseSource.slice(node.arguments[2].start, node.arguments[2].end),
+      "ready && renderer === 'octane'",
+    );
+  }
 });
 assert.equal(
   typecheckSteps.length,
   1,
   'The packed release must typecheck each renderer',
 );
+assert.equal(compilerInputSteps.length, 1);
+test('packed Octane records installed compiler inputs without replacing its typecheck', async () => {
+  const callback = compilerInputSteps[0];
+  const createInputs = compileFunction(
+    `return (${releaseSource.slice(callback.start, callback.end)});`,
+    ['sh', 'process', 'path', 'root', 'appRoot', 'env', 'renderer'],
+  );
+  const appRoot = path.join(root, 'control-consumer', 'octane');
+  const env = { CONTROL_REGISTRY: 'packed-cohort' };
+  const calls = [];
+  await createInputs(
+    async (...args) => calls.push(args),
+    process,
+    path,
+    root,
+    appRoot,
+    env,
+    'octane',
+  )();
+  assert.deepEqual(calls, [
+    [
+      process.execPath,
+      [
+        path.join(
+          root,
+          'scripts/ultramodern-renderers/octane-compiler-inputs.mjs',
+        ),
+        appRoot,
+      ],
+      { cwd: appRoot, env, log: 'octane-compiler-inputs' },
+    ],
+  ]);
+});
 // Execute the production phase body without running the release CLI's installs,
 // builds or servers. Only the external command runner is replaced by a control.
 const callback = typecheckSteps[0];

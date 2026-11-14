@@ -697,6 +697,22 @@ async function main() {
           ready,
         );
       await step(
+        `${renderer} compiler inputs`,
+        () =>
+          sh(
+            process.execPath,
+            [
+              path.join(
+                root,
+                'scripts/ultramodern-renderers/octane-compiler-inputs.mjs',
+              ),
+              appRoot,
+            ],
+            { cwd: appRoot, env, log: `${renderer}-compiler-inputs` },
+          ),
+        ready && renderer === 'octane',
+      );
+      await step(
         `${renderer} typecheck`,
         () =>
           sh('pnpm', ['run', 'typecheck'], {
