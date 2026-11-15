@@ -79,7 +79,7 @@ function runCommand(command, args = [], options = {}) {
     command,
     args,
     processStatus: result.status,
-    exitCode: result.status ?? 1,
+    exitCode: result.error ? 1 : (result.status ?? 1),
     signal: result.signal,
     error: result.error,
     stdout: result.stdout || '',
