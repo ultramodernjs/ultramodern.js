@@ -155,7 +155,7 @@ function assertScaffoldParity(accepted, observed, { lane }) {
     [
       `${lane} scaffold differs from the workspace the source lane built (${drift.length} file(s)):`,
       ...drift.map(line => `  - ${line}`),
-      'The create package resolves its own dependencies through pnpm dlx at run time; one of them moved between the lanes and changed the generated source. Release the next version so its source lane builds today\u2019s scaffold.',
+      'The create package resolves its own dependencies through pnpm dlx at run time; one of them moved between the lanes and changed the generated source. Release the next version from a new reviewed source commit so its source lane builds today\u2019s scaffold; an already-published source commit cannot be published under another version.',
     ].join('\n'),
   );
 }
@@ -192,7 +192,7 @@ function assertResolutionParity(accepted, observed, { lane }) {
     [
       `${lane} resolution differs from the closure the source lane accepted (${drift.length} package(s)):`,
       ...drift.map(line => `  - ${line}`),
-      'The registry now resolves dependencies the source lane never built or ran. A version change usually means a third-party release matured between the two lanes; release the next version so its source lane accepts today’s closure. An integrity change means the registry serves different bytes for an accepted version; investigate it before promoting anything.',
+      'The registry now resolves dependencies the source lane never built or ran. A version change usually means a third-party release matured between the two lanes; release the next version from a new reviewed source commit so its source lane accepts today’s closure. An already-published source commit cannot be published under another version. An integrity change means the registry serves different bytes for an accepted version; investigate it before promoting anything.',
     ].join('\n'),
   );
 }

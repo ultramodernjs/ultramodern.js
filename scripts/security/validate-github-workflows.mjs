@@ -1755,6 +1755,22 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
   const securitySteps = Array.isArray(jobs['publish-security']?.steps)
     ? jobs['publish-security'].steps
     : [];
+  const sourcePreflight = securitySteps.filter(step =>
+    runIncludes(step, 'workflow.mjs reject-published-source'),
+  );
+  if (
+    sourcePreflight.length !== 1 ||
+    sourcePreflight[0].if !==
+      "inputs.mode == 'cohort' && inputs.recovery_run_id == ''" ||
+    sourcePreflight[0]['continue-on-error'] !== undefined ||
+    sourcePreflight[0].env?.PUBLISH_VERSION !== '${{ inputs.version }}' ||
+    stripShellComments(sourcePreflight[0].run).trim() !==
+      'node scripts/ultramodern-publish/workflow.mjs reject-published-source'
+  ) {
+    errors.push(
+      `${relativePath} publish-security must reject an already published source cohort before compiler and integration work, only for fresh cohorts and with the requested version`,
+    );
+  }
   if (
     !securitySteps.some(
       step =>

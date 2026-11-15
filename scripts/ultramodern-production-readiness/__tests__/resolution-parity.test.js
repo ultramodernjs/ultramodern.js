@@ -116,7 +116,8 @@ test('a third-party release that matured between the lanes fails with its name',
     error =>
       error.message.includes('effect: accepted 3.19.0, now resolves 3.19.1') &&
       !error.message.includes('react') &&
-      /matured between the two lanes/u.test(error.message),
+      /matured between the two lanes/u.test(error.message) &&
+      /new reviewed source commit/u.test(error.message),
   );
 });
 
