@@ -250,17 +250,46 @@ type TypecheckRun = {
   packageJson?: JsonValue;
 };
 
-// Runs the installed typecheck against a compiler stub that records what it
-// received. The ambient TSRS_* and ULTRAMODERN_TYPECHECK_* settings are
-// cleared so only each case's own settings apply.
+// Exercise the unchanged installed script through its public resolver boundary.
+// Compiler identity is tested separately; these forwarding tests must not select
+// the checkout's staged release payload. Ambient tuning settings are cleared.
 function runInstalledTypecheck({
   args,
   status = 0,
   env = {},
   packageJson,
 }: TypecheckRun) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'um-tsrs-args-'));
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'um-tsrs-args-'));
+  const root = path.join(fixture, 'workspace');
   try {
+    fs.mkdirSync(root);
+    const harness = path.join(fixture, 'harness');
+    const provider = path.join(
+      harness,
+      'node_modules/@modern-js/app-tools-extensions',
+    );
+    fs.mkdirSync(provider, { recursive: true });
+    fs.writeFileSync(
+      path.join(provider, 'package.json'),
+      JSON.stringify({
+        name: '@modern-js/app-tools-extensions',
+        type: 'module',
+        exports: { './config': './config.mjs' },
+      }),
+    );
+    fs.writeFileSync(
+      path.join(provider, 'config.mjs'),
+      `import assert from 'node:assert/strict';
+import { pathToFileURL } from 'node:url';
+export function resolveEffectTsgoCompiler({ from }) {
+  assert.equal(from.href, pathToFileURL(${JSON.stringify(path.join(root, 'package.json'))}).href);
+  assert.equal(typeof process.env.EFFECT_TSGO_BIN, 'string');
+  return process.env.EFFECT_TSGO_BIN;
+}
+`,
+    );
+    const installedScript = path.join(harness, 'ultramodern-typecheck.mjs');
+    fs.copyFileSync(typecheckScript, installedScript);
     const compiler = path.join(root, 'compiler.cjs');
     const log = path.join(root, 'compiler.json');
     if (packageJson !== undefined) {
@@ -271,11 +300,7 @@ function runInstalledTypecheck({
     }
     writeExecutable(
       compiler,
-      `if (process.argv[2] === '--version') {
-  console.log('Version 7.0.2+effect-tsgo.0.67.0');
-  process.exit(0);
-}
-require('node:fs').writeFileSync(${JSON.stringify(log)}, JSON.stringify({
+      `require('node:fs').writeFileSync(${JSON.stringify(log)}, JSON.stringify({
   args: process.argv.slice(2),
   assignment: process.env.TSRS_CHECKER_ASSIGNMENT,
   fast: process.env.TSRS_FAST,
@@ -286,7 +311,7 @@ if (${status} === 143) process.kill(process.pid, 'SIGTERM');
 else process.exit(${status});
 `,
     );
-    const result = spawnSync(process.execPath, [typecheckScript, ...args], {
+    const result = spawnSync(process.execPath, [installedScript, ...args], {
       cwd: root,
       encoding: 'utf8',
       env: {
@@ -311,7 +336,7 @@ else process.exit(${status});
         : undefined,
     };
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(fixture, { recursive: true, force: true });
   }
 }
 
