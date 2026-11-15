@@ -99,6 +99,145 @@ test('ERP and Tractor consume the same once-packed cohort through the release ow
   assert.equal(acceptance.jobs['accept-release'].environment, undefined);
 });
 
+test('retained Tractor adoption is owner-only and leaves reusable acceptance read-only', () => {
+  const tractor = readWorkflow('ultramodern-tractor-downstream');
+  const job = tractor.jobs['tractor-downstream'];
+  const github = {
+    event_name: 'workflow_dispatch',
+    repository: 'ultramodernjs/ultramodern.js',
+    actor: 'BleedingDev',
+    triggering_actor: 'BleedingDev',
+    ref: 'refs/heads/main-ultramodern',
+  };
+  const allowed = (overrides, artifact = '') =>
+    runInNewContext(job.if, {
+      github: { ...github, ...overrides },
+      inputs: { release_bundle_artifact: artifact },
+    });
+  assert.equal(allowed({}), true);
+  for (const overrides of [
+    { actor: 'other' },
+    { triggering_actor: 'other' },
+    { ref: 'refs/heads/other' },
+    { repository: 'other/repository' },
+  ])
+    assert.equal(allowed(overrides), false);
+  assert.equal(allowed({ event_name: 'pull_request', actor: 'other' }), true);
+  assert.equal(allowed({ actor: 'other' }, 'same-run-bundle'), true);
+  assert.deepEqual(tractor.permissions, { actions: 'read', contents: 'read' });
+  assert.equal(job.environment, undefined);
+  assert.equal(job.permissions, undefined);
+  const download = job.steps.find(
+    step => step.name === 'Download exact release bundle',
+  );
+  assert.match(download.with['run-id'], /workflow_dispatch/u);
+  assert.match(download.with['run-id'], /github\.run_id/u);
+  assert.match(download.with.name, /inputs\.release_bundle_artifact/u);
+  const retain = job.steps.find(
+    step => step.name === 'Retain the accepted Tractor source commit',
+  );
+  assert.equal(
+    retain.if,
+    "success() && github.event_name == 'workflow_dispatch' && inputs.release_bundle_artifact == ''",
+  );
+  assert.equal(
+    runInNewContext(retain.if, {
+      success: () => true,
+      github,
+      inputs: { release_bundle_artifact: 'same-run-bundle' },
+    }),
+    false,
+  );
+  assert.match(retain.run, /export-tractor-acceptance-source\.mjs/u);
+  const upload = job.steps.find(
+    step => step.name === 'Upload the accepted Tractor source',
+  );
+  assert.equal(upload.if, retain.if);
+  assert.equal(
+    upload.with.path,
+    'modernjs/.modern/production-readiness/tractor-source',
+  );
+  assert.equal(upload.with['if-no-files-found'], 'error');
+});
+
+test('retained Tractor adoption requires a successful live publication and exact release inputs', () => {
+  const job = readWorkflow('ultramodern-tractor-downstream').jobs[
+    'tractor-downstream'
+  ];
+  const validate = job.steps.find(
+    step =>
+      step.name === 'Validate retained adoption inputs and publication run',
+  );
+  const source = 'a'.repeat(40);
+  const run = {
+    conclusion: 'success',
+    head_sha: source,
+    head_branch: 'main-ultramodern',
+    event: 'workflow_dispatch',
+    path: '.github/workflows/publish-bleedingdev.yml',
+    run_attempt: 2,
+  };
+  const jobs = {
+    jobs: [
+      { name: 'Publish accepted @bleedingdev tarballs', conclusion: 'success' },
+    ],
+  };
+  const execute = (env = {}, runOverrides = {}, jobData = jobs) =>
+    spawnSync(
+      'bash',
+      [
+        '-e',
+        '-c',
+        `gh() { if [ "\${GH_FAIL:-0}" = 1 ]; then return 1; fi; case "$2" in *"/jobs?"*) printf '%s' "$JOB_DATA";; *) printf '%s' "$RUN_DATA";; esac; }\n${validate.run}`,
+      ],
+      {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PRODUCER_RUN_ID: '123',
+          PRODUCER_RUN_ATTEMPT: '2',
+          EXPECTED_SOURCE: source,
+          EXPECTED_VERSION: '3.11.3-ultramodern.2',
+          GITHUB_REPOSITORY: 'ultramodernjs/ultramodern.js',
+          RUN_DATA: JSON.stringify({ ...run, ...runOverrides }),
+          JOB_DATA: JSON.stringify(jobData),
+          ...env,
+        },
+      },
+    );
+  assert.equal(execute().status, 0);
+  assert.notEqual(execute({ GH_FAIL: '1' }).status, 0);
+  for (const env of [
+    { PRODUCER_RUN_ID: 'invalid' },
+    { PRODUCER_RUN_ATTEMPT: '0' },
+    { EXPECTED_SOURCE: 'main' },
+    { EXPECTED_VERSION: 'latest' },
+  ])
+    assert.notEqual(execute(env).status, 0, JSON.stringify(env));
+  for (const overrides of [
+    { conclusion: 'failure' },
+    { head_sha: 'b'.repeat(40) },
+    { event: 'pull_request' },
+    { path: '.github/workflows/other.yml' },
+    { head_branch: 'other' },
+    { run_attempt: 1 },
+  ])
+    assert.notEqual(execute({}, overrides).status, 0);
+  assert.notEqual(execute({}, {}, { jobs: [] }).status, 0);
+  assert.notEqual(
+    execute({}, {}, { jobs: [{ ...jobs.jobs[0], conclusion: 'skipped' }] })
+      .status,
+    0,
+  );
+  const identity = job.steps.find(
+    step => step.name === 'Verify retained adoption release identity',
+  );
+  assert.match(
+    identity.run,
+    /\.source\.commit == \$sha and \.release\.version == \$version/u,
+  );
+});
+
 test('both required feature workflows stage verified native inputs before consumer execution', () => {
   const source = readWorkflow('ultramodern-release-acceptance').jobs[
     'accept-release'
