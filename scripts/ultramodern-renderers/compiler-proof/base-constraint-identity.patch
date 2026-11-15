@@ -1,12 +1,12 @@
-Port of _patches/typescript/035-checker-base-constraint-identity.patch.
-The constraint stack uses the normalized parameter type rather than its symbol for indexed accesses.
+Port of the scoped parameter/conditional constraint identity correction.
+Indexed chains use their normalized parameter or conditional type, not its symbol or conditional-root identity.
 Shared recursion identities and cycle/depth limits remain unchanged.
 The target-normalization helper is crate-visible solely for this sibling-module call.
 
 diff --git a/crates/tsrs_checker/src/checker_13.rs b/crates/tsrs_checker/src/checker_13.rs
 --- a/crates/tsrs_checker/src/checker_13.rs
 +++ b/crates/tsrs_checker/src/checker_13.rs
-@@ -3556,7 +3556,13 @@
+@@ -3556,7 +3556,16 @@
          // levels of nesting, we are presumably exploring a repeating pattern with a long cycle that hasn't
          // yet triggered the deeply nested limiter. We have no test cases that actually get to 50 levels of
          // nesting, so it is effectively just a safety stop.
@@ -14,7 +14,10 @@ diff --git a/crates/tsrs_checker/src/checker_13.rs b/crates/tsrs_checker/src/che
 +        let mut identity = get_recursion_identity(self, t);
 +        if t.flags().intersects(TypeFlags::IndexedAccess) {
 +            let target = get_recursion_identity_target(self, t);
-+            if target.flags().intersects(TypeFlags::TypeParameter) {
++            if target
++                .flags()
++                .intersects(TypeFlags::TypeParameter | TypeFlags::Conditional)
++            {
 +                identity = RecursionId::Type(target);
 +            }
 +        }
