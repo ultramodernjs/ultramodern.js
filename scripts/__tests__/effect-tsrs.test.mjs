@@ -91,16 +91,32 @@ test('compiler launcher reuses the calling package manager', () => {
   assert.equal(result.stdout.trim(), process.execPath);
 });
 
-test('compiler launcher rejects a binary without the Effect patch', () => {
+test('compiler launcher rejects an unpatched binary before executing the requested command', () => {
+  const owned =
+    provider.getCompilerPolicy().distribution === 'ultramodern-effect-tsrs';
+  const executionMarker = 'UNPATCHED_COMMAND_EXECUTED';
   const result = spawnSync(
     process.execPath,
-    ['scripts/with-effect-tsrs.mjs', process.execPath, '-e', 'process.exit(0)'],
+    [
+      'scripts/with-effect-tsrs.mjs',
+      process.execPath,
+      '-e',
+      `console.log(${JSON.stringify(executionMarker)})`,
+    ],
     {
       cwd: root,
       env: { ...process.env, EFFECT_TSGO_BIN: process.execPath },
       encoding: 'utf8',
     },
   );
+  assert.ifError(result.error);
+  assert.equal(result.signal, null);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /Effect-enabled compiler .* is required/);
+  assert.match(
+    result.stderr,
+    owned
+      ? /Invalid owned Effect compiler payload: executable override differs from verified owned compiler:/
+      : /Effect-enabled compiler .* is required/,
+  );
+  assert.ok(!result.stdout.includes(executionMarker));
 });
