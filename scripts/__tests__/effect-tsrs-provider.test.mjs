@@ -52,9 +52,30 @@ function loadProvider(
       },
     },
   };
-  const artifacts = { present: true, size: 100 };
+  const artifacts = { present: true, size: 100, owned: { kind: 'absent' } };
   change(documents, artifacts);
   const fixtureRequire = name => {
+    if (
+      name ===
+      '../../packages/solutions/app-tools-extensions/compiler/resolve.cjs'
+    ) {
+      return {
+        resolveOwnedEffectCompiler(options) {
+          assert.equal(options.from, '/fixture/scripts/tsrs-dts/compiler.cjs');
+          if (artifacts.owned instanceof Error) throw artifacts.owned;
+          if (artifacts.owned.kind === 'owned') {
+            for (const candidate of [
+              environment.EFFECT_TSGO_BIN,
+              environment.TSRS_BINARY,
+            ]) {
+              if (candidate && candidate !== artifacts.owned.executable)
+                throw new Error('Override escapes owned identity');
+            }
+          }
+          return artifacts.owned;
+        },
+      };
+    }
     if (name === 'node:fs') {
       return {
         readFileSync(filename) {
@@ -95,6 +116,7 @@ function loadProvider(
   const warnings = [];
   vm.runInNewContext(source, {
     module,
+    __filename: '/fixture/scripts/tsrs-dts/compiler.cjs',
     require: fixtureRequire,
     console: { warn: message => warnings.push(message) },
     process: { platform: host.platform, arch: host.arch, env: environment },
@@ -236,4 +258,122 @@ test('root provider rejects corrupt capability and embedded TypeScript metadata'
       ),
     /Native tsrs dependency does not match/,
   );
+});
+
+test('root provider prefers source payload without official platform metadata', () => {
+  const executable = '/fixture/owned/tsrs';
+  const provider = loadProvider((documents, artifacts) => {
+    artifacts.owned = {
+      kind: 'owned',
+      executable,
+      distribution: 'ultramodern-effect-tsrs',
+    };
+    delete documents[`${nativeRoot}/package.json`];
+    delete documents[`${nativeRoot}/lib/upstream.json`];
+    artifacts.present = false;
+  });
+  assert.equal(provider.getExePath(), executable);
+  assert.equal(
+    provider.getCompilerPolicy().distribution,
+    'ultramodern-effect-tsrs',
+  );
+  assert.equal(provider.typescriptVersion, '7.1.0-beta');
+});
+
+test('root provider never falls back from a malformed owned payload', () => {
+  assert.throws(
+    () =>
+      loadProvider((_, artifacts) => {
+        artifacts.owned = new Error('Invalid owned manifest');
+      }),
+    /Invalid owned manifest/,
+  );
+});
+
+for (const variable of ['EFFECT_TSGO_BIN', 'TSRS_BINARY']) {
+  test(`root provider keeps ${variable} bound to owned identity`, () => {
+    const executable = '/fixture/owned/tsrs';
+    const change = (_, artifacts) => {
+      artifacts.owned = {
+        kind: 'owned',
+        executable,
+        distribution: 'ultramodern-effect-tsrs',
+      };
+    };
+    assert.equal(
+      loadProvider(change, { [variable]: executable }).getExePath(),
+      executable,
+    );
+    assert.throws(
+      () => loadProvider(change, { [variable]: '/outside/compiler' }),
+      /escapes owned identity/,
+    );
+  });
+}
+
+test('launcher keeps exact Effect/tsrs/TypeScript stamp validation for owned selection', () => {
+  const launcherSource = readFileSync(
+    new URL('../with-effect-tsrs.mjs', import.meta.url),
+    'utf8',
+  )
+    .replace(/^import .+;\n/gm, '')
+    .replaceAll(
+      'import.meta.url',
+      JSON.stringify('file:///fixture/scripts/with-effect-tsrs.mjs'),
+    );
+  const good = `Version 7.1.0-beta+effect-tsgo.${effectVersion} (tsrs ${tsrsVersion}, microsoft/TypeScript@${typescriptCommit.slice(0, 12)})`;
+  for (const [stamp, expectedStatus] of [
+    [good, 0],
+    [good.replace(effectVersion, '0.66.0'), 1],
+    [good.replace(tsrsVersion, '0.20.0-ts7.1.0-beta'), 1],
+    [good.replace(typescriptCommit.slice(0, 12), '0'.repeat(12)), 1],
+    ['Version 7.1.0-beta', 1],
+  ]) {
+    const calls = [];
+    const finished = new Error('launcher exited');
+    const executable = '/fixture/owned/tsrs';
+    let status;
+    assert.throws(
+      () =>
+        vm.runInNewContext(launcherSource, {
+          compilerProvider: {
+            getExePath: () => executable,
+            getCompilerPolicy: () => ({
+              backend: 'tsrs',
+              distribution: 'ultramodern-effect-tsrs',
+            }),
+            effectVersion,
+            tsrsVersion,
+            typescriptCommit,
+          },
+          spawnSync: (file, args, options) => {
+            calls.push({ file, args, options });
+            return { status: 0, stdout: stamp };
+          },
+          dirname: path.dirname,
+          join: path.join,
+          fileURLToPath: value => new URL(value).pathname,
+          console: { error() {} },
+          process: {
+            argv: [
+              'node',
+              '/fixture/scripts/with-effect-tsrs.mjs',
+              '--version',
+            ],
+            env: {},
+            platform: 'darwin',
+            pid: 1,
+            exit: value => {
+              status = value;
+              throw finished;
+            },
+          },
+        }),
+      error => error === finished,
+    );
+    assert.equal(status, expectedStatus);
+    assert.equal(calls.length, expectedStatus === 0 ? 2 : 1);
+    if (expectedStatus === 0)
+      assert.equal(calls[1].options.env.EFFECT_TSGO_BIN, executable);
+  }
 });

@@ -1,8 +1,34 @@
 import { execFileSync } from 'node:child_process';
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { createRequire, findPackageJSON } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, type URL } from 'node:url';
+import { fileURLToPath, pathToFileURL, type URL } from 'node:url';
+
+// Resolve the uncompiled payload helper through this package's actual published
+// name. Both output formats must share its CJS identity, including renamed packs.
+const owningModuleUrl =
+  process.env.MODERN_LIB_FORMAT === 'esm'
+    ? import.meta.url
+    : pathToFileURL(__filename).href;
+const owningManifest = findPackageJSON(owningModuleUrl, owningModuleUrl);
+if (!owningManifest)
+  throw new Error('Cannot find owning Effect discovery package manifest');
+const owningName: unknown = JSON.parse(
+  readFileSync(owningManifest, 'utf8'),
+).name;
+if (typeof owningName !== 'string' || owningName.length === 0)
+  throw new Error(
+    `Invalid owning Effect discovery package name: ${owningManifest}`,
+  );
+
+const {
+  resolveOwnedEffectCompiler,
+}: typeof import('../../compiler/resolve.cjs') = createRequire(owningModuleUrl)(
+  `${owningName}/internal-effect-payload`,
+);
+export type EffectCompilerSelection =
+  | { kind: 'owned'; executable: string }
+  | { kind: 'official'; executable: string };
 
 const EFFECT_TSGO_PACKAGE = '@effect/tsgo';
 const EFFECT_TSGO_BIN = 'effect-tsgo';
@@ -290,24 +316,78 @@ function resolveTsrsCompiler(
       ),
   );
   const version = configuredVersion ?? compilerVersion(compiler);
-  // Check the selected executable itself, including TSRS_BINARY and explicit
-  // EFFECT_TSGO_BIN paths. A package name alone cannot prove it was patched.
+  validateTsrsVersion(
+    version,
+    compiler,
+    effect.packageJson.version,
+    manifest.version,
+    embedded.typescriptCommit,
+  );
+  return compiler;
+}
+
+function validateTsrsVersion(
+  version: string,
+  compiler: string,
+  effectVersion: string | undefined,
+  tsrsVersion: string,
+  typescriptCommit: string,
+): void {
   const stamp =
     /\+effect-tsgo\.([\d.]+)\s+\(tsrs ([^,]+), microsoft\/TypeScript@([a-f\d]+)\)$/u.exec(
       version,
     );
   if (
     !stamp ||
-    stamp[1] !== effect.packageJson.version ||
-    stamp[2] !== manifest.version ||
+    stamp[1] !== effectVersion ||
+    stamp[2] !== tsrsVersion ||
     stamp[3].length < 12 ||
-    !embedded.typescriptCommit.startsWith(stamp[3])
+    !typescriptCommit.startsWith(stamp[3])
   ) {
     throw new Error(
-      `Effect-enabled tsrs matching ${manifest.version} and @effect/tsgo@${effect.packageJson.version} is required: ${compiler}. Install matching packages or select a matching Effect-enabled candidate with EFFECT_TSGO_BIN.`,
+      `Effect-enabled tsrs matching ${tsrsVersion} and @effect/tsgo@${effectVersion} is required: ${compiler}. Install matching packages or select a matching Effect-enabled candidate with EFFECT_TSGO_BIN.`,
     );
   }
-  return compiler;
+}
+
+/** One selection path for configured, strict API, and ordinary build consumers. */
+export function resolveEffectCompilerSelection(
+  from: string | URL,
+  configuredExecutable?: string,
+  requiredBackend?: 'tsrs',
+): EffectCompilerSelection {
+  const owned = resolveOwnedEffectCompiler({
+    from:
+      typeof from === 'string' && from.startsWith('file:')
+        ? fileURLToPath(from)
+        : from,
+    configuredExecutable,
+  });
+  if (owned.kind === 'owned') {
+    validateTsrsVersion(
+      compilerVersion(owned.executable),
+      owned.executable,
+      owned.effectVersion,
+      owned.tsrsVersion,
+      owned.typescriptCommit,
+    );
+    return owned;
+  }
+  return {
+    kind: 'official',
+    executable:
+      configuredExecutable ??
+      resolveOfficialEffectCompiler(from, requiredBackend),
+  };
+}
+
+/** Selects a path for callers that do not need the artifact's ownership. */
+export function resolveInstalledEffectCompiler(
+  from: string | URL,
+  requiredBackend?: 'tsrs',
+): string {
+  return resolveEffectCompilerSelection(from, undefined, requiredBackend)
+    .executable;
 }
 
 /** Explicit native binaries must still report Effect diagnostics support. */
@@ -316,7 +396,24 @@ export function validateConfiguredEffectCompiler(
   from: string | URL,
   requiredBackend?: 'tsrs',
 ): void {
+  const owned = resolveOwnedEffectCompiler({
+    from:
+      typeof from === 'string' && from.startsWith('file:')
+        ? fileURLToPath(from)
+        : from,
+    configuredExecutable: compiler,
+  });
   const version = compilerVersion(compiler);
+  if (owned.kind === 'owned') {
+    validateTsrsVersion(
+      version,
+      compiler,
+      owned.effectVersion,
+      owned.tsrsVersion,
+      owned.typescriptCommit,
+    );
+    return;
+  }
   if (requiredBackend === 'tsrs' && !version.includes('(tsrs ')) {
     throw new Error(
       `The tsrs API requires an Effect-enabled tsrs executable, not Effect-Go: ${compiler}`,
@@ -347,7 +444,7 @@ export function validateConfiguredEffectCompiler(
 }
 
 /** Selects the exact native replacement without invoking the provider CLI. */
-export function resolveInstalledEffectCompiler(
+function resolveOfficialEffectCompiler(
   from: string | URL,
   requiredBackend?: 'tsrs',
 ): string {

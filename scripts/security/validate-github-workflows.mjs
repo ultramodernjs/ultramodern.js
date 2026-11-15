@@ -915,6 +915,7 @@ const bleedingdevGuardedPermissionScopes = Object.freeze([
 const bleedingdevPublishJobs = Object.freeze([
   'accept-published',
   'accept-release',
+  'effect-compiler-payload',
   'integration',
   'prepare-release',
   'prepare-sidecars',
@@ -936,6 +937,10 @@ const bleedingdevPublishJobs = Object.freeze([
 // registry gates must finish before the clean-room acceptance starts, and a
 // dry run is green only when the Tractor rehearsal is.
 const bleedingdevRequiredNeeds = Object.freeze({
+  'effect-compiler-payload': ['publish-security'],
+  integration: ['effect-compiler-payload'],
+  'qualify-source-compute': ['effect-compiler-payload'],
+  'prepare-release': ['effect-compiler-payload'],
   'accept-release': ['reconcile-sidecars'],
   publish: [
     'publish-security',
@@ -975,6 +980,7 @@ const elevatedPermissionScopes = (permissions, scopes) =>
 // OIDC job has skipped prerequisites in either mode, so its status checks must
 // remain explicit instead of inheriting GitHub's implicit success().
 const bleedingdevCohortJobs = Object.freeze([
+  'effect-compiler-payload',
   'integration',
   'qualify-source-compute',
   'qualify-source',
@@ -1676,10 +1682,13 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
   if (
     qualificationNeeds.length !== 2 ||
     !qualificationNeeds.includes('qualify-source-compute') ||
-    normalizeNeeds(jobs['qualify-source-compute']).length !== 0
+    normalizeNeeds(jobs['qualify-source-compute']).length !== 1 ||
+    !normalizeNeeds(jobs['qualify-source-compute']).includes(
+      'effect-compiler-payload',
+    )
   ) {
     errors.push(
-      `${relativePath} qualify-source must join integration and independent qualify-source-compute before issuing a receipt`,
+      `${relativePath} qualify-source must join integration and compiler-dependent qualify-source-compute before issuing a receipt`,
     );
   }
   const qualificationContext = {
@@ -1693,6 +1702,8 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
     vars: {},
   };
   const qualificationResults = {
+    'publish-security': 'success',
+    'effect-compiler-payload': 'success',
     integration: 'success',
     'qualify-source-compute': 'success',
   };

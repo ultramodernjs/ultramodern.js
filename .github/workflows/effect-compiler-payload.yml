@@ -1,0 +1,229 @@
+name: Corrected Effect compiler payload
+
+on:
+  workflow_call:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  build:
+    name: Effect compiler (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            rust_target: aarch64-apple-darwin
+            runner: macos-latest
+          - target: darwin-x64
+            rust_target: x86_64-apple-darwin
+            runner: macos-26-intel
+          - target: linux-x64
+            rust_target: x86_64-unknown-linux-gnu
+            runner: ubuntu-22.04
+          - target: linux-arm64
+            rust_target: aarch64-unknown-linux-gnu
+            runner: ubuntu-22.04-arm
+          - target: win32-x64
+            rust_target: x86_64-pc-windows-msvc
+            runner: windows-latest
+    steps:
+      - name: Configure native Windows checkout
+        if: runner.os == 'Windows'
+        run: |
+          git config --system core.longpaths true
+          git config --system core.autocrlf false
+
+      # Keep the original local setup action at the workspace root: it resolves
+      # component paths relative to GITHUB_WORKSPACE, not the action directory.
+      - name: Checkout the exact Effect compiler base
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Effect-TS/tsgo
+          ref: 3cbaa7bc6f149b83d4d3c2f67ef95f8426487d8e
+          persist-credentials: false
+
+      - name: Checkout the production correction and staging CLI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: harness
+          persist-credentials: false
+
+      - name: Verify source contract and add the exact production correction
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import { createHash } from 'node:crypto';
+          const root = 'harness/packages/solutions/app-tools-extensions/compiler';
+          const source = JSON.parse(fs.readFileSync(`${root}/source.json`));
+          assert.equal(source.effect.baseCommit, '3cbaa7bc6f149b83d4d3c2f67ef95f8426487d8e');
+          assert.equal(source.tsrs.sourceCommit, '38931a58019107ba31581791e26a7aa414c9e015');
+          assert.equal(source.typescript.sourceCommit, '3e9236361fa97a9e6c685f4833ac457ae2d8c50a');
+          assert.equal(source.optimization, 'none');
+          const patch = fs.readFileSync(`${root}/constraint.patch`);
+          assert.equal(createHash('sha256').update(patch).digest('hex'), source.patchSha256);
+          fs.writeFileSync('_patches/tsrs/035-checker-base-constraint-identity.patch', patch, { flag: 'wx' });
+          JS
+
+      - name: Materialize the original tsrs component
+        uses: ./.github/actions/setup-repo
+        with:
+          component: tsrs
+          version: 0.21.0-ts7.1.0-beta
+          target: ${{ matrix.target }}
+
+      - name: Verify materialized source identities
+        env:
+          RUST_TARGET: ${{ matrix.rust_target }}
+        run: |
+          test "$(git rev-parse HEAD)" = 3cbaa7bc6f149b83d4d3c2f67ef95f8426487d8e
+          test "$(git -C tsrs rev-parse HEAD)" = 38931a58019107ba31581791e26a7aa414c9e015
+          test "$(git -C typescript rev-parse HEAD)" = 3e9236361fa97a9e6c685f4833ac457ae2d8c50a
+          rustup target add "$RUST_TARGET"
+          pnpm exec repoctl tsrs port-check
+
+      - name: Build the complete release artifact and noembed libraries
+        id: compiler
+        env:
+          TARGET: ${{ matrix.target }}
+        run: >-
+          pnpm exec repoctl build artifact --component tsrs
+          --version 0.21.0-ts7.1.0-beta --target "$TARGET" --optimize none
+
+      - name: Setup Node.js 26.12.0 for release smoke and staging
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26.12.0'
+
+      - name: Smoke the actual release binary, libraries, API and Effect diagnostics
+        timeout-minutes: 10
+        env:
+          ARTIFACT_DIR: ${{ steps.compiler.outputs.artifact_path }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          node --conditions=@typescript/source --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { spawnSync } from 'node:child_process';
+          import { Client } from './typescript/packages/typescript/src/api/sync/client.ts';
+          const binary = path.resolve(process.env.ARTIFACT_DIR, process.env.TARGET === 'win32-x64' ? 'tsrs.exe' : 'tsrs');
+          const run = args => {
+            const result = spawnSync(binary, args, { encoding: 'utf8', timeout: 120000 });
+            assert.ifError(result.error);
+            assert.equal(result.signal, null);
+            return result;
+          };
+          assert.ok(fs.statSync(path.join(process.env.ARTIFACT_DIR, 'lib.d.ts')).isFile());
+          assert.ok(fs.readdirSync(process.env.ARTIFACT_DIR).filter(name => name.endsWith('.d.ts')).length > 10);
+          const version = run(['--version']);
+          assert.equal(version.status, 0, version.stderr);
+          assert.equal(version.stdout.trim(), 'Version 7.1.0-beta+effect-tsgo.0.67.0 (tsrs 0.21.0-ts7.1.0-beta, microsoft/TypeScript@3e9236361fa9)');
+          const client = new Client({ tsserverPath: binary });
+          try { assert.equal(client.echo('release-api-smoke'), 'release-api-smoke'); }
+          finally { client.close(); }
+          // This uses the existing pinned Effect fixture dependency, not a shim.
+          const root = fs.mkdtempSync(path.resolve('testdata/tests/effect-v4/release-smoke-'));
+          try {
+            fs.writeFileSync(path.join(root, 'index.ts'), 'import { Effect } from "effect";\nEffect.succeed("floating");\n');
+            const config = { compilerOptions: { strict: true, target: 'ESNext', module: 'NodeNext', noEmit: true, skipLibCheck: true, plugins: [{ name: '@effect/language-service', diagnosticSeverity: { floatingEffect: 'error' } }] }, files: ['index.ts'] };
+            fs.writeFileSync(path.join(root, 'tsconfig.json'), JSON.stringify(config));
+            fs.writeFileSync(path.join(root, 'index.ts'), 'const values: Array<number> = [1];\nconsole.log(values);\n');
+            const valid = run(['--project', root, '--pretty', 'false']);
+            assert.equal(valid.status, 0, valid.stdout + valid.stderr);
+            fs.writeFileSync(path.join(root, 'index.ts'), 'import { Effect } from "effect";\nEffect.succeed("floating");\n');
+            const result = run(['--project', root, '--pretty', 'false']);
+            assert.equal(result.status, 2, result.stdout + result.stderr);
+            assert.match(result.stdout, /377001/);
+            assert.doesNotMatch(result.stdout, /TS(?:2318|6053|2307)/);
+          } finally { fs.rmSync(root, { recursive: true, force: true }); }
+          JS
+
+      - name: Include source licenses and static dependency notices before receipt creation
+        env:
+          ARTIFACT_DIR: ${{ steps.compiler.outputs.artifact_path }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { execFileSync } from 'node:child_process';
+          const notices = path.join(process.env.ARTIFACT_DIR, 'notices');
+          fs.mkdirSync(notices);
+          for (const [source, name] of [['LICENSE', 'LICENSE-Effect'], ['tsrs/LICENSE', 'LICENSE-tsrs'], ['typescript/LICENSE.txt', 'LICENSE-TypeScript'], ['tsrs/NOTICE', 'NOTICE-tsrs'], ['typescript/NOTICE.txt', 'NOTICE-TypeScript'], ['tsrs/licenses/Go-LICENSE', 'LICENSE-Go']]) {
+            fs.copyFileSync(source, path.join(notices, name));
+          }
+          const metadata = JSON.parse(execFileSync('cargo', ['metadata', '--locked', '--format-version', '1'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
+          const sections = [];
+          for (const pkg of metadata.packages.filter(pkg => pkg.source !== null)) {
+            const root = path.dirname(pkg.manifest_path);
+            const files = new Set();
+            if (pkg.license_file) files.add(path.resolve(root, pkg.license_file));
+            for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+              if (entry.isFile() && /^(?:licen[sc]e|copying|notice|copyright|authors)(?:[._-]|$)/i.test(entry.name)) files.add(path.join(root, entry.name));
+              if (entry.isDirectory() && /^licenses?$/i.test(entry.name)) {
+                for (const name of fs.readdirSync(path.join(root, entry.name), { recursive: true })) {
+                  const file = path.join(root, entry.name, name);
+                  if (fs.statSync(file).isFile()) files.add(file);
+                }
+              }
+            }
+            assert.ok(files.size, `Missing static dependency license text: ${pkg.name}@${pkg.version}`);
+            sections.push(`${pkg.name}@${pkg.version} (${pkg.license ?? 'license-file'})\n${[...files].sort().map(file => fs.readFileSync(file, 'utf8')).join('\n')}`);
+          }
+          fs.writeFileSync(path.join(notices, 'THIRD-PARTY-NOTICES'), sections.join('\n\n========================================\n\n'));
+          JS
+
+      - name: Produce the target inventory and same-run receipt
+        env:
+          ARTIFACT_DIR: ${{ steps.compiler.outputs.artifact_path }}
+          TARGET: ${{ matrix.target }}
+        run: >-
+          node harness/scripts/ultramodern-publish/stage-effect-compiler-payload.mjs produce
+          --artifact-dir "$ARTIFACT_DIR" --target "$TARGET"
+          --output .modern/effect-compiler-target
+
+      - name: Upload the complete target directory and receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: effect-compiler-target-${{ matrix.target }}-${{ github.sha }}
+          path: .modern/effect-compiler-target
+          include-hidden-files: true
+          if-no-files-found: error
+
+  aggregate:
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node.js 26.12.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26.12.0'
+      - name: Download five target receipts into artifact-named directories
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: effect-compiler-target-*-${{ github.sha }}
+          path: .modern/effect-compiler-targets
+          merge-multiple: false
+      - name: Validate and stage the complete compiler payload
+        run: node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-targets
+      - name: Upload the complete staged payload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: effect-compiler-payload-${{ github.sha }}
+          path: packages/solutions/app-tools-extensions/compiler/payload
+          include-hidden-files: true
+          if-no-files-found: error

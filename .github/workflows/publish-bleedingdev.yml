@@ -170,18 +170,30 @@ jobs:
         if: inputs.mode == 'sidecars'
         run: node scripts/ultramodern-publish/publish-sidecars.mjs --mode sidecars --profile "$BLEEDINGDEV_SIDECAR_PROFILE" --check-registry
 
+  effect-compiler-payload:
+    needs: publish-security
+    if: >-
+      inputs.mode == 'cohort' &&
+      github.actor == 'BleedingDev' &&
+      github.triggering_actor == 'BleedingDev' &&
+      github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern')
+    uses: ./.github/workflows/effect-compiler-payload.yml
+
   # The integration suites on the exact release commit: a called workflow
   # shares this run's github.sha, so no other run's check is polled. A
   # recovery dispatch runs them on HEAD too, because HEAD's tooling drives the
-  # registry.
+  # registry. The compiler matrix supplies the same verified selection on both paths.
   integration:
     name: Integration suites on the release commit
+    needs: effect-compiler-payload
     if: >-
       inputs.mode == 'cohort' &&
       github.actor == 'BleedingDev' &&
       github.triggering_actor == 'BleedingDev' &&
       github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern')
     uses: ./.github/workflows/integration-test.yml
+    with:
+      compiler_payload_provided: true
 
   # Run source and tooling qualification beside integration and bundle preparation.
   # This job has no recovery authority. Only qualify-source below can issue a
@@ -192,6 +204,7 @@ jobs:
     name: Test the release source and publication tooling
     runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 90
+    needs: effect-compiler-payload
     if: >-
       inputs.mode == 'cohort' &&
       github.actor == 'BleedingDev' &&
@@ -252,6 +265,13 @@ jobs:
       # package bytes are built, so it costs an install plus a couple of minutes
       # of suites, and the recovery lane still drops the whole framework build,
       # the browser runtime, and the unit suites below.
+      - name: Test owned compiler payload contracts without native builds
+        shell: bash
+        run: |
+          compiler_contracts="$(mktemp -d "$RUNNER_TEMP/compiler-contracts-XXXXXX")"
+          trap 'rm -rf -- "$compiler_contracts"' EXIT
+          OWNED_TEMP_DIR="$compiler_contracts" node scripts/ultramodern-publish/test-effect-compiler-contracts.mjs
+
       - name: Qualify the release publication tooling
         run: |
           mise exec -- pnpm lint
@@ -307,6 +327,19 @@ jobs:
           node scripts/lib/browser-provisioning.js
           --install --runtime tests/integration/rstest/basic-app-rstest-browser
           --version ${{ steps.browser-runtime.outputs.version }}
+
+      - name: Download corrected Effect compiler payload
+        if: inputs.recovery_run_id == ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: effect-compiler-payload-${{ github.sha }}
+          path: .modern/effect-compiler-input
+
+      # Artifact transport strips executable modes; only the CI stager repairs
+      # owned generated output after validating the complete same-run receipt.
+      - name: Validate and restage corrected Effect compiler payload
+        if: inputs.recovery_run_id == ''
+        run: node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-input --complete-manifest
 
       - name: Qualify release source
         if: inputs.recovery_run_id == ''
@@ -450,6 +483,7 @@ jobs:
     name: Build the immutable @bleedingdev release bundle
     runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 90
+    needs: effect-compiler-payload
     if: >-
       inputs.mode == 'cohort' &&
       github.actor == 'BleedingDev' &&
@@ -506,6 +540,19 @@ jobs:
           PUBLISH_VERSION: ${{ inputs.version }}
         run: |
           node scripts/ultramodern-publish/workflow.mjs reject-published-source
+
+      - name: Download corrected Effect compiler payload
+        if: inputs.recovery_run_id == ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: effect-compiler-payload-${{ github.sha }}
+          path: .modern/effect-compiler-input
+
+      # Artifact transport strips executable modes; only the CI stager repairs
+      # owned generated output after validating the complete same-run receipt.
+      - name: Validate and restage corrected Effect compiler payload
+        if: inputs.recovery_run_id == ''
+        run: node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-input --complete-manifest
 
       - name: Build Packages
         if: inputs.recovery_run_id == ''
@@ -727,6 +774,11 @@ jobs:
     runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 45
     if: >-
+      always() && cancelled() == false &&
+      needs.publish-security.result == 'success' &&
+      needs.qualify-source.result == 'success' &&
+      needs.accept-release.result == 'success' &&
+      needs.rehearse-tractor.result == 'success' &&
       inputs.mode == 'cohort' &&
       github.actor == 'BleedingDev' &&
       github.triggering_actor == 'BleedingDev' &&

@@ -7,6 +7,7 @@ import fsKit from '../lib/fs-kit.js';
 import processKit from '../lib/process-kit.js';
 import { collectPackageJsonFiles } from './lib/fs-utils.mjs';
 import { assertCleanCommittedSource } from './lib/release-source-state.mjs';
+import { assertReleaseCompilerPayload } from './stage-effect-compiler-payload.mjs';
 
 const { readJsonFile, repoRoot } = fsKit;
 const { runCommand } = processKit;
@@ -98,6 +99,7 @@ function main(args) {
   }
 
   assertCleanCommittedSource(repoRoot);
+  assertReleaseCompilerPayload();
   const buildProjects = collectBuildProjects();
   const packages = collectPublicModernPackages().filter(packageName =>
     buildProjects.has(packageName),
