@@ -401,6 +401,7 @@ for (const format of ['cjs', 'esm-node']) {
           name: '@ultramodern/renamed-build-config',
           exports: {
             './internal-effect-discovery': './internal-effect-discovery.cjs',
+            './internal-effect-payload': './compiler/resolve.cjs',
           },
         }),
       );
@@ -412,6 +413,18 @@ for (const format of ['cjs', 'esm-node']) {
         join(builtDirectory, 'cjs/build-config/internal-effect-discovery.js'),
         join(directory, 'internal-effect-discovery.cjs'),
       );
+      mkdirSync(join(directory, 'compiler'));
+      for (const filename of [
+        'resolve.cjs',
+        'resolve.d.cts',
+        'source.json',
+        'constraint.patch',
+      ]) {
+        copyFileSync(
+          join(import.meta.dirname, '../../compiler', filename),
+          join(directory, 'compiler', filename),
+        );
+      }
       const environment = {
         ...process.env,
         BUILD_CONFIG_PACKAGE_URL_FIXTURE: 'recognized',

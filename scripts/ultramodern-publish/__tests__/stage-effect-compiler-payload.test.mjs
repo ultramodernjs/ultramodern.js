@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
@@ -26,12 +27,11 @@ const env = {
 };
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 function fixture(t) {
-  assert.ok(
-    process.env.OWNED_TEMP_DIR,
-    'run fake staging tests with owned-temp-dir',
-  );
   const root = fs.mkdtempSync(
-    path.join(process.env.OWNED_TEMP_DIR, 'compiler-stage-'),
+    path.join(
+      fs.realpathSync(process.env.OWNED_TEMP_DIR || tmpdir()),
+      'compiler-stage-',
+    ),
   );
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
