@@ -108,6 +108,13 @@ jobs:
       - name: Install the existing fixed renderer browser
         id: browser
         run: node scripts/ultramodern-renderers/provision-browser.mjs
+      - name: Resolve the shared renderer-spec browser
+        id: shared-browser
+        run: node scripts/lib/browser-provisioning.js --resolve --runtime tests
+      - name: Install the shared renderer-spec browser
+        run: >-
+          node scripts/lib/browser-provisioning.js --install --runtime tests
+          --version ${{ steps.shared-browser.outputs.version }}
       - name: Create isolated owned proof roots
         run: |
           proof_root="$(mktemp -d "$RUNNER_TEMP/octane-delivery-XXXXXX")"
@@ -125,6 +132,7 @@ jobs:
             --work-dir "$OWNED_TEMP_DIR" --browser-executable "$BROWSER"
       - name: Resolve navigation identities from the authenticated cohort
         run: |
+          export OWNED_TEMP_DIR="$PROOF_ROOT/inputs"
           node scripts/ultramodern-renderers/native-federation-inputs.mjs \
             --manifest .modern/bleedingdev-publish/manifest.json --out "$PROOF_ROOT/inputs/native"
           node --input-type=module <<'JS'
