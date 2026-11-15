@@ -1,6 +1,13 @@
 const { readFileSync, statSync } = require('node:fs');
 const { createRequire } = require('node:module');
 const { dirname, join } = require('node:path');
+const {
+  resolveOwnedEffectCompiler,
+} = require('../../packages/solutions/app-tools-extensions/compiler/resolve.cjs');
+
+function ownedCompiler() {
+  return resolveOwnedEffectCompiler({ from: __filename });
+}
 
 const tsrsManifestPath = require.resolve('tsrs/package.json');
 const tsrs = JSON.parse(readFileSync(tsrsManifestPath, 'utf8'));
@@ -50,6 +57,16 @@ function getCompilerPolicy(platform = process.platform, arch = process.arch) {
   ) {
     throw new Error(`Invalid tsrs platform identity: ${nativePackage}`);
   }
+  if (platform === process.platform && arch === process.arch) {
+    const owned = ownedCompiler();
+    if (owned.kind === 'owned') {
+      return {
+        backend: 'tsrs',
+        nativePackage,
+        distribution: owned.distribution,
+      };
+    }
+  }
   const version = tsrs.optionalDependencies?.[nativePackage];
   if (version === undefined) {
     return { backend: 'effect-go', nativePackage };
@@ -66,6 +83,8 @@ function getCompilerPolicy(platform = process.platform, arch = process.arch) {
 }
 
 function getExePath() {
+  const owned = ownedCompiler();
+  if (owned.kind === 'owned') return owned.executable;
   if (process.env.EFFECT_TSGO_BIN) return process.env.EFFECT_TSGO_BIN;
   const policy = getCompilerPolicy();
   if (policy.backend === 'effect-go') {

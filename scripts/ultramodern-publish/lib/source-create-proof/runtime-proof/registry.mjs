@@ -63,7 +63,9 @@ function createVerdaccioConfig({
 }) {
   return [
     `storage: ${JSON.stringify(storageDir)}`,
-    'max_body_size: 50mb',
+    // The five-platform compiler tarball is ~57 MB; npm PUT encodes it as
+    // ~76 MB of Base64 plus metadata. Keep a finite limit above that envelope.
+    'max_body_size: 100mb',
     'auth:',
     '  htpasswd:',
     `    file: ${JSON.stringify(htpasswdPath)}`,

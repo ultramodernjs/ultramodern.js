@@ -47,6 +47,28 @@ const verifyArgs = {
   runId: '77',
 };
 
+test('source registry accepts the compiler cohort npm publish envelope with a finite limit', async () => {
+  const { createVerdaccioConfig } = await import(
+    '../lib/source-create-proof/runtime-proof/registry.mjs'
+  );
+  const config = createVerdaccioConfig({
+    storageDir: '/fixture/storage',
+    htpasswdPath: '/fixture/htpasswd',
+    scope: 'bleedingdev',
+  });
+  const limit = /^max_body_size: (\d+)mb$/m.exec(config);
+  assert.ok(limit, 'source registry must retain a finite request limit');
+  // Exact packed app-tools-extensions size from native run 43710636493.
+  // npm PUT carries the tarball as Base64 plus package metadata.
+  const compilerTarballBytes = 57_004_915;
+  const encodedTarballBytes = 4 * Math.ceil(compilerTarballBytes / 3);
+  const metadataHeadroom = 1024 * 1024;
+  assert.ok(
+    Number(limit[1]) * 1024 * 1024 >= encodedTarballBytes + metadataHeadroom,
+    'the accepted compiler tarball must fit its npm publish envelope',
+  );
+});
+
 test('a qualification receipt binds the qualified commit to its own run', async () => {
   const { createSourceQualification, sourceQualificationArtifactName } =
     await loadHelper();

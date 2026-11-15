@@ -1,5 +1,7 @@
 const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
 const test = require('node:test');
+const { runInNewContext } = require('node:vm');
 
 const {
   createProcessEnv,
@@ -37,11 +39,45 @@ for (const stream of ['stdout', 'stderr']) {
       );
 
       assert.equal(result.error?.code, 'ENOBUFS');
-      assert.equal(result.processStatus, null);
+      assert.ok(
+        result.processStatus === null || result.processStatus === 0,
+        'The child may exit before Node reports its output buffer error',
+      );
       assert.equal(result.exitCode, 1);
     });
   }
 }
+
+test('runCommand treats a buffer error as failure even when the child exits zero', () => {
+  const error = Object.assign(new Error('output exceeded maxBuffer'), {
+    code: 'ENOBUFS',
+  });
+  const loaded = { exports: {} };
+  runInNewContext(
+    readFileSync(require.resolve('../process-kit'), 'utf8'),
+    {
+      module: loaded,
+      process,
+      require(name) {
+        assert.equal(name, 'node:child_process');
+        return {
+          spawnSync: () => ({
+            status: 0,
+            signal: null,
+            error,
+            stdout: '',
+            stderr: 'partial output',
+          }),
+        };
+      },
+    },
+  );
+  const result = loaded.exports.runCommand('example', [], { stdio: 'pipe' });
+  assert.equal(result.processStatus, 0);
+  assert.equal(result.error, error);
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.stderr, 'partial output');
+});
 
 test('runCommand passes shell metacharacters as literal args', () => {
   const result = runCommand(

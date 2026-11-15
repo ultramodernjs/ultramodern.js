@@ -181,6 +181,7 @@ const readPublishWorkflow = () =>
 const cohortJobs = [
   'accept-published',
   'accept-release',
+  'effect-compiler-payload',
   'integration',
   'prepare-release',
   'publish',
@@ -643,7 +644,10 @@ test('release qualification overlaps integration and issues no receipt before bo
       results: { ...results, ...overrides },
       context: { ...context, inputs },
     });
-  assert.equal(workflow.jobs['qualify-source-compute'].needs, undefined);
+  assert.equal(
+    workflow.jobs['qualify-source-compute'].needs,
+    'effect-compiler-payload',
+  );
   assert.deepEqual(workflow.jobs['qualify-source'].needs, [
     'integration',
     'qualify-source-compute',

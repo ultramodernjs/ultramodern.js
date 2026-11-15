@@ -17,7 +17,11 @@ permissions:
   contents: read
 
 jobs:
+  effect-compiler-payload:
+    uses: ./.github/workflows/effect-compiler-payload.yml
+
   native-framework-contracts:
+    needs: effect-compiler-payload
     name: Native framework contracts
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 90
@@ -58,6 +62,24 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Test owned compiler payload contracts without native builds
+        shell: bash
+        run: |
+          compiler_contracts="$(mktemp -d "$RUNNER_TEMP/compiler-contracts-XXXXXX")"
+          trap 'rm -rf -- "$compiler_contracts"' EXIT
+          OWNED_TEMP_DIR="$compiler_contracts" node scripts/ultramodern-publish/test-effect-compiler-contracts.mjs
+
+      - name: Download corrected Effect compiler payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: effect-compiler-payload-${{ github.sha }}
+          path: .modern/effect-compiler-input
+
+      # Artifact transport strips executable modes; only the CI stager repairs
+      # owned generated output after validating the complete same-run receipt.
+      - name: Validate and restage corrected Effect compiler payload
+        run: node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-input --complete-manifest
+
       - name: Prepare
         run: pnpm run prepare-build
 
@@ -96,6 +118,7 @@ jobs:
         run: pnpm run validate:native-compatibility --prepared
 
   pack-candidate:
+    needs: effect-compiler-payload
     name: Pack the consumer candidate
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 90
@@ -139,6 +162,17 @@ jobs:
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Download corrected Effect compiler payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: effect-compiler-payload-${{ github.sha }}
+          path: .modern/effect-compiler-input
+
+      # Artifact transport strips executable modes; only the CI stager repairs
+      # owned generated output after validating the complete same-run receipt.
+      - name: Validate and restage corrected Effect compiler payload
+        run: node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-input --complete-manifest
 
       - name: Build the publishable cohort
         run: pnpm ultramodern:build-bleedingdev-publish

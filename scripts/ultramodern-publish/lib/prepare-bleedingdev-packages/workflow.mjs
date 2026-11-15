@@ -41,6 +41,7 @@ import {
 } from './registry.mjs';
 import { assertCleanCommittedSource } from '../release-source-state.mjs';
 import { resolveOwnedPreparationOutput } from './options.mjs';
+import { assertReleaseCompilerPayload } from '../../stage-effect-compiler-payload.mjs';
 
 const { readJsonFile, writeJsonFile } = fsKit;
 
@@ -70,6 +71,24 @@ function assertTrustedPublishContext() {
   }
 }
 
+function assertPackedCompilerPayload(releaseArtifacts, out) {
+  const compiler = releaseArtifacts.manifest.packages.find(
+    item => item.sourceName === '@modern-js/app-tools-extensions',
+  );
+  if (!compiler) return;
+  const ownedRoot = fs.mkdtempSync(path.join(out, 'compiler-pack-check-'));
+  try {
+    const tarball = path.join(out, compiler.tarballPath);
+    const packageDir = extractTarball(tarball, path.join(ownedRoot, 'extracted'));
+    const verified = assertReleaseCompilerPayload(packageDir, { sameRun: false });
+    if (verified.manifest.producer.sourceCommit !== releaseArtifacts.manifest.source.commit)
+      throw new Error('Packed compiler producer does not match release source commit');
+    console.log(`Verified final compiler package tarball: ${fs.statSync(tarball).size} bytes; payload ${verified.manifestSha256}`);
+  } finally {
+    fs.rmSync(ownedRoot, { recursive: true, force: true });
+  }
+}
+
 async function prepareBleedingdevPackages(options) {
   if (!options.publishExisting) {
     options.out = resolveOwnedPreparationOutput(options.out);
@@ -78,6 +97,10 @@ async function prepareBleedingdevPackages(options) {
   const sourceCommit = assertCleanCommittedSource(repoRoot);
   const { allPackages, aliases, packages, sourceNames } =
     collectModernPackages(options);
+  const includesCompiler = packages.some(
+    item => item.packageJson.name === '@modern-js/app-tools-extensions',
+  );
+  if (includesCompiler && !options.publishExisting) assertReleaseCompilerPayload();
   enforceSingleVersionPolicy(options, packages, allPackages);
   // Fail before reconstruction, packing, or any registry write. Checking source
   // also covers --publish-existing and preparation without --include-sidecars.
@@ -97,6 +120,7 @@ async function prepareBleedingdevPackages(options) {
       tag: options.tag,
       version: options.version,
     });
+    assertPackedCompilerPayload(releaseArtifacts, options.out);
     // Recovery must validate the immutable tarball manifests as well: a fixed
     // checkout cannot authorize an older candidate with the upstream edge.
     assertRepositoryRecipeConsumers(
@@ -148,6 +172,8 @@ async function prepareBleedingdevPackages(options) {
     );
     const packageJsonPath = path.join(packageDir, 'package.json');
     const packageJson = readJsonFile(packageJsonPath);
+    if (sourceName === '@modern-js/app-tools-extensions')
+      assertReleaseCompilerPayload(packageDir);
     rewritePackageJson(packageJson, sourceName, options, sourceNames);
     if (targetName === sidecarAliasConsumerTargetName)
       sidecarAliasConsumerCount += 1;
@@ -202,6 +228,7 @@ async function prepareBleedingdevPackages(options) {
     tag: options.tag,
     version: options.version,
   });
+  assertPackedCompilerPayload(releaseArtifacts, options.out);
   assertRepositoryRecipeConsumers(
     releaseArtifacts.packages.map(item => item.packageJson),
   );

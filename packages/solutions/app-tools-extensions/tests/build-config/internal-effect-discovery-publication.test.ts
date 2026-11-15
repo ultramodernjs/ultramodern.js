@@ -90,6 +90,10 @@ try {
   mkdirSync(installedDirectory, { recursive: true });
   // Exercise the ordinary producer's bytes. The fixture never transpiles or patches them.
   cpSync(join(sourcePackageRoot, 'dist'), join(installedDirectory, 'dist'), { recursive: true });
+  mkdirSync(join(installedDirectory, 'compiler'));
+  for (const filename of ['resolve.cjs', 'resolve.d.cts', 'source.json', 'constraint.patch']) {
+    cpSync(join(sourcePackageRoot, 'compiler', filename), join(installedDirectory, 'compiler', filename));
+  }
   const publishedManifest = structuredClone(sourceManifest);
   const sourceNames = new Set([sourceManifest.name, ...['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'].flatMap(block => Object.keys(sourceManifest[block] ?? {})).filter(name => name.startsWith('@modern-js/'))]);
   const version = sourceManifest.version + '-ultramodern.discovery-test';

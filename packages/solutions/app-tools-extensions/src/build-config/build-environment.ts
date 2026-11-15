@@ -35,7 +35,7 @@ if (typeof owningName !== 'string' || owningName.length === 0) {
 }
 const {
   effectCompilerDiscoveryFailureStage,
-  resolveInstalledEffectCompiler,
+  resolveEffectCompilerSelection,
   validateConfiguredEffectCompiler,
 }: typeof import('./internal-effect-discovery') = createRequire(
   owningModuleUrl,
@@ -146,6 +146,23 @@ export function resolveEffectTsgoCompiler(
   const configuredCompiler =
     getBuildConfigEnvironment('EFFECT_TSGO_BIN')?.trim();
 
+  let selection: ReturnType<typeof resolveEffectCompilerSelection>;
+  try {
+    selection = resolveEffectCompilerSelection(
+      options.from,
+      configuredCompiler || undefined,
+    );
+  } catch (cause) {
+    throw effectTsgoResolutionError(
+      cause,
+      effectCompilerDiscoveryFailureStage(cause) ?? 'Compiler selection',
+      options.from,
+    );
+  }
+  // The payload resolver already verified mode and identity. Never copy an owned
+  // artifact into the official provider's executable cache.
+  if (selection.kind === 'owned') return selection.executable;
+
   if (configuredCompiler) {
     try {
       const compiler = resolveExecutableEffectTsgoCompiler(configuredCompiler);
@@ -162,7 +179,7 @@ export function resolveEffectTsgoCompiler(
 
   let stage = 'Package CLI resolution';
   try {
-    const compiler = resolveInstalledEffectCompiler(options.from).trim();
+    const compiler = selection.executable.trim();
     stage = 'Compiler backend lookup';
 
     if (!compiler) {
@@ -189,9 +206,13 @@ export function resolveEffectTsrsCompiler(
   try {
     const configuredCompiler =
       getBuildConfigEnvironment('EFFECT_TSGO_BIN')?.trim() || undefined;
-    const compiler =
-      configuredCompiler ??
-      resolveInstalledEffectCompiler(options.from, 'tsrs');
+    const selection = resolveEffectCompilerSelection(
+      options.from,
+      configuredCompiler,
+      'tsrs',
+    );
+    if (selection.kind === 'owned') return selection.executable;
+    const compiler = selection.executable;
     const artifact = lstatSync(realpathSync(compiler));
     if (!artifact.isFile() || artifact.size === 0) {
       throw new Error(

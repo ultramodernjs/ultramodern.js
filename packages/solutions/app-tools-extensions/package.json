@@ -12,7 +12,8 @@
   "version": "3.8.3",
   "files": [
     "dist",
-    "src"
+    "src",
+    "compiler"
   ],
   "types": "./dist/types/index.d.ts",
   "main": "./dist/cjs/index.js",
@@ -67,6 +68,11 @@
       "modern:source": "./src/cloudflare-output-verifier/*.ts",
       "import": "./dist/esm-node/cloudflare-output-verifier/*.mjs",
       "require": "./dist/cjs/cloudflare-output-verifier/*.js"
+    },
+    "./internal-effect-payload": {
+      "types": "./compiler/resolve.d.cts",
+      "import": "./compiler/resolve.cjs",
+      "require": "./compiler/resolve.cjs"
     },
     "./internal-effect-discovery": {
       "types": "./dist/types/build-config/internal-effect-discovery.d.ts",
@@ -206,6 +212,9 @@
       ],
       "deploy-output/trace-files": [
         "./dist/types/deploy-output/trace-files.d.ts"
+      ],
+      "internal-effect-payload": [
+        "./compiler/resolve.d.cts"
       ],
       "native-server-compiler": [
         "./dist/types/native-server-compiler.d.ts"
