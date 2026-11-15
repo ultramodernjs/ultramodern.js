@@ -82,6 +82,27 @@ test('hosted artifacts use verified job provenance and release their actual iden
   await assert.rejects(artifacts.release(directory), /no active owner/u);
 });
 
+test('Depot dev artifacts use the job lease without invoking the laptop guardian', async t => {
+  const { artifacts, workRoot, env } = fixture(t, {
+    RUNNER_ENVIRONMENT: 'self-hosted',
+    RUNNER_NAME: 'depot-control-123',
+  });
+  const directory = path.join(workRoot, 'remote', 'node_modules');
+  await artifacts.register(directory, 'dependencies');
+  const [record] = artifacts.snapshot();
+  assert.equal(record.status, 'runner-job-lease');
+  assert.equal(record.enclosingLease.cleanupOwner, 'depot-runner');
+  assert.equal(record.enclosingLease.attested, false);
+  env.GITHUB_RUN_ID = '9999';
+  await assert.rejects(
+    artifacts.register(directory, 'dependencies'),
+    /lease changed/u,
+  );
+  env.GITHUB_RUN_ID = '2345';
+  await artifacts.release(directory);
+  assert.equal(record.released, true);
+  assert(fs.statSync(directory).isDirectory());
+});
 test('incomplete or forged runner identity cannot create an artifact or bypass guardian', async t => {
   for (const [overrides, expected] of [
     [{ GITHUB_RUN_ID: '' }, /Invalid runner GITHUB_RUN_ID/u],

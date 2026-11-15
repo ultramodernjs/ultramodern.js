@@ -290,6 +290,14 @@ test('required native PR checks run focused renderer acceptance controls', () =>
     controls.run,
     /scripts\/__tests__\/rslib-tsrs-options\.test\.mjs/u,
   );
+  assert.match(
+    controls.run,
+    /tests\/ultramodern-renderers\/octane-federation\/\{artifact-ownership,browser-temporary\}\.test\.mjs/u,
+  );
+  assert.match(
+    controls.run,
+    /tests\/ultramodern-renderers\/octane-federation-workers\/contract\.test\.mjs/u,
+  );
   assert.match(controls.run, /trap 'rm -rf -- "\$controls_work"' EXIT/u);
 });
 

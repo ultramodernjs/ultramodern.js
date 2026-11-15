@@ -6,6 +6,7 @@ import {
   maintenanceLockFailure,
   validateRunnerJobLease,
 } from '../../../scripts/ultramodern-production-readiness/react-rsc-worker-proof/lifecycle.mjs';
+import { isSupportedHostedJob } from '../../../scripts/ultramodern-renderers/hosted-job.mjs';
 
 /** Inner outputs borrow a hosted job or the current proof's physical local root.
  * released ends this operation's lease, not necessarily its guardian record:
@@ -29,8 +30,7 @@ export function createDevArtifactOwnership({
       : undefined;
   },
 }) {
-  const hosted =
-    env.GITHUB_ACTIONS === 'true' && env.RUNNER_ENVIRONMENT === 'github-hosted';
+  const hosted = isSupportedHostedJob(env);
   const records = new Map();
   const root = fs.realpathSync(workRoot);
   assert.equal(root, path.resolve(workRoot), 'Dev proof root must be physical');

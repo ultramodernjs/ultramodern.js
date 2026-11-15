@@ -97,7 +97,9 @@ jobs:
           OWNED_TEMP_DIR="$controls_work" node --test \
             scripts/__tests__/rslib-tsrs-options.test.mjs \
             scripts/native-compatibility/packed-workflows.test.mjs \
-            scripts/ultramodern-renderers/*.test.mjs
+            scripts/ultramodern-renderers/*.test.mjs \
+            tests/ultramodern-renderers/octane-federation/{artifact-ownership,browser-temporary}.test.mjs \
+            tests/ultramodern-renderers/octane-federation-workers/contract.test.mjs
 
       - name: Resolve Playwright runtime
         id: browser-runtime
