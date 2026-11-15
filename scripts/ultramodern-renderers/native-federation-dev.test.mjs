@@ -4,7 +4,103 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { assertLifecycle } from '../../tests/ultramodern-renderers/octane-federation/lifecycle.mjs';
 import { validateNativeDevRefreshObservations } from './native-federation-dev.mjs';
+
+// Execute the real route-return proof without starting apps or a browser.
+const devSource = fs.readFileSync(
+  new URL(
+    '../../tests/ultramodern-renderers/octane-federation/dev.mjs',
+    import.meta.url,
+  ),
+  'utf8',
+);
+const routeReturn = new (Object.getPrototypeOf(async () => {}).constructor)(
+  'click',
+  'waitFor',
+  'text',
+  'documentState',
+  'browserObservation',
+  'assertLifecycle',
+  'removed',
+  devSource.slice(
+    devSource.indexOf("  await click('host-back');"),
+    devSource.indexOf(
+      '  assert.equal(new URL(navigationBack.location).pathname',
+    ),
+  ) + '\nreturn navigationBackBrowser;',
+);
+
+for (const state of [
+  'delayed activation',
+  'missing activation',
+  'duplicate activation',
+  'leaked effect',
+])
+  test(`route return observes passive effects: ${state}`, async () => {
+    const removed = {
+      owners: 1,
+      activations: 1,
+      cleanups: 1,
+      currentOwner: null,
+      effects: [{ id: 1, ownerId: 1, cleanups: 1 }],
+    };
+    const activated = {
+      owners: 2,
+      activations: 2,
+      cleanups: 1,
+      currentOwner: 2,
+      effects: [...removed.effects, { id: 2, ownerId: 2, cleanups: 0 }],
+    };
+    if (state === 'duplicate activation') {
+      activated.activations++;
+      activated.effects.push({ id: 3, ownerId: 2, cleanups: 0 });
+    }
+    if (state === 'leaked effect') {
+      activated.cleanups = 0;
+      activated.effects[0] = { id: 1, ownerId: 1, cleanups: 0 };
+    }
+    let reads = 0;
+    const run = () =>
+      routeReturn(
+        async () => {},
+        async check => {
+          for (let sample = 0; sample < 3; sample++) {
+            const value = await check();
+            if (value) return value;
+          }
+          throw new Error('passive activation did not arrive');
+        },
+        async () => 'Remote native v6',
+        async () => ({}),
+        async () => ({
+          version: 'Remote native v6',
+          lifecycle: structuredClone(
+            (++reads < 3 && state === 'delayed activation') ||
+              state === 'missing activation'
+              ? removed
+              : activated,
+          ),
+        }),
+        assertLifecycle,
+        removed,
+      );
+    if (state === 'delayed activation') {
+      assert.deepEqual((await run()).lifecycle, activated);
+      assert.equal(
+        reads,
+        3,
+        'DOM readiness must not stand in for passive activation',
+      );
+    } else {
+      await assert.rejects(
+        run,
+        state === 'missing activation'
+          ? /passive activation did not arrive/
+          : /exactly one live effect/,
+      );
+    }
+  });
 
 // Receipt-validation controls only. These fabricated observations never stand
 // in for the real browser/compiler/SSR execution required by the release runner.

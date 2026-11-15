@@ -1254,7 +1254,15 @@ export default function Away() { const router = useRouter(); return <section dat
     'native router return after HMR',
   );
   const navigationBack = await documentState();
-  const navigationBackBrowser = await browserObservation();
+  // Returning route DOM can commit before its native passive effects. Observe
+  // activation, as removal observes cleanup, without forcing a runtime flush.
+  const navigationBackBrowser = await waitFor(async () => {
+    const observation = await browserObservation();
+    return observation.version === 'Remote native v6' &&
+      observation.lifecycle.activations > removed.activations
+      ? observation
+      : false;
+  }, 'native passive activation after router return');
   assertLifecycle(navigationBackBrowser.lifecycle, {
     previous: removed,
     transition: 'new-owner',
