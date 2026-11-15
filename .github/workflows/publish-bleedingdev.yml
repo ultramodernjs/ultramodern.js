@@ -1326,8 +1326,9 @@ jobs:
   # renderer feature proofs run again using registry-resolved installed bytes.
   accept-published:
     name: Accept the exact published registry cohort
-    # Installed feature proofs validate a GitHub-hosted RUNNER_TEMP lease.
-    runs-on: ubuntu-24.04
+    # Acceptance consumes npm packages; only publication requires GitHub-hosted OIDC.
+    # Feature proofs validate a job-owned RUNNER_TEMP on GitHub or Depot GHA.
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 180
     if: >-
       always() &&

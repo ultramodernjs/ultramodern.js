@@ -1,6 +1,5 @@
 export type OwnedEffectTarget =
   | 'darwin-arm64'
-  | 'darwin-x64'
   | 'linux-x64'
   | 'linux-arm64'
   | 'win32-x64';
@@ -13,6 +12,8 @@ export interface OwnedEffectSource {
   typescript: { version: string; sourceCommit: string };
   patchSha256: string;
   optimization: 'none';
+  /** Support policy; selection checks process architecture, not chip generation. */
+  macos: { architecture: 'arm64'; minimumChip: 'M3' };
   targets: OwnedEffectTarget[];
 }
 
@@ -57,7 +58,11 @@ export type OwnedEffectCompiler =
       distribution: 'ultramodern-effect-tsrs';
     };
 
-/** Selection verifies files and installed identities; it never runs the compiler. */
+/**
+ * Selection verifies files and installed identities; it never runs the compiler.
+ * Non-arm64 macOS processes (including Rosetta) throw even without a payload.
+ * M3+ is a support policy, not runtime hardware attestation.
+ */
 export function resolveOwnedEffectCompiler(options: {
   /** Absolute filename, directory, or file URL used to resolve installed packages. */
   from: string | URL;

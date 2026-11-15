@@ -262,63 +262,69 @@ test('writes the exact executable output and rejects multiline paths', t => {
   );
 });
 
-function hostedSandbox(t) {
+function hostedSandbox(t, provider = 'github') {
   const root = directory(t);
   const binary = path.join(root, 'chrome');
   fs.writeFileSync(binary, 'fabricated executable');
   const environment = {
     RUNNER_TEMP: root,
     GITHUB_ACTIONS: 'true',
-    RUNNER_ENVIRONMENT: 'github-hosted',
+    RUNNER_ENVIRONMENT: provider === 'depot' ? 'self-hosted' : 'github-hosted',
+    RUNNER_NAME:
+      provider === 'depot' ? 'depot-control-123' : 'GitHub Actions 1',
   };
   return { root, binary, environment };
 }
 
-test('allows user namespaces only for the exact hosted Chrome and removes its policy source', t => {
-  const { binary, environment } = hostedSandbox(t);
-  const calls = [];
-  configureHostedRendererSandbox(binary, {
-    environment,
-    platform: 'linux',
-    command(name, args, options) {
-      calls.push({ name, args, options });
-      assert.equal(name, 'sudo');
-      assert.deepEqual(args.slice(0, 3), [
-        '-n',
-        'apparmor_parser',
-        '--replace',
-      ]);
-      assert.equal(
-        fs.readFileSync(args[3], 'utf8'),
-        `abi <abi/4.0>,\ninclude <tunables/global>\nprofile ultramodern-renderer-chrome-${process.pid} "${binary}" flags=(unconfined) {\n  userns,\n}\n`,
-      );
-    },
+for (const provider of ['github', 'depot'])
+  test(`${provider} allows user namespaces only for the exact hosted Chrome and removes its policy source`, t => {
+    const { binary, environment } = hostedSandbox(t, provider);
+    const calls = [];
+    configureHostedRendererSandbox(binary, {
+      environment,
+      platform: 'linux',
+      command(name, args, options) {
+        calls.push({ name, args, options });
+        assert.equal(name, 'sudo');
+        assert.deepEqual(args.slice(0, 3), [
+          '-n',
+          'apparmor_parser',
+          '--replace',
+        ]);
+        assert.equal(
+          fs.readFileSync(args[3], 'utf8'),
+          `abi <abi/4.0>,\ninclude <tunables/global>\nprofile ultramodern-renderer-chrome-${process.pid} "${binary}" flags=(unconfined) {\n  userns,\n}\n`,
+        );
+      },
+    });
+    assert.equal(calls.length, 1);
+    assert.equal(fs.existsSync(calls[0].args[3]), false);
   });
-  assert.equal(calls.length, 1);
-  assert.equal(fs.existsSync(calls[0].args[3]), false);
-});
 
-test('sandbox provisioning fails closed and retires its own policy source', t => {
-  const { binary, environment } = hostedSandbox(t);
-  const failure = new Error('AppArmor rejected profile');
-  assert.throws(
-    () =>
-      configureHostedRendererSandbox(binary, {
-        environment,
-        platform: 'linux',
-        command() {
-          throw failure;
-        },
-      }),
-    error => error === failure,
-  );
-  assert.equal(
-    fs.existsSync(path.join(path.dirname(binary), 'renderer-chrome.apparmor')),
-    false,
-  );
-});
+for (const provider of ['github', 'depot'])
+  test(`${provider} sandbox provisioning fails closed and retires its own policy source`, t => {
+    const { binary, environment } = hostedSandbox(t, provider);
+    const failure = new Error('AppArmor rejected profile');
+    assert.throws(
+      () =>
+        configureHostedRendererSandbox(binary, {
+          environment,
+          platform: 'linux',
+          command() {
+            throw failure;
+          },
+        }),
+      error => error === failure,
+    );
+    assert.equal(
+      fs.existsSync(
+        path.join(path.dirname(binary), 'renderer-chrome.apparmor'),
+      ),
+      false,
+    );
+  });
 
-test('does not change sandbox policy outside a GitHub-hosted Linux job', t => {
+test('does not change sandbox policy outside a supported hosted Linux job', t => {
   const { binary, environment } = hostedSandbox(t);
   for (const options of [
     { platform: 'darwin', environment },
@@ -340,24 +346,54 @@ test('does not change sandbox policy outside a GitHub-hosted Linux job', t => {
     });
 });
 
-test('rejects a foreign binary and AppArmor glob syntax before privilege elevation', t => {
-  const { root, binary, environment } = hostedSandbox(t);
-  const foreignRoot = directory(t);
-  const foreignBinary = path.join(foreignRoot, 'chrome');
-  fs.writeFileSync(foreignBinary, 'foreign executable');
-  const globBinary = path.join(root, 'chrome*');
-  fs.writeFileSync(globBinary, 'glob executable');
-  for (const executable of [foreignBinary, globBinary])
+test('Depot sandbox rejects nonphysical temp roots and escaped symlinks before sudo', t => {
+  const { root, binary, environment } = hostedSandbox(t, 'depot');
+  const elsewhere = directory(t);
+  const foreign = path.join(elsewhere, 'foreign-chrome');
+  fs.writeFileSync(foreign, 'foreign executable');
+  const escaped = path.join(root, 'escaped-chrome');
+  fs.symlinkSync(foreign, escaped);
+  const alias = path.join(elsewhere, 'temp-alias');
+  fs.symlinkSync(root, alias, 'dir');
+  for (const [executable, RUNNER_TEMP] of [
+    [escaped, root],
+    [binary, alias],
+    [binary, `${root}/../${path.basename(root)}`],
+    [binary, 'relative'],
+    [binary, undefined],
+  ])
     assert.throws(
       () =>
         configureHostedRendererSandbox(executable, {
-          environment,
+          environment: { ...environment, RUNNER_TEMP },
           platform: 'linux',
           command() {
             assert.fail('must reject before sudo');
           },
         }),
-      /job temporary directory|Unsafe AppArmor/u,
+      /job temporary directory|RUNNER_TEMP/u,
     );
-  assert.equal(fs.existsSync(binary), true);
 });
+
+for (const provider of ['github', 'depot'])
+  test(`${provider} rejects a foreign binary and AppArmor glob syntax before privilege elevation`, t => {
+    const { root, binary, environment } = hostedSandbox(t, provider);
+    const foreignRoot = directory(t);
+    const foreignBinary = path.join(foreignRoot, 'chrome');
+    fs.writeFileSync(foreignBinary, 'foreign executable');
+    const globBinary = path.join(root, 'chrome*');
+    fs.writeFileSync(globBinary, 'glob executable');
+    for (const executable of [foreignBinary, globBinary])
+      assert.throws(
+        () =>
+          configureHostedRendererSandbox(executable, {
+            environment,
+            platform: 'linux',
+            command() {
+              assert.fail('must reject before sudo');
+            },
+          }),
+        /job temporary directory|Unsafe AppArmor/u,
+      );
+    assert.equal(fs.existsSync(binary), true);
+  });

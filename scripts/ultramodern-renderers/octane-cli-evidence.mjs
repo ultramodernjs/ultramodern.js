@@ -2,11 +2,10 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isSupportedHostedJob } from './hosted-job.mjs';
 
 const appKey = 'ULTRAMODERN_OCTANE_EVIDENCE_APP';
 const logKey = 'ULTRAMODERN_OCTANE_EVIDENCE_LOG';
-const hosted = env =>
-  env.GITHUB_ACTIONS === 'true' && env.RUNNER_ENVIRONMENT === 'github-hosted';
 const errorInfo = error => ({
   name: error?.name ?? 'Error',
   message: error?.message ?? String(error),
@@ -18,7 +17,7 @@ export function octaneTypecheckEvidenceEnv(
   logPrefix,
   env = process.env,
 ) {
-  if (!hosted(env)) return env;
+  if (!isSupportedHostedJob(env)) return env;
   if (!path.isAbsolute(appRoot) || !path.isAbsolute(logPrefix))
     throw new Error(
       'Octane evidence requires absolute app and retained log paths',
@@ -39,7 +38,7 @@ export function octaneTypecheckEvidenceEnv(
 /** Production never imports or invokes the checker here. */
 export async function installOctaneCliEvidence() {
   const env = process.env;
-  if (!hosted(env) || !env[appKey] || !env[logKey]) return;
+  if (!isSupportedHostedJob(env) || !env[appKey] || !env[logKey]) return;
   // pnpm and all other children must not resolve packages, import tsrs or hook.
   if (path.basename(process.argv[1] ?? '') !== 'octane-tsc.mjs') return;
   let log;

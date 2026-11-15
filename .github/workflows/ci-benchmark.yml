@@ -27,7 +27,9 @@ env:
 jobs:
   benchmark:
     name: ci-benchmark (${{ matrix.workload }})
-    runs-on: ubuntu-24.04
+    # For an explicit comparison, set CI_BENCHMARK_RUNNER to ubuntu-24.04
+    # and use the same immutable commit and cold-cache protocol on both providers.
+    runs-on: ${{ vars.CI_BENCHMARK_RUNNER || vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 60
     strategy:
       fail-fast: false

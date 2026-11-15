@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isSupportedHostedJob } from './hosted-job.mjs';
 
 // Chromium CL 8508456 fixes completed no-store fetches being reported aborted.
 // Keep this exact CfT build until the normal Playwright revision contains it.
@@ -50,17 +51,24 @@ export function configureHostedRendererSandbox(
     command = execFileSync,
   } = {},
 ) {
-  if (
-    platform !== 'linux' ||
-    environment.GITHUB_ACTIONS !== 'true' ||
-    environment.RUNNER_ENVIRONMENT !== 'github-hosted'
-  )
-    return;
+  if (platform !== 'linux' || !isSupportedHostedJob(environment)) return;
+  assert(
+    typeof environment.RUNNER_TEMP === 'string' &&
+      path.isAbsolute(environment.RUNNER_TEMP) &&
+      path.resolve(environment.RUNNER_TEMP) === environment.RUNNER_TEMP,
+    'RUNNER_TEMP must name the canonical job temporary directory',
+  );
   const temporaryRoot = fs.realpathSync(environment.RUNNER_TEMP);
+  assert.equal(
+    temporaryRoot,
+    environment.RUNNER_TEMP,
+    'RUNNER_TEMP must be physical',
+  );
   const binary = fs.realpathSync(executable);
   const relative = path.relative(temporaryRoot, binary);
   assert(
     relative &&
+      relative !== '..' &&
       !relative.startsWith(`..${path.sep}`) &&
       !path.isAbsolute(relative),
     'Hosted renderer sandbox executable must belong to the job temporary directory',

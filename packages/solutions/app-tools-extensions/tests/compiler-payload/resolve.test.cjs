@@ -187,6 +187,29 @@ test('absent package payload returns absent without installed tools or compiled 
   );
 });
 
+test('source declares four targets and the M3+ arm64 macOS support policy', () => {
+  assert.deepEqual(source.targets, [
+    'darwin-arm64',
+    'linux-x64',
+    'linux-arm64',
+    'win32-x64',
+  ]);
+  assert.deepEqual(source.macos, { architecture: 'arm64', minimumChip: 'M3' });
+});
+
+for (const absent of [true, false]) {
+  test(`Darwin x64 (including Rosetta) rejects ${absent ? 'absent' : 'present'} payload instead of allowing official fallback`, () => {
+    const f = fixture({ absent });
+    assert.throws(
+      () =>
+        platform('darwin', 'x64', () =>
+          f.api.resolveOwnedEffectCompiler({ from: f.from }),
+        ),
+      /macOS.*arm64.*M3/i,
+    );
+  });
+}
+
 test('renamed package exports identical uncompiled CJS through require and ESM', async () => {
   const f = fixture();
   const consumer = path.join(f.directory, 'consumer.mjs');
@@ -218,7 +241,7 @@ test('renamed package exports identical uncompiled CJS through require and ESM',
   assert.equal(selected(f, { from: f.directory }).kind, 'owned');
 });
 
-test('stage root is validated against module source, with a complete five-target gate', () => {
+test('stage root is validated against module source, with a complete target-set gate', () => {
   const f = fixture();
   const staged = path.join(f.directory, 'staged');
   fs.renameSync(f.payload, staged);
@@ -227,6 +250,12 @@ test('stage root is validated against module source, with a complete five-target
     requireComplete: true,
   });
   assert.equal(result.kind, 'owned');
+  assert.deepEqual(Object.keys(result.manifest.targets).sort(), [
+    'darwin-arm64',
+    'linux-arm64',
+    'linux-x64',
+    'win32-x64',
+  ]);
   assert.deepEqual(result.manifest, f.manifest);
   assert.equal(
     result.manifestSha256,
@@ -254,6 +283,12 @@ for (const [label, mutate] of [
     'extra source metadata',
     f => {
       f.manifest.source.extra = true;
+    },
+  ],
+  [
+    'macOS support policy',
+    f => {
+      f.manifest.source.macos = { architecture: 'arm64', minimumChip: 'M1' };
     },
   ],
   [
@@ -296,6 +331,12 @@ for (const [label, mutate] of [
     'unknown target',
     f => {
       f.manifest.targets['linux-x64-musl'] = f.manifest.targets['linux-x64'];
+    },
+  ],
+  [
+    'removed Intel macOS target',
+    f => {
+      f.manifest.targets['darwin-x64'] = f.manifest.targets['darwin-arm64'];
     },
   ],
   [
@@ -480,11 +521,11 @@ test('rejects payload root and ancestor symlinks, including dangling links', () 
 });
 
 test('partial payload is allowed by validator but complete/current-target checks fail', () => {
-  const f = fixture({ targets: ['darwin-x64'] });
+  const f = fixture({ targets: ['win32-x64'] });
   assert.equal(f.api.validateOwnedEffectPayload().kind, 'owned');
   assert.throws(
     () => f.api.validateOwnedEffectPayload({ requireComplete: true }),
-    /five/,
+    /complete payload requires all source targets/,
   );
   assert.throws(() => selected(f), /current target/);
 });

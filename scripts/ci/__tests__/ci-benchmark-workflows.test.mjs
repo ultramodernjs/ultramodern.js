@@ -9,8 +9,15 @@ function workflow(file) {
   );
 }
 
+const expression = value => '$' + '{{ ' + value + ' }}';
+
 const benchmarkPaths = [
-  ['.github/workflows/ci-benchmark.yml', 'ubuntu-24.04'],
+  [
+    '.github/workflows/ci-benchmark.yml',
+    expression(
+      "vars.CI_BENCHMARK_RUNNER || vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'",
+    ),
+  ],
   ['.depot/workflows/ci-benchmark.yml', 'depot-ubuntu-24.04-8'],
 ];
 

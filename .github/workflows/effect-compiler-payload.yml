@@ -21,20 +21,29 @@ jobs:
         include:
           - target: darwin-arm64
             rust_target: aarch64-apple-darwin
-            runner: macos-latest
-          - target: darwin-x64
-            rust_target: x86_64-apple-darwin
-            runner: macos-26-intel
+            runner: ${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}
           - target: linux-x64
             rust_target: x86_64-unknown-linux-gnu
-            runner: ubuntu-22.04
+            # Keep the compiler's glibc baseline on Ubuntu 22.04, not the
+            # general framework runner's configurable Ubuntu 24.04 image.
+            runner: depot-ubuntu-22.04-8
           - target: linux-arm64
             rust_target: aarch64-unknown-linux-gnu
-            runner: ubuntu-22.04-arm
+            runner: depot-ubuntu-22.04-arm-8
           - target: win32-x64
             rust_target: x86_64-pc-windows-msvc
-            runner: windows-latest
+            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
     steps:
+      - name: Verify the supported Apple Silicon runner
+        if: runner.os == 'macOS'
+        run: |
+          test "$(uname -m)" = arm64
+          chip="$(sysctl -n machdep.cpu.brand_string)"
+          if ! printf '%s\n' "$chip" | grep -Eq '^Apple M([3-9]|[1-9][0-9]+)( |$)'; then
+            echo "::error::macOS compiler builds require Apple Silicon M3 or newer; got $chip"
+            exit 1
+          fi
+
       - name: Configure native Windows checkout
         if: runner.os == 'Windows'
         run: |
@@ -201,7 +210,7 @@ jobs:
 
   aggregate:
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -212,7 +221,7 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '26.12.0'
-      - name: Download five target receipts into artifact-named directories
+      - name: Download supported target receipts into artifact-named directories
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: effect-compiler-target-*-${{ github.sha }}

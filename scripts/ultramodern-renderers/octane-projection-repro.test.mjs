@@ -835,6 +835,33 @@ test('default loader rejects local use before resolving or importing a compiler'
   }
 });
 
+test('both default loaders admit Depot GHA but reject generic or malformed self-hosted context before installed loading', async () => {
+  const keys = ['GITHUB_ACTIONS', 'RUNNER_ENVIRONMENT', 'RUNNER_NAME'];
+  const before = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  try {
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.RUNNER_ENVIRONMENT = 'self-hosted';
+    for (const probe of [probeOctaneProjection, probeOctaneLiveTraversal]) {
+      process.env.RUNNER_NAME = 'depot-control-123';
+      // A nonexistent app reaches filesystem validation, never a real compiler.
+      await assert.rejects(probe('/not-an-installed-depot-app'), {
+        code: 'ENOENT',
+      });
+      for (const name of ['', 'generic', 'depot-', 'depot-control\n']) {
+        process.env.RUNNER_NAME = name;
+        await assert.rejects(
+          probe('/not-an-installed-depot-app'),
+          /hosted-only/u,
+        );
+      }
+    }
+  } finally {
+    for (const key of keys)
+      if (before[key] === undefined) delete process.env[key];
+      else process.env[key] = before[key];
+  }
+});
+
 test('original observation reuses native reduction without a second wrapper call', t => {
   const f = fixture(t, { targetPair: true, rootCount: 5 });
   const result = {

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import test from 'node:test';
 import yaml from '../../../packages/toolkit/utils/compiled/js-yaml/index.js';
@@ -39,35 +40,51 @@ function assertHandoff(job, before, conditional = false) {
   assert.ok(!job.steps.some(step => /chmod|\bcp\b/.test(step.run ?? '')));
 }
 
-test('compiler matrix uses exactly five native pinned-base release builds', () => {
+test('compiler matrix uses four Depot builds without Intel Mac or a newer glibc baseline', () => {
   assert.deepEqual(producer.on, { workflow_call: null });
   assert.deepEqual(producer.jobs.build.strategy.matrix.include, [
     {
       target: 'darwin-arm64',
       rust_target: 'aarch64-apple-darwin',
-      runner: 'macos-latest',
-    },
-    {
-      target: 'darwin-x64',
-      rust_target: 'x86_64-apple-darwin',
-      runner: 'macos-26-intel',
+      runner: expression("vars.DEPOT_MACOS_RUNNER || 'depot-macos-26'"),
     },
     {
       target: 'linux-x64',
       rust_target: 'x86_64-unknown-linux-gnu',
-      runner: 'ubuntu-22.04',
+      runner: 'depot-ubuntu-22.04-8',
     },
     {
       target: 'linux-arm64',
       rust_target: 'aarch64-unknown-linux-gnu',
-      runner: 'ubuntu-22.04-arm',
+      runner: 'depot-ubuntu-22.04-arm-8',
     },
     {
       target: 'win32-x64',
       rust_target: 'x86_64-pc-windows-msvc',
-      runner: 'windows-latest',
+      runner: expression("vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8'"),
     },
   ]);
+  const source = JSON.parse(
+    fs.readFileSync(
+      new URL(
+        '../../../packages/solutions/app-tools-extensions/compiler/source.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  );
+  assert.deepEqual(
+    producer.jobs.build.strategy.matrix.include.map(item => item.target),
+    source.targets,
+  );
+  assert.deepEqual(source.macos, {
+    architecture: 'arm64',
+    minimumChip: 'M3',
+  });
+  assert.equal(
+    producer.jobs.aggregate['runs-on'],
+    expression("vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'"),
+  );
   const steps = producer.jobs.build.steps;
   const checkout = steps.find(
     step => step.with?.repository === 'Effect-TS/tsgo',
@@ -145,6 +162,42 @@ test('compiler matrix uses exactly five native pinned-base release builds', () =
     final.with.path,
     'packages/solutions/app-tools-extensions/compiler/payload',
   );
+});
+
+test('macOS producer accepts M3 and newer but rejects Intel, Rosetta, M1, M2 and unknown hardware', () => {
+  const guard = producer.jobs.build.steps.find(
+    step => step.name === 'Verify the supported Apple Silicon runner',
+  );
+  assert.equal(guard.if, "runner.os == 'macOS'");
+  for (const [arch, chip, succeeds] of [
+    ['arm64', 'Apple M3', true],
+    ['arm64', 'Apple M3 Pro', true],
+    ['arm64', 'Apple M4 Max', true],
+    ['arm64', 'Apple M10 Ultra', true],
+    ['arm64', 'Apple M1', false],
+    ['arm64', 'Apple M2 Max', false],
+    ['arm64', 'Apple M30unknown', false],
+    ['arm64', 'unknown', false],
+    ['x86_64', 'Intel Core i7', false],
+    ['x86_64', 'Apple M4', false],
+  ]) {
+    const result = spawnSync(
+      'bash',
+      [
+        '-c',
+        `set -e
+uname() { printf '%s\\n' "$TEST_ARCH"; }
+sysctl() { printf '%s\\n' "$TEST_CHIP"; }
+${guard.run}`,
+      ],
+      {
+        encoding: 'utf8',
+        env: { ...process.env, TEST_ARCH: arch, TEST_CHIP: chip },
+      },
+    );
+    assert.ifError(result.error);
+    assert.equal(result.status === 0, succeeds, `${arch}: ${chip}`);
+  }
 });
 
 test('every fresh build stages the complete payload before selecting a compiler', () => {
