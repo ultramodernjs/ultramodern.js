@@ -142,7 +142,7 @@ function validateOwnedEffectPayload({
     requireComplete &&
     !isDeepStrictEqual([...targets].sort(), [...source.targets].sort())
   ) {
-    fail('complete payload requires all five source targets');
+    fail('complete payload requires all source targets');
   }
   const listed = new Set(['manifest.json']);
   for (const [target, inventory] of Object.entries(manifest.targets)) {
@@ -301,6 +301,13 @@ function verifyOverride(file, expectedSha256) {
 }
 
 function resolveOwnedEffectCompiler({ from, configuredExecutable }) {
+  // Reject before absence can route to the official provider, including source
+  // checkouts and Rosetta. M3+ is support policy, not a chip-generation probe.
+  if (process.platform === 'darwin' && process.arch !== 'arm64') {
+    throw new Error(
+      'Unsupported macOS process architecture: arm64 on Apple Silicon M3 or newer is required by support policy; Intel and Rosetta processes are not supported.',
+    );
+  }
   const payload = validateOwnedEffectPayload();
   if (payload.kind === 'absent') return payload;
   const fromPath =

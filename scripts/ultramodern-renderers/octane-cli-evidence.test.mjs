@@ -6,6 +6,11 @@ import test from 'node:test';
 import { octaneTypecheckEvidenceEnv } from './octane-cli-evidence.mjs';
 
 const hosted = { GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted' };
+const depot = {
+  GITHUB_ACTIONS: 'true',
+  RUNNER_ENVIRONMENT: 'self-hosted',
+  RUNNER_NAME: 'depot-control-123',
+};
 const phases = [
   'getConfigFileParsingDiagnostics',
   'getProgramDiagnostics',
@@ -16,7 +21,7 @@ const phases = [
 ];
 
 // Fabricated packages only: never import installed native tooling in these tests.
-function fixture(t, mode = 'failure') {
+function fixture(t, mode = 'failure', runner = hosted) {
   assert(process.env.OWNED_TEMP_DIR, 'Run through owned-temp-dir');
   const root = fs.mkdtempSync(
     path.join(process.env.OWNED_TEMP_DIR, 'original-cli-'),
@@ -169,7 +174,7 @@ fs.appendFileSync(${JSON.stringify(events)}, 'cli-ended\\n');
   const prefix = path.join(logs, 'original');
   const env = octaneTypecheckEvidenceEnv(app, prefix, {
     ...process.env,
-    ...hosted,
+    ...runner,
     NODE_OPTIONS: '--no-warnings',
   });
   return {
@@ -230,66 +235,69 @@ test('only hosted environment injects --import and preserves NODE_OPTIONS', () =
   );
 });
 
-test('original failing public child captures raw diagnostics before close and retains exit 1', t => {
-  const f = fixture(t);
-  const child = f.run();
-  assert.equal(child.status, 1, child.stderr);
-  assert.equal(child.stdout, 'ORIGINAL TS2536 twice\n');
-  const result = f.evidence();
-  assert.equal(result.captureOrigin, 'original-public-cli');
-  assert.equal(result.command.installedBin, f.bin);
-  assert.equal(result.command.pid, child.pid);
-  assert.equal(result.original.status, 'closed');
-  assert.equal(result.original.exitCode, 1);
-  assert.equal(
-    result.captures[0].rawDiagnosticsByPhase.getSemanticDiagnostics.length,
-    2,
-  );
-  assert.equal(result.captures[0].status, 'captured');
-  assert.equal(
-    result.replay.status,
-    'graph-matched',
-    JSON.stringify(result.captureError),
-  );
-  const history = f.history();
-  assert(
-    history.indexOf('original-getSemanticDiagnostics') <
-      history.indexOf('config'),
-  );
-  assert(history.indexOf('source') < history.indexOf('close'));
-  assert(
-    history.indexOf('cli-ended') < history.indexOf('metadata-after-close'),
-  );
-  assert.equal(
-    history.filter(event => event === 'original-getSemanticDiagnostics').length,
-    1,
-  );
-  assert.equal(history.filter(event => event === 'dispose').length, 1);
-  fs.rmSync(path.dirname(f.app), { recursive: true });
-  assert.deepEqual(
-    f.evidence(),
-    result,
-    'retained log survives navigation cleanup',
-  );
-});
+for (const runner of [hosted, depot])
+  test(`${runner.RUNNER_ENVIRONMENT} original failing public child captures raw diagnostics before close and retains exit 1`, t => {
+    const f = fixture(t, 'failure', runner);
+    const child = f.run();
+    assert.equal(child.status, 1, child.stderr);
+    assert.equal(child.stdout, 'ORIGINAL TS2536 twice\n');
+    const result = f.evidence();
+    assert.equal(result.captureOrigin, 'original-public-cli');
+    assert.equal(result.command.installedBin, f.bin);
+    assert.equal(result.command.pid, child.pid);
+    assert.equal(result.original.status, 'closed');
+    assert.equal(result.original.exitCode, 1);
+    assert.equal(
+      result.captures[0].rawDiagnosticsByPhase.getSemanticDiagnostics.length,
+      2,
+    );
+    assert.equal(result.captures[0].status, 'captured');
+    assert.equal(
+      result.replay.status,
+      'graph-matched',
+      JSON.stringify(result.captureError),
+    );
+    const history = f.history();
+    assert(
+      history.indexOf('original-getSemanticDiagnostics') <
+        history.indexOf('config'),
+    );
+    assert(history.indexOf('source') < history.indexOf('close'));
+    assert(
+      history.indexOf('cli-ended') < history.indexOf('metadata-after-close'),
+    );
+    assert.equal(
+      history.filter(event => event === 'original-getSemanticDiagnostics')
+        .length,
+      1,
+    );
+    assert.equal(history.filter(event => event === 'dispose').length, 1);
+    fs.rmSync(path.dirname(f.app), { recursive: true });
+    assert.deepEqual(
+      f.evidence(),
+      result,
+      'retained log survives navigation cleanup',
+    );
+  });
 
-test('successful public child keeps exit 0 with no graph, metadata or replay', t => {
-  const f = fixture(t, 'success');
-  const child = f.run();
-  assert.equal(child.status, 0, child.stderr);
-  assert.equal(child.stdout, 'ORIGINAL PASS\n');
-  const result = f.evidence();
-  assert.equal(result.captures[0].status, 'no-raw-semantic-failure');
-  assert.equal(result.replay.status, 'not-run');
-  assert.equal(result.rootReduction.attempts.length, 0);
-  assert(
-    !f
-      .history()
-      .some(event =>
-        ['graph', 'source', 'config', 'metadata-after-close'].includes(event),
-      ),
-  );
-});
+for (const runner of [hosted, depot])
+  test(`${runner.RUNNER_ENVIRONMENT} successful public child keeps exit 0 with no graph, metadata or replay`, t => {
+    const f = fixture(t, 'success', runner);
+    const child = f.run();
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stdout, 'ORIGINAL PASS\n');
+    const result = f.evidence();
+    assert.equal(result.captures[0].status, 'no-raw-semantic-failure');
+    assert.equal(result.replay.status, 'not-run');
+    assert.equal(result.rootReduction.attempts.length, 0);
+    assert(
+      !f
+        .history()
+        .some(event =>
+          ['graph', 'source', 'config', 'metadata-after-close'].includes(event),
+        ),
+    );
+  });
 
 for (const name of ['pnpm.cjs', 'unrelated.mjs', 'octane-tsc.mjs'])
   test(`${name} outside installed renderer does not import compiler, hook or write evidence`, t => {
@@ -304,7 +312,7 @@ for (const name of ['pnpm.cjs', 'unrelated.mjs', 'octane-tsc.mjs'])
 
 for (const gate of [
   { GITHUB_ACTIONS: 'false' },
-  { RUNNER_ENVIRONMENT: 'self-hosted' },
+  { RUNNER_ENVIRONMENT: 'self-hosted', RUNNER_NAME: 'generic-control' },
 ])
   test(`preloader is inert for ${JSON.stringify(gate)} even when manually inherited`, t => {
     const f = fixture(t);
@@ -366,4 +374,25 @@ test('evidence write errors cannot turn success red or failure green', t => {
     assert.equal(child.status, mode === 'success' ? 0 : 1, child.stderr);
     assert(!fs.existsSync(path.join(f.logs, 'absent')));
   }
+});
+
+test('Depot GHA context injects evidence but malformed and generic self-hosted contexts stay inert', () => {
+  const env = octaneTypecheckEvidenceEnv('/app', '/logs/original', depot);
+  assert.match(env.NODE_OPTIONS, /--import=/u);
+  for (const gate of [
+    { ...depot, GITHUB_ACTIONS: 'false' },
+    { ...depot, RUNNER_ENVIRONMENT: '' },
+    ...[
+      '',
+      'depot-',
+      'depot-x\n',
+      'other-depot-x',
+      'self-hosted',
+      'depot-x/y',
+    ].map(RUNNER_NAME => ({ ...depot, RUNNER_NAME })),
+  ])
+    assert.equal(
+      octaneTypecheckEvidenceEnv('/app', '/logs/original', gate),
+      gate,
+    );
 });

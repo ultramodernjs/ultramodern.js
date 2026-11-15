@@ -290,10 +290,18 @@ test('required native PR checks run focused renderer acceptance controls', () =>
     controls.run,
     /scripts\/__tests__\/rslib-tsrs-options\.test\.mjs/u,
   );
+  assert.match(
+    controls.run,
+    /tests\/ultramodern-renderers\/octane-federation\/\{artifact-ownership,browser-temporary\}\.test\.mjs/u,
+  );
+  assert.match(
+    controls.run,
+    /tests\/ultramodern-renderers\/octane-federation-workers\/contract\.test\.mjs/u,
+  );
   assert.match(controls.run, /trap 'rm -rf -- "\$controls_work"' EXIT/u);
 });
 
-test('required feature proofs select real GitHub-hosted Linux without changing ordinary acceptance runners', () => {
+test('feature proofs use Depot for owned jobs and retain GitHub-hosted fork isolation', () => {
   const source = readWorkflow('ultramodern-release-acceptance').jobs[
     'accept-release'
   ];
@@ -318,31 +326,39 @@ test('required feature proofs select real GitHub-hosted Linux without changing o
       vars,
       fromJSON: JSON.parse,
     });
-  for (const foreign of [false, true]) {
+  for (const required of [false, true]) {
     assert.equal(
-      select(true, { DEPOT_LINUX_RUNNER: 'depot-linux' }, foreign),
-      'ubuntu-24.04',
+      select(required, { DEPOT_LINUX_RUNNER: 'depot-linux' }),
+      'depot-linux',
     );
     assert.equal(
-      select(
-        true,
-        { BLEEDINGDEV_ACCEPT_RUNNER_LABELS: '["self-hosted","linux"]' },
-        foreign,
-      ),
-      'ubuntu-24.04',
+      select(required, { DEPOT_LINUX_RUNNER: 'depot-linux' }, true),
+      'ubuntu-latest',
     );
+    assert.equal(
+      select(required, {
+        BLEEDINGDEV_ACCEPT_RUNNER_LABELS: '["self-hosted","linux"]',
+      }),
+      'depot-ubuntu-24.04-8',
+    );
+    assert.equal(select(required), 'depot-ubuntu-24.04-8');
   }
+  const publishedRunner = published['runs-on'].slice(3, -3);
   assert.equal(
-    select(false, { DEPOT_LINUX_RUNNER: 'depot-linux' }),
+    runInNewContext(publishedRunner, {
+      vars: { DEPOT_LINUX_RUNNER: 'depot-linux' },
+    }),
     'depot-linux',
   );
-  assert.equal(select(false, {}, true), 'ubuntu-latest');
-  assert.equal(select(false), 'ubuntu-latest');
-  assert.equal(published['runs-on'], 'ubuntu-24.04');
+  assert.equal(
+    runInNewContext(publishedRunner, { vars: {} }),
+    'depot-ubuntu-24.04-8',
+  );
   for (const job of [source, published]) {
     for (const env of [job.env, ...job.steps.map(step => step.env)]) {
       assert.equal(env?.RUNNER_ENVIRONMENT, undefined);
       assert.equal(env?.GITHUB_ACTIONS, undefined);
+      assert.equal(env?.RUNNER_NAME, undefined);
     }
   }
 });

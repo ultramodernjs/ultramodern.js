@@ -288,7 +288,7 @@ export function stagePayload({
       [...source.targets].sort(),
     )
   )
-    fail('complete five-target matrix required');
+    fail('complete supported-target matrix required');
   return atomicOutput(output, temporary => {
     for (const receipt of receipts)
       copyInventory(receipt.root, temporary, receipt.manifest);

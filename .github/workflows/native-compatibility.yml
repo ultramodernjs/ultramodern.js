@@ -97,7 +97,9 @@ jobs:
           OWNED_TEMP_DIR="$controls_work" node --test \
             scripts/__tests__/rslib-tsrs-options.test.mjs \
             scripts/native-compatibility/packed-workflows.test.mjs \
-            scripts/ultramodern-renderers/*.test.mjs
+            scripts/ultramodern-renderers/*.test.mjs \
+            tests/ultramodern-renderers/octane-federation/{artifact-ownership,browser-temporary}.test.mjs \
+            tests/ultramodern-renderers/octane-federation-workers/contract.test.mjs
 
       - name: Resolve Playwright runtime
         id: browser-runtime
@@ -217,7 +219,7 @@ jobs:
     name: native-compatibility
     if: always()
     needs: [native-framework-contracts, pack-candidate, packed-erp, packed-tractor]
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 5
     steps:
       - name: Require every consumer contract

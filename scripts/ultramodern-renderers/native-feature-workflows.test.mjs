@@ -220,3 +220,35 @@ test('renderer CLI provisioning verifies the qualified native release before exe
     /fs\.rmSync\(directory, \{ recursive: true, force: true \}\)/u,
   );
 });
+
+const expression = value => '$' + '{{ ' + value + ' }}';
+const depotLinux = expression(
+  "vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'",
+);
+const isolatedDepotLinux = expression(
+  "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'",
+);
+
+test('acceptance uses Depot by default while external pull requests stay GitHub-hosted', () => {
+  for (const [workflow, job] of [
+    ['ultramodern-release-acceptance', 'accept-release'],
+    ['ultramodern-tractor-downstream', 'tractor-downstream'],
+    ['native-compatibility', 'native-compatibility'],
+  ])
+    assert.equal(
+      readWorkflow(workflow).jobs[job]['runs-on'],
+      isolatedDepotLinux,
+    );
+  assert.equal(
+    readWorkflow('publish-bleedingdev').jobs['accept-published']['runs-on'],
+    depotLinux,
+  );
+});
+
+test('npm trusted-publisher jobs retain GitHub-hosted OIDC publication', () => {
+  const jobs = readWorkflow('publish-bleedingdev').jobs;
+  for (const name of ['publish-sidecars', 'publish']) {
+    assert.equal(jobs[name]['runs-on'], 'ubuntu-24.04');
+    assert.equal(jobs[name].permissions['id-token'], 'write');
+  }
+});

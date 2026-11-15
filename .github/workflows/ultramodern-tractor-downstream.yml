@@ -80,7 +80,7 @@ jobs:
        github.actor == 'BleedingDev' &&
        github.triggering_actor == 'BleedingDev' &&
        github.ref == 'refs/heads/main-ultramodern')
-    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.release_bundle_artifact == '' && 'ubuntu-24.04' || github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     # The rehearsal additionally starts and seeds a registry from the bundle
     # before the same downstream work begins.
     timeout-minutes: ${{ inputs.mode == 'source' && 75 || 45 }}

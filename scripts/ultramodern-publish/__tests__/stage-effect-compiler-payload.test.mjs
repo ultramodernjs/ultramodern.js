@@ -104,13 +104,13 @@ test('aggregation rejects another producer run before copying bytes', t => {
   assert.equal(fs.existsSync(path.join(root, 'output')), false);
 });
 
-test('aggregation requires all five platforms and never fills gaps', t => {
+test('aggregation requires all source platforms and never fills gaps', t => {
   const root = fixture(t);
   const input = matrix(root);
   fs.rmSync(path.join(input, source.targets[0]), { recursive: true });
   assert.throws(
     () => stagePayload({ input, output: path.join(root, 'output'), env }),
-    /complete five-target/,
+    /complete .*matrix required/,
   );
 });
 
@@ -156,19 +156,17 @@ test('staging refuses to replace any preexisting output', t => {
   assert.equal(fs.readFileSync(path.join(output, 'user'), 'utf8'), 'preserve');
 });
 
-test('producer rejects unsupported platform without creating an output', t => {
-  const root = fixture(t);
-  assert.throws(
-    () =>
-      produceTarget({
-        artifactDir: root,
-        target: 'linux-x64-musl',
-        output: path.join(root, 'out'),
-        env,
-      }),
-    /unsupported target/,
-  );
-});
+for (const target of ['linux-x64-musl', 'darwin-x64']) {
+  test(`producer rejects unsupported ${target} without creating an output`, t => {
+    const root = fixture(t);
+    const output = path.join(root, 'out');
+    assert.throws(
+      () => produceTarget({ artifactDir: root, target, output, env }),
+      /unsupported target/,
+    );
+    assert.equal(fs.existsSync(output), false);
+  });
+}
 
 test('complete matrix stages verified bytes and survives artifact mode loss', t => {
   const root = fixture(t);
@@ -180,10 +178,12 @@ test('complete matrix stages verified bytes and survives artifact mode loss', t 
   }
   const output = path.join(root, 'verified');
   const manifest = stagePayload({ input, output, env });
-  assert.deepEqual(
-    Object.keys(manifest.targets).sort(),
-    [...source.targets].sort(),
-  );
+  assert.deepEqual(Object.keys(manifest.targets).sort(), [
+    'darwin-arm64',
+    'linux-arm64',
+    'linux-x64',
+    'win32-x64',
+  ]);
   if (process.platform !== 'win32')
     assert.equal(
       fs.statSync(path.join(output, 'linux-x64/tsrs')).mode & 0o777,

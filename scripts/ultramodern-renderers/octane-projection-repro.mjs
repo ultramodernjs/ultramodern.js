@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isSupportedHostedJob } from './hosted-job.mjs';
 import { captureResolvedOctaneCompilerInputs } from './octane-compiler-inputs.mjs';
 
 const phases = [
@@ -172,10 +173,7 @@ function liveGraphOf(project, openProjects, configFile) {
 }
 
 async function installed(appRoot) {
-  if (
-    process.env.GITHUB_ACTIONS !== 'true' ||
-    process.env.RUNNER_ENVIRONMENT !== 'github-hosted'
-  )
+  if (!isSupportedHostedJob(process.env))
     throw new Error('Octane projection reproduction is hosted-only');
   const inputs = await captureResolvedOctaneCompilerInputs(appRoot);
   const renderer = inputs.packages['@modern-js/renderer-octane'];

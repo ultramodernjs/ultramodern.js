@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout } from 'node:timers/promises';
+import { isSupportedHostedJob } from '../../ultramodern-renderers/hosted-job.mjs';
 
 const maintenanceLockReason = 'another maintenance operation holds the lock';
 const markerName = '.disk-guardian-owner';
@@ -134,7 +135,7 @@ function runnerOwnedPath(root, target, uid, { allowMissing = false } = {}) {
   }
 }
 
-/** GitHub owns RUNNER_TEMP for this hosted job; this is not a guardian lease. */
+/** The supported GHA runner owns RUNNER_TEMP; this is not a guardian lease. */
 export function validateRunnerJobLease(
   options,
   {
@@ -146,10 +147,9 @@ export function validateRunnerJobLease(
 ) {
   assert.equal(platform, 'linux', 'Runner job leases require hosted Linux');
   assert.equal(env.GITHUB_ACTIONS, 'true', 'A GitHub Actions job is required');
-  assert.equal(
-    env.RUNNER_ENVIRONMENT,
-    'github-hosted',
-    'Runner job leases require a GitHub-hosted job',
+  assert(
+    isSupportedHostedJob(env),
+    'Runner job leases require a GitHub-hosted or Depot GHA job',
   );
   assert.equal(env.RUNNER_OS, 'Linux', 'Runner job OS must be Linux');
   assert.equal(
@@ -247,7 +247,10 @@ export function validateRunnerJobLease(
     workflowRevision: env.GITHUB_WORKFLOW_SHA,
     eventPath,
     rootIdentity: { device: rootStat.dev, inode: rootStat.ino, uid },
-    cleanupOwner: 'github-hosted-runner',
+    cleanupOwner:
+      env.RUNNER_ENVIRONMENT === 'github-hosted'
+        ? 'github-hosted-runner'
+        : 'depot-runner',
   };
 }
 
@@ -362,8 +365,7 @@ export function registerOwnedRoot(
     options.workDir,
     'Proof work directory must be canonical',
   );
-  const hostedJob =
-    env.GITHUB_ACTIONS === 'true' && env.RUNNER_ENVIRONMENT === 'github-hosted';
+  const hostedJob = isSupportedHostedJob(env);
   const initialRunnerLease = hostedJob
     ? validateRunnerJobLease(options, {
         env,

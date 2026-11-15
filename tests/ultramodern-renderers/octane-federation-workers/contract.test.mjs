@@ -1568,6 +1568,7 @@ function workerBrowserControl({
   closeFailure,
   cleanupFailure,
   platform = 'linux',
+  environment = {},
 } = {}) {
   const events = [];
   const env = {
@@ -1576,6 +1577,7 @@ function workerBrowserControl({
     RUNNER_OS: 'Linux',
     TMPDIR: '/long/feature/prebuilt-worker',
     KEEP: 'unchanged',
+    ...environment,
   };
   const browser = {
     async close() {
@@ -1665,6 +1667,25 @@ test('Worker browser preserves non-Linux launch behavior without a hosted lease'
     await lifetime.close();
     assert.deepEqual(control.events.at(-1), 'close');
   }
+});
+
+test('Depot Worker browser receives the short job temporary path and retires it after close', async () => {
+  const control = workerBrowserControl({
+    environment: {
+      RUNNER_ENVIRONMENT: 'self-hosted',
+      RUNNER_NAME: 'depot-control-123',
+    },
+  });
+  const lifetime = await openWorkerFixtureBrowser(
+    control.chromium,
+    control.plan,
+    control.options,
+  );
+  assert.equal(control.events[0][0], 'temporary');
+  assert.equal(control.events[1][1].env.TMPDIR, '/job/b-ABCDEF');
+  assert.equal(control.env.TMPDIR, '/long/feature/prebuilt-worker');
+  await lifetime.close();
+  assert.deepEqual(control.events.slice(-2), ['close', 'cleanup']);
 });
 
 test('Worker browser preserves startup failure and retires only its temporary child', async () => {

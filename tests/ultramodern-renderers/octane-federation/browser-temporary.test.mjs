@@ -136,6 +136,17 @@ test('only hosted Linux proof invocations use the Linux job temporary lease', ()
     RUNNER_OS: 'Linux',
   };
   assert.equal(usesHostedBrowserTemporary(env, 'linux'), true);
+  assert.equal(
+    usesHostedBrowserTemporary(
+      {
+        ...env,
+        RUNNER_ENVIRONMENT: 'self-hosted',
+        RUNNER_NAME: 'depot-control-123',
+      },
+      'linux',
+    ),
+    true,
+  );
   for (const [platform, runnerOS] of [
     ['darwin', 'macOS'],
     ['win32', 'Windows'],
@@ -156,4 +167,37 @@ test('only hosted Linux proof invocations use the Linux job temporary lease', ()
     usesHostedBrowserTemporary({ ...env, GITHUB_ACTIONS: 'false' }, 'linux'),
     false,
   );
+});
+
+test('Depot browser borrows the short job root instead of the long feature directory', t => {
+  const jobRoot = root(t);
+  const workRoot = path.join(
+    jobRoot,
+    'renderer-features',
+    'feature-prebuilt-worker',
+  );
+  fs.mkdirSync(workRoot, { recursive: true });
+  const env = {
+    GITHUB_ACTIONS: 'true',
+    RUNNER_ENVIRONMENT: 'self-hosted',
+    RUNNER_NAME: 'depot-control-123',
+    RUNNER_TEMP: jobRoot,
+  };
+  let validated = false;
+  const temporary = createBrowserTemporary(
+    { workRoot, env, platform: 'win32' },
+    {
+      validateJobLease(options, context) {
+        assert.equal(path.dirname(options.workDir), jobRoot);
+        assert.equal(context.env, env);
+        validated = true;
+        return { cleanupOwner: 'depot-runner' };
+      },
+    },
+  );
+  assert.equal(validated, true);
+  assert.equal(path.dirname(temporary.directory), jobRoot);
+  assert.equal(temporary.lease.cleanupOwner, 'depot-runner');
+  temporary.cleanup();
+  assert(fs.existsSync(workRoot));
 });

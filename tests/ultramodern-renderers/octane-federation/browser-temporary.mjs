@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { validateRunnerJobLease } from '../../../scripts/ultramodern-production-readiness/react-rsc-worker-proof/lifecycle.mjs';
+import { isSupportedHostedJob } from '../../../scripts/ultramodern-renderers/hosted-job.mjs';
 
 export function usesHostedBrowserTemporary(
   env = process.env,
@@ -10,8 +11,7 @@ export function usesHostedBrowserTemporary(
   return (
     platform === 'linux' &&
     env.RUNNER_OS === 'Linux' &&
-    env.GITHUB_ACTIONS === 'true' &&
-    env.RUNNER_ENVIRONMENT === 'github-hosted'
+    isSupportedHostedJob(env)
   );
 }
 
@@ -35,8 +35,7 @@ export function createBrowserTemporary(
   { workRoot, env = process.env, platform = process.platform },
   { validateJobLease = validateRunnerJobLease } = {},
 ) {
-  const hosted =
-    env.GITHUB_ACTIONS === 'true' && env.RUNNER_ENVIRONMENT === 'github-hosted';
+  const hosted = isSupportedHostedJob(env);
   const base = fs.realpathSync(hosted ? env.RUNNER_TEMP : workRoot);
   const directory = fs.mkdtempSync(path.join(base, 'b-'));
   const identity = fs.lstatSync(directory);

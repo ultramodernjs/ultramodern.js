@@ -15,11 +15,9 @@
   },
   "patchSha256": "ff80d7bfd466658f2e6e2aed3468a81975b1e1d2de5d6dc393d3711fa0017b17",
   "optimization": "none",
-  "targets": [
-    "darwin-arm64",
-    "darwin-x64",
-    "linux-x64",
-    "linux-arm64",
-    "win32-x64"
-  ]
+  "macos": {
+    "architecture": "arm64",
+    "minimumChip": "M3"
+  },
+  "targets": ["darwin-arm64", "linux-x64", "linux-arm64", "win32-x64"]
 }

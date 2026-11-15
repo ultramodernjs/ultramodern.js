@@ -144,6 +144,55 @@ test('hosted runner owns only its job temporary descendant and records cleanup p
   assert.deepEqual(registerOwnedRoot(job.proof, job.configuration), result);
 });
 
+test('Depot runner uses the same job lease checks and records its actual cleanup owner', t => {
+  const job = runnerJob(t);
+  Object.assign(job.env, {
+    RUNNER_ENVIRONMENT: 'self-hosted',
+    RUNNER_NAME: 'depot-control-123',
+  });
+  const result = registerOwnedRoot(job.proof, job.configuration);
+  assert.equal(result.status, 'runner-job-lease');
+  assert.equal(result.enclosingLease.provider, 'github-actions');
+  assert.equal(result.enclosingLease.cleanupOwner, 'depot-runner');
+  assert.equal(result.enclosingLease.attested, false);
+  assert.equal(result.enclosingLease.assurance, 'runner-environment-asserted');
+  assert.equal(result.enclosingLease.runId, job.env.GITHUB_RUN_ID);
+  assert.equal(
+    result.enclosingLease.repositoryId,
+    job.env.GITHUB_REPOSITORY_ID,
+  );
+  assert.deepEqual(registerOwnedRoot(job.proof, job.configuration), result);
+  for (const override of [
+    { GITHUB_RUN_ID: '0' },
+    { GITHUB_REPOSITORY_ID: '9999' },
+    {
+      GITHUB_WORKFLOW_REF:
+        'foreign/repo/.github/workflows/a.yml@refs/heads/main',
+    },
+    { RUNNER_TEMP: job.proof.workDir },
+  ])
+    assert.throws(() =>
+      validateRunnerJobLease(job.proof, {
+        env: { ...job.env, ...override },
+        platform: 'linux',
+      }),
+    );
+  const link = path.join(job.root, 'linked-proof');
+  fs.symlinkSync(job.proof.workDir, link);
+  assert.throws(() =>
+    validateRunnerJobLease(
+      { ...job.proof, workDir: link },
+      { env: job.env, platform: 'linux' },
+    ),
+  );
+  assert.throws(() =>
+    validateRunnerJobLease(
+      { ...job.proof, workDir: job.env.GITHUB_WORKSPACE },
+      { env: job.env, platform: 'linux' },
+    ),
+  );
+});
+
 test('runner lease rejects incomplete or mismatched job identity before creating a proof', t => {
   for (const [override, expected] of [
     [{ GITHUB_RUN_ID: '' }, /Invalid runner GITHUB_RUN_ID/u],
@@ -185,7 +234,7 @@ test('runner lease cannot replace local or self-hosted artifact ownership', t =>
     [{ GITHUB_ACTIONS: 'false' }, /A GitHub Actions job is required/u],
     [
       { RUNNER_ENVIRONMENT: 'self-hosted' },
-      /Runner job leases require a GitHub-hosted job/u,
+      /Runner job leases require a GitHub-hosted or Depot GHA job/u,
     ],
   ]) {
     assert.throws(
