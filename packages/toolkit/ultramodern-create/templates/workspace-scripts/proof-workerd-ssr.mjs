@@ -919,39 +919,40 @@ const listen = (server, port) =>
 const closeServer = (server) =>
   new Promise((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
+    server.closeAllConnections();
   });
 
-const startWorkerdTargetServers = async (
-  apps,
-  miniflare,
-  failedServices,
-  workerConfigurations,
-  fixture,
-) => {
+// Bind the actual public listeners before any runtime can allocate ephemeral
+// ports. Keep these sockets until shutdown: releasing reservations and rebinding
+// would reintroduce the allocation race (compiled public URLs cannot change).
+export const withWorkerdTargetServers = async (apps, run) => {
   const servers = [];
   const isolatedVerticalRuntimes = [];
+  const runtimes = new Map();
   const targetUrls = {};
+  let ready = false;
+  let failedServices;
+  let stopping;
+  const stop = () => stopping ??= (async () => {
+    ready = false;
+    await Promise.allSettled(servers.map(closeServer));
+    await Promise.allSettled(
+      isolatedVerticalRuntimes.map((runtime) => runtime.dispose()),
+    );
+  })();
   try {
-    for (const [index, app] of apps.entries()) {
+    for (const app of apps) {
       assert(
         Number.isInteger(app.port) && app.port > 0,
         `${app.id} requires a configured local port for all-workerd browser proof`,
       );
-      const runtime =
-        app.kind === "vertical"
-          ? await createIsolatedRuntime(
-              workerConfigurations[index],
-              new ProofLog(),
-              app,
-              apps,
-              fixture,
-            )
-          : miniflare;
-      if (runtime !== miniflare) {
-        isolatedVerticalRuntimes.push(runtime);
-      }
       const server = http.createServer(async (incoming, outgoing) => {
         try {
+          if (!ready) {
+            outgoing.writeHead(503, { "content-type": "text/plain" });
+            outgoing.end("Workerd proof runtime is not ready");
+            return;
+          }
           const body = await readRequestBody(incoming);
           if (
             incoming.method === "POST" &&
@@ -975,6 +976,7 @@ const startWorkerdTargetServers = async (
           // Miniflare stringify it as "[object Request]" and reject the URL.
           // Keep the internal URL on the target Worker's canonical fake host
           // so Miniflare also selects that Worker's asset namespace.
+          const runtime = runtimes.get(app.id);
           const response = await runtime.dispatchFetch(
             `https://${workerName(app)}.invalid${incoming.url ?? "/"}`,
             {
@@ -993,25 +995,31 @@ const startWorkerdTargetServers = async (
           outgoing.end(error instanceof Error ? error.stack ?? error.message : String(error));
         }
       });
-      await listen(server, app.port);
       servers.push(server);
+      await listen(server, app.port);
       targetUrls[app.id] = `http://127.0.0.1:${app.port}`;
     }
-    return {
+    return await run({
       targetUrls,
-      async stop() {
-        await Promise.allSettled(servers.map(closeServer));
-        await Promise.allSettled(
-          isolatedVerticalRuntimes.map((runtime) => runtime.dispose()),
-        );
+      stop,
+      async start(miniflare, failures, workerConfigurations, fixture) {
+        failedServices = failures;
+        for (const [index, app] of apps.entries()) {
+          const runtime = app.kind === "vertical"
+            ? await createIsolatedRuntime(
+                workerConfigurations[index], new ProofLog(), app, apps, fixture,
+              )
+            : miniflare;
+          if (runtime !== miniflare) isolatedVerticalRuntimes.push(runtime);
+          // Readiness must include actual Worker startup, not just a bound socket.
+          await runtime.ready;
+          runtimes.set(app.id, runtime);
+        }
+        ready = true;
       },
-    };
-  } catch (error) {
-    await Promise.allSettled(servers.map(closeServer));
-    await Promise.allSettled(
-      isolatedVerticalRuntimes.map((runtime) => runtime.dispose()),
-    );
-    throw error;
+    });
+  } finally {
+    await stop();
   }
 };
 
@@ -1313,157 +1321,160 @@ const main = async () => {
   };
   const failedServices = new Set();
   const composition = {};
-  const workerConfigurations = apps.map((app) =>
-    createWorkerOptions(app, artifactRoot, {
-      serviceBindings: createServiceBindings(app, { ...recorders, composition, failedServices }),
-      // The network stays disabled except for the fixture's approved HTTPS
-      // owner origins, which are served by the owner's own Worker.
-      async outboundService(request) {
-        const requestUrl = new URL(request.url);
-        const outboundRequest = {
-          callerId: app.id,
-          method: request.method,
-          requestBody: {
-            contentLength: request.headers.get("content-length"),
-            contentType: request.headers.get("content-type"),
-            present: request.body !== null,
-          },
-          url: requestUrl.href,
-        };
-        recorders.outboundRequests.push(outboundRequest);
-        const target = ownerTargetsByOrigin.get(requestUrl.origin);
-        const owner = apps.find((candidate) => candidate.id === target?.appId);
-        if (owner === undefined || failedServices.has(workerName(owner))) {
-          return new Response("External network disabled by SSR proof", {
-            status: 502,
-          });
-        }
-        outboundRequest.targetAppId = owner.id;
-        const response = await (
-          await composition.miniflare.getWorker(workerName(owner))
-        ).fetch(request);
-        outboundRequest.response = {
-          contentType: response.headers.get("content-type"),
-          status: response.status,
-        };
-        return response;
-      },
-    }),
-  );
-  const executions = workerConfigurations.map((configuration) => configuration.executionEvidence);
-  const executionByAppId = new Map(apps.map((app, index) => [app.id, executions[index]]));
-  const workers = workerConfigurations.map(
-    ({ executionEvidence: _executionEvidence, ...configuration }) => configuration,
-  );
-  const log = new ProofLog();
-  const miniflare = new Miniflare(
-    convertV4MiniflareOptions({
-      log,
-      workers,
-    }),
-  );
-  composition.miniflare = miniflare;
-  const report = { executions, apiProofs: [], proofs: [], verticalProofs: [] };
-
-  try {
-    await seedWorkerdProofKv(miniflare, apps, apps, fixture);
-    for (const shell of shells) {
-      // Shell routes compose declared server-rendered boundaries through the
-      // shell's entry Worker exactly as a browser request would.
-      const renderedRemoteIds = new Set();
-      for (const route of shell.ssrRoutes) {
-        const proof = await proveRoute(
-          shell,
-          route,
-          (url, init) => miniflare.dispatchFetch(url, init),
-          apps,
-          recorders,
-          log,
-        );
-        assert(
-          shell.serverRenderedRoutes.length > 0 || proof.boundaries.length === 0,
-          `${shell.id} declares client composition but rendered distributed SSR boundaries for ${route}`,
-        );
-        if (shell.serverRenderedRoutes.includes(route)) {
-          assert(
-            shell.serverRenderedRemoteIds.length === 0 || proof.boundaries.length > 0,
-            `${shell.id} rendered no distributed SSR boundaries for ${route}`,
-          );
-          for (const boundary of proof.boundaries) {
-            renderedRemoteIds.add(boundary.remote);
+  const run = async (targetServers) => {
+    const workerConfigurations = apps.map((app) =>
+      createWorkerOptions(app, artifactRoot, {
+        serviceBindings: createServiceBindings(app, { ...recorders, composition, failedServices }),
+        // The network stays disabled except for the fixture's approved HTTPS
+        // owner origins, which are served by the owner's own Worker.
+        async outboundService(request) {
+          const requestUrl = new URL(request.url);
+          const outboundRequest = {
+            callerId: app.id,
+            method: request.method,
+            requestBody: {
+              contentLength: request.headers.get("content-length"),
+              contentType: request.headers.get("content-type"),
+              present: request.body !== null,
+            },
+            url: requestUrl.href,
+          };
+          recorders.outboundRequests.push(outboundRequest);
+          const target = ownerTargetsByOrigin.get(requestUrl.origin);
+          const owner = apps.find((candidate) => candidate.id === target?.appId);
+          if (owner === undefined || failedServices.has(workerName(owner))) {
+            return new Response("External network disabled by SSR proof", {
+              status: 502,
+            });
           }
+          outboundRequest.targetAppId = owner.id;
+          const response = await (
+            await composition.miniflare.getWorker(workerName(owner))
+          ).fetch(request);
+          outboundRequest.response = {
+            contentType: response.headers.get("content-type"),
+            status: response.status,
+          };
+          return response;
+        },
+      }),
+    );
+    const executions = workerConfigurations.map((configuration) => configuration.executionEvidence);
+    const executionByAppId = new Map(apps.map((app, index) => [app.id, executions[index]]));
+    const workers = workerConfigurations.map(
+      ({ executionEvidence: _executionEvidence, ...configuration }) => configuration,
+    );
+    const log = new ProofLog();
+    const miniflare = new Miniflare(
+      convertV4MiniflareOptions({
+        log,
+        workers,
+      }),
+    );
+    composition.miniflare = miniflare;
+    const report = { executions, apiProofs: [], proofs: [], verticalProofs: [] };
+
+    try {
+      await seedWorkerdProofKv(miniflare, apps, apps, fixture);
+      for (const shell of shells) {
+        // Shell routes compose declared server-rendered boundaries through the
+        // shell's entry Worker exactly as a browser request would.
+        const renderedRemoteIds = new Set();
+        for (const route of shell.ssrRoutes) {
+          const proof = await proveRoute(
+            shell,
+            route,
+            (url, init) => miniflare.dispatchFetch(url, init),
+            apps,
+            recorders,
+            log,
+          );
+          assert(
+            shell.serverRenderedRoutes.length > 0 || proof.boundaries.length === 0,
+            `${shell.id} declares client composition but rendered distributed SSR boundaries for ${route}`,
+          );
+          if (shell.serverRenderedRoutes.includes(route)) {
+            assert(
+              shell.serverRenderedRemoteIds.length === 0 || proof.boundaries.length > 0,
+              `${shell.id} rendered no distributed SSR boundaries for ${route}`,
+            );
+            for (const boundary of proof.boundaries) {
+              renderedRemoteIds.add(boundary.remote);
+            }
+          }
+          report.proofs.push({ shellId: shell.id, ...proof });
         }
-        report.proofs.push({ shellId: shell.id, ...proof });
-      }
-      for (const remoteId of shell.serverRenderedRemoteIds) {
-        assert(
-          renderedRemoteIds.has(remoteId),
-          `${shell.id} proof routes are missing independently rendered ${remoteId} content`,
+        for (const remoteId of shell.serverRenderedRemoteIds) {
+          assert(
+            renderedRemoteIds.has(remoteId),
+            `${shell.id} proof routes are missing independently rendered ${remoteId} content`,
+          );
+        }
+        report.apiProofs.push(
+          ...(await runApiProofs(apps, miniflare, shell, executionByAppId, fixture, recorders)),
         );
       }
-      report.apiProofs.push(
-        ...(await runApiProofs(apps, miniflare, shell, executionByAppId, fixture, recorders)),
-      );
-    }
 
-    // Every UI MicroVertical proves its own Worker at its declared SSR routes,
-    // whether or not a shell also composes it on the server.
-    for (const [index, vertical] of apps.entries()) {
-      if (vertical.kind !== "vertical" || vertical.ssrRoutes.length === 0) {
-        continue;
-      }
-      const runtimeLog = new ProofLog();
-      const runtime = await createIsolatedRuntime(
-        workers[index],
-        runtimeLog,
-        vertical,
-        apps,
-        fixture,
-      );
-      try {
-        for (const route of vertical.ssrRoutes) {
-          report.verticalProofs.push({
-            appId: vertical.id,
-            ...(await proveRoute(
-              vertical,
-              route,
-              (url, init) => runtime.dispatchFetch(url, init),
-              apps,
-              recorders,
-              runtimeLog,
-            )),
-          });
+      // Every UI MicroVertical proves its own Worker at its declared SSR routes,
+      // whether or not a shell also composes it on the server.
+      for (const [index, vertical] of apps.entries()) {
+        if (vertical.kind !== "vertical" || vertical.ssrRoutes.length === 0) {
+          continue;
         }
-      } finally {
-        await runtime.dispose();
+        const runtimeLog = new ProofLog();
+        const runtime = await createIsolatedRuntime(
+          workers[index],
+          runtimeLog,
+          vertical,
+          apps,
+          fixture,
+        );
+        try {
+          for (const route of vertical.ssrRoutes) {
+            report.verticalProofs.push({
+              appId: vertical.id,
+              ...(await proveRoute(
+                vertical,
+                route,
+                (url, init) => runtime.dispatchFetch(url, init),
+                apps,
+                recorders,
+                runtimeLog,
+              )),
+            });
+          }
+        } finally {
+          await runtime.dispose();
+        }
       }
-    }
 
-    writeReport(reportPath, report);
-    if (keepWorkerd) {
-      const targetServers = await startWorkerdTargetServers(
-        apps,
-        miniflare,
-        failedServices,
-        workers,
-        fixture,
-      );
-      console.log(`WORKERD_TARGET_URLS=${JSON.stringify(targetServers.targetUrls)}`);
-      console.log(`WORKERD_URL=${targetServers.targetUrls[shells[0].id]}`);
-      try {
+      writeReport(reportPath, report);
+      if (keepWorkerd) {
+        await targetServers.start(
+          miniflare,
+          failedServices,
+          workers,
+          fixture,
+        );
+        console.log(`WORKERD_TARGET_URLS=${JSON.stringify(targetServers.targetUrls)}`);
+        console.log(`WORKERD_URL=${targetServers.targetUrls[shells[0].id]}`);
         await new Promise((resolve) => {
           process.once("SIGINT", resolve);
           process.once("SIGTERM", resolve);
         });
-      } finally {
-        await targetServers.stop();
       }
+    } finally {
+      await targetServers?.stop();
+      await miniflare.dispose();
     }
-  } finally {
-    await miniflare.dispose();
-  }
 
-  console.log(`Workerd SSR composition proof passed for ${shells.length} shell(s): ${reportPath}`);
+    console.log(`Workerd SSR composition proof passed for ${shells.length} shell(s): ${reportPath}`);
+  };
+  if (keepWorkerd) {
+    await withWorkerdTargetServers(apps, run);
+  } else {
+    await run();
+  }
 };
 
 if (import.meta.main) {
