@@ -7,14 +7,9 @@ name: CI Cache
 
 # Seed dependency caches from the trusted default branch. PR jobs restore
 # caches without writing them. Depot cache storage is separate from GitHub.
+# Provider comparisons are explicit runs. Required GitHub Actions workflows
+# already execute these suites on Depot; automatic mirrors duplicate that work.
 on:
-  push:
-    branches: [main-ultramodern]
-
-  # Refresh the trusted dependency cache twice a week.
-  schedule:
-    - cron: '17 3 * * 1,4'
-
   workflow_dispatch:
 
 concurrency:

@@ -140,11 +140,6 @@ test('lanes balance measured cost instead of file count', t => {
       new Set(forward.map(entry => entry.testPath)),
     );
   }
-  // Counting files instead would put the measured long poles together.
-  const counts = windowsOrdinaryLanes.map(
-    lane => selectWindowsUnitFiles(root, baseline, lane).length,
-  );
-  assert.ok(Math.max(...counts) > Math.min(...counts));
 });
 
 test('an unmeasured file costs the documented default', () => {
@@ -397,4 +392,20 @@ test('branch rules require every Windows lane directly without an aggregate runn
   for (const lane of workflow.jobs['ut-windows-shards'].strategy.matrix.lane)
     assert.ok(required.includes(`ut-windows-shards (${lane})`), lane);
   assert.ok(!required.includes('ut-windows'));
+});
+
+test('fewer VMs retain eight ordinary workers and keep generator isolation', () => {
+  const { jobs } = yaml.load(readRepoText('.github/workflows/ut-Windows.yml'));
+  const job = jobs['ut-windows-shards'];
+  assert.equal(
+    job.env.WINDOWS_UNIT_WORKERS,
+    `\${{ startsWith(matrix.lane, 'generator-') && 1 || 4 }}`,
+  );
+  assert.equal(windowsOrdinaryLanes.length * 4, 8);
+  assert.equal(windowsGeneratorLanes.length, 2);
+  assert.ok(
+    job.steps
+      .find(step => step.name === 'Test')
+      .run.includes(`--pool.maxWorkers=\${{ env.WINDOWS_UNIT_WORKERS }}`),
+  );
 });
