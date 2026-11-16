@@ -1,9 +1,9 @@
 import { LanguageDetector } from 'i18next-http-middleware';
 import { detectLanguageFromRequest } from '../../../shared/detection.js';
-import type { I18nInstance, LanguageDetectorOptions } from '../instance';
+import type { I18nRuntimeInstance, LanguageDetectorOptions } from '../instance';
 
 type HttpDetectorInit = (
-  services: NonNullable<I18nInstance['services']>,
+  services: NonNullable<I18nRuntimeInstance['services']>,
   options?: unknown,
   allOptions?: unknown,
 ) => void;
@@ -29,7 +29,7 @@ const isDetectionRequest = (request: unknown): request is DetectionRequest => {
 };
 
 export const cacheUserLanguage = (
-  _i18nInstance: I18nInstance,
+  _i18nInstance: I18nRuntimeInstance,
   _language: string,
   _detectionOptions?: unknown,
 ): void => {
@@ -53,7 +53,9 @@ export const readLanguageFromStorage = (
  * Register LanguageDetector plugin to i18n instance
  * Must be called before init() to properly register the detector
  */
-export const useI18nextLanguageDetector = (i18nInstance: I18nInstance) => {
+export const useI18nextLanguageDetector = (
+  i18nInstance: I18nRuntimeInstance,
+) => {
   if (!i18nInstance.isInitialized) {
     return i18nInstance.use(LanguageDetector);
   }
@@ -65,7 +67,7 @@ export const useI18nextLanguageDetector = (i18nInstance: I18nInstance) => {
  * For initialized instances without detector in services, manually create a detector instance
  */
 export const detectLanguage = (
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   request?: unknown,
   detectionOptions?: LanguageDetectorOptions,
 ): string | undefined => {

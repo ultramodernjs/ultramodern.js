@@ -6,7 +6,7 @@ import {
   cacheI18nLanguage,
   changeI18nInstanceLanguage,
 } from './contextHelpers';
-import type { I18nInstance } from './i18n';
+import type { I18nRuntimeInstance } from './i18n';
 import {
   getI18nSdkBackendId,
   I18N_SDK_RESOURCES_LOADED_EVENT,
@@ -24,32 +24,13 @@ type WindowWithSSRData = Window & {
   _SSR_DATA?: unknown;
 };
 
-type ResourceStoreWithEvents = NonNullable<I18nInstance['store']> & {
+type ResourceStoreWithEvents = NonNullable<I18nRuntimeInstance['store']> & {
   emit?: (event: string, ...args: unknown[]) => void;
 };
 
-function createMinimalI18nInstance(language: string): I18nInstance {
-  const minimalInstance: I18nInstance = {
-    language,
-    isInitialized: false,
-    init: () => Promise.resolve(undefined),
-    // Keep the pre-existing loud failure: an uninitialised instance has no
-    // translator. Never echo the key back — that would silently render raw
-    // keys as if they were translations. This throws the same error that
-    // translateI18n (contextHelpers.ts:187) already throws today.
-    t: () => {
-      throw new Error('i18nInstance.t required');
-    },
-    use: () => {},
-    createInstance: () => minimalInstance,
-    services: {},
-  };
-  return minimalInstance;
-}
-
 export function createContextValue(
   lang: string,
-  i18nInstance: I18nInstance | undefined,
+  i18nInstance: I18nRuntimeInstance,
   entryName: string | undefined,
   languages: string[],
   localePathRedirect: boolean,
@@ -57,10 +38,9 @@ export function createContextValue(
   setLang: (lang: string) => void,
   urlStrategy?: I18nUrlStrategy,
 ) {
-  const instance = i18nInstance || createMinimalI18nInstance(lang);
   return {
     language: lang,
-    i18nInstance: instance,
+    i18nInstance,
     entryName,
     languages,
     localePathRedirect,
@@ -71,7 +51,7 @@ export function createContextValue(
 }
 
 export function useSdkResourcesLoader(
-  i18nInstance: I18nInstance | undefined,
+  i18nInstance: I18nRuntimeInstance | undefined,
   setForceUpdate: React.Dispatch<React.SetStateAction<number>>,
 ) {
   useEffect(() => {
@@ -172,7 +152,7 @@ export function useSdkResourcesLoader(
  * We use process.env.MODERN_TARGET to ensure this code is only included in browser bundles.
  */
 export function useClientSideRedirect(
-  i18nInstance: I18nInstance | undefined,
+  i18nInstance: I18nRuntimeInstance | undefined,
   localePathRedirect: boolean,
   languages: string[],
   fallbackLanguage: string,
@@ -275,7 +255,7 @@ export function useClientSideRedirect(
 }
 
 export function useLanguageSync(
-  i18nInstance: I18nInstance | undefined,
+  i18nInstance: I18nRuntimeInstance | undefined,
   localePathRedirect: boolean,
   languages: string[],
   pathname: string | undefined,

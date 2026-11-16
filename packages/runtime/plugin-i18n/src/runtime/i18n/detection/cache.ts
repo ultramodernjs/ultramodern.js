@@ -1,19 +1,19 @@
 import type {
   I18nInitOptions,
-  I18nInstance,
+  I18nRuntimeInstance,
   LanguageDetectorOptions,
 } from '../instance';
 
 interface DetectorCacheEntry {
-  instance: I18nInstance;
+  instance: I18nRuntimeInstance;
   isTemporary: boolean;
   configKey: string;
 }
 
-type DetectorCleanupInstance = I18nInstance & {
+type DetectorCleanupInstance = I18nRuntimeInstance & {
   removeAllListeners?: () => void;
   off?: (event: string) => void;
-  services?: I18nInstance['services'] & {
+  services?: I18nRuntimeInstance['services'] & {
     backendConnector?: {
       backend?: {
         stop?: () => void;
@@ -24,7 +24,7 @@ type DetectorCleanupInstance = I18nInstance & {
 };
 
 export const detectorInstanceCache = new WeakMap<
-  I18nInstance,
+  I18nRuntimeInstance,
   DetectorCacheEntry
 >();
 
@@ -135,9 +135,9 @@ const cleanupDetectorCacheEntry = (entry?: DetectorCacheEntry) => {
 };
 
 export const createDetectorInstance = (
-  baseInstance: I18nInstance,
+  baseInstance: I18nRuntimeInstance,
   configKey: string,
-): { instance: I18nInstance; isTemporary: boolean } => {
+): { instance: I18nRuntimeInstance; isTemporary: boolean } => {
   const cached = detectorInstanceCache.get(baseInstance);
   if (cached && cached.configKey === configKey) {
     return { instance: cached.instance, isTemporary: cached.isTemporary };
@@ -149,7 +149,7 @@ export const createDetectorInstance = (
   }
 
   const createNewInstance = (): {
-    instance: I18nInstance;
+    instance: I18nRuntimeInstance;
     isTemporary: boolean;
   } => {
     if (typeof baseInstance.createInstance === 'function') {

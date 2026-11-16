@@ -1,23 +1,10 @@
-import type { I18nInstance } from '../src/runtime/i18n';
 import { detectLanguageWithPriority } from '../src/runtime/i18n/detection';
 import { interpolateRouteParams } from '../src/runtime/Link';
 import { canonicalPath, localizePath } from '../src/runtime/localizedPaths';
 import { buildLocalizedUrl, splitUrlTarget } from '../src/runtime/utils';
+import { createI18nInstance } from './helpers/i18nInstance';
 
 const languages = ['en', 'cs'];
-
-function createI18nInstance(language = 'en'): I18nInstance {
-  return {
-    language,
-    isInitialized: true,
-    init: () => Promise.resolve(undefined),
-    use: () => {},
-    t: (key: string | string[]) => (Array.isArray(key) ? key[0] : key),
-    createInstance: () => createI18nInstance(language),
-    services: {},
-    options: {},
-  };
-}
 
 describe('splitUrlTarget public compatibility export', () => {
   test('retains the shared suffix splitter', () => {

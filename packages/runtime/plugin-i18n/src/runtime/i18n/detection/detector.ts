@@ -1,5 +1,5 @@
 import { isBrowser } from '@modern-js/runtime';
-import type { I18nInitOptions, I18nInstance } from '../instance';
+import type { I18nInitOptions, I18nRuntimeInstance } from '../instance';
 
 import {
   buildDetectorConfigKey,
@@ -23,16 +23,16 @@ import type {
  * Initialize i18n instance for detector if needed
  */
 interface DetectorInitResult {
-  detectorInstance: I18nInstance;
+  detectorInstance: I18nRuntimeInstance;
   isTemporary: boolean;
 }
 
-type MutableDetectorInstanceState = Omit<I18nInstance, 'language'> & {
+type MutableDetectorInstanceState = Omit<I18nRuntimeInstance, 'language'> & {
   language?: string;
 };
 
 const initializeI18nForDetector = async (
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   options: BaseLanguageDetectionOptions,
 ): Promise<DetectorInitResult> => {
   const mergedDetection = mergeDetectionOptions(
@@ -87,7 +87,7 @@ const initializeI18nForDetector = async (
  * Priority 3: Detect language using i18next detector
  */
 export const detectLanguageFromI18nextDetector = async (
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   options: BaseLanguageDetectionOptions & {
     ssrContext?: LanguageDetectionSsrContext;
   },

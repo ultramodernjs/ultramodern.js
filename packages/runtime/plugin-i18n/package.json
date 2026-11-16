@@ -134,7 +134,8 @@
     "dev": "rslib build --watch",
     "prepublishOnly": "only-allow-pnpm",
     "build": "rslib build",
-    "test": "rstest"
+    "test": "rstest",
+    "test:types": "node ../../../scripts/with-effect-tsrs.mjs --project tests/types/tsconfig.json && node ../../../scripts/with-effect-tsrs.mjs --project tests/types/selector/tsconfig.json"
   },
   "dependencies": {
     "@modern-js/i18n-runtime-extensions": "workspace:*",
