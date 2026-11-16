@@ -33,7 +33,7 @@ test('macOS units stay in the PR-associated check suite', () => {
 // Depot pool has to block the required check, not move it to other hardware.
 test('the macOS units select Depot with no GitHub-hosted escape', () => {
   assert.equal(
-    workflow.jobs['ut-mac-shards']['runs-on'],
+    workflow.jobs['ut-mac']['runs-on'],
     `\${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}`,
   );
   assert.equal(workflow.on.workflow_dispatch, null);
@@ -46,25 +46,92 @@ test('the macOS units select Depot with no GitHub-hosted escape', () => {
   assert.doesNotMatch(source, /macos-26(?!-)(?<!depot-macos-26)/u);
 });
 
-test('macOS units retain every shard and the fail-closed required gate', () => {
-  const shards = workflow.jobs['ut-mac-shards'];
-  assert.equal(shards.if, undefined);
-  assert.equal(shards.strategy['fail-fast'], false);
-  assert.deepEqual(shards.strategy.matrix.shard, [1, 2, 3]);
+const job = workflow.jobs['ut-mac'];
+
+function step(name) {
+  const found = job.steps.find(candidate => candidate.name === name);
+  assert.ok(found, `ut-mac must have a "${name}" step`);
+  return found;
+}
+
+// The workflow is one Depot job. A failed step fails the job, so the required
+// context is the job itself: no shard fan-out, no gate job, nothing that can
+// pass over a failure.
+test('the macOS suite is one job with no shard fan-out or gate', () => {
+  assert.deepEqual(Object.keys(workflow.jobs), ['ut-mac']);
+  assert.equal(job.if, undefined);
+  assert.equal(job.needs, undefined);
+  assert.equal(job.strategy, undefined);
+  for (const candidate of job.steps) {
+    assert.notEqual(
+      candidate['continue-on-error'],
+      true,
+      `"${candidate.name}" must fail the job when it fails`,
+    );
+  }
   assert.equal(
-    shards.steps.find(step => step.name === 'Test').run,
-    `pnpm run test:ut:prepared --shard=\${{ matrix.shard }}/3`,
+    step('Test').run,
+    'pnpm run test:ut:prepared --pool.maxWorkers=6',
   );
-  const gate = workflow.jobs['ut-mac'];
-  assert.equal(gate.if, `\${{ always() }}`);
-  assert.equal(gate.needs, 'ut-mac-shards');
+  assert.equal(step('Test').if, undefined);
+});
+
+// A prepared-build cache miss must rebuild the required packages before tests.
+test('a prepared-build cache miss rebuilds the required packages', () => {
+  const restore = step('Restore prepared build outputs');
+  assert.equal(restore.id, 'build-cache');
+  assert.equal(restore.uses, './.github/actions/restore-build-cache');
   assert.equal(
-    gate.steps[0].env.SHARD_RESULT,
-    `\${{ needs.ut-mac-shards.result }}`,
+    step('Build Required Pkg').if,
+    "steps.build-cache.outputs.cache-hit != 'true'",
   );
-  assert.match(
-    gate.steps[0].run,
-    /if \[\[ "\$SHARD_RESULT" != "success" \]\]/u,
+  assert.equal(step('Build Required Pkg').run, 'pnpm run build:required');
+});
+
+// A Playwright browser cache miss must still install the browsers. There is no
+// `if` on the install: playwright install is a no-op for browsers the cache
+// already restored, so running it always is the recovery path on a miss.
+test('a Playwright browser cache miss still installs the browsers', () => {
+  const resolve = step('Resolve Playwright runtime');
+  assert.equal(resolve.id, 'browser-runtime');
+  assert.equal(
+    resolve.run,
+    'node scripts/lib/browser-provisioning.js --resolve --runtime tests/integration/rstest/basic-app-rstest-browser',
   );
-  assert.match(gate.steps[0].run, /exit 1/u);
+  const restore = step('Restore Playwright browser cache');
+  assert.equal(
+    restore.with.path,
+    `\${{ steps.browser-runtime.outputs.cache_path }}`,
+  );
+  assert.equal(
+    restore.with.key,
+    `\${{ steps.browser-runtime.outputs.cache_key }}`,
+  );
+  const install = step('Install Playwright browsers');
+  assert.equal(install.if, undefined);
+  assert.equal(
+    install.run,
+    `node scripts/lib/browser-provisioning.js --install --runtime tests/integration/rstest/basic-app-rstest-browser --version \${{ steps.browser-runtime.outputs.version }}`,
+  );
+});
+
+test('the macOS steps run in dependency order', () => {
+  const names = [
+    'Install Dependencies',
+    'Restore prepared build outputs',
+    'Build Required Pkg',
+    'Resolve Playwright runtime',
+    'Restore Playwright browser cache',
+    'Install Playwright browsers',
+    'Test',
+  ];
+  const indexes = names.map(name => {
+    const index = job.steps.findIndex(candidate => candidate.name === name);
+    assert.notEqual(index, -1, `ut-mac must have a "${name}" step`);
+    return index;
+  });
+  assert.deepEqual(
+    indexes,
+    [...indexes].sort((a, b) => a - b),
+  );
 });

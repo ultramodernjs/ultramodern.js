@@ -101,7 +101,7 @@ test('browser-driving steps run after the shared provisioner installed their run
     'ut-Linux.yml:ut-linux:\\btest:build-consumers(?![\\w:-])',
     'ut-Linux.yml:ut-linux:\\btest:ut(?::prepared)?(?![\\w:-])',
     'ut-Windows.yml:ut-windows-shards:\\btest:ut(?::prepared)?(?![\\w:-])',
-    'ut-macOS.yml:ut-mac-shards:\\btest:ut(?::prepared)?(?![\\w:-])',
+    'ut-macOS.yml:ut-mac:\\btest:ut(?::prepared)?(?![\\w:-])',
     'integration-test.yml:integration:\\btest:framework(?::prepared)?(?![\\w:-])',
     'integration-test.yml:integration:\\btest:rstest-adapter(?![\\w:-])',
     'ultramodern-nightly.yml:superapp:\\bvalidate:superapp-certification(?![\\w-])',
