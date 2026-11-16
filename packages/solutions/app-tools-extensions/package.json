@@ -230,11 +230,11 @@
     "verify:public-surface": "node ./tests/build-config/verify-public-surface.mjs"
   },
   "engines": {
-    "node": ">=26.12.0"
+    "node": ">=26.13.1"
   },
   "dependencies": {
-    "@babel/parser": "^8.0.7",
-    "@babel/traverse": "^8.0.7",
+    "@babel/parser": "^8.1.2",
+    "@babel/traverse": "^8.1.2",
     "@modern-js/backend-federation-contracts": "workspace:*",
     "@modern-js/builder": "workspace:*",
     "@modern-js/plugin": "workspace:*",
@@ -245,8 +245,8 @@
     "@modern-js/surface-resolution": "workspace:*",
     "@modern-js/types": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@swc/helpers": "^0.5.23",
-    "@vercel/nft": "^1.11.0",
+    "@swc/helpers": "^0.5.24",
+    "@vercel/nft": "^1.11.2",
     "compression-webpack-plugin": "^12.0.0",
     "esbuild": "^0.28.2",
     "jsonc-parser": "3.3.1",
@@ -258,8 +258,8 @@
     "@loadable/component": "5.16.7",
     "@modern-js/runtime-renderer-extensions": "workspace:^3.8.3",
     "react": "^19.3.1",
-    "@effect/tsgo": "0.67.0",
-    "tsrs": "0.21.0-ts7.1.0-beta"
+    "@effect/tsgo": "0.69.0",
+    "tsrs": "0.25.0-ts7.1.0-beta"
   },
   "peerDependenciesMeta": {
     "@loadable/component": {
@@ -283,24 +283,24 @@
     "@modern-js/plugin-bff-extensions": "workspace:*",
     "@modern-js/plugin-data-loader": "workspace:*",
     "@modern-js/rslib": "workspace:*",
-    "@module-federation/modern-js-v3": "2.9.2",
-    "@module-federation/runtime-tools": "2.9.2",
+    "@module-federation/modern-js-v3": "npm:@bleedingdev/mf-modern-js-v3@2.9.5",
+    "@module-federation/runtime-tools": "npm:@bleedingdev/mf-runtime-tools@2.9.5",
     "@rsbuild/core": "2.3.2",
-    "@rslib/core": "1.0.3",
+    "@rslib/core": "1.0.7",
     "@scripts/rstest-config": "workspace:*",
     "@types/babel__traverse": "7.28.0",
-    "@types/node": "^26.6.5",
-    "core-js": "^3.50.0",
-    "effect": "4.0.7",
-    "miniflare": "5.20261012.0-beta",
+    "@types/node": "^26.6.6",
+    "core-js": "^3.51.0",
+    "effect": "4.1.4",
+    "miniflare": "5.20261113.0-beta",
     "ndepe": "^0.1.13",
     "@loadable/component": "5.16.7",
     "@modern-js/runtime-renderer-extensions": "workspace:*",
     "pg": "8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "@effect/tsgo": "0.67.0",
-    "tsrs": "0.21.0-ts7.1.0-beta"
+    "@effect/tsgo": "0.69.0",
+    "tsrs": "0.25.0-ts7.1.0-beta"
   },
   "sideEffects": false,
   "publishConfig": {

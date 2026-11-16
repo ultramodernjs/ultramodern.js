@@ -1,7 +1,8 @@
 diff --git a/dist/e.js b/dist/e.js
 --- a/dist/e.js
 +++ b/dist/e.js
-@@ -5324,7 +5324,8 @@ async function calcLongestCommonPath(files) {
+@@ -5389,8 +5389,9 @@
+     return lca;
  }
  const globDtsFiles = async (cwd, dir, patterns)=>{
 +    dir = resolve(cwd, dir);
@@ -11,7 +12,7 @@ diff --git a/dist/e.js b/dist/e.js
              absolute: true,
              dot: true
          })));
-@@ -5467,7 +5468,7 @@ async function prepareDtsContext(data) {
+@@ -5474,7 +5475,7 @@
          if (bundle) throw Error('Can not set "dts.bundle: true" when "dts.build: true"');
          if ((!rawCompilerOptions.outDir || normalize(rawCompilerOptions.outDir) !== resolvedDtsEmitPath) && (!rawCompilerOptions.declarationDir || normalize(rawCompilerOptions.declarationDir) !== resolvedDtsEmitPath)) throw Error(`Please set "declarationDir": "${dtsEmitPath}" in ${color.underline(tsconfigPath)} to keep it same as "dts.distPath" or "output.distPath" field in lib config.`);
      }
@@ -20,3 +21,15 @@ diff --git a/dist/e.js b/dist/e.js
      const bundledDtsEntries = bundle ? dtsEntry.map((entryObj)=>{
          const { name: entryName, path: entryPath } = entryObj;
          if (!entryPath) return null;
+diff --git a/dist/5.js b/dist/5.js
+--- a/dist/5.js
++++ b/dist/5.js
+@@ -54,7 +54,7 @@
+     if (isTypeScriptVersionAtLeast7(typescriptVersion)) {
+         if (false === options.tsgo) throw new Error('Can not set "dts.tsgo: false" when using `typescript` >= 7.0.0.');
+         const version = parseTypescriptVersion(typescriptVersion);
+-        if ((version.major > 7 || version.minor >= 1) && !options.build) return 'api-new';
++        if ((version.major > 7 || version.minor >= 1) && !options.build && !(options.tsgo === true && options.typescriptPath)) return 'api-new';
+         return 'ts7-executable';
+     }
+     if (true === options.tsgo) throw new Error("`dts.tsgo` requires `typescript` >= 7.0.0.");

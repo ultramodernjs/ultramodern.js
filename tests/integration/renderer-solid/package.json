@@ -5,14 +5,14 @@
   "dependencies": {
     "@modern-js/renderer-core": "workspace:*",
     "@modern-js/renderer-solid": "workspace:*",
-    "@solidjs/signals": "2.0.0-rc.15",
-    "@solidjs/web": "2.0.0-rc.15",
-    "solid-js": "2.0.0-rc.15"
+    "@solidjs/signals": "2.0.0-rc.22",
+    "@solidjs/web": "2.0.0-rc.22",
+    "solid-js": "2.0.0-rc.22"
   },
   "devDependencies": {
     "@modern-js/ultramodern-app-tools": "workspace:*",
     "@rsbuild/core": "2.3.2",
-    "@solidjs/compiler": "2.0.0-rc.15",
-    "@types/node": "^26.6.5"
+    "@solidjs/compiler": "2.0.0-rc.22",
+    "@types/node": "^26.6.6"
   }
 }

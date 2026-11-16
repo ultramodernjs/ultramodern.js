@@ -104,16 +104,16 @@
     "@modern-js/runtime-utils": "workspace:*",
     "@modern-js/types": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@swc/helpers": "^0.5.23",
-    "@tanstack/react-router": "1.170.44",
-    "@tanstack/router-core": "1.171.37"
+    "@swc/helpers": "^0.5.24"
   },
   "peerDependencies": {
     "@modern-js/app-tools": "workspace:^3.11.3",
     "@modern-js/runtime": "workspace:^3.11.3",
+    "@tanstack/react-router": "1.170.46",
+    "@tanstack/router-core": "1.171.39",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-server-dom-rspack": "0.1.0"
+    "react-server-dom-rspack": "0.1.1"
   },
   "peerDependenciesMeta": {
     "react-server-dom-rspack": {
@@ -125,17 +125,19 @@
     "@modern-js/rslib": "workspace:*",
     "@modern-js/runtime": "workspace:*",
     "@modern-js/server-utils": "workspace:*",
-    "@rslib/core": "1.0.3",
+    "@rslib/core": "1.0.7",
     "@scripts/rstest-config": "workspace:*",
     "@tanstack/history": "1.162.5",
+    "@tanstack/react-router": "1.170.46",
+    "@tanstack/router-core": "1.171.39",
     "@testing-library/react": "^16.3.3",
-    "@tsconfig/strictest": "2.0.8",
-    "@types/node": "^26.6.5",
+    "@tsconfig/strictest": "2.0.9",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-server-dom-rspack": "0.1.0"
+    "react-server-dom-rspack": "0.1.1"
   },
   "sideEffects": [
     "./src/runtime/register.ts",

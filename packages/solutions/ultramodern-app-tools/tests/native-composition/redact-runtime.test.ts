@@ -47,12 +47,27 @@ import {
   REDACT_ALIASES,
   REDACT_PATCH_MARKER,
   redactArtifactDigest,
+  redactRuntimeIdentity,
   resolveRedactAliases,
   ultramodernRedactIntegrationPlugin,
 } from '../../src/renderers/react/redact-integration-plugin';
 
 const require = createRequire(import.meta.url);
-const frameworkRequire = createRequire(require.resolve('../../package.json'));
+const installedRequire = createRequire(require.resolve('../../package.json'));
+const installedVersion: string = JSON.parse(
+  readFileSync(
+    path.resolve(
+      path.dirname(installedRequire.resolve('@tanstack/redact')),
+      '../../package.json',
+    ),
+    'utf8',
+  ),
+).version;
+const frameworkRequire = installedRequire;
+const artifactDirectory = path.resolve(
+  path.dirname(frameworkRequire.resolve('@tanstack/redact')),
+  '..',
+);
 const ignorePatch = () => {};
 // The aliased sidecar keeps its physical directory; JSON doubles `\` on Windows.
 const redactSidecarModule = /@bleedingdev[\\/]+tanstack-redact[\\/]+dist[\\/]/;
@@ -169,7 +184,7 @@ describe('default React runtime composition', () => {
     ]);
   });
 
-  it('uses the public plugin CSR path and framework-owned runtime without app dependencies', async () => {
+  it('uses the native CSR path and framework-owned runtime without app dependencies', async () => {
     const { configs } = await resolveConfigs();
     expectCanonical(configs[0]);
     expect(
@@ -253,7 +268,8 @@ describe('default React runtime composition', () => {
       cacheDigest: expect.arrayContaining([
         'consumer',
         REDACT_PATCH_MARKER,
-        redactArtifactDigest(),
+        redactRuntimeIdentity(frameworkRequire),
+        redactArtifactDigest(artifactDirectory),
       ]),
     });
     expect(disabledCache).toMatchObject({
@@ -288,7 +304,7 @@ describe('default React runtime composition', () => {
       const manifest = path.join(root, 'package.json');
       writeFileSync(
         manifest,
-        JSON.stringify({ name: '@tanstack/redact', version: '0.2.1' }),
+        JSON.stringify({ name: '@tanstack/redact', version: '0.3.1' }),
       );
       mkdirSync(path.join(directory, 'dom/features'), { recursive: true });
       writeFileSync(
@@ -308,7 +324,7 @@ describe('default React runtime composition', () => {
         manifest,
         JSON.stringify({
           name: '@tanstack/redact',
-          version: '0.2.1',
+          version: '0.3.1',
           exports: './dist/other.js',
         }),
       );
@@ -352,7 +368,7 @@ describe('default React runtime composition', () => {
       { name: 'ignored', alias: false },
     ],
   ])(
-    'preserves unrelated aliases without the public plugin numeric-key corruption',
+    'preserves unrelated aliases without numeric-key corruption',
     async aliases => {
       const { configs } = await resolveConfigs({ aliases });
       expectCanonical(configs[0]);
@@ -453,7 +469,7 @@ describe('federation runtime identity', () => {
         path.join(owner, 'package.json'),
         JSON.stringify({
           name: '@bleedingdev/tanstack-redact',
-          version: '0.2.2',
+          version: installedVersion,
           exports: { '.': './index.js', './*': './index.js' },
         }),
       );
@@ -465,7 +481,7 @@ describe('federation runtime identity', () => {
       );
       expect(compatibility.runtime).toEqual({
         name: '@tanstack/redact',
-        version: '0.2.2',
+        version: installedVersion,
       });
       expect(compatibility.profile.hydration).toEqual(compatibility.runtime);
       expect(() =>
@@ -494,8 +510,8 @@ describe('federation runtime identity', () => {
         expect(shared[request]).toMatchObject({
           import: path.join(owner, 'index.js'),
           shareKey: reactSpelling(request),
-          version: '0.2.2',
-          requiredVersion: '0.2.2',
+          version: installedVersion,
+          requiredVersion: installedVersion,
           singleton: true,
           strictVersion: true,
         });
@@ -515,7 +531,7 @@ describe('federation runtime identity', () => {
     const rsc = resolveReactFederationCompatibility({ server: { rsc: true } });
     expect(redact.runtime).toEqual({
       name: '@tanstack/redact',
-      version: '0.2.2',
+      version: installedVersion,
     });
     expect(redact.profile.hydration).toEqual(redact.runtime);
     expect(react.runtime.name).toBe('react');
@@ -540,11 +556,11 @@ describe('federation runtime identity', () => {
       resolveReactFederationCompatibility(),
     );
     expect(shared.unrelated).toEqual({ singleton: false });
-    const aliases = resolveRedactAliases();
+    const aliases = resolveRedactAliases(installedRequire);
     for (const request of Object.keys(aliases).map(key => key.slice(0, -1))) {
       expect(shared[request]).toMatchObject({
-        version: '0.2.2',
-        requiredVersion: '0.2.2',
+        version: installedVersion,
+        requiredVersion: installedVersion,
         strictVersion: true,
         singleton: true,
         import: aliases[`${request}$`],

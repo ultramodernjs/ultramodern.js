@@ -246,9 +246,9 @@ test('generated React roots provide canonical framework peers and their pinned r
   );
   assert.equal(
     tools.dependencies['@tanstack/redact'],
-    'npm:@bleedingdev/tanstack-redact@0.2.2',
+    'npm:@bleedingdev/tanstack-redact@0.3.2',
   );
-  assert.equal(tools.dependencies['rsbuild-redact-plugin'], '0.1.0');
+  assert.equal(tools.dependencies['rsbuild-redact-plugin'], undefined);
   assert.equal(tools.peerDependencies.typescript, '7.0.2');
   assert.notEqual(tools.peerDependenciesMeta?.typescript?.optional, true);
   for (const name of ['react', 'react-dom']) {

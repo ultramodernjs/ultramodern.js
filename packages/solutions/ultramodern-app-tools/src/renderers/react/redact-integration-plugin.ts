@@ -2,11 +2,9 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { AppTools, CliPlugin } from '@modern-js/app-tools';
 import { logger } from '@modern-js/utils';
 import type { RsbuildPlugin, Rspack } from '@rsbuild/core';
-import { pluginRedact } from 'rsbuild-redact-plugin';
 import {
   type ReactRuntimeConfig,
   usesRedact,
@@ -19,7 +17,29 @@ export {
   validateRedactConfig,
 } from '../../native-composition/redact-config';
 
-// Alias mapping adapted from rsbuild-redact-plugin 0.1.0 (MIT, zllkjc).
+/*
+ * Aliases and view-transition replacement adapted from rsbuild-redact-plugin
+ * 0.2.0 (https://github.com/zllkjc/rsbuild-redact-plugin).
+ * MIT License — Copyright (c) 2026 rsbuild-redact-plugin contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 export const REDACT_ALIASES = {
   react: '@tanstack/redact',
   'react/jsx-runtime': '@tanstack/redact/jsx-runtime',
@@ -45,23 +65,28 @@ export const REDACT_ALIASES = {
 } as const;
 
 const frameworkRequire = createRequire(import.meta.url);
-const frameworkDirectory = () =>
-  readRendererFrameworkPackage({
-    specifier: '@modern-js/ultramodern-app-tools',
-    filename: fileURLToPath(import.meta.url),
-  }).directory;
+export function redactRuntimeIdentity(require = frameworkRequire): string {
+  const owner = readRendererFrameworkPackage({
+    specifier: '@tanstack/redact',
+    filename: require.resolve('@tanstack/redact'),
+  });
+  return `${owner.name}@${owner.version}`;
+}
 
 export const REDACT_PATCH_MARKER = '// ultramodern-redact-patch: v1';
 
 /** Mandatory for every enabled build, including CSR; never exposed as app config. */
-export function assertRedactPatch(read = readFileSync): void {
+export function assertRedactPatch(
+  read: (filename: string, encoding: 'utf8') => string = readFileSync,
+  require = frameworkRequire,
+): void {
   const stream = path.join(
-    path.dirname(frameworkRequire.resolve('@tanstack/redact/server')),
+    path.dirname(require.resolve('@tanstack/redact/server')),
     'stream.js',
   );
   if (read(stream, 'utf8').split(/\r?\n/, 1)[0] !== REDACT_PATCH_MARKER) {
     throw new Error(
-      `[ultramodern] @tanstack/redact@0.2.1 requires the UltraModern reviewed SSR patch (${REDACT_PATCH_MARKER}) in ${stream}. Install the framework's npm:@bleedingdev/tanstack-redact@0.2.2 dependency; unpatched Redact must not ship. Set redact: false to use real React instead.`,
+      `[ultramodern] ${redactRuntimeIdentity(require)} requires the UltraModern reviewed SSR patch (${REDACT_PATCH_MARKER}) in ${stream}. Install the framework's npm:@bleedingdev/tanstack-redact@0.3.2 dependency; unpatched Redact must not ship. Set redact: false to use real React instead.`,
     );
   }
 }
@@ -119,7 +144,7 @@ type AliasRecord = Exclude<NonNullable<Aliases>, boolean>;
 
 /** Normalize legacy arrays for Rspack 2, preserving exact matches, false
  * aliases and ordered duplicate fallbacks. Never feed numeric keys to the
- * public plugin; array-shaped final aliases also fail native Rspack resolution.
+ * integration; array-shaped final aliases also fail native Rspack resolution.
  */
 export function mergeRedactAliases(
   previous: Aliases,
@@ -186,9 +211,10 @@ export function bundleRedactRuntime(
 /** Test dependencies are module-local factories, not user-config escape hatches. */
 export function createRedactBuilderPlugin(
   config: ReactRuntimeConfig,
-  testing: { assertPatch?: () => void } = {},
+  testing: { assertPatch?: () => void; require?: NodeJS.Require } = {},
 ): RsbuildPlugin {
   const enabled = usesRedact(config);
+  const require = testing.require ?? frameworkRequire;
   return {
     name: enabled
       ? 'ultramodern:react:redact'
@@ -214,13 +240,18 @@ export function createRedactBuilderPlugin(
                 ...(options.cacheDigest ?? []),
                 ...(enabled
                   ? [
-                      '@tanstack/redact@0.2.1',
+                      redactRuntimeIdentity(require),
                       REDACT_PATCH_MARKER,
-                      redactArtifactDigest(),
+                      redactArtifactDigest(
+                        path.resolve(
+                          path.dirname(require.resolve('@tanstack/redact')),
+                          '..',
+                        ),
+                      ),
                       `redact-view-transitions:${viewTransitions}`,
                     ]
                   : [
-                      `react@${frameworkRequire('react/package.json').version}`,
+                      `react@${require('react/package.json').version}`,
                       'ultramodern:real-react-cache:v1',
                     ]),
               ],
@@ -231,51 +262,20 @@ export function createRedactBuilderPlugin(
       // Opt-out and RSC builds only receive cache identity, never aliases or
       // dependency replacement. They also cannot reuse pre-identity caches.
       if (!enabled) return;
-      // Inspect normalized environments only after topology and inherited output
-      // targets are final. Cloudflare's web-target worker is still SSR.
-      const isCsr = () =>
-        Object.entries(api.getNormalizedConfig().environments).every(
-          ([name, env]) => env.output.target === 'web' && name !== 'workerSSR',
+      const reactVersion: unknown = require('react/package.json').version;
+      if (typeof reactVersion !== 'string' || !reactVersion.startsWith('19.'))
+        throw new Error(
+          `[ultramodern] Redact requires React 19; found ${String(reactVersion)}. Set redact: false to use real React instead.`,
         );
-      const publicApplied = new WeakSet<Rspack.Configuration>();
-      const publicPlugin = pluginRedact({
-        resolveFrom: frameworkDirectory(),
-        viewTransitions,
-      });
-      // Isolate the third-party plugin's Object.entries(alias) implementation:
-      // it receives an empty object, then we merge its output into the original
-      // object OR array without converting array entries to numeric keys.
-      publicPlugin.setup({
-        ...api,
-        modifyRspackConfig(hook) {
-          const handler = typeof hook === 'function' ? hook : hook.handler;
-          api.modifyRspackConfig({
-            order: 'post',
-            async handler(rspackConfig, utils) {
-              if (!isCsr()) return;
-              const isolated = {
-                ...rspackConfig,
-                resolve: { ...rspackConfig.resolve, alias: {} },
-              };
-              await handler(isolated, utils);
-              if (Object.hasOwn(isolated.resolve.alias, 'react$'))
-                publicApplied.add(rspackConfig);
-              rspackConfig.resolve ??= {};
-              rspackConfig.resolve.alias = mergeRedactAliases(
-                rspackConfig.resolve.alias,
-                isolated.resolve.alias as Record<string, string>,
-              );
-              rspackConfig.plugins = isolated.plugins;
-            },
-          });
-        },
-      });
       api.modifyRspackConfig({
         order: 'post',
         handler(rspackConfig, { rspack, environment }) {
-          (testing.assertPatch ?? assertRedactPatch)();
-          const aliases = resolveRedactAliases();
-          // This hook follows both the public plugin and all chain hooks, so
+          (
+            testing.assertPatch ??
+            (() => assertRedactPatch(readFileSync, require))
+          )();
+          const aliases = resolveRedactAliases(require);
+          // This hook follows all chain hooks, so
           // Cloudflare/source-build React file pins cannot win over the runtime.
           rspackConfig.resolve ??= {};
           rspackConfig.resolve.alias = mergeRedactAliases(
@@ -284,9 +284,9 @@ export function createRedactBuilderPlugin(
           );
           rspackConfig.externals = bundleRedactRuntime(rspackConfig.externals);
           rspackConfig.plugins ??= [];
-          if (!publicApplied.has(rspackConfig) && !viewTransitions) {
+          if (!viewTransitions) {
             const feature = path.resolve(
-              path.dirname(frameworkRequire.resolve('@tanstack/redact')),
+              path.dirname(require.resolve('@tanstack/redact')),
               '../dom/features/view-transition/index.js',
             );
             rspackConfig.plugins.push(

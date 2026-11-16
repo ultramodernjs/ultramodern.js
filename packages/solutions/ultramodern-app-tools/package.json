@@ -159,7 +159,7 @@
     "verify:deploy-output": "node ./tests/deploy-output/verify-public-surface.mjs"
   },
   "engines": {
-    "node": ">=26.12.0"
+    "node": ">=26.13.1"
   },
   "dependencies": {
     "@modern-js/app-tools": "workspace:*",
@@ -179,9 +179,8 @@
     "@modern-js/utils": "workspace:*",
     "@rsbuild/core": "2.3.2",
     "@types/babel__core": "^7.20.5",
-    "prettier": "~3.9.10",
-    "@tanstack/redact": "npm:@bleedingdev/tanstack-redact@0.2.2",
-    "rsbuild-redact-plugin": "0.1.0",
+    "prettier": "~3.10.1",
+    "@tanstack/redact": "npm:@bleedingdev/tanstack-redact@0.3.2",
     "react": "^19.3.1"
   },
   "devDependencies": {
@@ -192,20 +191,20 @@
     "@modern-js/rslib": "workspace:*",
     "@modern-js/server": "workspace:*",
     "@modern-js/tsconfig": "workspace:*",
-    "@rslib/core": "1.0.3",
+    "@rslib/core": "1.0.7",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
     "@modern-js/runtime": "workspace:*",
     "@modern-js/i18n-integration": "workspace:*",
     "@modern-js/runtime-renderer-extensions": "workspace:*",
-    "@solidjs/compiler": "2.0.0-rc.15",
+    "@solidjs/compiler": "2.0.0-rc.22",
     "@octanejs/rspack-plugin": "https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz",
     "octane": "https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz",
     "@modern-js/renderer-solid": "workspace:*",
     "@modern-js/renderer-octane": "workspace:*",
     "@rsbuild/plugin-svgr": "2.0.5",
-    "@tsrx/oxc": "0.20.0"
+    "@tsrx/oxc": "0.24.0"
   },
   "sideEffects": false,
   "publishConfig": {

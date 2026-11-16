@@ -17,7 +17,7 @@
     "@modern-js/runtime": "workspace:*",
     "@modern-js/server-runtime": "workspace:*",
     "bff-api-app": "workspace:*",
-    "effect": "4.0.7",
+    "effect": "4.1.4",
     "express": "^5.3.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -29,7 +29,7 @@
     "@modern-js/plugin-bff-build-extensions": "workspace:*",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "typescript": "7.0.2"

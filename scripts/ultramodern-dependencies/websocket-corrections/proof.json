@@ -1,0 +1,506 @@
+{
+  "generatedAt": "2026-11-16T05:32:45.312Z",
+  "node": "v26.13.1",
+  "pnpm": "12.21.0",
+  "policies": {
+    "corrected": {
+      "ws@>=7.0.0 <7.5.11": "7.5.11",
+      "ws@>=8.0.0 <8.23.0": "8.23.0",
+      "isomorphic-ws@5.0.0>ws:peer": "*"
+    }
+  },
+  "evidenceLimits": "Installed selection and runtime qualification; registry metadata only. No fresh package-byte SRI or signature authentication is claimed. historical-proposal.patch records the already-integrated proposal, not a rerun step.",
+  "repository": {
+    "rootWsPolicy": {
+      "ws@>=7.0.0 <7.5.11": "7.5.11",
+      "ws@>=8.0.0 <8.23.0": "8.23.0",
+      "isomorphic-ws@5.0.0>ws:peer": "*"
+    },
+    "generatorWsPolicy": [
+      "      'ws@>=8.0.0 <8.23.0': '8.23.0',"
+    ],
+    "lockDocuments": 2,
+    "wsConsumers": [
+      {
+        "name": "@bleedingdev/mf-dts-plugin@2.9.5(bufferutil@4.1.0)(typescript@7.0.2)(utf-8-validate@5.0.10)",
+        "group": "dependencies",
+        "ws": "8.23.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)"
+      },
+      {
+        "name": "@rstest/browser@0.12.6(@rstest/core@0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(bufferutil@4.1.0)(playwright@1.65.1)(utf-8-validate@5.0.10)",
+        "group": "dependencies",
+        "ws": "8.23.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)"
+      },
+      {
+        "name": "engine.io@6.6.11(bufferutil@4.1.0)(supports-color@10.2.2)(utf-8-validate@5.0.10)",
+        "group": "dependencies",
+        "ws": "8.23.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)"
+      },
+      {
+        "name": "happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)",
+        "group": "dependencies",
+        "ws": "8.23.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)"
+      },
+      {
+        "name": "isomorphic-ws@5.0.0(ws@8.23.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))",
+        "group": "dependencies",
+        "ws": "8.23.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)"
+      },
+      {
+        "name": "miniflare@5.20261113.0-beta(@types/node@26.6.6)(bufferutil@4.1.0)(utf-8-validate@5.0.10)",
+        "group": "dependencies",
+        "ws": "8.23.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)"
+      },
+      {
+        "name": "puppeteer-core@25.17.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)(yauzl@3.4.0)",
+        "group": "dependencies",
+        "ws": "8.23.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)"
+      },
+      {
+        "name": "socket.io-adapter@2.5.8(bufferutil@4.1.0)(supports-color@10.2.2)(utf-8-validate@5.0.10)",
+        "group": "dependencies",
+        "ws": "8.23.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)"
+      },
+      {
+        "name": "storybook@10.6.7(@types/react@19.3.0)(bufferutil@4.1.0)(prettier@3.10.1)(react@19.3.1)(utf-8-validate@5.0.10)",
+        "group": "dependencies",
+        "ws": "8.23.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)"
+      }
+    ],
+    "isomorphicPeers": [
+      {
+        "name": "isomorphic-ws@5.0.0",
+        "peerDependencies": {
+          "ws": "*"
+        }
+      }
+    ],
+    "installedIsomorphic": {
+      "resolutionChain": [
+        {
+          "entry": "/Users/satan/workspace/bleedingdev/projects/modernjs/code/modernjs-upstream-20261113/node_modules/.pnpm/@bleedingdev+mf-enhanced@2.9.5_@rspack+core@2.3.2_@module-federation+runtime-tools@2.9._804c3f40ad4b220acf1dc110b45c0a93/node_modules/@bleedingdev/mf-enhanced/dist/src/index.js",
+          "name": "@bleedingdev/mf-enhanced",
+          "version": "2.9.5"
+        },
+        {
+          "entry": "/Users/satan/workspace/bleedingdev/projects/modernjs/code/modernjs-upstream-20261113/node_modules/.pnpm/@bleedingdev+mf-dts-plugin@2.9.5_bufferutil@4.1.0_typescript@7.0.2_utf-8-validate@5.0.10/node_modules/@bleedingdev/mf-dts-plugin/dist/index.js",
+          "name": "@bleedingdev/mf-dts-plugin",
+          "version": "2.9.5"
+        },
+        {
+          "entry": "/Users/satan/workspace/bleedingdev/projects/modernjs/code/modernjs-upstream-20261113/node_modules/.pnpm/isomorphic-ws@5.0.0_ws@8.23.0_bufferutil@4.1.0_utf-8-validate@5.0.10_/node_modules/isomorphic-ws/node.js",
+          "name": "isomorphic-ws",
+          "version": "5.0.0"
+        },
+        {
+          "entry": "/Users/satan/workspace/bleedingdev/projects/modernjs/code/modernjs-upstream-20261113/node_modules/.pnpm/ws@8.23.0_bufferutil@4.1.0_utf-8-validate@5.0.10/node_modules/ws/index.js",
+          "name": "ws",
+          "version": "8.23.0"
+        }
+      ],
+      "lockChain": {
+        "enhancedReference": "@bleedingdev/mf-enhanced@2.9.5(@rspack/core@2.3.2(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(bufferutil@4.1.0)(typescript@7.0.2)(utf-8-validate@5.0.10)(webpack@5.112.2(@swc/core@1.16.22(@swc/helpers@0.5.24))(clean-css@5.3.3)(cssnano@9.9.0(postcss@8.5.33))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.33)(sharp@0.35.5(@types/node@26.6.6))(svgo@4.1.0)(uglify-js@3.19.3))",
+        "ownerReference": "@bleedingdev/mf-dts-plugin@2.9.5(bufferutil@4.1.0)(typescript@7.0.2)(utf-8-validate@5.0.10)",
+        "isoReference": "5.0.0(ws@8.23.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))",
+        "wsReference": "8.23.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)"
+      },
+      "peerDependencies": {
+        "ws": "*"
+      },
+      "ws": "8.23.0",
+      "identityEvidence": "Public-entry resolution, installed manifests and current lock/policy agreement only; registry metadata is not tarball SRI or provenance verification",
+      "runtime": {
+        "version": "8.23.0",
+        "wrapperIdentity": true,
+        "bidirectionalSend": true,
+        "bidirectionalPingPong": true,
+        "close": {
+          "code": 1000,
+          "reason": "qualified"
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "original-warning",
+      "rootGroup": "dependencies",
+      "overrides": {
+        "ws@>=7.0.0 <7.5.11": "7.5.11",
+        "ws@>=8.0.0 <8.21.3": "8.23.0"
+      },
+      "strictPeerDependencies": false,
+      "status": 0,
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +7\n+++++++\nProgress: resolved 7, reused 4, downloaded 0, added 7, done\n[WARN] Issues with peer dependencies found. Run \"pnpm peers check\" to list them.\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n+ ws 8.21.3\n\nDone in 120ms using pnpm v12.21.0\n",
+      "peer": "7.5.11",
+      "peerCheck": {
+        "status": 1,
+        "output": "Issues with peer dependencies found\n\n✕ unmet peer ws\n  Installed: 8.21.3\n  Wanted:\n    7.5.11:\n      isomorphic-ws@5.0.0\n"
+      },
+      "rootWs": "8.21.3",
+      "installedIsomorphicPeer": "*",
+      "runtimeEdges": [
+        {
+          "name": "isomorphic-ws@5.0.0(ws@8.21.3)",
+          "group": "dependencies",
+          "ws": "8.21.3"
+        },
+        {
+          "name": "probe-eight@file:eight",
+          "group": "dependencies",
+          "ws": "8.22.0"
+        },
+        {
+          "name": "probe-optional@file:optional",
+          "group": "optionalDependencies",
+          "ws": "8.22.0"
+        },
+        {
+          "name": "probe-seven@file:seven",
+          "group": "dependencies",
+          "ws": "7.5.11"
+        }
+      ]
+    },
+    {
+      "name": "original-strict-control",
+      "rootGroup": "dependencies",
+      "overrides": {
+        "ws@>=7.0.0 <7.5.11": "7.5.11",
+        "ws@>=8.0.0 <8.21.3": "8.23.0"
+      },
+      "strictPeerDependencies": true,
+      "status": 1,
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +7\n+++++++\nProgress: resolved 7, reused 4, downloaded 0, added 7, done\n[ERR_PNPM_PEER_DEP_ISSUES] Unmet peer dependencies\n\n✕ unmet peer ws\n  Installed: 8.21.3\n  Wanted:\n    7.5.11:\n      isomorphic-ws@5.0.0\nhint: To disable failing on peer dependency issues, add the following to pnpm-workspace.yaml in your project root:\n\n  strictPeerDependencies: false\n"
+    },
+    {
+      "name": "cutoff-only-negative-control",
+      "rootGroup": "dependencies",
+      "overrides": {
+        "ws@>=7.0.0 <7.5.11": "7.5.11",
+        "ws@>=8.0.0 <8.23.0": "8.23.0"
+      },
+      "strictPeerDependencies": true,
+      "status": 1,
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +6\n++++++\nProgress: resolved 6, reused 3, downloaded 0, added 6, done\n[ERR_PNPM_PEER_DEP_ISSUES] Unmet peer dependencies\n\n✕ unmet peer ws\n  Installed: 8.23.0\n  Wanted:\n    7.5.11:\n      isomorphic-ws@5.0.0\nhint: To disable failing on peer dependency issues, add the following to pnpm-workspace.yaml in your project root:\n\n  strictPeerDependencies: false\n"
+    },
+    {
+      "name": "runtime-only-production-and-optional",
+      "rootGroup": "dependencies",
+      "overrides": {
+        "ws@>=7.0.0 <7.5.11:prod": "7.5.11",
+        "ws@>=8.0.0 <8.23.0:prod": "8.23.0",
+        "ws@>=7.0.0 <7.5.11:optional": "7.5.11",
+        "ws@>=8.0.0 <8.23.0:optional": "8.23.0"
+      },
+      "strictPeerDependencies": true,
+      "status": 0,
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +6\n++++++\nProgress: resolved 6, reused 3, downloaded 0, added 6, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n+ ws 8.23.0\n\nDone in 83ms using pnpm v12.21.0\n",
+      "peer": "*",
+      "peerCheck": {
+        "status": 0,
+        "output": "No peer dependency issues found\n"
+      },
+      "rootWs": "8.23.0",
+      "installedIsomorphicPeer": "*",
+      "runtimeEdges": [
+        {
+          "name": "isomorphic-ws@5.0.0(ws@8.23.0)",
+          "group": "dependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-eight@file:eight",
+          "group": "dependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-optional@file:optional",
+          "group": "optionalDependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-seven@file:seven",
+          "group": "dependencies",
+          "ws": "7.5.11"
+        }
+      ],
+      "runtime": {
+        "version": "8.23.0",
+        "wrapperIdentity": true,
+        "bidirectionalSend": true,
+        "bidirectionalPingPong": true,
+        "close": {
+          "code": 1000,
+          "reason": "qualified"
+        }
+      }
+    },
+    {
+      "name": "runtime-only-dev-security-negative-control",
+      "rootGroup": "devDependencies",
+      "overrides": {
+        "ws@>=7.0.0 <7.5.11:prod": "7.5.11",
+        "ws@>=8.0.0 <8.23.0:prod": "8.23.0",
+        "ws@>=7.0.0 <7.5.11:optional": "7.5.11",
+        "ws@>=8.0.0 <8.23.0:optional": "8.23.0"
+      },
+      "strictPeerDependencies": true,
+      "status": 0,
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +7\n+++++++\nProgress: resolved 7, reused 4, downloaded 0, added 7, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n\ndevDependencies:\n+ ws 8.21.3\n\nDone in 84ms using pnpm v12.21.0\n",
+      "peer": "*",
+      "peerCheck": {
+        "status": 0,
+        "output": "No peer dependency issues found\n"
+      },
+      "rootWs": "8.21.3",
+      "installedIsomorphicPeer": "*",
+      "runtimeEdges": [
+        {
+          "name": "isomorphic-ws@5.0.0(ws@8.21.3)",
+          "group": "dependencies",
+          "ws": "8.21.3"
+        },
+        {
+          "name": "probe-eight@file:eight",
+          "group": "dependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-optional@file:optional",
+          "group": "optionalDependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-seven@file:seven",
+          "group": "dependencies",
+          "ws": "7.5.11"
+        }
+      ],
+      "rejectedAlternative": "Typed prod/optional overrides leave a direct devDependency below the security floor"
+    },
+    {
+      "name": "restore-published-peer-all-runtime-groups",
+      "rootGroup": "dependencies",
+      "overrides": {
+        "ws@>=7.0.0 <7.5.11": "7.5.11",
+        "ws@>=8.0.0 <8.23.0": "8.23.0",
+        "isomorphic-ws@5.0.0>ws:peer": "*"
+      },
+      "strictPeerDependencies": true,
+      "status": 0,
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +6\n++++++\nProgress: resolved 6, reused 3, downloaded 0, added 6, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n+ ws 8.23.0\n\nDone in 87ms using pnpm v12.21.0\n",
+      "peer": "*",
+      "peerCheck": {
+        "status": 0,
+        "output": "No peer dependency issues found\n"
+      },
+      "rootWs": "8.23.0",
+      "installedIsomorphicPeer": "*",
+      "runtimeEdges": [
+        {
+          "name": "isomorphic-ws@5.0.0(ws@8.23.0)",
+          "group": "dependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-eight@file:eight",
+          "group": "dependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-optional@file:optional",
+          "group": "optionalDependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-seven@file:seven",
+          "group": "dependencies",
+          "ws": "7.5.11"
+        }
+      ],
+      "runtime": {
+        "version": "8.23.0",
+        "wrapperIdentity": true,
+        "bidirectionalSend": true,
+        "bidirectionalPingPong": true,
+        "close": {
+          "code": 1000,
+          "reason": "qualified"
+        }
+      }
+    },
+    {
+      "name": "restored-peer-root-dev-dependency",
+      "rootGroup": "devDependencies",
+      "overrides": {
+        "ws@>=7.0.0 <7.5.11": "7.5.11",
+        "ws@>=8.0.0 <8.23.0": "8.23.0",
+        "isomorphic-ws@5.0.0>ws:peer": "*"
+      },
+      "strictPeerDependencies": true,
+      "status": 0,
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +6\n++++++\nProgress: resolved 6, reused 3, downloaded 0, added 6, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n\ndevDependencies:\n+ ws 8.23.0\n\nDone in 82ms using pnpm v12.21.0\n",
+      "peer": "*",
+      "peerCheck": {
+        "status": 0,
+        "output": "No peer dependency issues found\n"
+      },
+      "rootWs": "8.23.0",
+      "installedIsomorphicPeer": "*",
+      "runtimeEdges": [
+        {
+          "name": "isomorphic-ws@5.0.0(ws@8.23.0)",
+          "group": "dependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-eight@file:eight",
+          "group": "dependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-optional@file:optional",
+          "group": "optionalDependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-seven@file:seven",
+          "group": "dependencies",
+          "ws": "7.5.11"
+        }
+      ],
+      "runtime": {
+        "version": "8.23.0",
+        "wrapperIdentity": true,
+        "bidirectionalSend": true,
+        "bidirectionalPingPong": true,
+        "close": {
+          "code": 1000,
+          "reason": "qualified"
+        }
+      }
+    },
+    {
+      "name": "generator-current-narrows-peer",
+      "rootGroup": "dependencies",
+      "overrides": {
+        "ws@>=8.0.0 <8.23.0": "8.23.0"
+      },
+      "strictPeerDependencies": true,
+      "status": 0,
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +4\n++++\nProgress: resolved 4, reused 2, downloaded 0, added 4, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ ws 8.23.0\n\nDone in 83ms using pnpm v12.21.0\n",
+      "peer": "8.23.0",
+      "peerCheck": {
+        "status": 0,
+        "output": "No peer dependency issues found\n"
+      },
+      "rootWs": "8.23.0",
+      "installedIsomorphicPeer": "*",
+      "runtimeEdges": [
+        {
+          "name": "isomorphic-ws@5.0.0(ws@8.23.0)",
+          "group": "dependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-eight@file:eight",
+          "group": "dependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-optional@file:optional",
+          "group": "optionalDependencies",
+          "ws": "8.23.0"
+        }
+      ],
+      "runtime": {
+        "version": "8.23.0",
+        "wrapperIdentity": true,
+        "bidirectionalSend": true,
+        "bidirectionalPingPong": true,
+        "close": {
+          "code": 1000,
+          "reason": "qualified"
+        }
+      }
+    },
+    {
+      "name": "generator-restores-published-peer",
+      "rootGroup": "dependencies",
+      "overrides": {
+        "ws@>=8.0.0 <8.23.0": "8.23.0",
+        "isomorphic-ws@5.0.0>ws:peer": "*"
+      },
+      "strictPeerDependencies": true,
+      "status": 0,
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +4\n++++\nProgress: resolved 4, reused 2, downloaded 0, added 4, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ ws 8.23.0\n\nDone in 81ms using pnpm v12.21.0\n",
+      "peer": "*",
+      "peerCheck": {
+        "status": 0,
+        "output": "No peer dependency issues found\n"
+      },
+      "rootWs": "8.23.0",
+      "installedIsomorphicPeer": "*",
+      "runtimeEdges": [
+        {
+          "name": "isomorphic-ws@5.0.0(ws@8.23.0)",
+          "group": "dependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-eight@file:eight",
+          "group": "dependencies",
+          "ws": "8.23.0"
+        },
+        {
+          "name": "probe-optional@file:optional",
+          "group": "optionalDependencies",
+          "ws": "8.23.0"
+        }
+      ],
+      "runtime": {
+        "version": "8.23.0",
+        "wrapperIdentity": true,
+        "bidirectionalSend": true,
+        "bidirectionalPingPong": true,
+        "close": {
+          "code": 1000,
+          "reason": "qualified"
+        }
+      }
+    },
+    {
+      "name": "real-incompatible-peer-negative-control",
+      "rootGroup": "dependencies",
+      "overrides": {
+        "ws@>=7.0.0 <7.5.11": "7.5.11",
+        "ws@>=8.0.0 <8.23.0": "8.23.0",
+        "isomorphic-ws@5.0.0>ws:peer": "*"
+      },
+      "strictPeerDependencies": true,
+      "status": 1,
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +7\n+++++++\nProgress: resolved 7, reused 3, downloaded 0, added 7, done\n[ERR_PNPM_PEER_DEP_ISSUES] Unmet peer dependencies\n\n✕ unmet peer ws\n  Installed: 8.23.0\n  Wanted:\n    ^7.5.11:\n      probe-real-peer-seven@file:real-peer-seven\nhint: To disable failing on peer dependency issues, add the following to pnpm-workspace.yaml in your project root:\n\n  strictPeerDependencies: false\n"
+    }
+  ],
+  "publishedIsomorphic": {
+    "version": "5.0.0",
+    "peerDependencies": {
+      "ws": "*"
+    },
+    "integrity": "sha512-muId7Zzn9ywDsyXgTIafTry2sV3nySZeUDe6YedVd1Hvuuep5AsIlqK+XefWpYTyJG5e503F2xIuT2lcU6rCSw=="
+  },
+  "sidecarMetadata": {
+    "name": "@bleedingdev/mf-dts-plugin",
+    "version": "2.9.5",
+    "ws": "8.21.3",
+    "isomorphicWs": "5.0.0",
+    "integrity": "sha512-GnbI2UXSKdpDbxF6nFzA4gElZLPk6Y8RS0xdFYPtmGoOaV7advwhaiYBwRG7ViR/fa1R0QkP91u9vfIcx5GLlg==",
+    "note": "Registry metadata check only; signature verification belongs to the parent acceptance record"
+  },
+  "latestWs": {
+    "version": "8.23.0",
+    "integrity": "sha512-wCkmX8QMOrKjgO8HW2WyDbTSGeqkocxgDzS9iR79rEAexty6/2qzilx3Ag8Tqf9ykop3irLKle0MtVn5qjVnoQ=="
+  },
+  "store": "/Users/satan/.pnpm-store"
+}

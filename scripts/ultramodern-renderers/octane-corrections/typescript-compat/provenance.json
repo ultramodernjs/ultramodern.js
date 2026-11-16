@@ -1,0 +1,64 @@
+{
+  "scope": "Owning native text-type backend compatibility; not a final npm-layout or full runtime patch",
+  "source": {
+    "repository": "https://github.com/octanejs/octane",
+    "commit": "4c35afcdca0f4889921612fc462e6aabe507d78d",
+    "archiveSha256": "e12e4846d57c0e4913f60bd1d010637cfe175b833158cb50e2d175c7452f5900"
+  },
+  "npm": {
+    "name": "octane",
+    "version": "0.18.0",
+    "integrity": "sha512-nMuONCV3pMMJhWjlXmC08Dn+i/bXju1micX/kKyAxY1b+dGK0zvCY6dCuMn791pyQfgXBs0jQ2X8apPysVrOhQ==",
+    "backendIdenticalToSource": true
+  },
+  "execution": {
+    "node": "26.13.1",
+    "pnpm": "12.21.0",
+    "typescript": "7.0.2",
+    "classicControl": "6.0.3",
+    "oxc": "0.24.0",
+    "core": "0.5.5 with exact source-archive upstream patch",
+    "esrap": "2.3.2 with exact source-archive upstream patch"
+  },
+  "rootCause": {
+    "config": "Stable parseConfigFile returns {options,fileNames}, not errors/raw/projectReferences; parseJsonConfigFileContent is absent",
+    "snapshot": "Stable API.updateSnapshot({openProjects,fileChanges}) returns configured Projects; API.createSnapshot/createPrograms/operation.createdPrograms are absent",
+    "checker": "Stable Program lacks getProject(); obtain checker from Snapshot.getProject(analysisConfig).checker",
+    "enums": "Stable sync does not export JsxEmit; the virtual JSON config uses the accepted preserve spelling instead",
+    "invalidation": "Configured-project root/config caches survive snapshot disposal; close/reopen stable API on explicit changes"
+  },
+  "verification": {
+    "before": "Actual stable binary reproduces parsed.errors.filter crash; actual API rejects createSnapshot invocation",
+    "after": {
+      "source": {
+        "passed": 44,
+        "failed": 0
+      },
+      "rebuiltNpmCompilerModules": {
+        "passed": 44,
+        "failed": 0
+      }
+    },
+    "upstreamSuite": "Existing typescript-text-inference.test.ts; only fixture backend routing changes to separate genuine classic and stable installs",
+    "additionalTests": "JSONC root mapping; stable native TS2307/TS2339/TS2352 and diagnostic span; native syntax rejection; repeated invalid configuration rejection; inherited and excluded roots",
+    "cleanup": "Fresh qualification and exploratory owned temporary trees removed; no run-owned tsgo processes remain"
+  },
+  "rebuild": "The exact upstream scripts/build.mjs copies plain-JS compiler modules from src/compiler into dist/compiler. Qualification performs that copy for only the two changed modules over the authenticated npm tarball, leaving bundled Volar/parser and runtime intact.",
+  "integrationRequirements": [
+    "Compose this source patch with the runtime-port worker source changes before the parent full owning build.",
+    "Include the new text-types-config.js in actual emitted dist/compiler and produce the final octane@0.18.0.patch in the parent lane.",
+    "Keep real TypeScript 7.0.2 independent of the owned tsrs embedded 7.1 beta.",
+    "If adopting @tsrx/core 0.6.1 instead of the audited upstream core input, fix its invalid jsxImportSource pragma in the owning Volar layer; exploratory run reports TS2875 in the unchanged upstream assertion test.",
+    "Full runtime build, PR7/9 composition, framework/downstream acceptance, peer metadata, inventory, policy, lock and final package patch remain parent-owned.",
+    "This patch does not qualify unrelated native-read-types.js/validateNativeSignalNames callers that independently use nightly Program.getProject()."
+  ],
+  "rerun": "/Users/satan/bin/owned-temp-dir --need-gib 20 --run octane-typescript-compat -- node scripts/ultramodern-renderers/octane-corrections/typescript-compat/qualify.mjs",
+  "filesSha256": {
+    "build-package.json": "28b2989645db25530e4a6d989de9cf28a72c174b472d20a0babdc75d25eefb22",
+    "build-pnpm-lock.yaml": "85c80575319d1b19ed9018d45900b2ded6abdc0e2be2d2bb5648a2167f86f5af",
+    "build-workspace.yaml": "19004ac5bf6af836fc4971aaceba4f368426ad7db86eb797574da22b67d414cc",
+    "compat.test.ts": "d4d787429ca7a6c72329ed5796368dc1357f0b501f46f910801cf34cce388415",
+    "qualify.mjs": "06d48e2eee671b8f22f9fc9f4045f17757866e68310310da0f254a08c17eea0c",
+    "typescript-source.patch": "71898145840705e712954009bf5a94877302181ac2aef3ece3ec907cd17404cc"
+  }
+}

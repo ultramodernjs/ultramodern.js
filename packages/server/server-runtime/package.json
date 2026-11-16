@@ -57,12 +57,12 @@
     "@modern-js/runtime-utils": "workspace:*",
     "@modern-js/server-core": "workspace:*",
     "@modern-js/types": "workspace:*",
-    "@swc/helpers": "^0.5.23"
+    "@swc/helpers": "^0.5.24"
   },
   "devDependencies": {
     "@modern-js/rslib": "workspace:*",
-    "@rslib/core": "1.0.3",
-    "@types/node": "^26.6.5"
+    "@rslib/core": "1.0.7",
+    "@types/node": "^26.6.6"
   },
   "sideEffects": false,
   "publishConfig": {

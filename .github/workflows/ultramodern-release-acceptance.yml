@@ -61,15 +61,15 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Setup Node.js 26.12.0
+      - name: Setup Node.js 26.13.1
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '26.12.0'
+          node-version: '26.13.1'
 
       - name: Setup mise
         uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
-          version: 2026.9.18
+          version: 2026.11.8
           cache_save: false
 
       - name: Resolve pnpm store path
@@ -189,6 +189,7 @@ jobs:
         id: renderer-features
         if: inputs.required_renderer_features
         env:
+          NATIVE_ARTIFACT_GITHUB_TOKEN: ${{ github.token }}
           RENDERER_AGENT_BROWSER_EXECUTABLE: ${{ steps.renderer-browser-cli.outputs.executable_path }}
           RENDERER_BROWSER_EXECUTABLE: ${{ steps.renderer-fixed-browser.outputs.executable_path }}
           PRODUCER_RUN_IDENTITY: ${{ inputs.producer_run_identity }}
@@ -200,8 +201,9 @@ jobs:
           feature_work="$(realpath "$feature_work")"
           export OWNED_TEMP_DIR="$feature_work"
           trap 'rm -rf -- "$feature_work/native-inputs"' EXIT
-          mise exec -- node scripts/ultramodern-renderers/native-federation-inputs.mjs \
+          GH_TOKEN="$NATIVE_ARTIFACT_GITHUB_TOKEN" mise exec -- node scripts/ultramodern-renderers/native-federation-inputs.mjs \
             --manifest "$BLEEDINGDEV_RELEASE_MANIFEST" --out "$feature_work/native-inputs"
+          unset NATIVE_ARTIFACT_GITHUB_TOKEN
           mise exec -- node scripts/ultramodern-renderers/release.mjs \
             --cohort-dir .modern/bleedingdev-publish --renderers solid,octane --with '' \
             --work-dir "$feature_work" --required-features \
@@ -210,13 +212,17 @@ jobs:
             --acceptance-receipt .modern/bleedingdev-publish/acceptance-receipt.json \
             --feature-receipt .modern/bleedingdev-publish/acceptance-receipt.renderer-features.json \
             --run-identity "$PRODUCER_RUN_IDENTITY"
+          mise exec -- node scripts/ultramodern-renderers/retain-feature-evidence.mjs \
+            --receipt .modern/bleedingdev-publish/acceptance-receipt.renderer-features.json
 
       - name: Preserve renderer feature runtime evidence
         if: always() && inputs.required_renderer_features && steps.renderer-features.outcome != 'skipped'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: renderer-feature-source-runtime-${{ inputs.producer_artifact_identity }}
-          path: ${{ runner.temp }}/renderer-features-*/**/*.log
+          path: |
+            ${{ runner.temp }}/renderer-features-*/**/*.log
+            ${{ runner.temp }}/renderer-features-*/logs/retained-evidence/**
           if-no-files-found: error
           include-hidden-files: true
 

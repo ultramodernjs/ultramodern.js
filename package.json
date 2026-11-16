@@ -42,8 +42,8 @@
     "check-overrides": "node ./scripts/check-overrides.mjs",
     "update-codesmith": "cd ./scripts/update-codesmith && pnpm start",
     "sync:skills": "node ./scripts/sync-skills.mjs",
-    "update-rspress": "npx taze major --include /rspress/ -w -r -l",
-    "update-rsbuild": "npx taze major --include /rsbuild/ -w -r -l",
+    "update-rspress": "npx --yes taze@21.3.0 major --include /rspress/ -w -r -l",
+    "update-rsbuild": "npx --yes taze@21.3.0 major --include /rsbuild/ -w -r -l",
     "update-nx-cache": "nx reset && npm run prepare-build",
     "gen:docs": "rm -rf doc_output && mkdir doc_output && cp -r ./packages/document/doc_build/* ./doc_output",
     "docs:v2-link": "echo '/v2/*  https://modernjs-v2.netlify.app/:splat  200' >> doc_output/_redirects",
@@ -75,10 +75,10 @@
     "validate:supply": "node scripts/ultramodern-supply/sync-patches.mjs && node scripts/ultramodern-supply/verify-sidecars.mjs"
   },
   "engines": {
-    "node": ">=26.12.0",
-    "pnpm": ">=12"
+    "node": ">=26.13.1",
+    "pnpm": ">=12.21.0"
   },
-  "packageManager": "pnpm@12.11.2",
+  "packageManager": "pnpm@12.21.0",
   "lint-staged": {
     "!(*.gen).{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [
       "biome check --files-ignore-unknown=true --no-errors-on-unmatched"
@@ -88,33 +88,33 @@
     ]
   },
   "dependencies": {
-    "semver": "7.8.5",
+    "semver": "7.8.6",
     "yaml": "2.9.1"
   },
   "devDependencies": {
-    "@babel/core": "7.29.7",
-    "@babel/plugin-transform-modules-commonjs": "^7.29.7",
-    "@biomejs/biome": "2.5.15",
+    "@babel/core": "8.1.2",
+    "@babel/plugin-transform-modules-commonjs": "^8.1.2",
+    "@biomejs/biome": "2.6.8",
     "@changesets/cli": "^3.0.3",
-    "@commitlint/cli": "^21.2.3",
-    "@commitlint/config-conventional": "^21.2.3",
-    "@effect/tsgo": "0.67.0",
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
+    "@effect/tsgo": "0.69.0",
     "@modern-js/app-tools": "workspace:*",
     "@modern-js/app-tools-extensions": "workspace:*",
     "@modern-js/tsconfig": "workspace:*",
     "@modern-js/ultramodern-create": "workspace:*",
-    "@rstest/core": "0.12.3",
+    "@rstest/core": "0.12.6",
     "@scripts/build": "workspace:*",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "check-dependency-version-consistency": "6.0.0",
+    "check-dependency-version-consistency": "6.0.1",
     "husky": "^9.1.7",
-    "lint-staged": "~17.6.0",
-    "nx": "^23.3.0",
-    "oxfmt": "0.73.0",
-    "rimraf": "^6.1.3",
+    "lint-staged": "~17.6.1",
+    "nx": "^24.0.6",
+    "oxfmt": "0.78.0",
+    "rimraf": "^6.1.4",
     "typescript": "7.0.2",
-    "tsrs": "0.21.0-ts7.1.0-beta"
+    "tsrs": "0.25.0-ts7.1.0-beta"
   },
   "commitlint": {
     "extends": [

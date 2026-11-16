@@ -78,22 +78,22 @@
     "test:types": "node ../../../scripts/with-effect-tsrs.mjs --project tests/types/tsconfig.json"
   },
   "engines": {
-    "node": ">=26.12.0"
+    "node": ">=26.13.1"
   },
   "dependencies": {
-    "@babel/core": "7.29.7",
+    "@babel/core": "8.1.2",
     "@jridgewell/remapping": "2.3.5",
     "@modern-js/renderer-core": "workspace:*",
-    "@solidjs/signals": "2.0.0-rc.15",
-    "@solidjs/web": "2.0.0-rc.15",
+    "@solidjs/signals": "2.0.0-rc.22",
+    "@solidjs/web": "2.0.0-rc.22",
     "@tanstack/history": "1.162.5",
-    "isbot": "5.2.2",
-    "solid-js": "2.0.0-rc.15"
+    "isbot": "5.2.3"
   },
   "peerDependencies": {
+    "solid-js": "2.0.0-rc.22",
     "@modern-js/i18n-runtime-extensions": "workspace:^3.8.3",
     "@rsbuild/core": "2.3.2",
-    "@solidjs/compiler": "2.0.0-rc.15",
+    "@solidjs/compiler": "2.0.0-rc.22",
     "i18next": ">=25.7.4",
     "@tanstack/router-core": "1.171.38"
   },
@@ -112,13 +112,14 @@
     }
   },
   "devDependencies": {
+    "solid-js": "2.0.0-rc.22",
     "@modern-js/i18n-runtime-extensions": "workspace:*",
     "@modern-js/tsconfig": "workspace:*",
     "@rsbuild/core": "2.3.2",
-    "@rslib/core": "1.0.3",
+    "@rslib/core": "1.0.7",
     "@scripts/rstest-config": "workspace:*",
-    "@solidjs/compiler": "2.0.0-rc.15",
-    "@types/node": "^26.6.5",
+    "@solidjs/compiler": "2.0.0-rc.22",
+    "@types/node": "^26.6.6",
     "@tanstack/router-core": "https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz"
   },
   "sideEffects": false,

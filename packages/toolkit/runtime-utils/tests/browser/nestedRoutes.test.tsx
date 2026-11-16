@@ -1,4 +1,14 @@
-import { renderNestedRoute } from '../../src/browser/nestedRoutes';
+import { renderToString } from 'react-dom/server';
+import {
+  createStaticHandler,
+  createStaticRouter,
+  StaticRouterProvider,
+  useRouteError,
+} from 'react-router';
+import {
+  renderNestedRoute,
+  transformNestedRoutes,
+} from '../../src/browser/nestedRoutes';
 
 // A rejected promise whose rejection is only "handled" once something attaches
 // a rejection handler to it; `.catch(fn)` goes through `.then(undefined, fn)`.
@@ -67,4 +77,35 @@ describe('renderNestedRoute loader preload', () => {
     expect(result).toBe('data');
     expect(state.handled).toBe(true);
   });
+});
+
+function ErrorBoundary() {
+  const error = useRouteError();
+  return <main>{error instanceof Error ? error.message : 'unexpected'}</main>;
+}
+
+test('native route errors use the declared error element without a private boundary flag', async () => {
+  const routes = transformNestedRoutes([
+    {
+      id: 'page',
+      type: 'nested',
+      path: '/',
+      hasErrorBoundary: false,
+      error: ErrorBoundary,
+      loader: () => {
+        throw new Error('native route failure');
+      },
+    },
+  ]);
+  const handler = createStaticHandler(routes);
+  const context = await handler.query(new Request('http://router.test/'));
+  expect(context).not.toBeInstanceOf(Response);
+  if (context instanceof Response) throw new Error('Unexpected redirect');
+  const html = renderToString(
+    <StaticRouterProvider
+      router={createStaticRouter(handler.dataRoutes, context)}
+      context={context}
+    />,
+  );
+  expect(html).toContain('<main>native route failure</main>');
 });

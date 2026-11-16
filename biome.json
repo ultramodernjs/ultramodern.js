@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
   "vcs": {
     "enabled": true,
     "defaultBranch": "main",
@@ -207,7 +207,9 @@
       "!**/@mf-types",
       "!**/packages/toolkit/create/template/**/*",
       "!**/packages/toolkit/sandpack-react/scripts/mwa-template/**/*",
-      "!**/tests/skill/fixtures/**/*"
+      "!**/tests/skill/fixtures/**/*",
+      "!**/scripts/ultramodern-renderers/octane-corrections/typescript-compat/**/*",
+      "!**/scripts/ultramodern-dependencies/websocket-corrections/proof.json"
     ]
   }
 }

@@ -16,9 +16,9 @@ const fixtureRequire = createRequire(
 const require = createRequire(
   fixtureRequire.resolve('@module-federation/modern-js-v3'),
 );
-const packageRoot = path.dirname(
-  path.dirname(require.resolve('@module-federation/dts-plugin')),
-);
+const packageRoot =
+  process.env.ULTRAMODERN_DTS_PACKAGE_ROOT ??
+  path.dirname(path.dirname(require.resolve('@module-federation/dts-plugin')));
 
 const exposeRpcChunk = format => {
   const directory = path.join(

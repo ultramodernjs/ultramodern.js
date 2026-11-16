@@ -1,4 +1,5 @@
-import { defineEffectBff, OpenTelemetry } from '@modern-js/bff-effect/effect';
+import * as NodeSdk from '@effect/opentelemetry/NodeSdk';
+import { defineEffectBff } from '@modern-js/bff-effect/effect';
 import { createRequestContextHeaders } from '@modern-js/runtime-extensions/request-context';
 import * as Effect from 'effect/Effect';
 import { Headers, HttpTraceContext } from 'effect/http';
@@ -8,7 +9,7 @@ import * as Option from 'effect/Option';
 import { hostEffectApi } from '../../shared/effect/api';
 
 type TraceSpanProcessor = Exclude<
-  OpenTelemetry.NodeSdk.Configuration['spanProcessor'],
+  NodeSdk.Configuration['spanProcessor'],
   ReadonlyArray<unknown> | undefined
 >;
 
@@ -176,7 +177,7 @@ const greetingsLayer = HttpApiBuilder.group(
 const layer = HttpApiBuilder.layer(hostEffectApi).pipe(
   Layer.provide(greetingsLayer),
   Layer.provide(
-    OpenTelemetry.NodeSdk.layer(() => ({
+    NodeSdk.layer(() => ({
       spanProcessor: traceSpanProcessor,
       resource: {
         serviceName: 'modernjs-mf-host-tests',

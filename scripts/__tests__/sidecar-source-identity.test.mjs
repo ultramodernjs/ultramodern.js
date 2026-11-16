@@ -106,23 +106,25 @@ test('repository MF source pins, installed identities and patch selectors use th
     const match = /^(@module-federation\/[^@]+)@(.+)$/u.exec(selector);
     if (match) assertPin(match[1], match[2], 'patch selector');
   }
+});
+
+test('pnpm preserves the corrected generator dependency identity', () => {
   const { hooks } = createRequire(import.meta.url)(
     path.join(repoRoot, '.pnpmfile.cjs'),
   );
-  const resolved = hooks.readPackage({
-    name: '@modern-js/ultramodern-create',
-    dependencies: {
-      '@module-federation/modern-js-v3':
-        ULTRAMODERN_PACKAGE_PINS.appDependencies[
-          '@module-federation/modern-js-v3'
-        ],
-    },
-  });
-  assertPin(
-    '@module-federation/modern-js-v3',
-    resolved.dependencies['@module-federation/modern-js-v3'],
-    'pnpm readPackage',
-  );
+  const alias =
+    ULTRAMODERN_PACKAGE_PINS.appDependencies['@module-federation/modern-js-v3'];
+  assert.equal(alias, 'npm:@bleedingdev/mf-modern-js-v3@2.9.5');
+  for (const name of ['@modern-js/ultramodern-create', '@fixture/consumer']) {
+    const resolved = hooks.readPackage({
+      name,
+      dependencies: { '@module-federation/modern-js-v3': alias },
+    });
+    assert.equal(
+      resolved.dependencies['@module-federation/modern-js-v3'],
+      alias,
+    );
+  }
 });
 
 // Framework packages ship their source edges unchanged, so the graph the

@@ -37,7 +37,10 @@ import {
   createSmokeTargets,
   orderTargetsForLocalStartup,
 } from './browser-smoke/targets.mjs';
-import { authenticatedCompilerTrustExclusions } from './published-create-proof/package-cohort.mjs';
+import {
+  authenticatedCompilerTrustExclusions,
+  reviewedCompilerTrustExclusions,
+} from './published-create-proof/package-cohort.mjs';
 import { createAcceptanceWorkspaceEnv } from './published-create-proof/process.mjs';
 import {
   parseYamlFile,
@@ -175,9 +178,7 @@ export function createAcceptedNodeProofEnvironment(
   // may retain this reviewed exact compiler exception, never another release.
   const compilerTrustExclusions = context.release
     ? authenticatedCompilerTrustExclusions(context.release)
-    : nativeTrustExclusions.includes('tsrs@0.21.0-ts7.1.0-beta')
-      ? ['tsrs@0.21.0-ts7.1.0-beta']
-      : [];
+    : reviewedCompilerTrustExclusions(nativeTrustExclusions);
   if (
     JSON.stringify(nativeTrustExclusions) !==
     JSON.stringify(compilerTrustExclusions)

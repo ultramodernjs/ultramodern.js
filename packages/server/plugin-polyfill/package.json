@@ -65,7 +65,7 @@
   "dependencies": {
     "@modern-js/polyfill-lib": "^1.0.2",
     "@modern-js/utils": "workspace:*",
-    "@swc/helpers": "^0.5.23",
+    "@swc/helpers": "^0.5.24",
     "lru-cache": "^11.5.3",
     "ua-parser-js": "^2.0.10"
   },
@@ -74,8 +74,8 @@
     "@modern-js/rslib": "workspace:*",
     "@modern-js/server-core": "workspace:*",
     "@modern-js/types": "workspace:*",
-    "@rslib/core": "1.0.3",
-    "@types/node": "^26.6.5",
+    "@rslib/core": "1.0.7",
+    "@types/node": "^26.6.6",
     "@types/ua-parser-js": "^0.7.39"
   },
   "sideEffects": false,

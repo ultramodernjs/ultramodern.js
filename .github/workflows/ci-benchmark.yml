@@ -61,16 +61,16 @@ jobs:
           echo 'CI_BENCHMARK_CACHE_EVIDENCE {"schemaVersion":1,"cacheState":"cold","actionsCache":false,"miseCache":false,"pnpmStore":"fresh-per-job","browsers":"fresh-per-job","preparedBuildRestore":false,"nxTaskCache":false,"nxRemoteCache":false}'
 
       # Match the existing type-check setup; unit tests use mise directly.
-      - name: Setup Node.js 26.12.0
+      - name: Setup Node.js 26.13.1
         if: matrix.workload == 'type-check'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '26.12.0'
+          node-version: '26.13.1'
 
       - name: Setup mise
         uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
-          version: 2026.9.18
+          version: 2026.11.8
           mise_dir: ${{ env.MISE_DATA_DIR }}
           cache: false
           cache_save: false

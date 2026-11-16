@@ -15,6 +15,7 @@ import {
   retirePackedNativeFederationInstaller,
   runPackedNativeFederationCommand,
 } from '../../../scripts/ultramodern-renderers/native-federation-packed.mjs';
+import { admissionTuple } from '../octane-admission/native-artifact.mjs';
 
 export { installedBin, recordPackedNativeFederationProcess };
 
@@ -80,6 +81,37 @@ export function sourceDevManifest(manifest, input) {
   return { ...manifest, dependencies };
 }
 
+/** Local candidates are source-only evidence, but must still be the latest tuple. */
+export function assertSourceNativeArchives(archives, packageRequests) {
+  for (const name of [
+    'octane',
+    '@octanejs/tanstack-router',
+    '@octanejs/rspack-plugin',
+    '@tanstack/router-core',
+  ]) {
+    const artifact = archives.get(name);
+    assert(artifact, `Missing exact native candidate archive: ${name}`);
+    assert.equal(
+      artifact.metadata.name,
+      name,
+      `Source candidate identity: ${name}`,
+    );
+    assert.equal(
+      artifact.metadata.version,
+      admissionTuple[name],
+      `Source candidate version: ${name}`,
+    );
+  }
+  for (const name of ['@tsrx/oxc', 'typescript']) {
+    const local = archives.get(name);
+    assert.equal(
+      local?.metadata.version ?? packageRequests[name],
+      admissionTuple[name],
+      `Source tooling cohort: ${name}`,
+    );
+  }
+}
+
 export function readSourceDevContext(filename) {
   assert(!process.env.ULTRAMODERN_MF_PACKED_CONTEXT);
   assert(!process.env.ULTRAMODERN_MF_DEV_OBSERVATIONS);
@@ -139,15 +171,7 @@ export function readSourceDevContext(filename) {
       });
     }
   }
-  for (const name of [
-    'octane',
-    '@octanejs/tanstack-router',
-    '@octanejs/rspack-plugin',
-  ])
-    assert(
-      archives.has(name),
-      `Missing exact native candidate archive: ${name}`,
-    );
+  assertSourceNativeArchives(archives, input.packageRequests);
   assert.equal(typeof input.browserExecutable, 'string');
   assert(fs.statSync(input.browserExecutable).isFile());
   return {

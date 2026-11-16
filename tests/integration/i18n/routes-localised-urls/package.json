@@ -7,14 +7,14 @@
     "build": "modern build"
   },
   "dependencies": {
-    "@effect/opentelemetry": "4.0.7",
+    "@effect/opentelemetry": "4.1.4",
     "@modern-js/bff-effect": "workspace:*",
     "@modern-js/plugin-bff": "workspace:*",
     "@modern-js/plugin-bff-extensions": "workspace:*",
     "@modern-js/plugin-i18n": "workspace:*",
     "@modern-js/runtime": "workspace:*",
-    "effect": "4.0.7",
-    "i18next": "26.4.6",
+    "effect": "4.1.4",
+    "i18next": "27.1.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

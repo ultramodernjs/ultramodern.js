@@ -440,3 +440,111 @@ test('interruption preserves its original error and removes only staged download
   assert.equal(fs.existsSync(directory), false);
   assert(fs.existsSync(path.join(f.root, 'octane.tgz')));
 });
+
+// Typed framework producer controls are independent of the legacy archive route.
+test('typed renderer owns exact peers without transitive archive implementation edges', async t => {
+  const { fixture: producerFixture } = await import(
+    './native-artifacts/fixtures.test-support.mjs'
+  );
+  const producer = producerFixture();
+  const renderer = fixture(t).rendererPackage;
+  const manifest = renderer.packageJson;
+  manifest.ultramodern.nativeArtifacts = producer.descriptor;
+  delete manifest.dependencies;
+  delete manifest.devDependencies;
+  manifest.peerDependencies = Object.fromEntries(
+    Object.entries(producer.descriptor.packages).map(([name, item]) => [
+      name,
+      item.version,
+    ]),
+  );
+  assert.equal(Object.keys(nativeFederationArtifacts(renderer)).length, 4);
+  for (const block of ['dependencies', 'optionalDependencies']) {
+    const wrong = structuredClone(renderer);
+    wrong.packageJson[block] = {
+      octane: producer.descriptor.packages.octane.request,
+    };
+    assert.throws(
+      () => nativeFederationArtifacts(wrong),
+      /implementation dependency|optional dependency/,
+    );
+  }
+  const optionalCore = structuredClone(renderer);
+  optionalCore.packageJson.peerDependenciesMeta = {
+    '@tanstack/router-core': { optional: true },
+  };
+  assert.throws(
+    () => nativeFederationArtifacts(optionalCore),
+    /shared core.*required/,
+  );
+});
+
+test('admits typed producer archives only after exact manifest/source/run authentication', async t => {
+  const { fixture: producerFixture } = await import(
+    './native-artifacts/fixtures.test-support.mjs'
+  );
+  const f = producerFixture();
+  const legacy = fixture(t);
+  const manifest = legacy.rendererPackage.packageJson;
+  manifest.ultramodern.nativeArtifacts = f.descriptor;
+  manifest.devDependencies = Object.fromEntries(
+    Object.entries(f.descriptor.packages).map(([name, item]) => [
+      name,
+      item.request,
+    ]),
+  );
+  manifest.peerDependencies = Object.fromEntries(
+    Object.entries(f.descriptor.packages).map(([name, item]) => [
+      name,
+      item.version,
+    ]),
+  );
+  const filename = await stageNativeFederationInputs({
+    rendererPackage: legacy.rendererPackage,
+    directory: path.join(legacy.root, 'typed'),
+    readGithub: f.readGithub,
+    fetchArtifact: f.fetchArtifact,
+  });
+  assert.equal(Object.keys(JSON.parse(fs.readFileSync(filename))).length, 4);
+  for (const failure of ['attempt', 'manifest', 'package', 'assetDigest']) {
+    const candidate = producerFixture();
+    manifest.ultramodern.nativeArtifacts = candidate.descriptor;
+    if (failure === 'attempt') candidate.evidence.run.run_attempt++;
+    if (failure === 'manifest')
+      candidate.payloads.set('native-artifacts.json', Buffer.from('{}'));
+    if (failure === 'assetDigest')
+      candidate.evidence.release.assets[0].digest = `sha256:${'0'.repeat(64)}`;
+    if (failure === 'package') {
+      const { integrity, manifestBytes, sha256 } = await import(
+        './native-artifacts/protocol.mjs'
+      );
+      const wrong = candidate.payloads.get('tanstack-router-core-1.171.39.tgz');
+      candidate.payloads.set('octane-0.18.0.tgz', wrong);
+      candidate.descriptor.packages.octane.integrity = integrity(wrong);
+      candidate.evidence.release.assets[0].digest = `sha256:${sha256(wrong)}`;
+      const bytes = manifestBytes(candidate.manifest);
+      candidate.payloads.set('native-artifacts.json', bytes);
+      candidate.descriptor.manifest.integrity = integrity(bytes);
+      const { releaseBody } = await import('./native-artifacts/transport.mjs');
+      candidate.evidence.release.body = releaseBody(candidate.descriptor);
+      candidate.evidence.release.assets.at(-1).digest =
+        `sha256:${sha256(bytes)}`;
+    }
+    const directory = path.join(legacy.root, failure);
+    await assert.rejects(
+      stageNativeFederationInputs({
+        rendererPackage: legacy.rendererPackage,
+        directory,
+        readGithub: candidate.readGithub,
+        fetchArtifact: candidate.fetchArtifact,
+      }),
+    );
+    assert.equal(fs.existsSync(directory), false);
+  }
+  const mixed = structuredClone(legacy.rendererPackage);
+  mixed.packageJson.ultramodern.nativeArtifacts = {
+    ...mixed.packageJson.ultramodern.nativeArtifacts,
+    ...fixture(t).rendererPackage.packageJson.ultramodern.nativeArtifacts,
+  };
+  assert.throws(() => nativeFederationArtifacts(mixed), /unknown or missing/u);
+});

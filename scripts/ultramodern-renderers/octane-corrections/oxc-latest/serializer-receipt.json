@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "testedAt": "2026-11-16T08:02:02.565Z",
+  "status": "PASS",
+  "patchSha256": "529e0cbb9dd695c7569ae9d64b04ee0ba9685402823faa230c339d582d811f74",
+  "sourceCommit": "4c35afcdca0f4889921612fc462e6aabe507d78d",
+  "gates": [
+    "exact existing four-package recipe reconstructed; corrected Octane peer already ^0.24.0",
+    "actual registry Octane + OXC 0.24 strict install rejects stale exact 0.23 peer",
+    "actual corrected Octane + incompatible OXC 0.23 strict install rejects",
+    "normal + frozen strict pnpm12 installs; 1022 installed Octane files byte-matched actual archive",
+    "corrected source owning runtime/compiler boundary suite",
+    "actual installed packed owning runtime/compiler boundary suite",
+    "normal+clean frozen graph: one physical corrected core, one exact seroval1.8.1 and plugins1.8.0; all supplied Octane/core/adapter files match",
+    "unchanged owning router-core hydrate + hydration-boundary-chunks whole suites against actual esm package; real Seroval dehydration/bootstrap evaluation",
+    "unchanged owning router-core hydrate + hydration-boundary-chunks whole suites against actual cjs package; real Seroval dehydration/bootstrap evaluation",
+    "actual Octane public ESM+CJS SSR Unicode rendering",
+    "actual packed Octane SSR -> emitted Seroval payload bytes -> router hydrate -> Octane DOM adoption; rich cyclic loader values, escaped script text, web-stream plugin",
+    "actual installed packed runtime APIs + stable TS7.0.2 text facts",
+    "stable TS7.0.2 strict noEmit skipLibCheck:false consumer of actual packed compiler declarations",
+    "strict stable TS7.0.2 noEmit skipLibCheck:false Seroval+web plugin+router hydrate declarations"
+  ],
+  "oxc": {
+    "version": "0.24.0",
+    "integrity": "sha512-P+E1qvimUW1DdoQE8uHyZ44U2xVDugYkDn3xsTnbw7eYP/tTrHuFGLIjKZr5tSw7wPvj4deMO9BKmGtbMAFdpg=="
+  },
+  "recipePatches": {
+    "@tanstack/router-core": "546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8",
+    "@octanejs/tanstack-router": "df6732ebcfc0af7cf274187c44596ac519abbc383ce30a796205b55c561bf688",
+    "octane": "529e0cbb9dd695c7569ae9d64b04ee0ba9685402823faa230c339d582d811f74",
+    "@octanejs/rspack-plugin": "930795abefa05ae08954654b99b4f5a1442f50d89aa58900c164a0200cb7e3f0"
+  },
+  "archiveIntegrity": "sha512-w2Qatqpdpipgngxo2i7jllyinKxF+f1wwfp8MrsIvFEWrGB2S8hDlgHUlOvU9r8bsSHhaMLB6zbBFz2cjbkZ3A==",
+  "sourceCorrections": {
+    "runtime-source.patch": "a3e4e1e0ad6b99e97fd368bea03e50c89594c587cb5a59c40544f02e2a086a4a",
+    "typescript-compat/typescript-source.patch": "71898145840705e712954009bf5a94877302181ac2aef3ece3ec907cd17404cc",
+    "typescript-compat/native-signals-source.patch": "057a5f475311f5c2c437773c15c658b024b583b13d94f1e6958f6453ccc9558f",
+    "typescript-compat/volar-core-source.patch": "e2384c2a171989340e9ceb85bdbf0ac1d4e3a26a30154a0e920503b8cb9b254f",
+    "runtime-tests.patch": "45fd5daf6c151630cec2239d655c60615f9f51e4fd4d8f499f30555873e5281d",
+    "rspack-source.patch": "d1c3701919c7e7ed7129479497089aa14df8f0f41818b29795ac49998917336e",
+    "rspack-tests.patch": "08d967919d786b4ff085e1bcb124abeff0c591e61938e0f3d9557cd585dcf06a"
+  },
+  "serializers": {
+    "seroval": {
+      "version": "1.8.1",
+      "integrity": "sha512-7z9x1flFYfZBz+LfDkXNfm5UIhZJ/97ASaV8Q1wctoVkeqVfv+tLPsWebeMXBNw6XprvwxDE5wC5Ylqmr+iSrA=="
+    },
+    "seroval-plugins": {
+      "version": "1.8.0",
+      "integrity": "sha512-96vBb12rDvPPwdKUgWw1op3fGq8AVBFOr0IllbnM72yR5J9WWXF18cQ4g1XfDO7HCyh2dt70P3XdtyRayP8FWg=="
+    }
+  },
+  "installedPackages": {
+    "octane": {
+      "files": 1022
+    },
+    "@tanstack/router-core": {
+      "files": 472
+    },
+    "@octanejs/tanstack-router": {
+      "files": 107
+    }
+  },
+  "owningSerializerTests": {
+    "commit": "6b9fe6d29552270836c511bc9b343d73541f4424",
+    "files": {
+      "routerTestUtils.ts": "9cdca1126b6a53bdcc15af850778b4f27353301bacafe166398121d860549b6f",
+      "hydrate.test.ts": "fb586461cd08cfe4ae0c23c73d4b913ba1355511bbcdeb8713a63db8c769c098",
+      "hydration-boundary-chunks.test.ts": "cad593ad1687d76cd7250c395c5575ec5e18e469076f49d3b3a6c9c71d29abe9"
+    }
+  },
+  "payloadEvidence": {
+    "routerBootstrap": {
+      "sha256": "0773e49f7b6ee946f8cabda1df2b28d836e55ee92a73acf6e33f1c2ef219ea90",
+      "bytes": 1087
+    },
+    "webReadableStream": {
+      "sha256": "9629d398cfa5a4474408a5e888d2a36e2883d54b4efd035e815422713c13f09e",
+      "bytes": 2199
+    }
+  },
+  "correction": "none: existing pinned owning patch already corrects exact 0.23 peer to ^0.24.0",
+  "notClaimed": [
+    "full hydration rerun",
+    "new owning build",
+    "hosted acceptance",
+    "publication",
+    "parent updater/root integration"
+  ]
+}

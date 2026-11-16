@@ -15,7 +15,7 @@
     "src"
   ],
   "engines": {
-    "node": ">=26.12.0"
+    "node": ">=26.13.1"
   },
   "types": "./dist/types/cli.d.ts",
   "main": "./dist/cjs/cli.js",
@@ -122,17 +122,17 @@
     "@modern-js/rslib": "workspace:*",
     "@modern-js/runtime": "workspace:*",
     "@modern-js/tsconfig": "workspace:*",
-    "@rslib/core": "1.0.3",
-    "@rstest/core": "0.12.3",
+    "@rslib/core": "1.0.7",
+    "@rstest/core": "0.12.6",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "esbuild": "^0.28.2",
-    "i18next": "26.4.6",
+    "i18next": "27.1.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-i18next": "17.0.18",
+    "react-i18next": "18.0.1",
     "typescript": "7.0.2",
     "@modern-js/types": "workspace:*"
   },

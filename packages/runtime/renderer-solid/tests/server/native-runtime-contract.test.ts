@@ -3,6 +3,23 @@ import { SOLID_RENDERER_PROFILE } from '../../src';
 import { rendererAdapter } from '../../src/plugin';
 
 describe('Solid 2 native dependency ownership', () => {
+  test('preserves the selected runtime install request instead of replacing it with a version', () => {
+    // Synthetic transport identity: this does not claim a published release.
+    const request = 'https://unit.invalid/qualified-solid-control.tgz';
+    const profile = {
+      ...rendererAdapter.profile,
+      dependencies: {
+        ...rendererAdapter.profile.dependencies,
+        'solid-js': request,
+      },
+    };
+    expect(
+      rendererAdapter.create?.dependencies(profile, {
+        typescriptVersion: '7.0.2',
+      }).dependencies['solid-js'],
+    ).toBe(request);
+  });
+
   test('generates the same accepted router core that the renderer installs', () => {
     const manifest = JSON.parse(
       readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
@@ -34,8 +51,8 @@ describe('Solid 2 native dependency ownership', () => {
   });
 
   test('shares native runtime owners without replacing the independent HTTP codec', () => {
-    expect(rendererAdapter.profile.compiler.version).toBe('2.0.0-rc.15');
-    expect(rendererAdapter.profile.hydration.version).toBe('2.0.0-rc.15');
+    expect(rendererAdapter.profile.compiler.version).toBe('2.0.0-rc.22');
+    expect(rendererAdapter.profile.hydration.version).toBe('2.0.0-rc.22');
     expect(rendererAdapter.federation.shared).toEqual(
       expect.arrayContaining(['solid-js', '@solidjs/web', '@solidjs/signals']),
     );

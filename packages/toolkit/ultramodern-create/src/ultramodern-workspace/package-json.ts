@@ -15,6 +15,7 @@ import {
 } from './descriptors';
 import { readFileTemplate } from './fs-io';
 import { packageName, relativeRootFor } from './naming';
+import { selectSupportRequests } from './package-source';
 import { ULTRAMODERN_WORKSPACE_POLICY } from './policy';
 import { hasNativeAppGeneration } from './renderer-generations';
 import {
@@ -122,7 +123,7 @@ export function appDependencies(
     }
   }
 
-  return dependencies;
+  return selectSupportRequests(dependencies, packageSource.supportArtifacts);
 }
 
 function appDevDependencies(
@@ -151,27 +152,30 @@ function appDevDependencies(
           ),
         );
 
-  return {
-    ...(appHasApi(app) || (app.kind === 'shell' && renderer === 'react')
-      ? {
-          '@modern-js/plugin-bff-build-extensions':
-            frameworkRequest(packageSource),
-        }
-      : {}),
-    '@modern-js/ultramodern-app-tools': frameworkRequest(packageSource),
-    '@modern-js/app-tools-extensions': frameworkRequest(packageSource),
-    ...(renderer === 'react' || renderer === 'none'
-      ? { '@modern-js/app-tools': frameworkRequest(packageSource) }
-      : {}),
-    ...selectedAlways,
-    ...generationProfile?.devDependencies,
-    ...(enableTailwind
-      ? {
-          '@rsbuild/plugin-tailwindcss': tailwindPluginVersion,
-          tailwindcss: tailwindVersion,
-        }
-      : {}),
-  };
+  return selectSupportRequests(
+    {
+      ...(appHasApi(app) || (app.kind === 'shell' && renderer === 'react')
+        ? {
+            '@modern-js/plugin-bff-build-extensions':
+              frameworkRequest(packageSource),
+          }
+        : {}),
+      '@modern-js/ultramodern-app-tools': frameworkRequest(packageSource),
+      '@modern-js/app-tools-extensions': frameworkRequest(packageSource),
+      ...(renderer === 'react' || renderer === 'none'
+        ? { '@modern-js/app-tools': frameworkRequest(packageSource) }
+        : {}),
+      ...selectedAlways,
+      ...generationProfile?.devDependencies,
+      ...(enableTailwind
+        ? {
+            '@rsbuild/plugin-tailwindcss': tailwindPluginVersion,
+            tailwindcss: tailwindVersion,
+          }
+        : {}),
+    },
+    packageSource.supportArtifacts,
+  );
 }
 
 export function createRootPackageJson(
@@ -249,7 +253,24 @@ export function createRootPackageJson(
         typescript: ULTRAMODERN_PACKAGE_PINS.appDevDependencies.typescript,
         [ULTRAMODERN_CREATE_PACKAGE]: frameworkRequest(packageSource),
         '@modern-js/ultramodern-app-tools': frameworkRequest(packageSource),
+        ...Object.fromEntries(
+          apps
+            .flatMap(app =>
+              Object.entries(
+                appDependencies(scope, packageSource, app, remotes),
+              ),
+            )
+            .filter(([name]) =>
+              Object.hasOwn(
+                packageSource.supportArtifacts?.packages ?? {},
+                name,
+              ),
+            ),
+        ),
       },
+      ...(packageSource.supportArtifacts
+        ? { ultramodern: { supportArtifacts: packageSource.supportArtifacts } }
+        : {}),
     };
   }
   const shellFilter = `--filter ${packageName(scope, shellApp.packageSuffix)}`;
@@ -352,8 +373,21 @@ export function createRootPackageJson(
       '@modern-js/code-tools': frameworkRequest(packageSource),
       [ULTRAMODERN_CREATE_PACKAGE]: frameworkRequest(packageSource),
       '@modern-js/plugin-bff': frameworkRequest(packageSource),
-      ...ULTRAMODERN_PACKAGE_PINS.bffEffectDependencies,
+      ...selectSupportRequests(
+        ULTRAMODERN_PACKAGE_PINS.bffEffectDependencies,
+        packageSource.supportArtifacts,
+      ),
+      ...(packageSource.supportArtifacts
+        ? {
+            '@tanstack/react-router':
+              packageSource.supportArtifacts.packages['@tanstack/react-router']
+                .request,
+          }
+        : {}),
     },
+    ...(packageSource.supportArtifacts
+      ? { ultramodern: { supportArtifacts: packageSource.supportArtifacts } }
+      : {}),
   };
 }
 
@@ -420,6 +454,9 @@ export function createAppPackage(
     },
     ...(resolveWorkspaceRenderer(app) === 'react' && appSupportsFederation(app)
       ? { 'zephyr:dependencies': createZephyrDependencies(scope, app, remotes) }
+      : {}),
+    ...(packageSource.supportArtifacts
+      ? { ultramodern: { supportArtifacts: packageSource.supportArtifacts } }
       : {}),
     dependencies: appDependencies(scope, packageSource, app, remotes, bridge),
     devDependencies: appDevDependencies(packageSource, enableTailwind, app),

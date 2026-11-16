@@ -1,7 +1,33 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { cohort } from '../../../scripts/ultramodern-renderers/native-artifacts/protocol.mjs';
 import { createOctaneFederationFixtures } from './fixtures.mjs';
-import { sourceDevManifest } from './source-dev.mjs';
+import {
+  assertSourceNativeArchives,
+  sourceDevManifest,
+} from './source-dev.mjs';
+
+test('actual source dev context cannot install historical native candidates or omit shared Core', () => {
+  const archives = new Map(
+    Object.entries(cohort).map(([name, version]) => [
+      name,
+      { metadata: { name, version } },
+    ]),
+  );
+  const tools = { '@tsrx/oxc': '0.24.0', typescript: '7.0.2' };
+  assertSourceNativeArchives(archives, tools);
+  archives.get('octane').metadata.version = '0.13.8';
+  assert.throws(
+    () => assertSourceNativeArchives(archives, tools),
+    /Source candidate version/,
+  );
+  archives.get('octane').metadata.version = cohort.octane;
+  archives.delete('@tanstack/router-core');
+  assert.throws(
+    () => assertSourceNativeArchives(archives, tools),
+    /Missing exact native candidate archive/,
+  );
+});
 
 const fixture = {
   name: 'source-dev-consumer',

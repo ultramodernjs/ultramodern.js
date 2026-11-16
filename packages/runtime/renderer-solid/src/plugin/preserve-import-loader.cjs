@@ -15,14 +15,12 @@ module.exports = function preserveSolidImport(source, inputMap) {
       plugins: [
         () => ({
           visitor: {
-            CallExpression(call) {
+            ImportExpression(call) {
               if (
-                call.node.callee.type === 'Import' &&
-                call.node.arguments.length === 1 &&
-                call.node.arguments[0].type === 'Identifier' &&
-                call.node.arguments[0].name === 'entryUrl'
+                call.node.source.type === 'Identifier' &&
+                call.node.source.name === 'entryUrl'
               ) {
-                const argument = call.node.arguments[0];
+                const argument = call.node.source;
                 argument.leadingComments = [
                   ...(argument.leadingComments ?? []),
                   { type: 'CommentBlock', value: ' webpackIgnore: true ' },
@@ -36,7 +34,7 @@ module.exports = function preserveSolidImport(source, inputMap) {
     });
     if (matched !== 1 || !result) {
       throw new Error(
-        'Solid native browser URL import contract changed. Expected one import(entryUrl) in @solidjs/web 2.0.0-rc.15; update and revalidate the compiler integration.',
+        'Solid native browser URL import contract changed. Expected one import(entryUrl) in @solidjs/web 2.0.0-rc.22; update and revalidate the compiler integration.',
       );
     }
     callback(null, result.code, result.map);

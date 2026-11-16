@@ -41,7 +41,7 @@ test('failed Tractor acceptance preserves bounded compiler inputs without claimi
 });
 
 for (const mode of ['source', 'published'])
-  for (const failure of ['none', 'stage', 'proof'])
+  for (const failure of ['none', 'stage', 'proof', 'retain', 'token-leak'])
     test(`${mode} feature command preserves ${failure} result and retires only staged native archives`, t => {
       // Only the shell wiring is executed: fabricated mise commands never qualify archives or a consumer.
       assert(
@@ -70,6 +70,11 @@ for (const mode of ['source', 'published'])
       const command = job.steps.find(step =>
         step.name.includes('installed renderer features'),
       ).run;
+      const exercisedCommand =
+        failure === 'token-leak'
+          ? command.replace('unset NATIVE_ARTIFACT_GITHUB_TOKEN', ':')
+          : command;
+      if (failure === 'token-leak') assert.notEqual(exercisedCommand, command);
       const child = spawnSync(
         'bash',
         [
@@ -81,21 +86,30 @@ for (const mode of ['source', 'published'])
         mise() {
           case "$4" in
             scripts/ultramodern-renderers/native-federation-inputs.mjs)
+              [[ "$GH_TOKEN" == native-control-token ]] || return 88
               mkdir "$OWNED_TEMP_DIR/native-inputs"
               printf 'staged control bytes' > "$OWNED_TEMP_DIR/native-inputs/native-inputs.json"
               if [[ "$FAILURE" == stage ]]; then return 23; fi
               ;;
             scripts/ultramodern-renderers/release.mjs)
+              [[ -z "\${GH_TOKEN+x}" && -z "\${NATIVE_ARTIFACT_GITHUB_TOKEN+x}" ]] || return 89
               [[ "$*" == *"--native-inputs $OWNED_TEMP_DIR/native-inputs/native-inputs.json"* ]]
               [[ "$*" == *"--browser-executable $RENDERER_BROWSER_EXECUTABLE"* ]]
               test -f "$OWNED_TEMP_DIR/native-inputs/native-inputs.json"
               printf 'proof invoked' > "$OWNED_TEMP_DIR/proof-evidence.log"
               if [[ "$FAILURE" == proof ]]; then return 31; fi
               ;;
+            scripts/ultramodern-renderers/retain-feature-evidence.mjs)
+              [[ -z "\${GH_TOKEN+x}" && -z "\${NATIVE_ARTIFACT_GITHUB_TOKEN+x}" ]] || return 89
+              test -f "$OWNED_TEMP_DIR/proof-evidence.log"
+              if [[ "$FAILURE" == retain ]]; then return 37; fi
+              mkdir -p "$OWNED_TEMP_DIR/logs/retained-evidence"
+              printf 'retained proof' > "$OWNED_TEMP_DIR/logs/retained-evidence/proof.json"
+              ;;
             *) return 90 ;;
           esac
         }
-        ${command}
+        ${exercisedCommand}
       `,
         ],
         {
@@ -106,6 +120,7 @@ for (const mode of ['source', 'published'])
             BLEEDINGDEV_RELEASE_MANIFEST: '/control/manifest.json',
             BLEEDINGDEV_RELEASE_DIR: '/control',
             PRODUCER_RUN_IDENTITY: 'control-run',
+            NATIVE_ARTIFACT_GITHUB_TOKEN: 'native-control-token',
             RENDERER_BROWSER_EXECUTABLE: browserExecutable,
             RENDERER_AGENT_BROWSER_EXECUTABLE: browserCli,
             PATH: `${root}${path.delimiter}${process.env.PATH}`,
@@ -116,7 +131,15 @@ for (const mode of ['source', 'published'])
       assert.equal(child.error, undefined);
       assert.equal(
         child.status,
-        failure === 'stage' ? 23 : failure === 'proof' ? 31 : 0,
+        failure === 'stage'
+          ? 23
+          : failure === 'proof'
+            ? 31
+            : failure === 'retain'
+              ? 37
+              : failure === 'token-leak'
+                ? 89
+                : 0,
         child.stderr,
       );
       const featureRoot = path.join(
@@ -131,9 +154,29 @@ for (const mode of ['source', 'published'])
       );
       assert.equal(
         fs.existsSync(path.join(featureRoot, 'proof-evidence.log')),
-        failure !== 'stage',
+        !['stage', 'token-leak'].includes(failure),
+      );
+      assert.equal(
+        fs.existsSync(
+          path.join(featureRoot, 'logs/retained-evidence/proof.json'),
+        ),
+        failure === 'none',
       );
     });
+
+for (const mode of ['source', 'published'])
+  test(`${mode} uploads the selected non-log evidence as well as failure logs`, () => {
+    const job =
+      mode === 'source'
+        ? readWorkflow('ultramodern-release-acceptance').jobs['accept-release']
+        : readWorkflow('publish-bleedingdev').jobs['accept-published'];
+    const upload = job.steps.find(
+      step => step.name === 'Preserve renderer feature runtime evidence',
+    );
+    assert.match(upload.with.path, /retained-evidence\/\*\*/u);
+    assert.match(upload.with.path, /\*\*\/\*\.log/u);
+    assert.doesNotMatch(upload.with.path, /renderer-features-\*\/\*\*$/mu);
+  });
 
 for (const mode of ['source', 'published'])
   test(`${mode} installed feature command consumes the fixed browser provisioner's exact output`, () => {
@@ -224,15 +267,15 @@ for (const mode of ['source', 'published'])
       assert.equal(job.steps[install].if, job.steps[proof].if);
   });
 
-test('renderer CLI provisioning verifies the qualified native release before execution', () => {
+test('renderer CLI provisioning verifies the pinned native release before execution', () => {
   const script = fs.readFileSync(
     new URL('./provision-agent-browser.mjs', import.meta.url),
     'utf8',
   );
-  assert.match(script, /const version = '0\.39\.1'/u);
+  assert.match(script, /const version = '0\.43\.0'/u);
   assert.match(
     script,
-    /6906d3a2a67b05809932a93d99e53d1132373f0a52a617b2d6032dbb954df6fc/u,
+    /8e69c9fb662514c9cf36e4911e94e913742ba066e55102486350e049dd847612/u,
   );
   assert.match(
     script,

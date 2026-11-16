@@ -8,6 +8,13 @@ import { parseArgs } from 'node:util';
 import { inspectNpmTarball } from '../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs';
 import { readReleaseManifest } from '../ultramodern-publish/lib/source-create-proof/release-manifest.mjs';
 
+import { sha256, validateDescriptor } from './native-artifacts/protocol.mjs';
+import {
+  authenticateDescriptor,
+  githubReader,
+  readBytes,
+} from './native-artifacts/transport.mjs';
+
 const packages = {
   octane: ['octane', 'octane'],
   '@octanejs/tanstack-router': ['octane', 'octanejs-tanstack-router'],
@@ -127,6 +134,63 @@ export function nativeFederationArtifacts(rendererPackage) {
     artifacts && typeof artifacts === 'object' && !Array.isArray(artifacts),
     'Packed Octane renderer is missing nativeArtifacts',
   );
+  // Presence of a typed envelope is a protocol commitment, never a legacy fallback.
+  if (
+    ['protocol', 'producer', 'manifest', 'packages'].some(key =>
+      Object.hasOwn(artifacts, key),
+    )
+  ) {
+    validateDescriptor(artifacts);
+    for (const name of [
+      '@octanejs/tanstack-start',
+      ...Object.keys(startPackages),
+    ])
+      assert(
+        ![
+          'dependencies',
+          'devDependencies',
+          'optionalDependencies',
+          'peerDependencies',
+        ].some(block => Object.hasOwn(manifest[block] ?? {}, name)),
+        'Typed native producer v1 does not qualify a Start closure',
+      );
+    return Object.fromEntries(
+      Object.entries(artifacts.packages).map(([name, artifact]) => {
+        assert(
+          !Object.hasOwn(manifest.dependencies ?? {}, name),
+          `${name}: native renderer must not ship an archive implementation dependency`,
+        );
+        assert(
+          !Object.hasOwn(manifest.optionalDependencies ?? {}, name),
+          `${name}: native authority cannot be an optional dependency`,
+        );
+        if (Object.hasOwn(manifest.devDependencies ?? {}, name))
+          assert.equal(
+            manifest.devDependencies[name],
+            artifact.request,
+            `${name} differs from its packed renderer devDependencies request`,
+          );
+        assert.equal(
+          manifest.peerDependencies?.[name],
+          artifact.version,
+          `${name} differs from its packed renderer peer`,
+        );
+        if (name === '@tanstack/router-core')
+          assert.notEqual(
+            manifest.peerDependenciesMeta?.[name]?.optional,
+            true,
+            'Native shared core peer must be required',
+          );
+        return [
+          name,
+          {
+            ...artifact,
+            filename: new URL(artifact.request).pathname.split('/').at(-1),
+          },
+        ];
+      }),
+    );
+  }
   const hasStart = [
     '@octanejs/tanstack-start',
     ...Object.keys(startPackages),
@@ -244,6 +308,7 @@ export async function stageNativeFederationInputs({
   directory,
   signal,
   fetchArtifact = fetch,
+  readGithub = githubReader({ token: process.env.GH_TOKEN, signal }),
 }) {
   const artifacts = nativeFederationArtifacts(rendererPackage);
   assert(
@@ -263,15 +328,31 @@ export async function stageNativeFederationInputs({
   signal?.throwIfAborted();
   fs.mkdirSync(directory);
   try {
+    const descriptor = rendererPackage.packageJson.ultramodern.nativeArtifacts;
+    const release = Object.hasOwn(descriptor, 'protocol')
+      ? await authenticateDescriptor(descriptor, {
+          readGithub,
+          fetchArtifact,
+          signal,
+        })
+      : undefined;
     const inputs = {};
     for (const [name, artifact] of Object.entries(artifacts)) {
       signal?.throwIfAborted();
-      const response = await fetchArtifact(artifact.request, { signal });
-      assert(
-        response.ok,
-        `${name} native archive fetch failed: HTTP ${response.status}`,
-      );
-      const bytes = Buffer.from(await response.arrayBuffer());
+      const bytes = await readBytes(artifact.request, {
+        fetchArtifact,
+        signal,
+      });
+      if (release) {
+        const asset = release.assets.find(
+          asset => asset.name === artifact.filename,
+        );
+        assert.equal(
+          asset.digest,
+          `sha256:${sha256(bytes)}`,
+          `${name} GitHub asset digest mismatch`,
+        );
+      }
       assert(
         bytes.length <= 128 * 1024 * 1024,
         `${name} native archive exceeds the admission limit`,

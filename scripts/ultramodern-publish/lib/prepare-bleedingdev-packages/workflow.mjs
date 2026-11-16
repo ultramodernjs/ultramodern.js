@@ -43,6 +43,8 @@ import { assertCleanCommittedSource } from '../release-source-state.mjs';
 import { resolveOwnedPreparationOutput } from './options.mjs';
 import { assertReleaseCompilerPayload } from '../../stage-effect-compiler-payload.mjs';
 
+import { assertReleaseSupportOwners, verifyReleaseSupportOwners } from '../support-release-admission.mjs';
+
 const { readJsonFile, writeJsonFile } = fsKit;
 
 function assertSidecarAliasConsumerCount(count) {
@@ -97,6 +99,7 @@ async function prepareBleedingdevPackages(options) {
   const sourceCommit = assertCleanCommittedSource(repoRoot);
   const { allPackages, aliases, packages, sourceNames } =
     collectModernPackages(options);
+  assertReleaseSupportOwners(packages.map(item => item.packageJson));
   const includesCompiler = packages.some(
     item => item.packageJson.name === '@modern-js/app-tools-extensions',
   );
@@ -120,6 +123,7 @@ async function prepareBleedingdevPackages(options) {
       tag: options.tag,
       version: options.version,
     });
+    await verifyReleaseSupportOwners(releaseArtifacts.packages);
     assertPackedCompilerPayload(releaseArtifacts, options.out);
     // Recovery must validate the immutable tarball manifests as well: a fixed
     // checkout cannot authorize an older candidate with the upstream edge.
@@ -228,6 +232,7 @@ async function prepareBleedingdevPackages(options) {
     tag: options.tag,
     version: options.version,
   });
+  await verifyReleaseSupportOwners(releaseArtifacts.packages);
   assertPackedCompilerPayload(releaseArtifacts, options.out);
   assertRepositoryRecipeConsumers(
     releaseArtifacts.packages.map(item => item.packageJson),

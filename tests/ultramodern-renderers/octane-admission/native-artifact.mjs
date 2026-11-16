@@ -5,43 +5,73 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const upstreamCommit = '676a4ee6db59854d6b711921f4ac808845dcdbcd';
 const exactVersion = /^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/u;
-const sha256Pattern = /^[a-f0-9]{64}$/u;
-const commitPattern = /^[a-f0-9]{40}$/u;
-const requiredFiles = [
-  'LICENSE',
-  'dist/index.js',
-  'dist/node/index.js',
-  'dist/cjs/index.cjs',
-  'dist/index.d.ts',
-  'dist/compiler/index.js',
-  'dist/hydration/streamed-signals.js',
-];
-const routerName = '@octanejs/tanstack-router';
-const routerExports = {
-  '.': './src/index.ts',
-  './history': './src/history.ts',
-  './ssr/server': {
-    types: './src/ssr/server.ts',
-    default: './src/ssr/server.ts',
-  },
-  './ssr/client': {
-    types: './src/ssr/client.ts',
-    default: './src/ssr/client.ts',
-  },
-  './generator-plugin': {
-    types: './src/generator-plugin.d.ts',
-    default: './src/generator-plugin.js',
-  },
-  './package.json': './package.json',
-};
-const routerDependencies = {
-  '@tanstack/history': '1.162.0',
-  '@tanstack/router-core': '1.171.15',
-  '@tanstack/store': '0.9.3',
-  isbot: '5.2.1',
-};
+
+export const admissionTuple = Object.freeze({
+  octane: '0.18.0',
+  '@octanejs/tanstack-router': '0.3.4',
+  '@octanejs/rspack-plugin': '0.2.10',
+  '@tanstack/router-core': '1.171.39',
+  '@tsrx/oxc': '0.24.0',
+  typescript: '7.0.2',
+  '@types/react': '19.3.0',
+  '@types/node': '26.6.6',
+  '@tanstack/history': '1.162.5',
+  '@tanstack/store': '0.11.2',
+});
+
+async function owningProtocol(workspacePath) {
+  assert(
+    typeof workspacePath === 'string' && path.isAbsolute(workspacePath),
+    'Pass the owning workspacePath for native descriptor verification',
+  );
+  return import(
+    pathToFileURL(
+      path.join(
+        workspacePath,
+        'scripts/ultramodern-renderers/native-artifacts/protocol.mjs',
+      ),
+    )
+  );
+}
+
+/** Select only real producer requests; never synthesize an unpublished URL. */
+export async function nativeAdmissionPlan({
+  descriptor,
+  workspacePath,
+  manifest = {},
+}) {
+  assert(
+    descriptor?.protocol,
+    'Latest native acceptance is pending its typed owning native descriptor',
+  );
+  const { validateDescriptor, cohort } = await owningProtocol(workspacePath);
+  validateDescriptor(descriptor);
+  for (const [name, version] of Object.entries(cohort))
+    assert.equal(
+      version,
+      admissionTuple[name],
+      `Reviewed native cohort drift: ${name}`,
+    );
+  const nativeRequests = Object.fromEntries(
+    Object.entries(descriptor.packages).map(([name, artifact]) => [
+      name,
+      artifact.request,
+    ]),
+  );
+  const plan = {
+    ...manifest,
+    dependencies: { ...manifest.dependencies, ...nativeRequests },
+    ultramodernAdmission: { workspacePath, nativeArtifacts: descriptor },
+  };
+  if (manifest.devDependencies)
+    plan.devDependencies = { ...manifest.devDependencies };
+  for (const block of ['dependencies', 'devDependencies'])
+    for (const name of Object.keys(plan[block] ?? {}))
+      if (nativeRequests[name]) plan[block][name] = nativeRequests[name];
+      else if (admissionTuple[name]) plan[block][name] = admissionTuple[name];
+  return plan;
+}
 
 function digest(algorithm, bytes, encoding = 'hex') {
   return createHash(algorithm).update(bytes).digest(encoding);
@@ -59,10 +89,11 @@ function packageAt(require, name) {
     if (fs.existsSync(file)) {
       const manifest = readJson(file);
       if (manifest.name !== undefined) {
-        assert.equal(
-          manifest.name,
-          name,
-          `Package alias is forbidden: ${name}`,
+        assert(
+          manifest.name === name ||
+            (name.startsWith('@modern-js/') &&
+              manifest.ultramodern?.sourceName === name),
+          `Package alias is forbidden without owning framework metadata: ${name}`,
         );
         return { directory, entry, manifest };
       }
@@ -71,11 +102,6 @@ function packageAt(require, name) {
     assert.notEqual(parent, directory, `Missing package identity for ${name}`);
     directory = parent;
   }
-}
-
-function keys(value, expected, label) {
-  assert.ok(value && typeof value === 'object' && !Array.isArray(value), label);
-  assert.deepEqual(Object.keys(value).sort(), [...expected].sort(), label);
 }
 
 function exportFiles(value, result = []) {
@@ -104,22 +130,6 @@ function installedFiles(directory, relative = '', result = new Map()) {
     }
   }
   return result;
-}
-
-async function inspectArtifact(workspacePath, bytes) {
-  assert.ok(
-    typeof workspacePath === 'string' && path.isAbsolute(workspacePath),
-    'Pass the owning workspacePath for the tarball inspector',
-  );
-  const { inspectNpmTarball } = await import(
-    pathToFileURL(
-      path.join(
-        workspacePath,
-        'scripts/ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs',
-      ),
-    )
-  );
-  return inspectNpmTarball(bytes);
 }
 
 function verifyInstalledArchive({ archive, expected, dependency, installed }) {
@@ -186,14 +196,6 @@ function verifyInstalledArchive({ archive, expected, dependency, installed }) {
   );
 }
 
-function verifyDependencyURI(dependency, expected, provenance, label) {
-  assert.ok(
-    dependency === `file:${expected.tarball}` ||
-      dependency === provenance.artifact.intendedReleaseURI,
-    `${label} dependency must name the exact local tarball or verified release URI`,
-  );
-}
-
 function nativePeerResolution(packages, native) {
   const peers = [];
   const nativeRequire = createRequire(
@@ -237,528 +239,200 @@ function nativePeerResolution(packages, native) {
   return peers;
 }
 
-function verifyProvenance(bytes, expected) {
-  assert.equal(
-    digest('sha256', bytes),
-    expected.provenanceSha256,
-    'Provenance SHA256',
-  );
-  const provenance = JSON.parse(bytes.toString('utf8'));
-  keys(
-    provenance,
-    ['schemaVersion', 'package', 'upstream', 'source', 'producer', 'artifact'],
-    'Native provenance fields',
-  );
-  assert.equal(provenance.schemaVersion, 1, 'Native provenance schema');
-  assert.equal(
-    bytes.toString('utf8'),
-    `${JSON.stringify(provenance, null, 2)}\n`,
-    'Canonical native provenance',
-  );
-  assert.deepEqual(provenance.package, {
-    name: expected.name,
-    version: expected.version,
-  });
-  assert.deepEqual(provenance.upstream, {
-    repository: 'https://github.com/octanejs/octane',
-    tag: 'octane@0.7.1',
-    commit: expected.upstreamCommit,
-  });
-  assert.deepEqual(provenance.source, {
-    repository: 'https://github.com/bleedingdev/octane',
-    commit: expected.producerCommit,
-    implementationCommit: expected.implementationCommit,
-    runtimePatchSha256: expected.runtimePatchSha256,
-    authoredSourcePatchSha256: expected.authoredSourcePatchSha256,
-  });
-  keys(
-    provenance.producer,
-    ['node', 'pnpm', 'hostLockSha256', 'sourceManifestSha256'],
-    'Native producer fields',
-  );
-  assert.match(provenance.producer.node, /^v\d+\.\d+\.\d+$/u);
-  assert.match(provenance.producer.pnpm, /^\d+\.\d+\.\d+$/u);
-  assert.match(provenance.producer.hostLockSha256, sha256Pattern);
-  assert.match(provenance.producer.sourceManifestSha256, sha256Pattern);
-  const file = path.basename(expected.tarball);
-  assert.equal(
-    file,
-    `octane-${expected.version}.tgz`,
-    'Native artifact filename',
-  );
-  assert.match(provenance.artifact.publishManifestSha256, sha256Pattern);
-  assert.deepEqual(provenance.artifact, {
-    file,
-    sha256: expected.sha256,
-    integrity: expected.integrity,
-    publishManifestSha256: provenance.artifact.publishManifestSha256,
-    intendedReleaseURI: `https://github.com/bleedingdev/octane/releases/download/${encodeURIComponent(`octane@${expected.version}`)}/${encodeURIComponent(file)}`,
-  });
-  return provenance;
-}
-
-async function verifyNativeArtifact({
-  workspacePath,
-  expected,
-  dependency,
-  installed,
-}) {
-  assert.equal(expected.name, 'octane', 'Native package name');
-  assert.equal(
-    expected.upstreamCommit,
-    upstreamCommit,
-    'Native upstream release',
-  );
-  for (const field of [
-    'upstreamCommit',
-    'implementationCommit',
-    'producerCommit',
-  ])
-    assert.match(expected[field], commitPattern, `Native ${field}`);
-  for (const field of [
-    'sha256',
-    'provenanceSha256',
-    'runtimePatchSha256',
-    'authoredSourcePatchSha256',
-  ])
-    assert.match(expected[field], sha256Pattern, `Native ${field}`);
-  assert.equal(
-    expected.version,
-    `0.7.1+ultramodern.${expected.implementationCommit.slice(0, 12)}`,
-    'Native source version',
-  );
-  assert.ok(
-    path.isAbsolute(expected.tarball),
-    'Native tarball must be an absolute path',
-  );
-  assert.ok(
-    path.isAbsolute(expected.provenancePath),
-    'Native provenance must be an absolute path',
-  );
-  assert.equal(
-    installed.manifest.version,
-    expected.version,
-    'Installed native version',
-  );
-  const bytes = fs.readFileSync(expected.tarball);
-  assert.ok(
-    bytes.length <= 128 * 1024 * 1024,
-    'Native tarball exceeds the admission limit',
-  );
-  assert.equal(
-    digest('sha256', bytes),
-    expected.sha256,
-    'Native tarball SHA256',
-  );
-  assert.equal(
-    `sha512-${digest('sha512', bytes, 'base64')}`,
-    expected.integrity,
-    'Native tarball SRI',
-  );
-  const provenance = verifyProvenance(
-    fs.readFileSync(expected.provenancePath),
-    expected,
-  );
-  verifyDependencyURI(dependency, expected, provenance, 'Native');
-  const archive = await inspectArtifact(workspacePath, bytes);
-  assert.equal(
-    archive.packageJson.name,
-    expected.name,
-    'Packed native package name',
-  );
-  assert.equal(
-    archive.packageJson.version,
-    expected.version,
-    'Packed native version',
-  );
-  assert.deepEqual(archive.packageJson.ultramodernSource, {
-    upstreamCommit: expected.upstreamCommit,
-    implementationCommit: expected.implementationCommit,
-    runtimePatchSha256: expected.runtimePatchSha256,
-    authoredSourcePatchSha256: expected.authoredSourcePatchSha256,
-  });
-  assert.equal(
-    digest('sha256', archive.fileContents.get('package.json')),
-    provenance.artifact.publishManifestSha256,
-    'Native published package manifest SHA256',
-  );
-  for (const file of requiredFiles)
-    assert.ok(
-      archive.fileContents.has(file),
-      `Native tarball is missing ${file}`,
-    );
-  verifyInstalledArchive({ archive, expected, dependency, installed });
-  return {
-    name: expected.name,
-    version: expected.version,
-    dependencyURI: dependency,
-    tarball: expected.tarball,
-    sha256: expected.sha256,
-    integrity: expected.integrity,
-    provenancePath: expected.provenancePath,
-    provenanceSha256: expected.provenanceSha256,
-    upstreamCommit: expected.upstreamCommit,
-    implementationCommit: expected.implementationCommit,
-    producerCommit: expected.producerCommit,
-    runtimePatchSha256: expected.runtimePatchSha256,
-    authoredSourcePatchSha256: expected.authoredSourcePatchSha256,
-    publishManifestSha256: provenance.artifact.publishManifestSha256,
-    packageRoot: installed.directory,
-    fileCount: archive.fileCount,
-    fileListSha256: archive.fileListSha256,
-    installedBytesVerified: true,
-    producer: provenance.producer,
-  };
-}
-
-function runtimeBinding(nativeRuntime) {
-  return {
-    name: nativeRuntime.name,
-    version: nativeRuntime.version,
-    artifactSha256: nativeRuntime.sha256,
-    provenanceSha256: nativeRuntime.provenanceSha256,
-  };
-}
-
-function verifyRouterProvenance(bytes, expected, nativeRuntime) {
-  assert.equal(
-    digest('sha256', bytes),
-    expected.provenanceSha256,
-    'Router provenance SHA256',
-  );
-  const provenance = JSON.parse(bytes.toString('utf8'));
-  keys(
-    provenance,
-    [
-      'schemaVersion',
-      'package',
-      'upstream',
-      'source',
-      'producer',
-      'artifact',
-      'inventory',
-    ],
-    'Router provenance fields',
-  );
-  assert.equal(provenance.schemaVersion, 1, 'Router provenance schema');
-  assert.equal(
-    bytes.toString('utf8'),
-    `${JSON.stringify(provenance, null, 2)}\n`,
-    'Canonical router provenance',
-  );
-  assert.deepEqual(provenance.package, {
-    name: expected.name,
-    version: expected.version,
-  });
-  assert.deepEqual(provenance.upstream, {
-    repository: 'https://github.com/octanejs/octane',
-    tag: 'octane@0.7.1',
-    commit: expected.upstreamCommit,
-    packageVersion: '0.1.60',
-  });
-  assert.deepEqual(provenance.source, {
-    repository: 'https://github.com/bleedingdev/octane',
-    commit: expected.producerCommit,
-    implementationCommit: expected.implementationCommit,
-    authoredSourcePatchSha256: expected.authoredSourcePatchSha256,
-  });
-  keys(
-    provenance.producer,
-    ['node', 'pnpm', 'hostLockSha256', 'sourceManifestSha256', 'nativeRuntime'],
-    'Router producer fields',
-  );
-  assert.match(provenance.producer.node, /^v\d+\.\d+\.\d+$/u);
-  assert.match(provenance.producer.pnpm, /^\d+\.\d+\.\d+$/u);
-  assert.match(provenance.producer.hostLockSha256, sha256Pattern);
-  assert.match(provenance.producer.sourceManifestSha256, sha256Pattern);
-  assert.deepEqual(
-    provenance.producer.nativeRuntime,
-    runtimeBinding(nativeRuntime),
-    'Router producer must bind the verified native runtime',
-  );
-  const file = path.basename(expected.tarball);
-  assert.equal(
-    file,
-    `octanejs-tanstack-router-${expected.version}.tgz`,
-    'Router artifact filename',
-  );
-  assert.match(provenance.artifact.publishManifestSha256, sha256Pattern);
-  assert.match(provenance.artifact.sourceInventorySha256, sha256Pattern);
-  assert.deepEqual(provenance.artifact, {
-    file,
-    sha256: expected.sha256,
-    integrity: expected.integrity,
-    publishManifestSha256: provenance.artifact.publishManifestSha256,
-    sourceInventorySha256: provenance.artifact.sourceInventorySha256,
-    intendedReleaseURI: `https://github.com/bleedingdev/octane/releases/download/${encodeURIComponent(`${routerName}@${expected.version}`)}/${encodeURIComponent(file)}`,
-  });
-  return provenance;
-}
-
-function publishedInventory(archive) {
-  // The producer visits sorted directory entries recursively. Compare path
-  // components so a directory precedes a sibling such as "directory.ts".
-  const files = [...archive.fileContents.keys()].sort((left, right) => {
-    const leftParts = left.split('/');
-    const rightParts = right.split('/');
-    for (
-      let index = 0;
-      index < Math.min(leftParts.length, rightParts.length);
-      index++
-    ) {
-      if (leftParts[index] < rightParts[index]) return -1;
-      if (leftParts[index] > rightParts[index]) return 1;
-    }
-    return leftParts.length - rightParts.length;
-  });
-  return files.map(file => ({
-    file,
-    sha256: digest('sha256', archive.fileContents.get(file)),
-  }));
-}
-
-async function verifyNativeRouterArtifact({
-  workspacePath,
-  expected,
-  dependency,
-  installed,
-  nativeRuntime,
-}) {
-  assert.equal(expected.name, routerName, 'Router package name');
-  assert.equal(
-    expected.upstreamCommit,
-    upstreamCommit,
-    'Router upstream release',
-  );
-  for (const field of [
-    'upstreamCommit',
-    'implementationCommit',
-    'producerCommit',
-  ])
-    assert.match(expected[field], commitPattern, `Router ${field}`);
-  for (const field of [
-    'sha256',
-    'provenanceSha256',
-    'authoredSourcePatchSha256',
-  ])
-    assert.match(expected[field], sha256Pattern, `Router ${field}`);
-  assert.equal(
-    expected.version,
-    `0.1.60+ultramodern.${expected.implementationCommit.slice(0, 12)}`,
-    'Router source version',
-  );
-  assert.ok(
-    path.isAbsolute(expected.tarball),
-    'Router tarball must be an absolute path',
-  );
-  assert.ok(
-    path.isAbsolute(expected.provenancePath),
-    'Router provenance must be an absolute path',
-  );
-  assert.equal(
-    installed.manifest.version,
-    expected.version,
-    'Installed router version',
-  );
-  const bytes = fs.readFileSync(expected.tarball);
-  assert.ok(
-    bytes.length <= 128 * 1024 * 1024,
-    'Router tarball exceeds the admission limit',
-  );
-  assert.equal(
-    digest('sha256', bytes),
-    expected.sha256,
-    'Router tarball SHA256',
-  );
-  assert.equal(
-    `sha512-${digest('sha512', bytes, 'base64')}`,
-    expected.integrity,
-    'Router tarball SRI',
-  );
-  const provenance = verifyRouterProvenance(
-    fs.readFileSync(expected.provenancePath),
-    expected,
-    nativeRuntime,
-  );
-  verifyDependencyURI(dependency, expected, provenance, 'Router');
-  const archive = await inspectArtifact(workspacePath, bytes);
-  const manifest = archive.packageJson;
-  assert.equal(manifest.name, expected.name, 'Packed router package name');
-  assert.equal(manifest.version, expected.version, 'Packed router version');
-  assert.deepEqual(manifest.ultramodernSource, {
-    upstreamCommit: expected.upstreamCommit,
-    implementationCommit: expected.implementationCommit,
-    authoredSourcePatchSha256: expected.authoredSourcePatchSha256,
-    nativeRuntime: runtimeBinding(nativeRuntime),
-  });
-  for (const field of ['main', 'module', 'types'])
-    assert.equal(manifest[field], 'src/index.ts', `Native router ${field}`);
-  assert.equal(manifest.type, 'module', 'Native router module type');
-  assert.equal(manifest.license, 'MIT', 'Native router license');
-  assert.equal(manifest.sideEffects, false, 'Native router side effects');
-  assert.deepEqual(manifest.engines, { node: '>=22.22.2' });
-  assert.deepEqual(manifest.octane, { hookSlots: { manual: ['src'] } });
-  assert.equal(
-    JSON.stringify(manifest.exports),
-    JSON.stringify(routerExports),
-    'Preserve the native router source export conditions',
-  );
-  assert.deepEqual(
-    manifest.dependencies,
-    routerDependencies,
-    'Native router dependency pins',
-  );
-  assert.deepEqual(
-    manifest.peerDependencies,
-    { octane: '^0.7.0' },
-    'Native router peer',
-  );
-  for (const field of [
-    'publishConfig',
-    'scripts',
-    'devDependencies',
-    'imports',
-    'optionalDependencies',
-  ])
-    assert.ok(
-      !Object.hasOwn(manifest, field),
-      `Router must not publish ${field}`,
-    );
-  for (const file of ['package.json', 'README.md', 'LICENSE'])
-    assert.ok(
-      archive.fileContents.has(file),
-      `Router tarball is missing ${file}`,
-    );
-  for (const file of archive.fileContents.keys())
-    assert.ok(
-      file.startsWith('src/') ||
-        ['package.json', 'README.md', 'LICENSE'].includes(file),
-      `Router must publish authored native sources: ${file}`,
-    );
-  assert.equal(
-    digest('sha256', archive.fileContents.get('package.json')),
-    provenance.artifact.publishManifestSha256,
-    'Router published package manifest SHA256',
-  );
-  const inventory = publishedInventory(archive);
-  assert.deepEqual(
-    provenance.inventory,
-    inventory,
-    'Router published source inventory',
-  );
-  assert.equal(
-    digest('sha256', Buffer.from(`${JSON.stringify(inventory)}\n`)),
-    provenance.artifact.sourceInventorySha256,
-    'Router published source inventory SHA256',
-  );
-  verifyInstalledArchive({ archive, expected, dependency, installed });
-  const routerRequire = createRequire(
-    path.join(installed.directory, 'package.json'),
-  );
-  const dependencyVersions = {};
-  for (const [name, version] of Object.entries(routerDependencies)) {
-    const resolved = packageAt(routerRequire, name);
-    assert.equal(
-      resolved.manifest.version,
-      version,
-      `Native router requires exact ${name}@${version}`,
-    );
-    dependencyVersions[name] = resolved.manifest.version;
-  }
-  return {
-    name: expected.name,
-    version: expected.version,
-    dependencyURI: dependency,
-    tarball: expected.tarball,
-    sha256: expected.sha256,
-    integrity: expected.integrity,
-    provenancePath: expected.provenancePath,
-    provenanceSha256: expected.provenanceSha256,
-    upstreamCommit: expected.upstreamCommit,
-    implementationCommit: expected.implementationCommit,
-    producerCommit: expected.producerCommit,
-    authoredSourcePatchSha256: expected.authoredSourcePatchSha256,
-    publishManifestSha256: provenance.artifact.publishManifestSha256,
-    sourceInventorySha256: provenance.artifact.sourceInventorySha256,
-    dependencyVersions,
-    packageRoot: installed.directory,
-    fileCount: archive.fileCount,
-    fileListSha256: archive.fileListSha256,
-    installedBytesVerified: true,
-    producer: provenance.producer,
-  };
-}
-
-/** Verify exact registry pins and explicitly qualified native source tarballs. */
+/** Live admission consumes the same authenticated four-asset producer protocol
+ * as packed federation. Historical v1 receipts are not latest acceptance. */
 export async function validateAdmissionPackages({
-  root = process.cwd(),
+  root,
   workspacePath,
+  nativeArtifacts,
+  nativeArchives,
   nativeArtifact,
   nativeRouterArtifact,
-} = {}) {
-  assert.ok(
-    !nativeRouterArtifact || nativeArtifact,
-    'A maintained router requires a qualified native runtime',
-  );
+  readGithub,
+  fetchArtifact,
+}) {
   const require = createRequire(path.join(root, 'package.json'));
-  const dependencies = readJson(path.join(root, 'package.json')).dependencies;
-  assert.ok(
-    dependencies && typeof dependencies === 'object',
-    'Admission dependencies are required',
+  const manifest = readJson(path.join(root, 'package.json'));
+  const admission = manifest.ultramodernAdmission ?? {};
+  assert(
+    !nativeArtifact && !nativeRouterArtifact,
+    'Historical nativeArtifact/nativeRouterArtifact receipts cannot admit the latest native descriptor',
   );
-  const packageVersions = {};
+  const descriptor = nativeArtifacts ?? admission.nativeArtifacts;
+  workspacePath ??= admission.workspacePath;
+  await nativeAdmissionPlan({ descriptor, workspacePath });
+  const { authenticateDescriptor, readBytes } = await import(
+    pathToFileURL(
+      path.join(
+        workspacePath,
+        'scripts/ultramodern-renderers/native-artifacts/transport.mjs',
+      ),
+    )
+  );
+  const { inspectNpmTarball } = await import(
+    pathToFileURL(
+      path.join(
+        workspacePath,
+        'scripts/ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs',
+      ),
+    )
+  );
+  const archives = nativeArchives ?? admission.nativeArchives ?? {};
+  const requests = { ...manifest.devDependencies, ...manifest.dependencies };
+  // Reject drift before touching the network or declaring any installed package.
+  for (const [name, artifact] of Object.entries(descriptor.packages)) {
+    for (const block of ['dependencies', 'devDependencies']) {
+      const declared = manifest[block]?.[name];
+      if (declared !== undefined)
+        assert.equal(
+          declared,
+          requests[name],
+          `Conflicting live native request: ${name}`,
+        );
+    }
+    assert(
+      requests[name] === artifact.request ||
+        (path.isAbsolute(archives[name] ?? '') &&
+          requests[name] === `file:${archives[name]}`),
+      `${name}: use the owning descriptor request or its explicit exact staged archive`,
+    );
+  }
+  for (const name of ['@tsrx/oxc', 'typescript', '@types/react', '@types/node'])
+    if (requests[name] !== undefined)
+      assert.equal(
+        requests[name],
+        admissionTuple[name],
+        `Live native tooling cohort: ${name}`,
+      );
+  const release = await authenticateDescriptor(descriptor, {
+    readGithub,
+    fetchArtifact,
+  });
   const packages = new Map();
-  let verifiedNativeArtifact = null;
-  let verifiedNativeRouterArtifact = null;
-  for (const [name, version] of Object.entries(dependencies)) {
+  const packageVersions = {};
+  const verified = {};
+  for (const [name, request] of Object.entries(requests)) {
+    if (request.startsWith('workspace:')) continue; // Owning SDK, never a native archive.
     const installed = packageAt(require, name);
     packages.set(name, installed);
-    if (name === 'octane' && nativeArtifact) {
-      verifiedNativeArtifact = await verifyNativeArtifact({
-        workspacePath,
-        expected: nativeArtifact,
-        dependency: version,
-        installed,
-      });
-    } else if (name !== routerName || !nativeRouterArtifact) {
+    packageVersions[name] = installed.manifest.version;
+    const artifact = descriptor.packages[name];
+    if (!artifact) {
+      if (name.startsWith('@modern-js/')) {
+        // Framework transport is admitted by its own packed release gate.
+        // Keep it in the physical Octane peer-resolution check below.
+        assert(
+          request.startsWith('file:') ||
+            /^npm:@bleedingdev\/[^@]+@\d+\.\d+\.\d+(?:-[\w.-]+)?$/u.test(
+              request,
+            ) ||
+            exactVersion.test(request),
+          `Owning framework package needs an exact packed request: ${name}`,
+        );
+        continue;
+      }
       assert.match(
-        version,
+        request,
         exactVersion,
         `Admission requires an exact numeric pin for ${name}`,
       );
       assert.equal(
         installed.manifest.version,
-        version,
-        `Admission requires exact ${name}@${version}`,
+        request,
+        `Admission requires exact ${name}@${request}`,
       );
+      continue;
     }
-    packageVersions[name] = installed.manifest.version;
-  }
-  assert.ok(
-    !nativeArtifact || verifiedNativeArtifact,
-    'Native artifact has no octane consumer dependency',
-  );
-  if (nativeRouterArtifact) {
-    assert.ok(
-      packages.has(routerName),
-      'Native router artifact has no router consumer dependency',
+    const bytes = archives[name]
+      ? fs.readFileSync(archives[name])
+      : await readBytes(artifact.request, { fetchArtifact });
+    assert(
+      bytes.length <= 128 * 1024 * 1024,
+      'Native tarball exceeds admission limit',
     );
-    verifiedNativeRouterArtifact = await verifyNativeRouterArtifact({
-      workspacePath,
-      expected: nativeRouterArtifact,
-      dependency: dependencies[routerName],
-      installed: packages.get(routerName),
-      nativeRuntime: verifiedNativeArtifact,
+    assert.equal(
+      `sha512-${digest('sha512', bytes, 'base64')}`,
+      artifact.integrity,
+      `${name}: native archive SRI`,
+    );
+    const asset = release.assets.find(
+      asset =>
+        asset.name === new URL(artifact.request).pathname.split('/').at(-1),
+    );
+    assert.equal(
+      asset?.digest,
+      `sha256:${digest('sha256', bytes)}`,
+      `${name}: GitHub asset digest`,
+    );
+    const archive = inspectNpmTarball(bytes);
+    assert.equal(archive.packageJson.name, name);
+    assert.equal(archive.packageJson.version, artifact.version);
+    assert.equal(installed.manifest.version, artifact.version);
+    verifyInstalledArchive({
+      archive,
+      expected: artifact,
+      dependency: request,
+      installed,
     });
+    verified[name] = {
+      name,
+      version: artifact.version,
+      dependencyURI: request,
+      integrity: artifact.integrity,
+      sha256: digest('sha256', bytes),
+      descriptorManifestIntegrity: descriptor.manifest.integrity,
+      producer: descriptor.producer,
+      packageRoot: installed.directory,
+      installedBytesVerified: true,
+      fileCount: archive.fileCount,
+      fileHashes: Object.fromEntries(
+        [...archive.fileContents].map(([file, bytes]) => [
+          file,
+          digest('sha256', bytes),
+        ]),
+      ),
+    };
   }
-  if (verifiedNativeArtifact)
-    verifiedNativeArtifact.peerPackageRoots = nativePeerResolution(
-      packages,
-      packages.get('octane'),
+  assert.deepEqual(
+    Object.keys(verified).sort(),
+    Object.keys(descriptor.packages).sort(),
+    'Every descriptor asset must be installed and byte-verified',
+  );
+  const native = packages.get('octane');
+  for (const file of [
+    'LICENSE',
+    'dist/index.js',
+    'dist/node/index.js',
+    'dist/cjs/index.cjs',
+    'dist/index.d.ts',
+    'dist/compiler/index.js',
+    'dist/hydration/streamed-signals.js',
+  ])
+    assert(
+      verified.octane.fileHashes[file],
+      `Owning emitted native file absent: ${file}`,
+    );
+  const router = packages.get('@octanejs/tanstack-router');
+  assert.equal(
+    router.manifest.peerDependencies?.['@tanstack/router-core'],
+    admissionTuple['@tanstack/router-core'],
+    'Adapter must bind the exact admitted shared Core',
+  );
+  verified.octane.peerPackageRoots = nativePeerResolution(packages, native);
+  const routerRequire = createRequire(
+    path.join(router.directory, 'package.json'),
+  );
+  for (const name of ['@tanstack/history', '@tanstack/store'])
+    assert.equal(
+      packageAt(routerRequire, name).manifest.version,
+      admissionTuple[name],
+      `Adapter must actually resolve reviewed ${name}`,
     );
   return {
     packageVersions,
-    nativeArtifact: verifiedNativeArtifact,
-    nativeRouterArtifact: verifiedNativeRouterArtifact,
+    nativeDescriptor: descriptor,
+    nativeArtifacts: verified,
+    nativeArtifact: verified.octane,
+    nativeRouterArtifact: verified['@octanejs/tanstack-router'],
   };
 }

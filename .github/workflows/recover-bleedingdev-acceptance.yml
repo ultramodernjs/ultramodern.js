@@ -57,13 +57,13 @@ jobs:
       - name: Setup accepted Node interpreter
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '26.12.0'
+          node-version: '26.13.1'
       - name: Bind the accepted interpreter
         run: echo "ULTRAMODERN_ACCEPTANCE_NODE=$(command -v node)" >> "$GITHUB_ENV"
       - name: Setup mise
         uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
-          version: 2026.9.18
+          version: 2026.11.8
           cache_save: false
       - name: Install verification CLI dependencies
         run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts --prod --filter modern-js-monorepo --package-import-method=clone-or-copy
@@ -137,13 +137,13 @@ jobs:
       - name: Setup accepted Node interpreter
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '26.12.0'
+          node-version: '26.13.1'
       - name: Bind the accepted interpreter
         run: echo "ULTRAMODERN_ACCEPTANCE_NODE=$(command -v node)" >> "$GITHUB_ENV"
       - name: Setup mise
         uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
-          version: 2026.9.18
+          version: 2026.11.8
           cache_save: false
       - name: Install verification CLI dependencies
         run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts --prod --filter modern-js-monorepo --package-import-method=clone-or-copy

@@ -11,7 +11,7 @@
   "license": "MIT",
   "version": "3.8.3",
   "engines": {
-    "node": ">=26.12.0"
+    "node": ">=26.13.1"
   },
   "types": "./src/index.ts",
   "main": "./dist/cjs/index.js",
@@ -290,19 +290,19 @@
     "@modern-js/rslib": "workspace:*",
     "@modern-js/utils": "workspace:*",
     "@rsbuild/core": "2.3.2",
-    "@rslib/core": "1.0.3",
+    "@rslib/core": "1.0.7",
     "@scripts/rstest-config": "workspace:*",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "esbuild": "^0.28.2",
-    "nock": "^15.0.1",
+    "nock": "^15.0.6",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "typescript": "7.0.2",
-    "react-helmet-async": "3.0.0"
+    "react-helmet-async": "3.1.0"
   },
   "sideEffects": false,
   "publishConfig": {
@@ -312,7 +312,7 @@
   },
   "peerDependencies": {
     "react": "^19.3.1",
-    "react-helmet-async": "3.0.0"
+    "react-helmet-async": "3.1.0"
   },
   "peerDependenciesMeta": {
     "react": {

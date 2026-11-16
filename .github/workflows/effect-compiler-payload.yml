@@ -56,7 +56,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Effect-TS/tsgo
-          ref: 3cbaa7bc6f149b83d4d3c2f67ef95f8426487d8e
+          ref: 416fdf299111341e156fc94330cd481470494ac6
           persist-credentials: false
 
       - name: Checkout the production correction and staging CLI
@@ -73,8 +73,8 @@ jobs:
           import { createHash } from 'node:crypto';
           const root = 'harness/packages/solutions/app-tools-extensions/compiler';
           const source = JSON.parse(fs.readFileSync(`${root}/source.json`));
-          assert.equal(source.effect.baseCommit, '3cbaa7bc6f149b83d4d3c2f67ef95f8426487d8e');
-          assert.equal(source.tsrs.sourceCommit, '38931a58019107ba31581791e26a7aa414c9e015');
+          assert.equal(source.effect.baseCommit, '416fdf299111341e156fc94330cd481470494ac6');
+          assert.equal(source.tsrs.sourceCommit, '0f82b670e4ff861840b1315f8610816229e73e3a');
           assert.equal(source.typescript.sourceCommit, '3e9236361fa97a9e6c685f4833ac457ae2d8c50a');
           assert.equal(source.optimization, 'none');
           const patch = fs.readFileSync(`${root}/constraint.patch`);
@@ -86,15 +86,15 @@ jobs:
         uses: ./.github/actions/setup-repo
         with:
           component: tsrs
-          version: 0.21.0-ts7.1.0-beta
+          version: 0.25.0-ts7.1.0-beta
           target: ${{ matrix.target }}
 
       - name: Verify materialized source identities
         env:
           RUST_TARGET: ${{ matrix.rust_target }}
         run: |
-          test "$(git rev-parse HEAD)" = 3cbaa7bc6f149b83d4d3c2f67ef95f8426487d8e
-          test "$(git -C tsrs rev-parse HEAD)" = 38931a58019107ba31581791e26a7aa414c9e015
+          test "$(git rev-parse HEAD)" = 416fdf299111341e156fc94330cd481470494ac6
+          test "$(git -C tsrs rev-parse HEAD)" = 0f82b670e4ff861840b1315f8610816229e73e3a
           test "$(git -C typescript rev-parse HEAD)" = 3e9236361fa97a9e6c685f4833ac457ae2d8c50a
           rustup target add "$RUST_TARGET"
           pnpm exec repoctl tsrs port-check
@@ -105,12 +105,26 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: >-
           pnpm exec repoctl build artifact --component tsrs
-          --version 0.21.0-ts7.1.0-beta --target "$TARGET" --optimize none
+          --version 0.25.0-ts7.1.0-beta --target "$TARGET" --optimize none
 
-      - name: Setup Node.js 26.12.0 for release smoke and staging
+      - name: Setup Node.js 26.13.1 for release smoke and staging
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '26.12.0'
+          node-version: '26.13.1'
+
+      - name: Test retained-checker constraint identities and negative diagnostics
+        timeout-minutes: 30
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          fs.mkdirSync('crates/ets_typeparser/tests', { recursive: true });
+          fs.copyFileSync(
+            'harness/packages/solutions/app-tools-extensions/tests/compiler-payload/base_constraint_history.rs',
+            'crates/ets_typeparser/tests/ultramodern_base_constraint_history.rs',
+            fs.constants.COPYFILE_EXCL,
+          );
+          JS
+          cargo test --locked -p ets_typeparser --test ultramodern_base_constraint_history -- --exact base_constraint_history_matrix --nocapture
 
       - name: Smoke the actual release binary, libraries, API and Effect diagnostics
         timeout-minutes: 10
@@ -135,7 +149,7 @@ jobs:
           assert.ok(fs.readdirSync(process.env.ARTIFACT_DIR).filter(name => name.endsWith('.d.ts')).length > 10);
           const version = run(['--version']);
           assert.equal(version.status, 0, version.stderr);
-          assert.equal(version.stdout.trim(), 'Version 7.1.0-beta+effect-tsgo.0.67.0 (tsrs 0.21.0-ts7.1.0-beta, microsoft/TypeScript@3e9236361fa9)');
+          assert.equal(version.stdout.trim(), 'Version 7.1.0-beta+effect-tsgo.0.69.0 (tsrs 0.25.0-ts7.1.0-beta, microsoft/TypeScript@3e9236361fa9)');
           const client = new Client({ tsserverPath: binary });
           try { assert.equal(client.echo('release-api-smoke'), 'release-api-smoke'); }
           finally { client.close(); }
@@ -217,10 +231,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Setup Node.js 26.12.0
+      - name: Setup Node.js 26.13.1
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '26.12.0'
+          node-version: '26.13.1'
       - name: Download supported target receipts into artifact-named directories
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:

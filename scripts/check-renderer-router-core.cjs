@@ -11,7 +11,7 @@ function assertRendererRouterCore(dependency) {
     for (const { pathRelative } of packages) {
       const expected = nativeConsumers.has(pathRelative.replaceAll('\\', '/'))
         ? nativeCore
-        : '1.171.37';
+        : '1.171.39';
       if (version !== expected) {
         throw new Error(
           `${pathRelative}: @tanstack/router-core must resolve ${expected}, received ${version}`,

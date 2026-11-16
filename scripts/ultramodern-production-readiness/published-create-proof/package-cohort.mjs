@@ -47,6 +47,7 @@ const compilerPlatformPackages = Object.freeze({
     '@tsrs/linux-arm64-musl',
     '@tsrs/linux-x64-gnu',
     '@tsrs/linux-x64-musl',
+    '@tsrs/win32-arm64',
     '@tsrs/win32-x64',
   ]),
 });
@@ -80,8 +81,8 @@ function compilerBootstrapSelectors(packageJson) {
   const runtimeSelectors =
     packageJson.ultramodern?.bootstrapReleaseAgeExclude ?? [];
   const reviewedRuntimeSelectors = new Set([
-    'effect@4.0.7',
-    '@effect/opentelemetry@4.0.7',
+    'effect@4.1.4',
+    '@effect/opentelemetry@4.1.4',
   ]);
   assertCondition(
     Array.isArray(runtimeSelectors) &&
@@ -572,8 +573,8 @@ function assertBootstrapReleaseAgePolicy(createPackage) {
 // An age approval alone is not a trust approval. Only this reviewed release
 // needs the bootstrap-approver workaround, and only when the producer pins it.
 function reviewedCompilerTrustExclusions(bootstrapSelectors) {
-  return bootstrapSelectors.includes('tsrs@0.21.0-ts7.1.0-beta')
-    ? ['tsrs@0.21.0-ts7.1.0-beta']
+  return bootstrapSelectors.includes('tsrs@0.25.0-ts7.1.0-beta')
+    ? ['tsrs@0.25.0-ts7.1.0-beta']
     : [];
 }
 

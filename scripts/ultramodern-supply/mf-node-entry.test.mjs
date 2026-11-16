@@ -79,14 +79,14 @@ before(async () => {
   const bytes = Buffer.from(
     await (
       await fetch(
-        'https://registry.npmjs.org/@module-federation/error-codes/-/error-codes-2.9.2.tgz',
+        'https://registry.npmjs.org/@module-federation/error-codes/-/error-codes-2.9.3.tgz',
         { signal: AbortSignal.timeout(30_000) },
       )
     ).arrayBuffer(),
   );
   assert.equal(
     createHash('sha512').update(bytes).digest('base64'),
-    'MTpKubqsJSBgnuw+2Pli1kHL4INeHD5cGnHL84oRANwQAWK7b6lN3ZZTmL3FL6lYn65ImineqZNqGWBv5GQVLQ==',
+    'sXWo6XHOFKC1Dcu9DcSA1okZjtIz2y3uM+NJrAoSpeZ9QSPXielkMWT5PtG7MqGE3OQ+/HDawiLK53IOi3NHcQ==',
   );
   const errorCodes = path.join(packages, 'error-codes');
   fs.mkdirSync(errorCodes);

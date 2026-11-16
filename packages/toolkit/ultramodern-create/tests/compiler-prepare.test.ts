@@ -18,7 +18,7 @@ test.each([
   { platformPackage: '@tsrs/linux-arm64-musl', tsrs: false, status: 0 },
   { platformPackage: '@tsrs/win32-x64', tsrs: true, status: 0 },
   { platformPackage: '@tsrs/darwin-x64', tsrs: true, status: 0 },
-  { platformPackage: '@tsrs/win32-arm64', tsrs: false, status: 0 },
+  { platformPackage: '@tsrs/win32-arm64', tsrs: true, status: 0 },
   { platformPackage: '@tsrs/linux-arm-gnu', tsrs: false, status: 0 },
   { platformPackage: '@tsrs/darwin-arm64', tsrs: true, status: 37 },
 ])(
@@ -32,10 +32,10 @@ test.each([
         platformPackage,
         compilerStatus: status,
       });
-      assert.equal(fixture.manifest.version, '0.21.0-ts7.1.0-beta');
+      assert.equal(fixture.manifest.version, '0.25.0-ts7.1.0-beta');
       assert.equal(
         Object.hasOwn(fixture.manifest.optionalDependencies, platformPackage),
-        !['@tsrs/win32-arm64', '@tsrs/linux-arm-gnu'].includes(platformPackage),
+        platformPackage !== '@tsrs/linux-arm-gnu',
       );
       const tsrsManifest = path.join(fixture.tsrsRoot, 'package.json');
       const before = fs.readFileSync(tsrsManifest);
@@ -108,9 +108,9 @@ test('an unsupported Effect replacement host still rejects mismatched tsrs depen
   );
   try {
     const fixture = compilerBootstrapFixture(root, {
-      platformPackage: '@tsrs/win32-x64',
+      platformPackage: '@tsrs/linux-x64-musl',
     });
-    fixture.manifest.optionalDependencies['@tsrs/win32-x64'] = '0.0.0';
+    fixture.manifest.optionalDependencies['@tsrs/linux-x64-musl'] = '0.0.0';
     fs.writeFileSync(
       path.join(fixture.tsrsRoot, 'package.json'),
       JSON.stringify(fixture.manifest),

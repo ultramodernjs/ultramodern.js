@@ -55,6 +55,21 @@ for (const renderer of renderers) {
       const files = snapshotWorkspace(targetDir);
       const manifest = JSON.parse(files[`${appDirectory}/package.json`]!);
       const rootManifest = JSON.parse(files['package.json']!);
+      assert.equal(manifest.engines.node, '>=26.13.1');
+      if (renderer === 'solid') {
+        for (const name of ['solid-js', '@solidjs/web', '@solidjs/signals']) {
+          assert.equal(manifest.dependencies[name], '2.0.0-rc.22');
+        }
+        assert.equal(
+          manifest.devDependencies['@solidjs/compiler'],
+          '2.0.0-rc.22',
+        );
+      }
+      if (renderer === 'octane') {
+        assert.equal(manifest.dependencies['@tsrx/oxc'], '0.24.0');
+        assert.equal(manifest.dependencies.seroval, '1.8.1');
+        assert.equal(manifest.dependencies['seroval-plugins'], '1.8.0');
+      }
       if (renderer !== 'react') {
         const [filter, packages, operation, script] =
           localizedNavigationSharedCheckCommand;

@@ -8,15 +8,15 @@
     "typecheck": "node ../../../../scripts/with-effect-tsrs.mjs --project tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
-    "@effect/opentelemetry": "4.0.7",
+    "@effect/opentelemetry": "4.1.4",
     "@modern-js/bff-effect": "workspace:*",
     "@modern-js/plugin-bff-extensions": "workspace:*",
     "@modern-js/plugin-tanstack": "workspace:*",
     "@modern-js/runtime": "workspace:*",
-    "@module-federation/modern-js-v3": "2.9.2",
-    "@module-federation/runtime": "2.9.2",
+    "@module-federation/modern-js-v3": "npm:@bleedingdev/mf-modern-js-v3@2.9.5",
+    "@module-federation/runtime": "npm:@bleedingdev/mf-runtime@2.9.5",
     "@tanstack/react-router": "1.170.44",
-    "effect": "4.0.7",
+    "effect": "4.1.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

@@ -221,7 +221,7 @@
     "test": "rstest"
   },
   "engines": {
-    "node": ">=26.12.0"
+    "node": ">=26.13.1"
   },
   "dependencies": {
     "@modern-js/backend-federation-contracts": "workspace:*",
@@ -232,13 +232,13 @@
     "@modern-js/server-runtime-extensions": "workspace:*",
     "@modern-js/types": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@module-federation/runtime": "2.9.2",
-    "@swc/core": "1.16.21",
+    "@module-federation/runtime": "npm:@bleedingdev/mf-runtime@2.9.5",
+    "@swc/core": "1.16.22",
     "esbuild": "^0.28.2"
   },
   "peerDependencies": {
-    "@effect/opentelemetry": "4.0.7",
-    "effect": "4.0.7"
+    "@effect/opentelemetry": "4.1.4",
+    "effect": "4.1.4"
   },
   "peerDependenciesMeta": {
     "@effect/opentelemetry": {
@@ -249,15 +249,15 @@
     }
   },
   "devDependencies": {
-    "@effect/opentelemetry": "4.0.7",
+    "@effect/opentelemetry": "4.1.4",
     "@modern-js/plugin": "workspace:*",
     "@modern-js/rslib": "workspace:*",
     "@rsbuild/core": "2.3.2",
-    "@rslib/core": "1.0.3",
+    "@rslib/core": "1.0.7",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
-    "effect": "4.0.7"
+    "effect": "4.1.4"
   },
   "sideEffects": false,
   "publishConfig": {

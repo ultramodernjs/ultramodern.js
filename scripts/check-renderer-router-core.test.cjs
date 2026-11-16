@@ -25,15 +25,16 @@ test('keeps the accepted native Core separate from the registry bindings', () =>
       assertRendererRouterCore(usage(path, nativeCore)),
     );
     assert.throws(() => assertRendererRouterCore(usage(path, '1.171.38')));
-    assert.throws(() => assertRendererRouterCore(usage(path, '1.171.37')));
+    assert.throws(() => assertRendererRouterCore(usage(path, '1.171.39')));
   }
   for (const path of [
     'packages/runtime/plugin-tanstack',
     'packages/new-consumer',
   ]) {
     assert.doesNotThrow(() =>
-      assertRendererRouterCore(usage(path, '1.171.37')),
+      assertRendererRouterCore(usage(path, '1.171.39')),
     );
+    assert.throws(() => assertRendererRouterCore(usage(path, '1.171.37')));
     assert.throws(() => assertRendererRouterCore(usage(path, nativeCore)));
     assert.throws(() => assertRendererRouterCore(usage(path, '1.171.38')));
   }

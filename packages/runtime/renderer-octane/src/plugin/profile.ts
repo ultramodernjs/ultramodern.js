@@ -4,7 +4,7 @@ export const octaneProfile: RendererBuildProfile<'octane'> = {
   renderer: 'octane',
   status: 'preview',
   protocolVersion: 1,
-  minimumNode: '26.12.0',
+  minimumNode: '26.13.1',
   hmr: {
     editedBoundary: 'may-reset',
     unaffectedComponents: 'preserved',
@@ -26,7 +26,7 @@ export const octaneProfile: RendererBuildProfile<'octane'> = {
   sourceExtensions: ['.tsx', '.tsrx', '.ts', '.js'],
   jsxImportSource: 'octane',
   dependencies: {
-    '@tsrx/oxc': '0.20.0',
+    '@tsrx/oxc': '0.24.0',
     octane:
       'https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz',
     '@octanejs/tanstack-router':
@@ -36,8 +36,8 @@ export const octaneProfile: RendererBuildProfile<'octane'> = {
     '@tanstack/router-core':
       'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz',
     '@modern-js/renderer-octane': '3.8.3',
-    seroval: '1.6.9',
-    'seroval-plugins': '1.6.9',
+    seroval: '1.8.1',
+    'seroval-plugins': '1.8.0',
   },
   capabilities: {
     worker: true,

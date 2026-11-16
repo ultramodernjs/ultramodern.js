@@ -1,11 +1,10 @@
-// The published generator selects the Module Federation sidecar alias; the
-// monorepo resolves the same patched upstream through .pnpmfile.cjs.
 const ignoreDeps = [
   'fs-extra',
   'tailwindcss',
-  '@module-federation/modern-js-v3',
-  // MCP SDK requires zod 4, while existing BFF APIs still use zod 3.
-  'zod',
+  // plugin-tanstack requires the corrected 1.170.46 binding; the MF tanstack
+  // integration apps stay on the locked 1.170.44 React binding until the
+  // support-artifact React router lane is activated.
+  '@tanstack/react-router',
 ];
 
 const {

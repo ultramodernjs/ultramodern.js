@@ -444,8 +444,22 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
   let compilers: Rspack.Compiler[] = [];
   let lastDoneCompiler: Rspack.Compiler | undefined;
   let clientCompiler: Rspack.Compiler | undefined;
+  let heldClientNotifications: (() => void)[] | undefined;
+  let publishedClientCompilation: Rspack.Compilation | undefined;
+  let nextClientPublication:
+    | { readonly previous: Rspack.Compilation; readonly resolve: () => void }
+    | undefined;
   let beforeAggregateCompile: (() => Promise<void>) | undefined;
-  let beforeClientCompileDone: (() => Promise<void>) | undefined;
+  let beforeClientCompileDone:
+    | { readonly marker: string; readonly callback: () => Promise<void> }
+    | undefined;
+  let clientPublication:
+    | { readonly marker: string; readonly resolve: () => void }
+    | undefined;
+  const containsMarker = (compilation: Rspack.Compilation, marker: string) =>
+    compilation
+      .getAssets()
+      .some(asset => asset.source.source().toString().includes(marker));
   let afterAggregateCompile: (() => void) | undefined;
   let duringNextCompile: (() => void) | undefined;
   const compilerArtifacts = createReplacementCompilerArtifacts();
@@ -477,13 +491,45 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
         clientCompiler = compilers.find(
           candidate => candidate.options.name === 'client',
         );
+        // Independent watchers need not report a shared edit together. Hold
+        // the real client callbacks to exercise a server-first publication.
+        const filesystem = clientCompiler?.watchFileSystem;
+        if (!filesystem) throw new Error('No client watch filesystem');
+        const watch = filesystem.watch.bind(filesystem);
+        const notifyClient = (callback: () => void) => {
+          if (heldClientNotifications) heldClientNotifications.push(callback);
+          else callback();
+        };
+        filesystem.watch = (
+          files,
+          directories,
+          missing,
+          startTime,
+          options,
+          callback,
+          callbackUndelayed,
+        ) =>
+          watch(
+            files,
+            directories,
+            missing,
+            startTime,
+            options,
+            (...args) => notifyClient(() => callback(...args)),
+            (...args) => notifyClient(() => callbackUndelayed(...args)),
+          );
         // Control the finished client before MultiCompiler's aggregate done.
         clientCompiler?.hooks.done.tapPromise(
           { name: 'ReplacementCompilerControl', stage: -Infinity },
-          async () => {
-            const callback = beforeClientCompileDone;
-            beforeClientCompileDone = undefined;
-            await callback?.();
+          async stats => {
+            if (
+              beforeClientCompileDone &&
+              containsMarker(stats.compilation, beforeClientCompileDone.marker)
+            ) {
+              const { callback } = beforeClientCompileDone;
+              beforeClientCompileDone = undefined;
+              await callback();
+            }
           },
         );
         if (initialPublication)
@@ -497,7 +543,29 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
       });
       api.onDevCompileDone({
         order: 'post',
-        handler: () => {
+        handler: ({ stats }) => {
+          const client = ('stats' in stats ? stats.stats : [stats]).find(
+            result => result.compilation.name === 'client',
+          )?.compilation;
+          publishedClientCompilation = client;
+          if (
+            client &&
+            clientPublication &&
+            containsMarker(client, clientPublication.marker)
+          ) {
+            const { resolve } = clientPublication;
+            clientPublication = undefined;
+            resolve();
+          }
+          if (
+            client &&
+            nextClientPublication &&
+            client !== nextClientPublication.previous
+          ) {
+            const { resolve } = nextClientPublication;
+            nextClientPublication = undefined;
+            resolve();
+          }
           const callback = afterAggregateCompile;
           afterAggregateCompile = undefined;
           callback?.();
@@ -773,8 +841,36 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
     beforeNextAggregateCompile(callback: () => Promise<void>) {
       beforeAggregateCompile = callback;
     },
-    beforeNextClientCompileDone(callback: () => Promise<void>) {
-      beforeClientCompileDone = callback;
+    beforeClientCompileContaining(
+      marker: string,
+      callback: () => Promise<void>,
+    ) {
+      beforeClientCompileDone = { marker, callback };
+    },
+    clientPublicationContaining(marker: string) {
+      const completed = Promise.withResolvers<void>();
+      clientPublication = { marker, resolve: completed.resolve };
+      return completed.promise;
+    },
+    delayClientNotifications() {
+      heldClientNotifications = [];
+      const release = () => {
+        const pending = heldClientNotifications ?? [];
+        heldClientNotifications = undefined;
+        for (const notify of pending) notify();
+      };
+      closes.push(async () => release());
+      return release;
+    },
+    nextClientPublication() {
+      if (!publishedClientCompilation)
+        throw new Error('No published client compilation');
+      const completed = Promise.withResolvers<void>();
+      nextClientPublication = {
+        previous: publishedClientCompilation,
+        resolve: completed.resolve,
+      };
+      return completed.promise;
     },
     afterNextAggregateCompile(callback: () => void) {
       afterAggregateCompile = callback;
@@ -1228,10 +1324,11 @@ describe('native development', () => {
       expect(
         scripts.some(script => script.source.includes('REMOTE_LAZY_CHUNK')),
       ).toBe(false);
-      const completed = Promise.withResolvers<void>();
-      app.afterNextAggregateCompile(() => completed.resolve());
+      const completed = app.clientPublicationContaining(
+        'REMOTE_LAZY_AFTER_HOT_APPLY',
+      );
       app.editRemoteLazy('REMOTE_LAZY_AFTER_HOT_APPLY');
-      await completed.promise;
+      await completed;
       const nextManifest = await (await fetch(manifestUrl)).json();
       nextPublicPath = nextManifest.metaData.publicPath;
       expect(nextPublicPath).not.toBe(initialPublicPath);
@@ -1268,13 +1365,15 @@ describe('native development', () => {
       expect(await (await fetch(entryUrl)).text()).toBe(entryBytes);
     } catch (error) {
       throw new Error(
-        `Native federation hot apply failed: ${JSON.stringify({
-          initialPublicPath,
-          nextPublicPath,
-          loadedScripts: scripts.map(script => script.url),
-          clientHashes: app.clientCompilationHashes(),
-          scriptFailures,
-        })}`,
+        `Native federation hot apply failed: ${inspect(error)}\n${JSON.stringify(
+          {
+            initialPublicPath,
+            nextPublicPath,
+            loadedScripts: scripts.map(script => script.url),
+            clientHashes: app.clientCompilationHashes(),
+            scriptFailures,
+          },
+        )}`,
         { cause: error },
       );
     } finally {
@@ -1396,7 +1495,7 @@ describe('native development', () => {
       // Compile A finishes, but a later edit supersedes it before it is
       // published. Its hot update still chains from the initial graph.
       const superseded = Promise.withResolvers<void>();
-      app.beforeNextClientCompileDone(async () => {
+      app.beforeClientCompileContaining('REMOTE_LAZY_SUPERSEDED', async () => {
         await app.startInvalidatedClientRun();
         superseded.resolve();
       });
@@ -1668,7 +1767,16 @@ describe('native development', () => {
         await (await fetch(new URL(script.href, app.address))).arrayBuffer(),
       );
 
+      const releaseClient = app.delayClientNotifications();
+      const clientPublished = app.nextClientPublication();
       app.edit('second');
+      const serverOnly = await until(app, 'second:replacement-compiler');
+      expect(serverOnly.snapshot.hydrationBuildId).toBe(
+        first.snapshot.hydrationBuildId,
+      );
+      expect(serverOnly.snapshot.assets).toEqual(first.snapshot.assets);
+      releaseClient();
+      await clientPublished;
       const second = await until(app, 'second:replacement-compiler');
       expect(second.manifest.devCompilation.generation).toBeGreaterThan(
         first.manifest.devCompilation.generation,

@@ -74,19 +74,19 @@
   "dependencies": {
     "@modern-js/runtime-utils": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@swc/helpers": "^0.5.23",
+    "@swc/helpers": "^0.5.24",
     "encoding": "^0.1.14",
-    "path-to-regexp": "^8.4.2",
-    "qs": "^6.16.1"
+    "path-to-regexp": "^9.0.0",
+    "qs": "^6.17.1"
   },
   "devDependencies": {
     "@modern-js/rslib": "workspace:*",
     "@modern-js/types": "workspace:*",
-    "@rslib/core": "1.0.3",
+    "@rslib/core": "1.0.7",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/qs": "^6.15.1",
-    "nock": "^15.0.1",
+    "nock": "^15.0.6",
     "typescript": "7.0.2"
   },
   "sideEffects": false,

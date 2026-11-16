@@ -419,7 +419,7 @@ test('Redact reconstruction carries the reviewed marker and grandfathers only th
       fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'),
     );
     assert.equal(manifest.name, '@bleedingdev/tanstack-redact');
-    assert.equal(manifest.version, '0.2.2');
+    assert.equal(manifest.version, '0.3.2');
     assert.equal(manifest.license, 'MIT');
     assert.equal(
       fs
@@ -442,7 +442,10 @@ test('Redact reconstruction carries the reviewed marker and grandfathers only th
         /if \(fiber\.su\) \{\s+scheduleUpdate\(fiber\);\s+continue;/,
       );
       assert.match(read('dom/features/hydration/full'), /queueHydrationEnd/);
-      assert.match(read('dom/features/suspense/full'), /commitSynchronously/);
+      assert.match(
+        read('dom/features/suspense-hydration/full'),
+        /commitSynchronously/,
+      );
     }
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
