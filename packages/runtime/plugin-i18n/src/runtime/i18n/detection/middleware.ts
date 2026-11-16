@@ -1,6 +1,6 @@
 import { isBrowser } from '@modern-js/runtime';
 import LanguageDetector from 'i18next-browser-languagedetector';
-import type { I18nInstance, LanguageDetectorOptions } from '../instance';
+import type { I18nRuntimeInstance, LanguageDetectorOptions } from '../instance';
 import { getActualI18nextInstance, isI18nWrapperInstance } from '../instance';
 
 type BrowserDetectorInitOptions = Parameters<LanguageDetector['init']>[1];
@@ -10,7 +10,9 @@ type BrowserDetectorInitOptions = Parameters<LanguageDetector['init']>[1];
  * Must be called before init() to properly register the detector
  * For wrapper instances, ensure detector is registered on the underlying i18next instance
  */
-export const useI18nextLanguageDetector = (i18nInstance: I18nInstance) => {
+export const useI18nextLanguageDetector = (
+  i18nInstance: I18nRuntimeInstance,
+) => {
   if (!i18nInstance.isInitialized) {
     // For wrapper instances, also register on the underlying instance
     if (isI18nWrapperInstance(i18nInstance)) {
@@ -115,7 +117,7 @@ export const readLanguageFromStorage = (
  * For wrapper instances, access the underlying i18next instance's services
  */
 export const detectLanguage = (
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   _request?: unknown,
   detectionOptions?: LanguageDetectorOptions,
 ): string | undefined => {
@@ -191,7 +193,7 @@ export const detectLanguage = (
  * For wrapper instances, access the underlying i18next instance's services
  */
 export const cacheUserLanguage = (
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   language: string,
   detectionOptions?: unknown,
 ): void => {

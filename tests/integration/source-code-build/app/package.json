@@ -11,13 +11,13 @@
   "dependencies": {
     "@modern-js/runtime": "workspace:*",
     "@source-code-build/components": "workspace:*",
-    "antd": "^6.6.6",
+    "antd": "^6.7.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@modern-js/app-tools": "workspace:*",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "typescript": "7.0.2"

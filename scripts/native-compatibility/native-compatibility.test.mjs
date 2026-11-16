@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -633,53 +635,311 @@ test('upstream baseline pins every native package to the fixed audited commit', 
   assert.throws(() => upstreamDependencies(() => 'different-commit'));
 });
 
-test('packed consumers reject changed artifacts and sidecars from another cohort', () =>
+function packFixture(root, packageJson, marker) {
+  const source = fs.mkdtempSync(path.join(root, 'source-'));
+  fs.mkdirSync(path.join(source, 'package'));
+  fs.writeFileSync(
+    path.join(source, 'package/package.json'),
+    JSON.stringify({ main: 'index.js', ...packageJson }),
+  );
+  fs.writeFileSync(
+    path.join(source, 'package/index.js'),
+    `module.exports = ${JSON.stringify(marker)};\n`,
+  );
+  const tarball = `${source}.tgz`;
+  execFileSync('tar', ['-czf', tarball, '-C', source, 'package'], {
+    env: { ...process.env, COPYFILE_DISABLE: '1' },
+  });
+  const bytes = fs.readFileSync(tarball);
+  return {
+    tarball,
+    version: packageJson.version,
+    integrity: createHash('sha256').update(bytes).digest('hex'),
+    bytes,
+  };
+}
+
+const aliasEdge = 'npm:@bleedingdev/mf-runtime@2.9.5';
+
+function packedAliasCohort(root) {
+  const supplied = packageJson => packFixture(root, packageJson, 'supplied');
+  return {
+    packages: Object.fromEntries(
+      [
+        '@modern-js/app-tools',
+        '@modern-js/runtime',
+        '@modern-js/plugin-bff',
+        '@modern-js/server-runtime',
+      ].map(name => [
+        name,
+        supplied({
+          name,
+          version: '3.8.2',
+          ...(name === '@modern-js/runtime' && {
+            dependencies: {
+              '@module-federation/runtime': aliasEdge,
+              '@bleedingdev/renderer': '1.0.0',
+            },
+          }),
+        }),
+      ]),
+    ),
+    sidecars: {
+      '@bleedingdev/mf-runtime': supplied({
+        name: '@bleedingdev/mf-runtime',
+        version: '2.9.5',
+      }),
+      '@bleedingdev/renderer': supplied({
+        name: '@bleedingdev/renderer',
+        version: '1.0.0',
+      }),
+    },
+  };
+}
+
+test('packed consumers scope alias overrides to their exact packed parent and reject foreign cohorts', () =>
   ownedDirectory(root => {
-    const tarball = path.join(root, 'artifact.tgz');
-    fs.writeFileSync(tarball, 'packed artifact');
-    const packed = {
-      tarball,
-      integrity: createHash('sha256').update('packed artifact').digest('hex'),
-    };
-    const manifest = {
-      packages: Object.fromEntries(
-        [
-          '@modern-js/app-tools',
-          '@modern-js/runtime',
-          '@modern-js/plugin-bff',
-          '@modern-js/server-runtime',
-        ].map(name => [name, packed]),
+    const manifest = packedAliasCohort(root);
+    const { packages, sidecars } = manifest;
+    assert.deepEqual(packedOverrides(manifest), {
+      ...Object.fromEntries(
+        Object.entries(packages).map(([name, { tarball }]) => [
+          name,
+          `file:${tarball}`,
+        ]),
       ),
-      sidecars: { '@bleedingdev/renderer': { ...packed, version: '1.0.0' } },
-      edges: [
-        {
-          name: 'renderer',
-          spec: 'npm:@bleedingdev/renderer@1.0.0',
-          target: '@bleedingdev/renderer',
-          version: '1.0.0',
-        },
-      ],
-    };
-    assert.equal(
-      packedOverrides(manifest)['renderer@npm:@bleedingdev/renderer@1.0.0'],
-      `file:${tarball}`,
-    );
+      '@modern-js/runtime@3.8.2>@module-federation/runtime': `file:${sidecars['@bleedingdev/mf-runtime'].tarball}`,
+      '@modern-js/runtime@3.8.2>@bleedingdev/renderer': `file:${sidecars['@bleedingdev/renderer'].tarball}`,
+    });
     assert.throws(
       () =>
         packedOverrides({
           ...manifest,
           sidecars: {
-            '@bleedingdev/renderer': { ...packed, version: '2.0.0' },
+            ...sidecars,
+            '@bleedingdev/mf-runtime': {
+              ...sidecars['@bleedingdev/mf-runtime'],
+              version: '2.9.4',
+            },
           },
         }),
-      /Missing packed sidecar/,
+      /Missing packed sidecar: @bleedingdev\/mf-runtime@2\.9\.5/,
     );
-    fs.writeFileSync(tarball, 'changed artifact');
+    assert.throws(
+      () =>
+        packedOverrides({
+          ...manifest,
+          packages: {
+            ...packages,
+            '@modern-js/runtime': packages['@modern-js/app-tools'],
+          },
+        }),
+      /Packed identity/,
+    );
+    fs.appendFileSync(packages['@modern-js/runtime'].tarball, 'changed');
     assert.throws(
       () => packedOverrides(manifest),
-      /Packed prerequisite changed/,
+      /Packed prerequisite changed after preparation: @modern-js\/runtime/,
     );
   }));
+
+async function runFixturePnpm(args, cwd, env) {
+  const child = spawn('pnpm', args, { cwd, env, stdio: 'pipe' });
+  let output = '';
+  child.stdout.on('data', chunk => {
+    output += chunk;
+  });
+  child.stderr.on('data', chunk => {
+    output += chunk;
+  });
+  const code = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', resolve);
+  });
+  assert.equal(code, 0, `pnpm ${args.join(' ')}\n${output}`);
+}
+
+test('real pnpm installs exactly the packed alias closure, normally and frozen', async () => {
+  const root = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'native-compatibility-pnpm-')),
+  );
+  const servers = [];
+  try {
+    const manifest = packedAliasCohort(root);
+    // Same alias name, foreign version, foreign alias and upstream identity,
+    // each declared outside the packed closure.
+    const foreign = {
+      'foreign-version': {
+        '@module-federation/runtime': 'npm:@bleedingdev/mf-runtime@2.9.4',
+      },
+      'foreign-alias': {
+        '@module-federation/runtime': aliasEdge,
+        'mf-alias': aliasEdge,
+      },
+      'upstream-parent': { '@module-federation/runtime': '2.9.5' },
+    };
+    const registryPackages = {
+      '@bleedingdev/mf-runtime': ['2.9.4', '2.9.5'],
+      '@module-federation/runtime': ['2.9.5'],
+    };
+    const published = {};
+    for (const [name, versions] of Object.entries(registryPackages)) {
+      for (const version of versions) {
+        published[`${name}@${version}`] = packFixture(
+          root,
+          { name, version },
+          'registry',
+        ).bytes;
+      }
+    }
+    const server = http.createServer((request, response) => {
+      const pathname = decodeURIComponent(request.url.slice(1));
+      const tarball = published[pathname.replace(/^tarballs\//u, '')];
+      if (tarball) {
+        response.writeHead(200).end(tarball);
+        return;
+      }
+      const versions = registryPackages[pathname];
+      if (!versions) {
+        response.writeHead(404).end('{}');
+        return;
+      }
+      const time = '2020-01-01T00:00:00.000Z';
+      response.writeHead(200, { 'content-type': 'application/json' }).end(
+        JSON.stringify({
+          name: pathname,
+          'dist-tags': { latest: versions.at(-1) },
+          time: Object.fromEntries(versions.map(version => [version, time])),
+          versions: Object.fromEntries(
+            versions.map(version => {
+              const bytes = published[`${pathname}@${version}`];
+              return [
+                version,
+                {
+                  name: pathname,
+                  version,
+                  main: 'index.js',
+                  dist: {
+                    tarball: `${registryUrl}tarballs/${pathname}@${version}`,
+                    integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
+                  },
+                },
+              ];
+            }),
+          ),
+        }),
+      );
+    });
+    servers.push(server);
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const registryUrl = `http://127.0.0.1:${server.address().port}/`;
+    const appDir = path.join(root, 'app');
+    fs.mkdirSync(appDir);
+    const overrides = packedOverrides(manifest);
+    fs.writeFileSync(
+      path.join(appDir, 'package.json'),
+      JSON.stringify({
+        name: 'alias-closure-consumer',
+        private: true,
+        dependencies: {
+          '@modern-js/runtime': overrides['@modern-js/runtime'],
+          ...Object.fromEntries(
+            Object.entries(foreign).map(([name, dependencies]) => [
+              name,
+              `file:${packFixture(root, { name, version: '1.0.0', dependencies }, name).tarball}`,
+            ]),
+          ),
+        },
+      }),
+    );
+    fs.writeFileSync(
+      path.join(appDir, 'pnpm-workspace.yaml'),
+      JSON.stringify({
+        packages: [],
+        packageImportMethod: 'clone-or-copy',
+        storeDir: path.join(root, 'store'),
+        cacheDir: path.join(root, 'cache'),
+        overrides,
+      }),
+    );
+    fs.writeFileSync(
+      path.join(appDir, '.npmrc'),
+      `registry=${registryUrl}\n@bleedingdev:registry=${registryUrl}\n`,
+    );
+    const userConfig = path.join(root, 'user.npmrc');
+    fs.writeFileSync(userConfig, '');
+    const env = {
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(
+          ([key]) => !/^(npm_config_|pnpm_config_)/iu.test(key),
+        ),
+      ),
+      npm_config_userconfig: userConfig,
+      CI: 'true',
+      NODE_PATH: '',
+    };
+    const resolved = (parent, dependency) => {
+      const parentDir = fs.realpathSync.native(
+        path.join(appDir, 'node_modules', parent),
+      );
+      const manifestFile = fs.realpathSync.native(
+        createRequire(path.join(parentDir, 'package.json')).resolve(
+          `${dependency}/package.json`,
+        ),
+      );
+      assert.ok(manifestFile.startsWith(`${appDir}${path.sep}`));
+      const { name, version } = JSON.parse(
+        fs.readFileSync(manifestFile, 'utf8'),
+      );
+      const marker = fs
+        .readFileSync(path.join(path.dirname(manifestFile), 'index.js'), 'utf8')
+        .match(/"(\w+)"/u)[1];
+      return `${name}@${version}:${marker}`;
+    };
+    const assertClosure = () => {
+      assert.deepEqual(
+        {
+          packedAlias: resolved(
+            '@modern-js/runtime',
+            '@module-federation/runtime',
+          ),
+          packedDirect: resolved('@modern-js/runtime', '@bleedingdev/renderer'),
+          foreignVersion: resolved(
+            'foreign-version',
+            '@module-federation/runtime',
+          ),
+          foreignParent: resolved(
+            'foreign-alias',
+            '@module-federation/runtime',
+          ),
+          foreignAlias: resolved('foreign-alias', 'mf-alias'),
+          upstream: resolved('upstream-parent', '@module-federation/runtime'),
+        },
+        {
+          packedAlias: '@bleedingdev/mf-runtime@2.9.5:supplied',
+          packedDirect: '@bleedingdev/renderer@1.0.0:supplied',
+          foreignVersion: '@bleedingdev/mf-runtime@2.9.4:registry',
+          foreignParent: '@bleedingdev/mf-runtime@2.9.5:registry',
+          foreignAlias: '@bleedingdev/mf-runtime@2.9.5:registry',
+          upstream: '@module-federation/runtime@2.9.5:registry',
+        },
+      );
+    };
+    await runFixturePnpm(['install', '--no-frozen-lockfile'], appDir, env);
+    assertClosure();
+    fs.rmSync(path.join(appDir, 'node_modules'), {
+      recursive: true,
+      force: true,
+    });
+    await runFixturePnpm(['install', '--frozen-lockfile'], appDir, env);
+    assertClosure();
+  } finally {
+    await Promise.all(
+      servers.map(server => new Promise(resolve => server.close(resolve))),
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('upstream consumer rejects fork artifacts and framework source links', () =>
   ownedDirectory(root => {

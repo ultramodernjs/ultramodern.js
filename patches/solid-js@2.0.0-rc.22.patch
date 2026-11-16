@@ -1,0 +1,9 @@
+diff --git a/types/index.d.ts b/types/index.d.ts
+--- a/types/index.d.ts
++++ b/types/index.d.ts
+@@ -1,4 +1,4 @@
+-export { $PROXY, $TRACK, action, affects, createReaction, createTrackedEffect, deep, flatten, flush, getNextChildId, getObserver, getOwner, isDisposed, isEqual, isPending, isWrappable, mapArray, merge, isStatic, omit, onCleanup, onSettled, onFlush, latest, reconcile, refresh, repeat, resetErrorHalt, resolve, until, NotReadyError, TimeoutError, runWithOwner, enableExternalSource, enforceLoadingBoundary, snapshot, untrack, configureClientErrors } from "@solidjs/signals";
++export { $PROXY, $TRACK, action, affects, createReaction, createTrackedEffect, deep, flatten, flush, getNextChildId, getObserver, getOwner, heldRead, isDisposed, isEqual, isPending, isWrappable, mapArray, merge, isStatic, omit, onCleanup, onSettled, onFlush, latest, reconcile, refresh, repeat, resetErrorHalt, resolve, until, NotReadyError, TimeoutError, runWithOwner, enableExternalSource, enforceLoadingBoundary, snapshot, untrack, configureClientErrors } from "@solidjs/signals";
+ export { from } from "./from.js";
+ export type { ClientErrorContext, ClientErrorHook, ClientErrorsConfig, Accessor, ComputeFunction, EffectBundle, EffectFunction, EffectOptions, ExternalSource, ExternalSourceConfig, ExternalSourceFactory, FromSource, Merge, MemoOptions, NoInfer, NotWrappable, Omit, Owner, ProjectionOptions, Refreshable, Signal, SignalOptions, SourceAccessor, Setter, Store, Truthy, UntilOptions, StoreReturn, ProjectionStoreReturn, StoreOptions, SolidStore, StoreNode, StoreSetter, StorePathRange, ArrayFilterFn, CustomPartial, Part, PathSetter } from "@solidjs/signals";
+ export { children, createContext, useContext } from "./client/core.js";

@@ -1,8 +1,5 @@
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
-
-const require = createRequire(import.meta.url);
 
 export function compilerBootstrapFixture(
   root: string,
@@ -12,9 +9,26 @@ export function compilerBootstrapFixture(
     compilerLog?: string;
   } = {},
 ) {
-  const manifest = JSON.parse(
-    fs.readFileSync(require.resolve('tsrs/package.json'), 'utf8'),
-  );
+  // Reviewed tsrs 0.25 registry manifest: isolate host-selection behavior
+  // from the shared checkout's (possibly not yet reinstalled) dependency tree.
+  const version = '0.25.0-ts7.1.0-beta';
+  const manifest = {
+    name: 'tsrs',
+    type: 'module',
+    version,
+    optionalDependencies: Object.fromEntries(
+      [
+        'darwin-arm64',
+        'darwin-x64',
+        'win32-x64',
+        'win32-arm64',
+        'linux-x64-gnu',
+        'linux-x64-musl',
+        'linux-arm64-gnu',
+        'linux-arm64-musl',
+      ].map(platform => [`@tsrs/${platform}`, version]),
+    ),
+  };
   const tsrsRoot = path.join(root, 'node_modules/tsrs');
   const effectRoot = path.join(root, 'node_modules/@effect/tsgo');
   const compilerLog = options.compilerLog ?? path.join(root, 'compiler.json');
@@ -34,7 +48,7 @@ export function compilerBootstrapFixture(
     path.join(effectRoot, 'package.json'),
     JSON.stringify({
       name: '@effect/tsgo',
-      version: '0.67.0',
+      version: '0.69.0',
       bin: { 'effect-tsgo': 'dist/effect-tsgo.cjs' },
     }),
   );

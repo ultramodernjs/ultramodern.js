@@ -390,7 +390,16 @@ test('real SDK Octane Worker contracts preserve authored and topology service bi
           'utf8',
         ),
       );
-      assert.equal(generatedManifest.dependencies['@tsrx/oxc'], '0.20.0');
+      // The generator pins the renderer's reviewed parser peer.
+      assert.equal(
+        generatedManifest.dependencies['@tsrx/oxc'],
+        JSON.parse(
+          fs.readFileSync(
+            path.join(root, 'packages/runtime/renderer-octane/package.json'),
+            'utf8',
+          ),
+        ).peerDependencies['@tsrx/oxc'],
+      );
       assert.deepEqual(
         JSON.parse(files['package.json']).modernjs,
         app.manifest.modernjs,

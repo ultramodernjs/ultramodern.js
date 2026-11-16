@@ -40,10 +40,18 @@ const biomePluginPaths = [
 
 // Lints probe files laid out at repository-relative paths so biome.json
 // overrides resolve exactly as they do for `pnpm lint`.
-const lintProbes = (relativePaths, source = PROBE_SOURCE) => {
+const lintProbes = (
+  relativePaths,
+  source = PROBE_SOURCE,
+  packageManifests = [],
+) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'biome-rules-'));
   try {
-    for (const relativePath of ['biome.json', ...biomePluginPaths]) {
+    for (const relativePath of [
+      'biome.json',
+      ...biomePluginPaths,
+      ...packageManifests,
+    ]) {
       const target = path.join(root, relativePath);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.copyFileSync(path.join(repoRoot, relativePath), target);
@@ -77,6 +85,50 @@ const lintProbes = (relativePaths, source = PROBE_SOURCE) => {
   }
 };
 
+test('the code formatter preserves Changeset front matter and generated YAML', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'biome-format-scope-'));
+  try {
+    fs.writeFileSync(
+      path.join(root, 'biome.json'),
+      JSON.stringify({
+        $schema: biomeConfig.$schema,
+        formatter: biomeConfig.formatter,
+        javascript: biomeConfig.javascript,
+      }),
+    );
+    fs.mkdirSync(path.join(root, '.changeset'));
+    const changeset =
+      "---\n'@modern-js/app-tools': patch\n---\n\nFix routing.\n";
+    const yaml = "packages:\n  - 'packages/*'\n";
+    fs.writeFileSync(path.join(root, '.changeset/release.md'), changeset);
+    fs.writeFileSync(path.join(root, 'pnpm-lock.yaml'), yaml);
+    fs.writeFileSync(
+      path.join(root, 'probe.ts'),
+      'export const value={x:1};\n',
+    );
+    const result = spawnSync(
+      biomeBin,
+      ['format', '--vcs-enabled=false', '--write', '.'],
+      { cwd: root, encoding: 'utf8' },
+    );
+    assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+    assert.equal(
+      fs.readFileSync(path.join(root, '.changeset/release.md'), 'utf8'),
+      changeset,
+    );
+    assert.equal(
+      fs.readFileSync(path.join(root, 'pnpm-lock.yaml'), 'utf8'),
+      yaml,
+    );
+    assert.equal(
+      fs.readFileSync(path.join(root, 'probe.ts'), 'utf8'),
+      'export const value = { x: 1 };\n',
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('unused imports, unused variables and @ts-ignore fail lint in fork-owned code', () => {
   const guarded = [
     'packages/toolkit/ultramodern-create/src/probe.ts',
@@ -92,6 +144,58 @@ test('unused imports, unused variables and @ts-ignore fail lint in fork-owned co
       `${file} must report every correctness rule`,
     );
   }
+});
+
+test('component-factory exceptions are limited to verified lifecycle factories and test setup', () => {
+  const factories = [
+    'packages/runtime/federation-runtime/src/module-federation/distributed-ssr.tsx',
+    'packages/runtime/i18n-extensions/src/router-navigation/adapter.tsx',
+    'packages/runtime/plugin-runtime/src/core/browser/hydrate.tsx',
+    'packages/runtime/plugin-runtime/src/core/server/stream/shared.tsx',
+    'packages/runtime/plugin-runtime/src/router/runtime/utils.tsx',
+    'packages/toolkit/runtime-utils/src/universal/async_storage.server.ts',
+    'packages/runtime/plugin-tanstack/src/runtime/plugin.tsx',
+    'packages/runtime/plugin-tanstack/src/runtime/rsc/server.tsx',
+    'packages/runtime/renderer-extensions/src/runtimePlugin.ts',
+    'packages/runtime/runtime-extensions/src/headRuntime.tsx',
+    'packages/toolkit/mcp-apps/src/ui/mf.tsx',
+    'packages/**/tests/**/*.test.{ts,tsx}',
+  ];
+  const exceptions = biomeConfig.overrides.filter(
+    override =>
+      override.linter?.rules?.correctness?.noComponentHookFactories === 'off',
+  );
+  assert.deepEqual(
+    exceptions.flatMap(override => override.includes).sort(),
+    factories.sort(),
+  );
+  assert.notEqual(
+    biomeConfig.linter.rules.correctness?.noComponentHookFactories,
+    'off',
+  );
+});
+
+test('render-time component factories still fail in React source, not isolated test setup', () => {
+  const source = 'packages/runtime/runtime-extensions/src/probe.tsx';
+  const testSetup = 'packages/runtime/runtime-extensions/tests/probe.test.tsx';
+  const rulesByFile = lintProbes(
+    [source, testSetup],
+    `import { useState } from 'react';
+export const Parent = () => {
+  const Child = () => {
+    const [value] = useState(0);
+    return <p>{value}</p>;
+  };
+  return <Child />;
+};
+`,
+    ['packages/runtime/runtime-extensions/package.json'],
+  );
+  assert.deepEqual(
+    [...rulesByFile.get(source)],
+    ['lint/correctness/noComponentHookFactories'],
+  );
+  assert.deepEqual([...rulesByFile.get(testSetup)], []);
 });
 
 test('upstream-owned packages keep upstream lint rules to stay shrink-only', () => {

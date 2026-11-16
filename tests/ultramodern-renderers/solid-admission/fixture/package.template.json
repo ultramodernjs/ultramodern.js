@@ -4,18 +4,22 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "solid-js": "2.0.0-rc.15",
-    "@solidjs/web": "2.0.0-rc.15",
-    "@solidjs/signals": "2.0.0-rc.15",
-    "@solidjs/compiler": "2.0.0-rc.15",
+    "solid-js": "2.0.0-rc.22",
+    "@solidjs/web": "2.0.0-rc.22",
+    "@solidjs/signals": "2.0.0-rc.22",
+    "@solidjs/compiler": "2.0.0-rc.22",
     "@modern-js/renderer-core": "3.8.3",
-    "@modern-js/renderer-solid": "3.8.3"
+    "@modern-js/renderer-solid": "3.8.3",
+    "@tanstack/router-core": "https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz"
   },
   "devDependencies": {
-    "@rsbuild/core": "2.2.11",
-    "@babel/core": "7.29.7",
-    "playwright": "1.64.1",
+    "@rsbuild/core": "2.3.2",
+    "@babel/core": "8.1.2",
+    "playwright": "1.65.1",
     "typescript": "7.0.2"
   },
-  "packageManager": "pnpm@11.27.1"
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=26.13.1"
+  }
 }

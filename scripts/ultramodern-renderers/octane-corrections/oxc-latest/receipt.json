@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "testedAt": "2026-11-16T07:25:27.192Z",
+  "status": "PASS",
+  "patchSha256": "529e0cbb9dd695c7569ae9d64b04ee0ba9685402823faa230c339d582d811f74",
+  "sourceCommit": "4c35afcdca0f4889921612fc462e6aabe507d78d",
+  "gates": [
+    "exact existing four-package recipe reconstructed; corrected Octane peer already ^0.24.0",
+    "actual registry Octane + OXC 0.24 strict install rejects stale exact 0.23 peer",
+    "actual corrected Octane + incompatible OXC 0.23 strict install rejects",
+    "normal + frozen strict pnpm12 installs; 1022 installed Octane files byte-matched actual archive",
+    "corrected source owning runtime/compiler boundary suite",
+    "actual installed packed owning runtime/compiler boundary suite",
+    "unchanged owning source compiler suites: parser-parity, style-syntax-fallback, compile-errors, typescript-runtime-lowering, native-change-compiler",
+    "actual installed packed runtime APIs + stable TS7.0.2 text facts",
+    "stable TS7.0.2 strict noEmit skipLibCheck:false consumer of actual packed compiler declarations"
+  ],
+  "oxc": {
+    "version": "0.24.0",
+    "integrity": "sha512-P+E1qvimUW1DdoQE8uHyZ44U2xVDugYkDn3xsTnbw7eYP/tTrHuFGLIjKZr5tSw7wPvj4deMO9BKmGtbMAFdpg=="
+  },
+  "recipePatches": {
+    "@tanstack/router-core": "546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8",
+    "@octanejs/tanstack-router": "df6732ebcfc0af7cf274187c44596ac519abbc383ce30a796205b55c561bf688",
+    "octane": "529e0cbb9dd695c7569ae9d64b04ee0ba9685402823faa230c339d582d811f74",
+    "@octanejs/rspack-plugin": "930795abefa05ae08954654b99b4f5a1442f50d89aa58900c164a0200cb7e3f0"
+  },
+  "archiveIntegrity": "sha512-w2Qatqpdpipgngxo2i7jllyinKxF+f1wwfp8MrsIvFEWrGB2S8hDlgHUlOvU9r8bsSHhaMLB6zbBFz2cjbkZ3A==",
+  "sourceCorrections": {
+    "runtime-source.patch": "a3e4e1e0ad6b99e97fd368bea03e50c89594c587cb5a59c40544f02e2a086a4a",
+    "typescript-compat/typescript-source.patch": "71898145840705e712954009bf5a94877302181ac2aef3ece3ec907cd17404cc",
+    "typescript-compat/native-signals-source.patch": "057a5f475311f5c2c437773c15c658b024b583b13d94f1e6958f6453ccc9558f",
+    "typescript-compat/volar-core-source.patch": "e2384c2a171989340e9ceb85bdbf0ac1d4e3a26a30154a0e920503b8cb9b254f",
+    "runtime-tests.patch": "45fd5daf6c151630cec2239d655c60615f9f51e4fd4d8f499f30555873e5281d",
+    "rspack-source.patch": "d1c3701919c7e7ed7129479497089aa14df8f0f41818b29795ac49998917336e",
+    "rspack-tests.patch": "08d967919d786b4ff085e1bcb124abeff0c591e61938e0f3d9557cd585dcf06a"
+  },
+  "correction": "none: existing pinned owning patch already corrects exact 0.23 peer to ^0.24.0",
+  "notClaimed": [
+    "full hydration rerun",
+    "new owning build",
+    "hosted acceptance",
+    "publication",
+    "parent updater/root integration"
+  ]
+}

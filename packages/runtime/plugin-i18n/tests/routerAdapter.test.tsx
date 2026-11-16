@@ -17,6 +17,7 @@ import {
   I18nNavigationProvider,
   useI18nRouterAdapter,
 } from '../src/runtime/routerAdapter';
+import { createI18nInstance } from './helpers/i18nInstance';
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -26,21 +27,6 @@ const requestContext = {
   request: {},
   response: {},
 };
-
-function createI18nInstance(language = 'en'): I18nInstance {
-  return {
-    language,
-    isInitialized: true,
-    init: () => Promise.resolve(undefined),
-    use: () => {},
-    t: (key: string | string[]) => (Array.isArray(key) ? key[0] : key),
-    createInstance: () => createI18nInstance(language),
-    setLang: rstest.fn(async () => undefined),
-    changeLanguage: rstest.fn(async () => undefined),
-    services: {},
-    options: {},
-  };
-}
 
 async function renderI18nRoot(node: React.ReactNode) {
   const container = document.createElement('div');

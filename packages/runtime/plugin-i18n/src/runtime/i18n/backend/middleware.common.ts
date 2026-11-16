@@ -3,7 +3,7 @@ import type {
   BaseBackendOptions,
   ChainedBackendConfig,
 } from '../../../shared/type';
-import type { I18nInstance } from '../instance';
+import type { I18nRuntimeInstance } from '../instance';
 import { getActualI18nextInstance } from '../instance';
 import { SdkBackend } from './sdk-backend';
 
@@ -50,7 +50,7 @@ function buildChainedBackendConfig(
 }
 
 function setupChainedBackend(
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   backend: BackendConfigWithChained,
   BackendWithSave: BackendConstructor,
 ) {
@@ -86,7 +86,7 @@ function cleanBackendConfig(backend: BackendConfigWithChained) {
  * @param backend - Optional backend configuration
  */
 export function useI18nextBackendCommon(
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   BackendWithSave: BackendConstructor,
   BackendBase: BackendConstructor,
   backend?: BackendConfigWithChained,

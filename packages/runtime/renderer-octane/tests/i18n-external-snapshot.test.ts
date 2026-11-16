@@ -180,7 +180,7 @@ test('native loader projection includes every loaded fallback bundle', async () 
 
 test('default projection rejects shaped/raw instances, callbacks and changed formatters', async () => {
   const shaped = context();
-  shaped.instance = { language: 'cs', t: () => 'fake' };
+  shaped.instance = { language: 'cs', t: shaped.instance.t };
   expect(() => captureOctaneI18nSnapshot(shaped)).toThrow('genuine');
   const raw = i18next.createInstance();
   await raw.init({

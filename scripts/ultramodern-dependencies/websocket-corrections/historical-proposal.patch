@@ -1,0 +1,28 @@
+# Historical proposal: already integrated by the parent.
+# Retained as evidence only; do not apply as part of qualification reruns.
+diff --git a/pnpm-workspace.yaml b/pnpm-workspace.yaml
+--- a/pnpm-workspace.yaml
++++ b/pnpm-workspace.yaml
+@@ -110,7 +110,9 @@
+   'dompurify@>=3.0.0 <3.4.17': 3.4.18
+   'serialize-javascript@>=7.0.0 <7.1.2': 7.1.4
+   'ws@>=7.0.0 <7.5.11': 7.5.11
+-  'ws@>=8.0.0 <8.21.3': 8.23.0
++  'ws@>=8.0.0 <8.23.0': 8.23.0
++  # Keep the published wildcard peer; security overrides still cover runtime edges.
++  'isomorphic-ws@5.0.0>ws:peer': '*'
+   'fast-uri@>=3.0.0 <3.1.6': 3.1.8
+   'follow-redirects@>=1.0.0 <1.16.2': 1.16.3
+   'handlebars@>=4.0.0 <4.7.10': 4.7.10
+diff --git a/packages/toolkit/ultramodern-create/src/ultramodern-workspace/policy.ts b/packages/toolkit/ultramodern-create/src/ultramodern-workspace/policy.ts
+--- a/packages/toolkit/ultramodern-create/src/ultramodern-workspace/policy.ts
++++ b/packages/toolkit/ultramodern-create/src/ultramodern-workspace/policy.ts
+@@ -246,6 +246,8 @@
+       'smol-toml@>=1.0.0 <1.9.1': '1.9.1',
+       'serialize-javascript@>=7.0.0 <7.1.4': '7.1.4',
+       'ws@>=8.0.0 <8.23.0': '8.23.0',
++      // Keep the published wildcard peer; security overrides still cover runtime edges.
++      'isomorphic-ws@5.0.0>ws:peer': '*',
+       'follow-redirects@>=1.0.0 <1.16.3': '1.16.3',
+       'postcss-selector-parser@>=7.0.0 <7.2.1': '7.2.1',
+       'react-router@>=8.0.0 <8.5.1': '8.5.1',

@@ -4,6 +4,8 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -162,25 +164,138 @@ export function emitAppToolsExtensionsDeclarations(types, resolvePackage) {
       "import type { CompressionPluginOptions } from '../../precompress/index.js';",
     ),
   );
+  emitSvgrDeclarations(types, resolvePackage);
 }
 
+function moduleSpecifiers(source) {
+  const ast = parseSync(source, {
+    babelrc: false,
+    configFile: false,
+    parserOpts: { plugins: [['typescript', { dts: true }]] },
+  });
+  const specifiers = [];
+  babelTypes.traverseFast(ast.program, node => {
+    if (
+      (node.type === 'ImportDeclaration' ||
+        node.type === 'ExportNamedDeclaration' ||
+        node.type === 'ExportAllDeclaration' ||
+        node.type === 'TSImportType') &&
+      node.source
+    )
+      specifiers.push(node.source);
+  });
+  return specifiers.sort((a, b) => a.start - b.start);
+}
+
+// Copy one declaration file and the relative declarations it reaches, mapping
+// bare specifiers through `rename` (a function of the copied file's target).
+function vendorDeclarations(packageRoot, entry, target, rename) {
+  const pending = [entry];
+  const copied = new Set();
+  while (pending.length) {
+    const file = pending.pop();
+    if (copied.has(file)) continue;
+    copied.add(file);
+    const output = join(target, file);
+    const source = readFileSync(join(packageRoot, file), 'utf8');
+    let text = source;
+    for (const literal of moduleSpecifiers(source).reverse()) {
+      const specifier = literal.value;
+      let replacement = specifier;
+      if (specifier.startsWith('.')) {
+        const base = join(dirname(file), specifier);
+        const reached = [
+          `${base}.d.ts`,
+          base.replace(/\.js$/, '.d.ts'),
+          join(base, 'index.d.ts'),
+        ].find(
+          candidate =>
+            candidate.endsWith('.d.ts') &&
+            existsSync(join(packageRoot, candidate)),
+        );
+        if (!reached)
+          throw new Error(`Cannot vendor ${specifier} from ${file}`);
+        pending.push(reached);
+      } else replacement = rename(output, specifier);
+      text = `${text.slice(0, literal.start)}'${replacement}'${text.slice(literal.end)}`;
+    }
+    mkdirSync(dirname(output), { recursive: true });
+    writeFileSync(output, text);
+  }
+  cpSync(join(packageRoot, 'LICENSE'), join(target, 'LICENSE'));
+}
+
+// SVGR's published option declarations import packages it does not declare
+// (`@babel/template`, `svgo`, `prettier`) or that ship no types (Babel 7's
+// `@babel/core`), so every consumer binds whatever its installation hoists,
+// such as Babel 8. Publish the option graph self-contained instead: each
+// specifier maps to the declarations of the package SVGR runs with (Babel 7
+// through its DefinitelyTyped types, SVGO from @svgr/plugin-svgo). Only the
+// Rsbuild peer stays external; any other import fails the build.
+export function emitSvgrDeclarations(types, resolvePackage) {
+  const target = join(types, 'svgr');
+  const plugin = resolvePackage('@rsbuild/plugin-svgr');
+  const fromPlugin = packageResolver(plugin);
+  const core = fromPlugin('@svgr/core');
+  const preset = packageResolver(core)('@svgr/babel-preset');
+  const babel = resolvePackage('@types/babel__core');
+  const fromBabel = packageResolver(babel);
+  const sources = {
+    '@rsbuild/plugin-svgr': [plugin, 'dist/index.d.ts'],
+    '@svgr/core': [core, 'dist/index.d.ts'],
+    '@svgr/babel-preset': [preset, 'dist/index.d.ts'],
+    '@svgr/babel-plugin-transform-svg-component': [
+      packageResolver(preset)('@svgr/babel-plugin-transform-svg-component'),
+      'dist/index.d.ts',
+    ],
+    svgo: [
+      packageResolver(fromPlugin('@svgr/plugin-svgo'))('svgo'),
+      'lib/svgo.d.ts',
+    ],
+    prettier: [resolvePackage('prettier'), 'index.d.ts'],
+    '@babel/core': [babel, 'index.d.ts'],
+    '@babel/generator': [fromBabel('@types/babel__generator'), 'index.d.ts'],
+    '@babel/template': [fromBabel('@types/babel__template'), 'index.d.ts'],
+    '@babel/traverse': [fromBabel('@types/babel__traverse'), 'index.d.ts'],
+    '@babel/parser': [fromBabel('@babel/parser'), 'typings/babel-parser.d.ts'],
+    '@babel/types': [fromBabel('@babel/types'), 'lib/index.d.ts'],
+  };
+  rmSync(target, { recursive: true, force: true });
+  const rename = (file, specifier) => {
+    if (specifier === '@rsbuild/core') return specifier;
+    if (!Object.hasOwn(sources, specifier))
+      throw new Error(`Undeclared SVGR declaration dependency ${specifier}`);
+    const [, entry] = sources[specifier];
+    return modulePath(
+      file,
+      join(target, specifier, entry.replace(/\.d\.ts$/, '.js')),
+    );
+  };
+  for (const [name, [root, entry]] of Object.entries(sources))
+    vendorDeclarations(root, entry, join(target, name), rename);
+  const entry = join(types, 'svgr.d.ts');
+  rewrite(entry, text =>
+    text.replace(
+      /(['"])@rsbuild\/plugin-svgr\1/g,
+      (_, quote) =>
+        `${quote}${modulePath(entry, join(target, '@rsbuild/plugin-svgr/dist/index.js'))}${quote}`,
+    ),
+  );
+  for (const file of [entry, ...declarationFiles(target)])
+    for (const { value } of moduleSpecifiers(readFileSync(file, 'utf8')))
+      if (!value.startsWith('.') && value !== '@rsbuild/core')
+        throw new Error(`${file} still imports ${value}`);
+}
+
+// Node's package directory lookup, which also finds types-only packages.
 function packageResolver(packageRoot) {
   const require = createRequire(join(packageRoot, 'package.json'));
   return name => {
-    let root = dirname(require.resolve(name));
-    // Skip RxJS's dist/cjs format marker and find the actual package identity.
-    while (true) {
-      const manifest = join(root, 'package.json');
-      if (
-        existsSync(manifest) &&
-        JSON.parse(readFileSync(manifest, 'utf8')).name === name
-      )
-        return root;
-      const parent = dirname(root);
-      if (parent === root)
-        throw new Error(`Cannot locate declaration dependency ${name}`);
-      root = parent;
+    for (const modules of require.resolve.paths(name) ?? []) {
+      const root = join(modules, name);
+      if (existsSync(join(root, 'package.json'))) return realpathSync(root);
     }
+    throw new Error(`Cannot locate declaration dependency ${name}`);
   };
 }
 

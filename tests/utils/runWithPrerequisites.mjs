@@ -4,7 +4,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { yaml } from '@modern-js/utils';
 import spawn from 'cross-spawn';
-import { inspectNpmTarball } from '../../scripts/ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs';
 import {
   collectSidecarPackages,
   stageSidecarPackages,
@@ -93,21 +92,12 @@ export async function packTestPackages(outputDir) {
     run: runPnpmAsync,
   });
   const sidecars = await packTestSidecars(outputDir);
-  // Edges inside packed manifests; generated workspaces add their own.
-  const edges = [
-    ...Object.values(packages),
-    ...Object.values(sidecars),
-  ].flatMap(({ tarball }) =>
-    bleedingdevEdges(
-      JSON.parse(inspectNpmTarball(fs.readFileSync(tarball)).packageJsonBytes),
-    ),
-  );
   const { allowBuilds, minimumReleaseAgeExclude = [] } = yaml.load(
     fs.readFileSync(path.join(repoRoot, 'pnpm-workspace.yaml'), 'utf8'),
   );
   fs.writeFileSync(
     manifest,
-    `${JSON.stringify({ packages, sidecars, edges, allowBuilds, minimumReleaseAgeExclude: minimumReleaseAgeExclude.filter(selector => !selector.includes('*')) }, null, 2)}\n`,
+    `${JSON.stringify({ packages, sidecars, allowBuilds, minimumReleaseAgeExclude: minimumReleaseAgeExclude.filter(selector => !selector.includes('*')) }, null, 2)}\n`,
   );
   return manifest;
 }

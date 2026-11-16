@@ -41,8 +41,13 @@ test('failed Tractor acceptance preserves bounded compiler inputs without claimi
   assert.ok(!steps[preserve].with.name.includes('acceptance-'));
 });
 
-for (const mode of ['source', 'published'])
-  for (const failure of ['none', 'stage', 'proof'])
+// The source lane emits rows for the `seal` job instead of a receipt, so only
+// the published lane retains receipt-referenced copies before its upload.
+for (const [mode, failures] of [
+  ['source', ['none', 'stage', 'proof', 'token-leak']],
+  ['published', ['none', 'stage', 'proof', 'retain', 'token-leak']],
+])
+  for (const failure of failures)
     test(`${mode} feature command preserves ${failure} result and retires only staged native archives`, t => {
       // Only the shell wiring is executed: fabricated mise commands never qualify archives or a consumer.
       assert(
@@ -62,6 +67,7 @@ for (const mode of ['source', 'published'])
       });
       const browserCli = path.join(root, 'agent-browser');
       fs.writeFileSync(browserCli, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+      const rows = path.join(root, 'rows', 'rows.json');
       const job =
         mode === 'source'
           ? readWorkflow('ultramodern-release-acceptance').jobs[
@@ -71,6 +77,11 @@ for (const mode of ['source', 'published'])
       const command = job.steps.find(step =>
         step.name.includes('installed renderer features'),
       ).run;
+      const exercisedCommand =
+        failure === 'token-leak'
+          ? command.replace('unset NATIVE_ARTIFACT_GITHUB_TOKEN', ':')
+          : command;
+      if (failure === 'token-leak') assert.notEqual(exercisedCommand, command);
       const child = spawnSync(
         'bash',
         [
@@ -82,21 +93,38 @@ for (const mode of ['source', 'published'])
         mise() {
           case "$4" in
             scripts/ultramodern-renderers/native-federation-inputs.mjs)
+              [[ "$GH_TOKEN" == native-control-token ]] || return 88
               mkdir "$OWNED_TEMP_DIR/native-inputs"
               printf 'staged control bytes' > "$OWNED_TEMP_DIR/native-inputs/native-inputs.json"
               if [[ "$FAILURE" == stage ]]; then return 23; fi
               ;;
             scripts/ultramodern-renderers/release.mjs)
+              # A proof log that captured its environment is uploaded verbatim.
+              mkdir -p "$OWNED_TEMP_DIR/logs"
+              env > "$OWNED_TEMP_DIR/logs/feature-environment.log"
+              [[ -z "\${GH_TOKEN+x}" && -z "\${NATIVE_ARTIFACT_GITHUB_TOKEN+x}" ]] || return 89
               [[ "$*" == *"--native-inputs $OWNED_TEMP_DIR/native-inputs/native-inputs.json"* ]]
               [[ "$*" == *"--browser-executable $RENDERER_BROWSER_EXECUTABLE"* ]]
               test -f "$OWNED_TEMP_DIR/native-inputs/native-inputs.json"
               printf 'proof invoked' > "$OWNED_TEMP_DIR/proof-evidence.log"
+              printf 'non-log proof' > "$OWNED_TEMP_DIR/logs/feature-dev-refresh.receipt.json.observations.json"
               if [[ "$FAILURE" == proof ]]; then return 31; fi
+              if [[ "$*" == *"--emit-rows $RENDERER_FEATURE_ROWS"* ]]; then
+                mkdir -p "$(dirname "$RENDERER_FEATURE_ROWS")"
+                printf 'executed rows' > "$RENDERER_FEATURE_ROWS"
+              fi
+              ;;
+            scripts/ultramodern-renderers/retain-feature-evidence.mjs)
+              [[ -z "\${GH_TOKEN+x}" && -z "\${NATIVE_ARTIFACT_GITHUB_TOKEN+x}" ]] || return 89
+              test -f "$OWNED_TEMP_DIR/proof-evidence.log"
+              if [[ "$FAILURE" == retain ]]; then return 37; fi
+              mkdir -p "$OWNED_TEMP_DIR/logs/retained-evidence"
+              printf 'retained proof' > "$OWNED_TEMP_DIR/logs/retained-evidence/proof.json"
               ;;
             *) return 90 ;;
           esac
         }
-        ${command}
+        ${exercisedCommand}
       `,
         ],
         {
@@ -107,7 +135,8 @@ for (const mode of ['source', 'published'])
             BLEEDINGDEV_RELEASE_MANIFEST: '/control/manifest.json',
             BLEEDINGDEV_RELEASE_DIR: '/control',
             PRODUCER_RUN_IDENTITY: 'control-run',
-            RENDERER_FEATURE_ROWS: path.join(root, 'rows', 'rows.json'),
+            NATIVE_ARTIFACT_GITHUB_TOKEN: 'native-control-token',
+            RENDERER_FEATURE_ROWS: rows,
             RENDERER_BROWSER_EXECUTABLE: browserExecutable,
             RENDERER_AGENT_BROWSER_EXECUTABLE: browserCli,
             PATH: `${root}${path.delimiter}${process.env.PATH}`,
@@ -118,7 +147,15 @@ for (const mode of ['source', 'published'])
       assert.equal(child.error, undefined);
       assert.equal(
         child.status,
-        failure === 'stage' ? 23 : failure === 'proof' ? 31 : 0,
+        failure === 'stage'
+          ? 23
+          : failure === 'proof'
+            ? 31
+            : failure === 'retain'
+              ? 37
+              : failure === 'token-leak'
+                ? 89
+                : 0,
         child.stderr,
       );
       // The source lane owns a fixed root so a second job can reconstruct it;
@@ -137,9 +174,55 @@ for (const mode of ['source', 'published'])
       );
       assert.equal(
         fs.existsSync(path.join(featureRoot, 'proof-evidence.log')),
-        failure !== 'stage',
+        !['stage', 'token-leak'].includes(failure),
+      );
+      assert.equal(
+        fs.existsSync(
+          path.join(featureRoot, 'logs/retained-evidence/proof.json'),
+        ),
+        mode === 'published' && failure === 'none',
+      );
+      assert.equal(
+        fs.existsSync(rows),
+        mode === 'source' && failure === 'none',
+      );
+      // The source upload is the whole logs root, so non-log evidence survives
+      // to `seal` in place and nothing outside that root is carried.
+      if (mode === 'source')
+        assert.equal(
+          fs.existsSync(
+            path.join(
+              featureRoot,
+              'logs/feature-dev-refresh.receipt.json.observations.json',
+            ),
+          ),
+          !['stage', 'token-leak'].includes(failure),
+        );
+      const leaked = fs
+        .readdirSync(featureRoot, { recursive: true })
+        .map(name => path.join(featureRoot, name))
+        .filter(
+          file =>
+            fs.statSync(file).isFile() &&
+            fs.readFileSync(file, 'utf8').includes('native-control-token'),
+        );
+      assert.equal(
+        leaked.length > 0,
+        failure === 'token-leak',
+        'The artifact token must never reach proof processes or evidence',
       );
     });
+
+test('published uploads the selected non-log evidence as well as failure logs', () => {
+  const upload = readWorkflow('publish-bleedingdev').jobs[
+    'accept-published'
+  ].steps.find(
+    step => step.name === 'Preserve renderer feature runtime evidence',
+  );
+  assert.match(upload.with.path, /retained-evidence\/\*\*/u);
+  assert.match(upload.with.path, /\*\*\/\*\.log/u);
+  assert.doesNotMatch(upload.with.path, /renderer-features-\*\/\*\*$/mu);
+});
 
 for (const mode of ['source', 'published'])
   test(`${mode} installed feature command consumes the fixed browser provisioner's exact output`, () => {
@@ -236,15 +319,15 @@ for (const mode of ['source', 'published'])
       assert.equal(job.steps[install].if, job.steps[proof].if);
   });
 
-test('renderer CLI provisioning verifies the qualified native release before execution', () => {
+test('renderer CLI provisioning verifies the pinned native release before execution', () => {
   const script = fs.readFileSync(
     new URL('./provision-agent-browser.mjs', import.meta.url),
     'utf8',
   );
-  assert.match(script, /const version = '0\.39\.1'/u);
+  assert.match(script, /const version = '0\.43\.0'/u);
   assert.match(
     script,
-    /6906d3a2a67b05809932a93d99e53d1132373f0a52a617b2d6032dbb954df6fc/u,
+    /8e69c9fb662514c9cf36e4911e94e913742ba066e55102486350e049dd847612/u,
   );
   assert.match(
     script,
@@ -316,6 +399,8 @@ test('the renderer leg executes rows without the ERP receipt only the seal leg b
   );
   assert.match(executed.run, /--emit-rows "\$RENDERER_FEATURE_ROWS"/u);
   assert.doesNotMatch(executed.run, /--acceptance-receipt|--feature-receipt/u);
+  // Only `seal` writes the feature receipt; nothing here may read it.
+  assert.doesNotMatch(executed.run, /renderer-features\.json/u);
   assert.match(sealed.run, /--rows "\$RENDERER_FEATURE_ROWS"/u);
   assert.match(
     sealed.run,

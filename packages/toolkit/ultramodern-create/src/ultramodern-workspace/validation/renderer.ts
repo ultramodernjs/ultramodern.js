@@ -8,6 +8,7 @@ import {
 } from '@modern-js/backend-federation-contracts';
 import { specifierRenderer } from '@modern-js/ultramodern-app-tools';
 import semver from '@modern-js/utils/semver';
+import { readSupportArtifacts, selectSupportRequests } from '../package-source';
 import {
   getRendererGenerationProfile,
   isApplicationRenderer,
@@ -366,6 +367,16 @@ export function assertRendererDependencies(
   generation?: RendererGenerationProfile,
   options: RendererDependencyCatalogs = {},
 ): void {
+  const support = readSupportArtifacts(manifest);
+  for (const group of ['dependencies', 'devDependencies'] as const) {
+    const requests = manifest[group] ?? {};
+    const selected = selectSupportRequests(requests, support);
+    for (const [name, request] of Object.entries(selected))
+      assert(
+        requests[name] === request,
+        `${manifest.name} ${group}.${name} must use the exact support request`,
+      );
+  }
   const nativeGeneration =
     renderer !== 'react' && renderer !== 'none'
       ? (generation ?? getRendererGenerationProfile(renderer))
@@ -406,7 +417,9 @@ export function assertRendererDependencies(
     ['dependencies', generation.dependencies],
     ['devDependencies', generation.devDependencies],
   ] as const) {
-    for (const [name, version] of Object.entries(pins)) {
+    for (const [name, version] of Object.entries(
+      selectSupportRequests(pins, support),
+    )) {
       const request = manifest[group]?.[name];
       const resolved =
         typeof request === 'string'
@@ -438,6 +451,7 @@ export function assertAuthoredRendererDependencyPins(
   options: RendererDependencyCatalogs = {},
 ): void {
   const profile = generation.profile;
+  const support = readSupportArtifacts(manifest);
   const pins: Record<string, string> = {
     [profile.compiler.name]: profile.compiler.version,
     [profile.hydration.name]: profile.hydration.version,
@@ -457,6 +471,7 @@ export function assertAuthoredRendererDependencyPins(
     )
       pins[name] = version;
   }
+  const selectedPins = selectSupportRequests(pins, support);
   for (const group of [
     'dependencies',
     'devDependencies',
@@ -484,8 +499,16 @@ export function assertAuthoredRendererDependencyPins(
           generation,
         );
       }
-      const expected = pins[name] ?? (alias ? pins[alias.name] : undefined);
+      const expected =
+        selectedPins[name] ?? (alias ? selectedPins[alias.name] : undefined);
       if (expected === undefined) continue;
+      if (support && Object.hasOwn(support.packages, name)) {
+        assert(
+          resolved === expected,
+          `${manifest.name} ${group}.${name} must use the exact support request`,
+        );
+        continue;
+      }
       if (name.startsWith('@modern-js/')) {
         assertRendererFrameworkDependencyRequest(
           `${manifest.name} ${group}.${name}`,

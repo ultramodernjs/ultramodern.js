@@ -18,6 +18,13 @@ const { dump, load } = yaml;
 
 type PackedPackage = { tarball: string; integrity: string };
 type PackedSidecar = PackedPackage & { version: string };
+type PackageManifest = {
+  name: string;
+  version: string;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+};
 type BleedingdevEdge = {
   name: string;
   spec: string;
@@ -41,30 +48,39 @@ function packedBleedingdevSpecifier(
   return `file:${packed.tarball}`;
 }
 
-function assertPacked(file: string, name: string, integrity: string) {
-  const actual = createHash('sha256')
-    .update(fs.readFileSync(file))
-    .digest('hex');
+function assertPacked(file: string, name: string, integrity: string): Buffer {
+  const bytes = fs.readFileSync(file);
+  const actual = createHash('sha256').update(bytes).digest('hex');
   if (actual !== integrity) {
     throw new Error(`Packed prerequisite changed after preparation: ${name}`);
   }
+  return bytes;
+}
+
+function packedManifest(name: string, bytes: Buffer): PackageManifest {
+  const manifest: PackageManifest = JSON.parse(
+    inspectNpmTarball(bytes).packageJsonBytes.toString('utf8'),
+  );
+  assert.equal(manifest.name, name, `Packed identity: ${name}`);
+  assert.equal(typeof manifest.version, 'string', `Packed version: ${name}`);
+  return manifest;
 }
 
 /**
- * Point every `@bleedingdev/*` edge at its packed tarball. pnpm matches an
- * override by dependency key, so an `npm:` alias needs a `key@npm:...` selector;
- * a bare target-name override would leave the alias on the registry.
+ * Point a packed manifest's `@bleedingdev/*` edges at their packed tarballs.
+ * pnpm selectors cannot name an `npm:` alias spec, and an unscoped alias name
+ * would capture every edge of that name, so the exact packed parent scopes each
+ * override to the edge its authenticated bytes declare.
  */
 export function bleedingdevOverrides(
-  edges: BleedingdevEdge[],
+  parent: PackageManifest,
   sidecars: Record<string, PackedSidecar>,
 ): Record<string, string> {
   const overrides: Record<string, string> = {};
+  const edges: BleedingdevEdge[] = bleedingdevEdges(parent);
   for (const edge of edges) {
-    overrides[`${edge.name}@${edge.spec}`] = packedBleedingdevSpecifier(
-      edge,
-      sidecars,
-    );
+    overrides[`${parent.name}@${parent.version}>${edge.name}`] =
+      packedBleedingdevSpecifier(edge, sidecars);
   }
   return overrides;
 }
@@ -107,12 +123,8 @@ export function assertPackedRegistrySidecars(
 
 function registrySidecars(sidecars: Record<string, PackedSidecar>) {
   return Object.entries(sidecars).map(([name, packed]) => {
-    assertPacked(packed.tarball, name, packed.integrity);
-    const bytes = fs.readFileSync(packed.tarball);
-    const packageJson = JSON.parse(
-      inspectNpmTarball(bytes).packageJsonBytes.toString('utf8'),
-    );
-    assert.equal(packageJson.name, name);
+    const bytes = assertPacked(packed.tarball, name, packed.integrity);
+    const packageJson = packedManifest(name, bytes);
     assert.equal(packageJson.version, packed.version);
     return {
       name,
@@ -138,25 +150,25 @@ function packedPrerequisites() {
   const {
     packages,
     sidecars,
-    edges,
     allowBuilds,
     minimumReleaseAgeExclude = [],
   } = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
     packages: Record<string, PackedPackage>;
     sidecars: Record<string, PackedSidecar>;
-    edges: BleedingdevEdge[];
     allowBuilds: Record<string, boolean>;
     minimumReleaseAgeExclude: string[];
   };
   const overrides: Record<string, string> = {};
-  for (const [name, { tarball, integrity }] of Object.entries(packages)) {
-    assertPacked(tarball, name, integrity);
+  for (const [name, { tarball }] of Object.entries(packages)) {
     overrides[name] = `file:${tarball}`;
   }
-  for (const [name, { tarball, integrity }] of Object.entries(sidecars)) {
-    assertPacked(tarball, name, integrity);
+  for (const [name, { tarball, integrity }] of Object.entries({
+    ...packages,
+    ...sidecars,
+  })) {
+    const parent = packedManifest(name, assertPacked(tarball, name, integrity));
+    Object.assign(overrides, bleedingdevOverrides(parent, sidecars));
   }
-  Object.assign(overrides, bleedingdevOverrides(edges, sidecars));
   return {
     framework: Object.keys(packages),
     overrides,
@@ -240,17 +252,17 @@ export async function materializeGeneratedWorkspaceDependencies(
         JSON.parse(fs.readFileSync(path.join(workspaceDir, manifest), 'utf8')),
       ),
     );
-  // Validate authored alias versions without replacing the producer's policy.
-  bleedingdevOverrides(generatedEdges, sidecars);
   const workspaceFile = path.join(workspaceDir, 'pnpm-workspace.yaml');
   const workspace = load(fs.readFileSync(workspaceFile, 'utf8')) as {
     overrides?: Record<string, string>;
     minimumReleaseAgeExclude?: string[];
   };
-  bleedingdevOverrides(
-    bleedingdevEdges({ dependencies: workspace.overrides }),
-    sidecars,
-  );
+  // Validate authored alias versions without replacing the producer's policy.
+  const authoredEdges: BleedingdevEdge[] = [
+    ...generatedEdges,
+    ...bleedingdevEdges({ dependencies: workspace.overrides }),
+  ];
+  for (const edge of authoredEdges) packedBleedingdevSpecifier(edge, sidecars);
   // Fresh dependency candidates use only the repository's exact reviewed selectors.
   // The published generator retains its normal release-age policy.
   // Keep the framework file overrides installed: reverting them would invalidate

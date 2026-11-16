@@ -12,11 +12,11 @@ const nativePackages = [
   '@solidjs/compiler',
 ];
 const installedTuple = Object.freeze({
-  ...Object.fromEntries(nativePackages.map(name => [name, '2.0.0-rc.15'])),
-  '@babel/core': '7.29.7',
+  ...Object.fromEntries(nativePackages.map(name => [name, '2.0.0-rc.22'])),
+  '@babel/core': '8.1.2',
   typescript: '7.0.2',
-  seroval: '1.6.7',
-  'seroval-plugins': '1.6.7',
+  seroval: '1.8.1',
+  'seroval-plugins': '1.8.0',
 });
 
 /** Only the completed original strict-build/browser proof may supply this row. */
@@ -31,7 +31,7 @@ export function verifyGeneratedSolidResult(result, binding) {
   assert.deepEqual(
     result.tuple,
     installedTuple,
-    'The generated consumer must use the actual Solid 2 RC15 tuple',
+    'The generated consumer must use the actual Solid 2 RC22 tuple',
   );
   const types = result.types;
   assert(Array.isArray(types?.entries) && types.entries.length > 0);
@@ -57,7 +57,7 @@ export function verifyGeneratedSolidResult(result, binding) {
   const checks = {
     strictGeneratedTypes: types.entries.length > 0,
     sameNativeOwner: nativePackages.every(
-      name => result.tuple[name] === '2.0.0-rc.15',
+      name => result.tuple[name] === '2.0.0-rc.22',
     ),
     retainedHydration:
       browser.retainedSsrNodes === true && browser.deferredHydration === true,

@@ -15,9 +15,9 @@
   "devDependencies": {
     "@modern-js/app-tools": "workspace:*",
     "@modern-js/ultramodern-app-tools": "workspace:*",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "miniflare": "5.20261012.0-beta"
+    "miniflare": "5.20261113.0-beta"
   }
 }

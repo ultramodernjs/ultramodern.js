@@ -73,7 +73,7 @@ Modern.js comes with a built-in default Monitor, where different events trigger 
 
 ## Register Monitors
 
-Developers can register their own Monitors using the `push` API, but this can only be done in [server middleware](/guides/advanced-features/web-server#unstable-middleware) or [server plugins](/plugin/server-plugins/api). Registration is not available in Data Loaders, components, or init functions.
+Developers can register their own Monitors using the `push` API, but this can only be done in [server middleware](/guides/advanced-features/web-server#middleware) or [server plugins](/plugin/server-plugins/api). Registration is not available in Data Loaders, components, or init functions.
 
 ```ts title="server/modern.server.ts"
 import {

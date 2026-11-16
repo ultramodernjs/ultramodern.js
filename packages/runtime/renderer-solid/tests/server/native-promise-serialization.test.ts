@@ -318,15 +318,16 @@ describe('SSR native Promise serialization candidate', () => {
       }
       expect(hook).toHaveBeenCalledWith(
         expect.any(Error),
-        expect.objectContaining({ handling: 'client' }),
+        expect.objectContaining({ handling: 'fallback' }),
       );
       expect(html).toContain('public native fallback error');
+      expect(html).toContain('native error fallback');
       return [...html.matchAll(/<template\b[^>]*>[\s\S]*?<\/template>/g)].map(
         match => match[0],
       );
     };
-    // RC13 emits its native recovery templates here; the owning browser fixture
-    // qualifies eventual hydration rather than inferring it from server text.
+    // Compare rc22's native fallback templates with and without our serializer.
+    // Eventual hydration still belongs to the owning browser fixture.
     const baseline = await run(false);
     expect(await run(true)).toEqual(baseline);
   });

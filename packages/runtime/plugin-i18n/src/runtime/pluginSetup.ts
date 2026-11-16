@@ -5,7 +5,7 @@ import type {
   BaseBackendOptions,
   BaseLocaleDetectionOptions,
 } from '../shared/type';
-import type { I18nInitOptions, I18nInstance } from './i18n';
+import type { I18nInitOptions, I18nRuntimeInstance } from './i18n';
 import { mergeBackendOptions } from './i18n/backend';
 import {
   detectLanguageWithPriority,
@@ -53,13 +53,13 @@ interface I18nRuntimeApi {
 }
 
 export interface RuntimeContextWithI18n extends TInternalRuntimeContext {
-  i18nInstance?: I18nInstance;
+  i18nInstance?: I18nRuntimeInstance;
   changeLanguage?: (lang: string) => Promise<void>;
 }
 
 interface SetupI18nBeforeRenderOptions {
   api: I18nRuntimeApi;
-  userI18nInstance?: I18nInstance;
+  userI18nInstance?: I18nRuntimeInstance;
   initOptions?: I18nInitOptions;
   backend?: BaseBackendOptions;
   backendEnabled: boolean;
@@ -79,7 +79,7 @@ const reactI18nextInstances = new WeakSet<object>();
 export async function setupI18nBeforeRender(
   context: RuntimeContextWithI18n,
   options: SetupI18nBeforeRenderOptions,
-): Promise<I18nInstance> {
+): Promise<I18nRuntimeInstance> {
   const {
     api,
     userI18nInstance,

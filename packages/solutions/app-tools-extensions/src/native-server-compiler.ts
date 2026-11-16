@@ -170,11 +170,12 @@ export const nativeServerCompiler: CompilerProvider = async appDirectory => {
     ...process.env,
     TSRS_CHECKER_ASSIGNMENT: process.env.TSRS_CHECKER_ASSIGNMENT || 'go',
   };
-  // Rslib 1.x requires a version module and adjacent getExePath.js, with no
-  // app-origin argument. An invocation-private adapter is necessary: a static
-  // package entry would rediscover from its own origin or share mutable state.
-  // This contains only the selected path, never a copied compiler executable.
+  // rsbuild-plugin-dts requires a version module and adjacent getExePath.js,
+  // with no app-origin argument. An invocation-private adapter is necessary: a
+  // static package entry would rediscover from its own origin or share mutable
+  // state. It contains only the selected path, never a copied executable.
   const adapter = await mkdtemp(path.join(tmpdir(), 'modern-server-tsrs-'));
+  const typescriptPath = path.join(adapter, 'compiler.cjs');
   const dispose = () => rm(adapter, { recursive: true, force: true });
   try {
     await writeFile(
@@ -182,7 +183,7 @@ export const nativeServerCompiler: CompilerProvider = async appDirectory => {
       '{"type":"commonjs"}\n',
     );
     await writeFile(
-      path.join(adapter, 'compiler.cjs'),
+      typescriptPath,
       `exports.version = ${JSON.stringify(version)};\n`,
     );
     await writeFile(
@@ -194,7 +195,20 @@ export const nativeServerCompiler: CompilerProvider = async appDirectory => {
     );
     return {
       command: { executable, args: [], env },
-      typescriptPath: path.join(adapter, 'compiler.cjs'),
+      // The plugin is the app's own declared copy, not the one inside
+      // @rslib/core: an explicit native tsgo executable must stay on the
+      // executable backend whatever TypeScript version the adapter reports.
+      async declarationPlugin(options) {
+        const { pluginDts } = await import('rsbuild-plugin-dts');
+        return pluginDts({
+          ...options,
+          bundle: false,
+          dtsExtension: '.d.ts',
+          autoExternal: true,
+          tsgo: true,
+          typescriptPath,
+        });
+      },
       async readConfig(tsconfigPath) {
         const result = await execute(
           process.execPath,

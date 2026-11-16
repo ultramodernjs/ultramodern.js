@@ -1201,7 +1201,7 @@ test('release validator requires the closed sidecar profile choice and parser de
     {
       required: true,
       type: 'choice',
-      options: ['parser', 'mf-sdk', 'mf-cohort', 'tanstack-redact'],
+      options: ['parser', 'mf-sdk', 'tanstack-redact', 'mf-cohort'],
       default: 'parser',
     },
   );
@@ -1217,6 +1217,11 @@ test('release validator requires the closed sidecar profile choice and parser de
     ],
     ['unknown default', setField('default', 'other')],
     ['Redact default', setField('default', 'tanstack-redact')],
+    ['MF cohort default', setField('default', 'mf-cohort')],
+    [
+      'missing MF cohort option',
+      setField('options', ['parser', 'mf-sdk', 'tanstack-redact']),
+    ],
     [
       'missing parser option',
       setField('options', ['mf-sdk', 'mf-cohort', 'tanstack-redact']),
@@ -1257,7 +1262,7 @@ test('release validator requires the closed sidecar profile choice and parser de
         const inputs = workflow.on.workflow_dispatch.inputs;
         mutate(root ? inputs : inputs.sidecar_profile);
       },
-      /sidecar profile.*parser\/mf-sdk\/mf-cohort\/tanstack-redact.*parser default/u,
+      /sidecar profile.*parser\/mf-sdk\/tanstack-redact\/mf-cohort.*parser default/u,
     );
   }
 });
@@ -1342,7 +1347,7 @@ test('release validator accepts matching profile overrides and inherited profile
 test('release validator rejects SDK cohort inputs and unknown sidecar profiles', () => {
   const parserGuard = '[[ "$SIDECAR_PROFILE" == parser ]]';
   const sidecarGuard =
-    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == mf-cohort || "$SIDECAR_PROFILE" == tanstack-redact ]]';
+    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == tanstack-redact || "$SIDECAR_PROFILE" == mf-cohort ]]';
   for (const [label, guard, replacement] of [
     ['SDK in cohort mode', parserGuard, sidecarGuard],
     ['unguarded cohort profile', parserGuard, 'true'],

@@ -1,4 +1,5 @@
 import {
+  createRoutesFromElements,
   createStaticHandler,
   UNSAFE_ErrorResponseImpl as ErrorResponseImpl,
 } from '@modern-js/runtime-utils/router';
@@ -131,7 +132,7 @@ describe('test runtime router utils', () => {
     expect(response?.status).toBe(404);
   });
 
-  it('passes hasErrorBoundary to rendered React Router routes', () => {
+  it('lets React Router infer error boundaries from rendered error elements', async () => {
     function ErrorPage() {
       return null;
     }
@@ -153,6 +154,9 @@ describe('test runtime router utils', () => {
               path: 'child',
               hasErrorBoundary: true,
               error: ErrorPage,
+              loader: () => {
+                throw new Error('child loader failed');
+              },
             },
           ],
         },
@@ -179,9 +183,24 @@ describe('test runtime router utils', () => {
       | ReactElement<Record<string, unknown>>
       | undefined;
 
-    expect(jsxRoot.props).toHaveProperty('hasErrorBoundary', true);
-    expect(jsxChild?.props).toHaveProperty('hasErrorBoundary', true);
+    expect(jsxRoot.props).not.toHaveProperty('hasErrorBoundary');
+    expect(jsxChild?.props).not.toHaveProperty('hasErrorBoundary');
     expect(jsxChild?.props.errorElement).toBeDefined();
+
+    for (const routes of [
+      objectRoutes ?? [],
+      createRoutesFromElements(jsxRoutes),
+    ]) {
+      const { query } = createStaticHandler(routes);
+      const context = await query(new Request('http://localhost/child'));
+      if (context instanceof Response) {
+        throw new Error('Expected a static router error context');
+      }
+      expect(context.statusCode).toBe(500);
+      expect(context.errors).toEqual({
+        child: expect.objectContaining({ message: 'child loader failed' }),
+      });
+    }
   });
 
   it('keeps object-route loader failures at HTTP 500', async () => {

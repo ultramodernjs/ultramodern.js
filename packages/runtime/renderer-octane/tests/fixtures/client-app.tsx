@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'octane';
+import { createElement, useLayoutEffect, useState } from 'octane';
 
 export function ClientApplication({
   label,
@@ -23,8 +23,13 @@ export function ClientApplication({
   );
 }
 
+// The lifecycle fixtures server-render this same runtime element through
+// octane/server, so the client hydrates the exact server shape.
 export function HydrationApplication() {
-  return <section data-fixture="native-hydration">Native hydration</section>;
+  return createElement('section', {
+    'data-fixture': 'native-hydration',
+    children: 'Native hydration',
+  });
 }
 
 export function ThrowingApplication() {

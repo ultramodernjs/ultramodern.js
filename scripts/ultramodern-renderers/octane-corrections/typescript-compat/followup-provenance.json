@@ -1,0 +1,84 @@
+{
+  "scope": "Stable native signal validation and core 0.6.1 owning Volar compatibility; parent owns final package composition",
+  "source": {
+    "commit": "4c35afcdca0f4889921612fc462e6aabe507d78d",
+    "archiveSha256": "e12e4846d57c0e4913f60bd1d010637cfe175b833158cb50e2d175c7452f5900",
+    "octaneNpmIntegrity": "sha512-nMuONCV3pMMJhWjlXmC08Dn+i/bXju1micX/kKyAxY1b+dGK0zvCY6dCuMn791pyQfgXBs0jQ2X8apPysVrOhQ=="
+  },
+  "execution": {
+    "node": "26.13.1",
+    "pnpm": "12.21.0",
+    "typescript": "7.0.2",
+    "oxc": "0.24.0",
+    "core": "0.6.1",
+    "esrap": "2.4.0",
+    "classicControl": "6.0.3",
+    "dependencyInputs": "Frozen latest-build-pnpm-lock.yaml; no old core/esrap patches applied"
+  },
+  "ownership": {
+    "native": "packages/octane/src/compiler/typescript.js, typescript.d.ts, native-read-types.js",
+    "volar": "packages/octane/src/compiler/volar.js; three synthetic block-comment constructors only",
+    "sourceAudit": "The source archive has no production caller of validateNativeSignalNames besides its public API implementation; upstream tests and typetests are consumers.",
+    "core": "Octane npm manifest declares @tsrx/core ^0.5.5 (0.6.1 is outside this range). Source compiler modules import core externally; dist/compiler/volar.js separately bundles an audited core graph. Both dependency metadata and build graph must adopt 0.6.1 in the parent.",
+    "esrap": "Same source/bundle split; parent latest cohort must not merely replace metadata and retain the old Volar graph."
+  },
+  "rootCauses": {
+    "native": "Stable Program exposes no public checker or getProject(). Stable Snapshot.getProject(config) provides a public Project with both program and checker. Passing the actual stable Program previously reaches program.getProject() and crashes.",
+    "volar": "Core 0.6.1 format_comment deliberately preserves raw block-comment.value. Octane constructs *@jsxImportSource octane with no trailing whitespace; printing /* + value + */ yields /**@jsxImportSource octane*/. TypeScript consumes octane*/ as the pragma module and emits TS2875. The old core formatter had hidden Octane’s malformed synthetic-comment construction."
+  },
+  "corrections": {
+    "native": "Accept public stable Project input, obtain Project.program and Project.checker, and pass the checker into the shared host. Keep nightly Program and classic Program support. A stable bare Program now fails with an actionable request for Project; no private field, wrapper monkeypatch, hidden checker, or parallel type project.",
+    "declarations": "Add structural NativeTypeScriptProject union arm. Actual stable declaration test accepts Project and rejects bare stable Program with TS2345 at the program argument.",
+    "volar": "Construct correctly spaced raw block-comment values before the single mapped AST print. Keep authored comments, mappings and diagnostics; no output regex, diagnostic suppression, parser fallback, or core patch."
+  },
+  "verification": {
+    "before": "Fresh runner first reproduces parsed.errors.filter on exact source/stable binary, then applies only original text patch and requires native Program.getProject missing-method failure plus TS2875 on core 0.6.1 before applying either follow-up patch.",
+    "after": {
+      "source": {
+        "passed": 87,
+        "failed": 0
+      },
+      "npmCompilerWithRebuiltLatestVolarGraph": {
+        "passed": 87,
+        "failed": 0
+      }
+    },
+    "suiteComposition": {
+      "unchangedOriginalTextAndCompatCases": 44,
+      "unchangedUpstreamNativeSignalCases": 36,
+      "followupCases": 7
+    },
+    "nativeAssertions": "Nominal real source SignalHandle identity, positive suffixed handles/tracked reads/sample values/structural lookalikes; exact full OCTANE_NATIVE_SIGNAL_NAME and OCTANE_NATIVE_MEMO_READ diagnostic objects including message/severity/file/line/column/offset/suggestions; stale source rejection in upstream suite.",
+    "volarAssertions": "Default synthetic, authored block override, and authored line override each retain sole TS2352 with no TS2875. Existing inference cases retain precise source mappings and error exclusions.",
+    "bundleAssertions": "The actual esbuild emitted-input graph contains @tsrx/core 0.6.1 and esrap 2.4.0 and contains no @tsrx/core 0.5.5. The reconstructed npm candidate runs this new bundle, not the tarball’s old bundled Volar.",
+    "cleanup": "Exploratory and fresh-qualification owned temporary roots removed; dependencies/build outputs registered and released."
+  },
+  "composition": {
+    "apply": [
+      "typescript-source.patch",
+      "native-signals-source.patch",
+      "volar-core-source.patch"
+    ],
+    "overlap": "Disjoint source-file ownership among the three patches; fresh runner git apply --check verifies exact application before use.",
+    "originalTextPatchSha256": "71898145840705e712954009bf5a94877302181ac2aef3ece3ec907cd17404cc",
+    "parentRequired": [
+      "Use all three source patches before the full owning build.",
+      "Migrate stable validator callers to validateNativeSignalNames(project, file, options), where project is the caller-owned snapshot.getProject(config).",
+      "Update final Octane dependency/peer metadata to the approved latest core/OXC/TS cohort; the untouched original archive and its fixture install remain identity controls, not a proposed old final dependency graph.",
+      "Rebuild dist/compiler/volar.js with core 0.6.1/esrap 2.4.0; include regenerated dependency licenses and pass the full owning declaration/license/dist verification gates. The bounded qualification reproduces the owning esbuild module boundary but does not claim the full runtime build.",
+      "Copy the authored updated typescript.d.ts and corrected plain-JS modules through the owning build.",
+      "Compose with runtime PR7/9 ports and generate the final actual npm-layout patch in the parent lane; perform downstream/framework acceptance there."
+    ],
+    "supersedes": "The unresolved native-validator/core-0.6.1 compatibility warnings in provenance.json are resolved by this follow-up; full build and release acceptance remain parent-owned."
+  },
+  "rerun": "/Users/satan/bin/owned-temp-dir --need-gib 20 --run octane-ts-followup -- node scripts/ultramodern-renderers/octane-corrections/typescript-compat/qualify-followup.mjs",
+  "filesSha256": {
+    "native-signals-source.patch": "057a5f475311f5c2c437773c15c658b024b583b13d94f1e6958f6453ccc9558f",
+    "volar-core-source.patch": "e2384c2a171989340e9ceb85bdbf0ac1d4e3a26a30154a0e920503b8cb9b254f",
+    "latest-build-package.json": "701ca595875a70d7125e4bf9843033a9e4aede9f7b9d6bac4f5d7c5c2320622a",
+    "latest-build-pnpm-lock.yaml": "734a3ce6068818b01b582375dde9b93da3a9f45ceabec21934bc9d6c5e56cb5d",
+    "prepare-followup-fixtures.mjs": "453e60c8b26a27d382b676061a5ed6829f184e4750177c4eaade31e0e274f9af",
+    "followup.test.ts": "fe0f2c442422f353427b0edc58332028f42c4592c5ddacf169607a1c06291839",
+    "qualify-followup.mjs": "ff633be1a285ede4d1a2862e7e0b1ffdb44cecebd4d819452c7f16b72008e5d3"
+  }
+}

@@ -4,9 +4,9 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1444,
-  "totalHunks": 4860,
-  "totalChangedLines": 103975,
+  "totalFiles": 1468,
+  "totalHunks": 4949,
+  "totalChangedLines": 105552,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -16,7 +16,7 @@
     {
       "file": "packages/cli/adapter-rstest/package.json",
       "hunks": 5,
-      "changedLines": 20
+      "changedLines": 148
     },
     {
       "file": "packages/cli/adapter-rstest/rslib.config.mts",
@@ -41,7 +41,7 @@
     {
       "file": "packages/cli/builder/package.json",
       "hunks": 13,
-      "changedLines": 72
+      "changedLines": 76
     },
     {
       "file": "packages/cli/builder/rslib.config.mts",
@@ -167,6 +167,11 @@
       "file": "packages/cli/builder/tests/loaders/fixtures/client-component.jsx",
       "hunks": 1,
       "changedLines": 2
+    },
+    {
+      "file": "packages/cli/builder/tests/loaders/fixtures/inline-actions.tsx",
+      "hunks": 2,
+      "changedLines": 4
     },
     {
       "file": "packages/cli/builder/tests/neutralConfigTypes.test.ts",
@@ -560,13 +565,13 @@
     },
     {
       "file": "packages/document/docs/en/apis/app/commands.mdx",
-      "hunks": 17,
-      "changedLines": 92
+      "hunks": 18,
+      "changedLines": 96
     },
     {
       "file": "packages/document/docs/en/apis/app/hooks/api/lambda.mdx",
-      "hunks": 1,
-      "changedLines": 3
+      "hunks": 2,
+      "changedLines": 5
     },
     {
       "file": "packages/document/docs/en/apis/app/hooks/config/html.mdx",
@@ -605,8 +610,8 @@
     },
     {
       "file": "packages/document/docs/en/apis/app/hooks/src/routes.mdx",
-      "hunks": 2,
-      "changedLines": 3
+      "hunks": 4,
+      "changedLines": 7
     },
     {
       "file": "packages/document/docs/en/apis/app/hooks/src/server.mdx",
@@ -690,8 +695,8 @@
     },
     {
       "file": "packages/document/docs/en/components/deploy-command.mdx",
-      "hunks": 2,
-      "changedLines": 3
+      "hunks": 3,
+      "changedLines": 5
     },
     {
       "file": "packages/document/docs/en/components/deploy.mdx",
@@ -746,7 +751,7 @@
     {
       "file": "packages/document/docs/en/components/serve-command.mdx",
       "hunks": 1,
-      "changedLines": 2
+      "changedLines": 4
     },
     {
       "file": "packages/document/docs/en/components/ssr-monitor.mdx",
@@ -755,6 +760,11 @@
     },
     {
       "file": "packages/document/docs/en/components/tech-stack-node-framework.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
+      "file": "packages/document/docs/en/components/ua-polyfill.mdx",
       "hunks": 1,
       "changedLines": 2
     },
@@ -864,6 +874,11 @@
       "changedLines": 42
     },
     {
+      "file": "packages/document/docs/en/configure/app/runtime/0-intro.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
       "file": "packages/document/docs/en/configure/app/runtime/plugins.mdx",
       "hunks": 1,
       "changedLines": 10
@@ -881,7 +896,7 @@
     {
       "file": "packages/document/docs/en/configure/app/server/ssr.mdx",
       "hunks": 4,
-      "changedLines": 8
+      "changedLines": 10
     },
     {
       "file": "packages/document/docs/en/configure/app/server/static-cache-control.mdx",
@@ -960,8 +975,8 @@
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/compatibility.mdx",
-      "hunks": 4,
-      "changedLines": 7
+      "hunks": 5,
+      "changedLines": 11
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/international.mdx",
@@ -975,8 +990,8 @@
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/international/api.mdx",
-      "hunks": 14,
-      "changedLines": 86
+      "hunks": 15,
+      "changedLines": 123
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/international/best-practices.mdx",
@@ -1009,6 +1024,11 @@
       "changedLines": 182
     },
     {
+      "file": "packages/document/docs/en/guides/advanced-features/page-performance/code-split.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
       "file": "packages/document/docs/en/guides/advanced-features/page-performance/optimize-bundle.mdx",
       "hunks": 3,
       "changedLines": 6
@@ -1030,8 +1050,8 @@
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/server-monitor/monitors.mdx",
-      "hunks": 1,
-      "changedLines": 4
+      "hunks": 2,
+      "changedLines": 6
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/source-build.mdx",
@@ -1045,13 +1065,13 @@
     },
     {
       "file": "packages/document/docs/en/guides/basic-features/data/data-fetch.mdx",
-      "hunks": 1,
-      "changedLines": 4
+      "hunks": 3,
+      "changedLines": 8
     },
     {
       "file": "packages/document/docs/en/guides/basic-features/data/data-write.mdx",
-      "hunks": 18,
-      "changedLines": 58
+      "hunks": 19,
+      "changedLines": 60
     },
     {
       "file": "packages/document/docs/en/guides/basic-features/debug/mock.mdx",
@@ -1105,8 +1125,8 @@
     },
     {
       "file": "packages/document/docs/en/guides/basic-features/render/ssr.mdx",
-      "hunks": 6,
-      "changedLines": 20
+      "hunks": 7,
+      "changedLines": 22
     },
     {
       "file": "packages/document/docs/en/guides/basic-features/render/streaming-ssr.mdx",
@@ -1140,8 +1160,8 @@
     },
     {
       "file": "packages/document/docs/en/guides/concept/entries.mdx",
-      "hunks": 1,
-      "changedLines": 2
+      "hunks": 2,
+      "changedLines": 4
     },
     {
       "file": "packages/document/docs/en/guides/concept/server.mdx",
@@ -1189,6 +1209,11 @@
       "changedLines": 4
     },
     {
+      "file": "packages/document/docs/en/guides/topic-detail/module-federation/i18n.mdx",
+      "hunks": 2,
+      "changedLines": 4
+    },
+    {
       "file": "packages/document/docs/en/guides/topic-detail/module-federation/introduce.mdx",
       "hunks": 1,
       "changedLines": 1
@@ -1204,9 +1229,19 @@
       "changedLines": 2
     },
     {
+      "file": "packages/document/docs/en/guides/troubleshooting/hmr.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
       "file": "packages/document/docs/en/guides/upgrade/config.mdx",
       "hunks": 6,
       "changedLines": 37
+    },
+    {
+      "file": "packages/document/docs/en/guides/upgrade/entry.mdx",
+      "hunks": 1,
+      "changedLines": 2
     },
     {
       "file": "packages/document/docs/en/guides/upgrade/other.mdx",
@@ -1230,8 +1265,8 @@
     },
     {
       "file": "packages/document/docs/en/plugin/cli-plugins/api.mdx",
-      "hunks": 1,
-      "changedLines": 46
+      "hunks": 2,
+      "changedLines": 48
     },
     {
       "file": "packages/document/docs/en/plugin/cli-plugins/life-cycle.mdx",
@@ -1285,8 +1320,8 @@
     },
     {
       "file": "packages/document/docs/zh/apis/app/commands.mdx",
-      "hunks": 17,
-      "changedLines": 86
+      "hunks": 19,
+      "changedLines": 88
     },
     {
       "file": "packages/document/docs/zh/apis/app/hooks/api/lambda.mdx",
@@ -1330,8 +1365,8 @@
     },
     {
       "file": "packages/document/docs/zh/apis/app/hooks/src/routes.mdx",
-      "hunks": 2,
-      "changedLines": 3
+      "hunks": 3,
+      "changedLines": 5
     },
     {
       "file": "packages/document/docs/zh/apis/app/hooks/src/server.mdx",
@@ -1415,8 +1450,8 @@
     },
     {
       "file": "packages/document/docs/zh/components/deploy-command.mdx",
-      "hunks": 2,
-      "changedLines": 3
+      "hunks": 3,
+      "changedLines": 5
     },
     {
       "file": "packages/document/docs/zh/components/deploy.mdx",
@@ -1476,7 +1511,7 @@
     {
       "file": "packages/document/docs/zh/components/serve-command.mdx",
       "hunks": 1,
-      "changedLines": 2
+      "changedLines": 4
     },
     {
       "file": "packages/document/docs/zh/components/ssr-monitor.mdx",
@@ -1485,6 +1520,11 @@
     },
     {
       "file": "packages/document/docs/zh/components/tech-stack-node-framework.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
+      "file": "packages/document/docs/zh/components/ua-polyfill.mdx",
       "hunks": 1,
       "changedLines": 2
     },
@@ -1626,7 +1666,7 @@
     {
       "file": "packages/document/docs/zh/configure/app/server/ssr.mdx",
       "hunks": 2,
-      "changedLines": 3
+      "changedLines": 5
     },
     {
       "file": "packages/document/docs/zh/configure/app/server/static-cache-control.mdx",
@@ -1700,8 +1740,8 @@
     },
     {
       "file": "packages/document/docs/zh/guides/advanced-features/compatibility.mdx",
-      "hunks": 3,
-      "changedLines": 6
+      "hunks": 4,
+      "changedLines": 8
     },
     {
       "file": "packages/document/docs/zh/guides/advanced-features/international.mdx",
@@ -1715,8 +1755,8 @@
     },
     {
       "file": "packages/document/docs/zh/guides/advanced-features/international/api.mdx",
-      "hunks": 14,
-      "changedLines": 77
+      "hunks": 15,
+      "changedLines": 112
     },
     {
       "file": "packages/document/docs/zh/guides/advanced-features/international/best-practices.mdx",
@@ -1749,6 +1789,11 @@
       "changedLines": 215
     },
     {
+      "file": "packages/document/docs/zh/guides/advanced-features/page-performance/code-split.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
       "file": "packages/document/docs/zh/guides/advanced-features/page-performance/optimize-bundle.mdx",
       "hunks": 3,
       "changedLines": 6
@@ -1769,6 +1814,11 @@
       "changedLines": 19
     },
     {
+      "file": "packages/document/docs/zh/guides/advanced-features/server-monitor/monitors.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
       "file": "packages/document/docs/zh/guides/advanced-features/source-build.mdx",
       "hunks": 2,
       "changedLines": 4
@@ -1780,13 +1830,13 @@
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/data/data-fetch.mdx",
-      "hunks": 1,
-      "changedLines": 4
+      "hunks": 3,
+      "changedLines": 8
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/data/data-write.mdx",
-      "hunks": 21,
-      "changedLines": 62
+      "hunks": 22,
+      "changedLines": 64
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/debug/mock.mdx",
@@ -1825,8 +1875,8 @@
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/render/rsc.mdx",
-      "hunks": 8,
-      "changedLines": 44
+      "hunks": 9,
+      "changedLines": 46
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/render/ssg.mdx",
@@ -1840,8 +1890,8 @@
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/render/ssr.mdx",
-      "hunks": 10,
-      "changedLines": 25
+      "hunks": 11,
+      "changedLines": 27
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/routes/config-routes.mdx",
@@ -1870,8 +1920,8 @@
     },
     {
       "file": "packages/document/docs/zh/guides/concept/entries.mdx",
-      "hunks": 1,
-      "changedLines": 2
+      "hunks": 2,
+      "changedLines": 4
     },
     {
       "file": "packages/document/docs/zh/guides/concept/server.mdx",
@@ -1930,6 +1980,11 @@
     },
     {
       "file": "packages/document/docs/zh/guides/troubleshooting/cli.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
+      "file": "packages/document/docs/zh/guides/troubleshooting/hmr.mdx",
       "hunks": 1,
       "changedLines": 2
     },
@@ -2035,8 +2090,8 @@
     },
     {
       "file": "packages/document/src/components/FrameworkCode/index.tsx",
-      "hunks": 3,
-      "changedLines": 6
+      "hunks": 8,
+      "changedLines": 112
     },
     {
       "file": "packages/document/src/components/Mermaid/index.tsx",
@@ -2090,8 +2145,8 @@
     },
     {
       "file": "packages/document/src/pages/index.module.scss",
-      "hunks": 8,
-      "changedLines": 16
+      "hunks": 9,
+      "changedLines": 22
     },
     {
       "file": "packages/document/src/pages/index.tsx",
@@ -2125,8 +2180,8 @@
     },
     {
       "file": "packages/runtime/plugin-i18n/package.json",
-      "hunks": 11,
-      "changedLines": 100
+      "hunks": 12,
+      "changedLines": 103
     },
     {
       "file": "packages/runtime/plugin-i18n/README.md",
@@ -2141,7 +2196,7 @@
     {
       "file": "packages/runtime/plugin-i18n/rstest.config.mts",
       "hunks": 1,
-      "changedLines": 56
+      "changedLines": 58
     },
     {
       "file": "packages/runtime/plugin-i18n/src/cli/index.ts",
@@ -2165,13 +2220,13 @@
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/context.tsx",
-      "hunks": 31,
-      "changedLines": 311
+      "hunks": 33,
+      "changedLines": 318
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/contextHelpers.ts",
       "hunks": 1,
-      "changedLines": 253
+      "changedLines": 232
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/contexts.ts",
@@ -2181,12 +2236,12 @@
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/core.tsx",
       "hunks": 1,
-      "changedLines": 186
+      "changedLines": 188
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/hooks.ts",
-      "hunks": 32,
-      "changedLines": 160
+      "hunks": 38,
+      "changedLines": 176
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/backend/defaults.node.ts",
@@ -2200,13 +2255,18 @@
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/backend/middleware.common.ts",
-      "hunks": 4,
-      "changedLines": 9
+      "hunks": 6,
+      "changedLines": 15
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/backend/middleware.node.ts",
+      "hunks": 4,
+      "changedLines": 36
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/src/runtime/i18n/backend/middleware.ts",
       "hunks": 2,
-      "changedLines": 32
+      "changedLines": 4
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/backend/sdk-backend.ts",
@@ -2240,13 +2300,13 @@
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/detection/middleware.node.ts",
-      "hunks": 8,
-      "changedLines": 63
+      "hunks": 10,
+      "changedLines": 71
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/detection/middleware.ts",
-      "hunks": 7,
-      "changedLines": 24
+      "hunks": 9,
+      "changedLines": 32
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/detection/path.ts",
@@ -2271,12 +2331,12 @@
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/index.ts",
       "hunks": 3,
-      "changedLines": 4
+      "changedLines": 6
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/instance.ts",
-      "hunks": 30,
-      "changedLines": 236
+      "hunks": 33,
+      "changedLines": 285
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/react-i18next.ts",
@@ -2285,8 +2345,8 @@
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/utils.ts",
-      "hunks": 11,
-      "changedLines": 87
+      "hunks": 18,
+      "changedLines": 109
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/I18nLink.tsx",
@@ -2331,7 +2391,7 @@
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/providerComposition.tsx",
       "hunks": 1,
-      "changedLines": 200
+      "changedLines": 210
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/reactI18next.ts",
@@ -2347,6 +2407,11 @@
       "file": "packages/runtime/plugin-i18n/src/runtime/sharedContexts.ts",
       "hunks": 1,
       "changedLines": 8
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/src/runtime/types.ts",
+      "hunks": 3,
+      "changedLines": 6
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/utils.ts",
@@ -2429,14 +2494,29 @@
       "changedLines": 65
     },
     {
+      "file": "packages/runtime/plugin-i18n/tests/helpers/i18nInstance.ts",
+      "hunks": 1,
+      "changedLines": 26
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/helpers/i18nWrapper.ts",
+      "hunks": 1,
+      "changedLines": 60
+    },
+    {
       "file": "packages/runtime/plugin-i18n/tests/i18nUtils.test.ts",
       "hunks": 1,
       "changedLines": 60
     },
     {
+      "file": "packages/runtime/plugin-i18n/tests/i18nWrapper.test.ts",
+      "hunks": 1,
+      "changedLines": 58
+    },
+    {
       "file": "packages/runtime/plugin-i18n/tests/link.test.tsx",
       "hunks": 1,
-      "changedLines": 139
+      "changedLines": 126
     },
     {
       "file": "packages/runtime/plugin-i18n/tests/localisedRouteGeneration.test.ts",
@@ -2456,7 +2536,7 @@
     {
       "file": "packages/runtime/plugin-i18n/tests/navigation.test.tsx",
       "hunks": 1,
-      "changedLines": 403
+      "changedLines": 534
     },
     {
       "file": "packages/runtime/plugin-i18n/tests/reactI18nextRegistration.test.ts",
@@ -2476,7 +2556,37 @@
     {
       "file": "packages/runtime/plugin-i18n/tests/routerAdapter.test.tsx",
       "hunks": 1,
-      "changedLines": 221
+      "changedLines": 207
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/typeContracts.test.ts",
+      "hunks": 1,
+      "changedLines": 26
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/types/i18n-wrapper.ts",
+      "hunks": 1,
+      "changedLines": 62
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/types/i18next-instance.ts",
+      "hunks": 1,
+      "changedLines": 37
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/types/selector/i18next-selector-instance.ts",
+      "hunks": 1,
+      "changedLines": 27
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/types/selector/tsconfig.json",
+      "hunks": 1,
+      "changedLines": 8
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/types/tsconfig.json",
+      "hunks": 1,
+      "changedLines": 8
     },
     {
       "file": "packages/runtime/plugin-i18n/tests/urlStrategySerialization.test.ts",
@@ -3020,8 +3130,8 @@
     },
     {
       "file": "packages/runtime/plugin-runtime/src/router/runtime/rsc-router.tsx",
-      "hunks": 18,
-      "changedLines": 81
+      "hunks": 19,
+      "changedLines": 135
     },
     {
       "file": "packages/runtime/plugin-runtime/src/router/runtime/types.ts",
@@ -3201,7 +3311,7 @@
     {
       "file": "packages/runtime/plugin-runtime/tests/router/rsc-router.test.tsx",
       "hunks": 1,
-      "changedLines": 70
+      "changedLines": 149
     },
     {
       "file": "packages/runtime/plugin-runtime/tests/router/templates.test.ts",
@@ -3216,7 +3326,7 @@
     {
       "file": "packages/runtime/plugin-runtime/tests/router/utils.test.ts",
       "hunks": 4,
-      "changedLines": 273
+      "changedLines": 292
     },
     {
       "file": "packages/runtime/plugin-runtime/tests/ssr/beforeTemplate.test.ts",
@@ -3370,8 +3480,8 @@
     },
     {
       "file": "packages/runtime/render/package.json",
-      "hunks": 12,
-      "changedLines": 45
+      "hunks": 10,
+      "changedLines": 49
     },
     {
       "file": "packages/runtime/render/react-server-dom-rspack.d.ts",
@@ -4230,8 +4340,8 @@
     },
     {
       "file": "packages/server/server/src/dev-tools/https/index.ts",
-      "hunks": 2,
-      "changedLines": 2
+      "hunks": 3,
+      "changedLines": 4
     },
     {
       "file": "packages/server/server/src/dev-tools/reloadManager.ts",
@@ -4371,12 +4481,12 @@
     {
       "file": "packages/server/utils/src/compiler.ts",
       "hunks": 1,
-      "changedLines": 43
+      "changedLines": 60
     },
     {
       "file": "packages/server/utils/src/compilers/rslib.ts",
       "hunks": 1,
-      "changedLines": 478
+      "changedLines": 484
     },
     {
       "file": "packages/server/utils/src/compilers/tsgo.ts",
@@ -4401,7 +4511,7 @@
     {
       "file": "packages/server/utils/tests/compilerProvider.test.ts",
       "hunks": 1,
-      "changedLines": 202
+      "changedLines": 401
     },
     {
       "file": "packages/server/utils/tests/declarationPasses.test.ts",
@@ -4496,12 +4606,12 @@
     {
       "file": "packages/solutions/app-tools/bin/modern-bundle-docs.js",
       "hunks": 1,
-      "changedLines": 11
+      "changedLines": 12
     },
     {
       "file": "packages/solutions/app-tools/bin/modern.js",
       "hunks": 1,
-      "changedLines": 11
+      "changedLines": 12
     },
     {
       "file": "packages/solutions/app-tools/CHANGELOG.md",
@@ -4516,7 +4626,7 @@
     {
       "file": "packages/solutions/app-tools/package.json",
       "hunks": 15,
-      "changedLines": 70
+      "changedLines": 68
     },
     {
       "file": "packages/solutions/app-tools/rslib.config.mts",
@@ -5124,6 +5234,11 @@
       "changedLines": 8
     },
     {
+      "file": "packages/toolkit/create/template/.nvmrc",
+      "hunks": 1,
+      "changedLines": 3
+    },
+    {
       "file": "packages/toolkit/create/template/.rstack/hooks/pre-commit",
       "hunks": 1,
       "changedLines": 3
@@ -5145,8 +5260,8 @@
     },
     {
       "file": "packages/toolkit/create/template/package.json.handlebars",
-      "hunks": 5,
-      "changedLines": 31
+      "hunks": 4,
+      "changedLines": 35
     },
     {
       "file": "packages/toolkit/create/template/README.md",
@@ -5506,7 +5621,7 @@
     {
       "file": "packages/toolkit/plugin/src/cli/run/utils/createFileWatcher.ts",
       "hunks": 6,
-      "changedLines": 45
+      "changedLines": 44
     },
     {
       "file": "packages/toolkit/plugin/src/cli/run/utils/debug.ts",
@@ -5681,7 +5796,7 @@
     {
       "file": "packages/toolkit/runtime-utils/package.json",
       "hunks": 10,
-      "changedLines": 43
+      "changedLines": 177
     },
     {
       "file": "packages/toolkit/runtime-utils/rslib.config.mts",
@@ -5700,8 +5815,8 @@
     },
     {
       "file": "packages/toolkit/runtime-utils/src/browser/nestedRoutes.tsx",
-      "hunks": 6,
-      "changedLines": 18
+      "hunks": 7,
+      "changedLines": 19
     },
     {
       "file": "packages/toolkit/runtime-utils/src/node/fileReader.ts",
@@ -5751,7 +5866,7 @@
     {
       "file": "packages/toolkit/runtime-utils/tests/browser/nestedRoutes.test.tsx",
       "hunks": 1,
-      "changedLines": 70
+      "changedLines": 111
     },
     {
       "file": "packages/toolkit/runtime-utils/tests/build-artifact/async-storage-externals.test.ts",
@@ -7070,8 +7185,8 @@
     },
     {
       "file": "packages/toolkit/utils/rslib.config.mts",
-      "hunks": 17,
-      "changedLines": 112
+      "hunks": 18,
+      "changedLines": 120
     },
     {
       "file": "packages/toolkit/utils/src/cli/commands.ts",
@@ -7186,12 +7301,17 @@
     {
       "file": "packages/toolkit/utils/tests/compatRequire.test.ts",
       "hunks": 7,
-      "changedLines": 344
+      "changedLines": 371
     },
     {
       "file": "packages/toolkit/utils/tests/compiledYamlExports.test.ts",
       "hunks": 1,
       "changedLines": 33
+    },
+    {
+      "file": "packages/toolkit/utils/tests/declarationSpecifiers.test.ts",
+      "hunks": 1,
+      "changedLines": 36
     },
     {
       "file": "packages/toolkit/utils/tests/fixtures/lazy-signale-inspect.mjs",

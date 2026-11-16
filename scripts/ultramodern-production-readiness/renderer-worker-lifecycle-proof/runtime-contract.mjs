@@ -27,8 +27,8 @@ export function assertCompiledReactRuntime(inputs, runtime) {
   if (runtime === 'redact') {
     assert(redact.length > 0, 'Default build did not compile TanStack Redact');
     assert(
-      redact.every(item => item.version === '0.2.2'),
-      'Default build must compile the pinned TanStack Redact sidecar 0.2.2',
+      redact.every(item => item.version === '0.3.2'),
+      'Default build must compile the pinned TanStack Redact sidecar 0.3.2',
     );
     assert.equal(reactDom.length, 0, 'Default build compiled native React DOM');
   } else {

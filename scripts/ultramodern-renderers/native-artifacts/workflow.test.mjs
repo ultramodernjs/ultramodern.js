@@ -29,7 +29,8 @@ test('workflow separates read-only qualifications from the final release writer'
   assert.match(source, /github.ref == 'refs\/heads\/main-ultramodern'/u);
   assert.match(source, /github.actor == 'BleedingDev'/u);
   assert.match(source, /github.triggering_actor == 'BleedingDev'/u);
-  assert.equal(source.match(/depot-ubuntu-24.04-8/gu)?.length, 3);
+  assert.equal(source.match(/runs-on: ubuntu-24\.04$/gmu)?.length, 3);
+  assert(!source.includes('DEPOT_LINUX_RUNNER'));
   for (const action of source.matchAll(/uses: ([^\n]+)/gu))
     assert.match(action[1], /^[a-z-]+\/[a-z-]+@[a-f0-9]{40}(?: #.*)?$/u);
 });

@@ -1,3 +1,4 @@
+import type { CloneOptions, InitOptions, i18n } from 'i18next';
 import type { BaseBackendOptions } from '../../shared/type';
 
 interface I18nResourceStore {
@@ -14,12 +15,6 @@ interface I18nResourceStore {
     overwrite?: boolean,
   ) => void;
 }
-
-type I18nWrapperInstance = I18nInstance & {
-  i18nInstance: {
-    instance: I18nInstance;
-  };
-};
 
 export function isI18nWrapperInstance(
   obj: unknown,
@@ -48,27 +43,20 @@ export function isI18nWrapperInstance(
   return true;
 }
 
-function getI18nWrapperI18nextInstance(
-  wrapperInstance: unknown,
-): I18nInstance | null {
-  if (isI18nWrapperInstance(wrapperInstance)) {
-    return wrapperInstance.i18nInstance?.instance;
-  }
-  return null;
+/** The i18next instance that owns resources, detection and translation. */
+export function getActualI18nextInstance(
+  instance: I18nRuntimeInstance,
+): I18nInstance {
+  return isI18nWrapperInstance(instance)
+    ? instance.i18nInstance.instance
+    : instance;
 }
 
-export function getActualI18nextInstance(instance: I18nInstance): I18nInstance {
-  if (isI18nWrapperInstance(instance)) {
-    const i18nextInstance = getI18nWrapperI18nextInstance(instance);
-    return i18nextInstance || instance;
-  }
-  return instance;
-}
-
-export type TranslateFn = (
-  key: string | string[],
-  options?: Record<string, unknown>,
-) => string;
+// i18next's own `t`, so keys, overloads, selectors and the application's
+// `CustomTypeOptions` augmentation follow the installed i18next release. A
+// hand-written signature drifts on every i18next release (27 replaced the
+// overloads with a rest-tuple union) and rejects strict-key and selector apps.
+export type TranslateFn = i18n['t'];
 
 // FORK: intentionally diverges from upstream @modern-js/plugin-i18n. Upstream
 // declares a top-level `[key: string]: any` and overloaded call-signature
@@ -90,12 +78,7 @@ export interface I18nInstance {
     key: string | string[],
     options?: Record<string, unknown>,
   ) => boolean;
-  // `lng` is required: i18next's getFixedT does not accept `undefined`.
-  getFixedT?: (
-    lng: string | readonly string[] | null,
-    ns?: string | readonly string[] | null,
-    keyPrefix?: string,
-  ) => TranslateFn;
+  getFixedT?: i18n['getFixedT'];
   hasLoadedNamespace?: (
     ns: string | readonly string[],
     options?: Record<string, unknown>,
@@ -133,6 +116,9 @@ export interface I18nInstance {
   cloneInstance?(options?: any, callback?: any): I18nInstance; // ssr need
   // i18next store (may not be in the type definition but exists at runtime)
   store?: I18nResourceStore;
+  // i18next's own event API.
+  on?: i18n['on'];
+  off?: i18n['off'];
   emit?(event: string, ...args: any[]): unknown;
   reloadResources?(
     language?: any,
@@ -160,6 +146,31 @@ export interface I18nInstance {
   // `i18n` permanently unassignable. BREAKING for consumers that read
   // undeclared properties off I18nInstance.
 }
+
+/**
+ * A custom instance that owns a native i18next instance at
+ * `i18nInstance.instance`. The plugin initialises and switches the wrapper
+ * itself, so its own initialisation stays in charge of its `t`; resources,
+ * detection, the react-i18next provider and `useModernI18n().t` use the native
+ * instance.
+ */
+export interface I18nWrapperInstance
+  extends Omit<
+    I18nInstance,
+    't' | 'on' | 'off' | 'cloneInstance' | 'createInstance'
+  > {
+  i18nInstance: { instance: I18nInstance };
+  /** The wrapper's own translate API; it may differ from i18next's `t`. */
+  t(key: string): string;
+  on?(...args: Parameters<i18n['on']>): unknown;
+  off?(...args: Parameters<i18n['off']>): unknown;
+  // SSR clones the wrapper per request; detection may create or clone one.
+  createInstance?(options?: InitOptions): I18nWrapperInstance;
+  cloneInstance?(options?: CloneOptions): I18nWrapperInstance;
+}
+
+/** The instance a Modern app configures: i18next itself, or a wrapper of it. */
+export type I18nRuntimeInstance = I18nInstance | I18nWrapperInstance;
 
 type LanguageDetectorOrder = string[];
 type LanguageDetectorCaches = boolean | string[];
@@ -211,7 +222,7 @@ export type I18nInitOptions = {
   forkResourceStore?: boolean;
 };
 
-export function isI18nInstance(obj: unknown): obj is I18nInstance {
+export function isI18nInstance(obj: unknown): obj is I18nRuntimeInstance {
   if (!obj || typeof obj !== 'object') {
     return false;
   }
@@ -229,7 +240,7 @@ export function isI18nInstance(obj: unknown): obj is I18nInstance {
 async function tryImportI18next(): Promise<I18nInstance | null> {
   try {
     const i18next = await import('i18next');
-    return i18next.default as unknown as I18nInstance;
+    return i18next.default;
   } catch (error) {
     return null;
   }
@@ -241,25 +252,21 @@ async function createI18nextInstance(): Promise<I18nInstance | null> {
     if (!i18next) {
       return null;
     }
-    return i18next.createInstance?.({
-      initImmediate: false,
-    }) as unknown as I18nInstance;
+    return (
+      i18next.createInstance?.({
+        initImmediate: false,
+      }) ?? null
+    );
   } catch (error) {
     return null;
   }
 }
 
 export function getI18nextInstanceForProvider(
-  instance: I18nInstance,
+  instance: I18nRuntimeInstance,
   language?: string,
 ): I18nInstance {
-  let providerInstance = instance;
-  if (isI18nWrapperInstance(instance)) {
-    const i18nextInstance = getI18nWrapperI18nextInstance(instance);
-    if (i18nextInstance) {
-      providerInstance = i18nextInstance;
-    }
-  }
+  const providerInstance = getActualI18nextInstance(instance);
 
   if (!language || typeof Proxy === 'undefined') {
     return providerInstance;
@@ -301,12 +308,8 @@ export function getI18nextInstanceForProvider(
 
 export async function getI18nInstance(
   userInstance?: unknown,
-): Promise<I18nInstance> {
+): Promise<I18nRuntimeInstance> {
   if (userInstance) {
-    if (isI18nWrapperInstance(userInstance)) {
-      return userInstance as I18nInstance;
-    }
-
     if (isI18nInstance(userInstance)) {
       return userInstance;
     }

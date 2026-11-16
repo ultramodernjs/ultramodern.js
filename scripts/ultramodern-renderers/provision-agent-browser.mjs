@@ -4,11 +4,11 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// The installed renderer proofs qualified this exact native CLI. Its official
-// GitHub release asset digest is checked before the executable can run.
-const version = '0.39.1';
+// Renderer acceptance pins this native CLI. Its official GitHub release asset
+// digest is checked before execution, then the real proofs qualify its behavior.
+const version = '0.43.0';
 const digest =
-  '6906d3a2a67b05809932a93d99e53d1132373f0a52a617b2d6032dbb954df6fc';
+  '8e69c9fb662514c9cf36e4911e94e913742ba066e55102486350e049dd847612';
 assert.equal(process.platform, 'linux', 'Renderer acceptance requires Linux');
 assert.equal(process.arch, 'x64', 'Renderer acceptance requires Linux x64');
 assert(

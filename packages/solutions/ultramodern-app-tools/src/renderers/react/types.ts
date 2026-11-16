@@ -1,4 +1,4 @@
-import type { PluginSvgrOptions } from '@rsbuild/plugin-svgr';
+import type { PluginSvgrOptions } from '@modern-js/app-tools-extensions/svgr';
 import type { ReactNode } from 'react';
 
 /** The selected React renderer's element contract for CLI route metadata. */

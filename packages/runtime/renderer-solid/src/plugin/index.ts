@@ -57,7 +57,6 @@ export const rendererAdapter: NativeRendererAdapter<'solid'> =
         ],
         dependencies: {
           ...nativeRendererDependencies(profile),
-          'solid-js': profile.hydration.version,
           '@solidjs/signals': profile.hydration.version,
         },
         devDependencies: {

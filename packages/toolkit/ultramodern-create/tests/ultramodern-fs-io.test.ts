@@ -13,7 +13,6 @@ const require = createRequire(import.meta.url);
 type FormatterAudit = {
   kind: 'formatter' | 'worker';
   pid: number;
-  parentPid: number;
   args?: string[];
   configSource?: string;
 };
@@ -27,7 +26,11 @@ for (const mode of ['workspace', 'stdin'] as const) {
     const preloadPath = path.join(root, 'audit.cjs');
     const runnerPath = path.join(root, 'run.mjs');
     const markdownPath = path.join(root, 'nested', 'README.md');
-    const sourcePath = path.join(root, 'view.tsx');
+    // Each source sorts Tailwind classes through Oxfmt's external worker
+    // pool; Markdown, including stdin Markdown, is formatted natively.
+    const sourcePaths = ['view.tsx', 'panel.tsx'].map(name =>
+      path.join(root, name),
+    );
     const markdown =
       '# Title\n\nThis is a paragraph with enough words to exercise the nested native Markdown formatting override.\n\n-   one\n-   two\n';
     const source =
@@ -38,23 +41,42 @@ for (const mode of ['workspace', 'stdin'] as const) {
         .trim()
         .split('\n')
         .map(line => JSON.parse(line) as FormatterAudit);
-    const assertWorkers = (audit: FormatterAudit[], count: number) => {
-      const formatter = audit.find(record => record.kind === 'formatter');
-      assert.ok(formatter);
+    // Oxfmt runs its external formatter pool as Tinypool worker threads
+    // inside the formatter process. The pool starts one worker on the first
+    // external request and grows on concurrent demand up to --threads, so
+    // only the configured cap and the presence of demand are deterministic.
+    const assertWorkers = (
+      audit: FormatterAudit[],
+      threads: number,
+      externalDemand: boolean,
+    ) => {
+      const formatters = audit.filter(record => record.kind === 'formatter');
+      assert.equal(formatters.length, 1);
+      const [formatter] = formatters;
       assert.equal(
-        audit.filter(
-          record =>
-            record.kind === 'worker' && record.parentPid === formatter.pid,
-        ).length,
-        count,
+        formatter
+          .args!.filter(argument => argument.startsWith('--threads='))
+          .join(' '),
+        `--threads=${threads}`,
       );
+      const workers = audit.filter(record => record.kind === 'worker');
+      assert.ok(workers.every(record => record.pid === formatter.pid));
+      if (externalDemand) {
+        assert.ok(
+          workers.length >= 1 && workers.length <= threads,
+          `expected 1..${threads} external workers, saw ${workers.length}`,
+        );
+      } else {
+        assert.equal(workers.length, 0);
+      }
       return formatter;
     };
 
     try {
       fs.mkdirSync(path.dirname(markdownPath));
       fs.writeFileSync(markdownPath, markdown);
-      fs.writeFileSync(sourcePath, source);
+      for (const sourcePath of sourcePaths)
+        fs.writeFileSync(sourcePath, source);
       fs.writeFileSync(
         path.join(root, 'nested', '.oxfmtrc.json'),
         JSON.stringify({ proseWrap: 'always', printWidth: 30 }),
@@ -63,16 +85,17 @@ for (const mode of ['workspace', 'stdin'] as const) {
         preloadPath,
         `const fs = require('node:fs');
 const path = require('node:path');
+const { isMainThread, workerData } = require('node:worker_threads');
 const script = path.basename(process.argv[1] || '');
-if (script === 'oxfmt' || (script === 'process.js' && process.env.TINYPOOL_WORKER_ID)) {
+const tinypoolWorker = !isMainThread && Array.isArray(workerData) && Number.isInteger(workerData[0]?.workerId);
+if ((isMainThread && script === 'oxfmt') || tinypoolWorker) {
   const args = process.argv.slice(1);
   const configIndex = args.indexOf('--config');
   fs.appendFileSync(process.env.UM_FORMATTER_AUDIT, JSON.stringify({
-    kind: script === 'oxfmt' ? 'formatter' : 'worker',
+    kind: tinypoolWorker ? 'worker' : 'formatter',
     pid: process.pid,
-    parentPid: process.ppid,
     args,
-    configSource: configIndex < 0 ? undefined : fs.readFileSync(args[configIndex + 1], 'utf-8'),
+    configSource: tinypoolWorker || configIndex < 0 ? undefined : fs.readFileSync(args[configIndex + 1], 'utf-8'),
   }) + '\\n');
 }
 `,
@@ -89,7 +112,7 @@ if (${JSON.stringify(mode)} === 'stdin') {
   const [formatted] = formatGeneratedSourceCandidates([['nested/README.md', ${JSON.stringify(markdown)}]], root);
   fs.writeFileSync(${JSON.stringify(markdownPath)}, formatted);
 } else {
-  formatGeneratedWorkspaceFiles(root, ['nested/README.md', 'view.tsx']);
+  formatGeneratedWorkspaceFiles(root, ['nested/README.md', 'view.tsx', 'panel.tsx']);
 }
 `,
       );
@@ -108,17 +131,17 @@ if (${JSON.stringify(mode)} === 'stdin') {
         { cwd: root, encoding: 'utf-8', env },
       );
       assert.equal(generated.status, 0, generated.stderr);
-      const formatter = assertWorkers(
-        readAudit(),
-        mode === 'workspace' ? 1 : 0,
-      );
+      const formatter = assertWorkers(readAudit(), 1, mode === 'workspace');
       const formattedMarkdown = fs.readFileSync(markdownPath, 'utf-8');
-      const formattedSource = fs.readFileSync(sourcePath, 'utf-8');
+      const formattedSources = sourcePaths.map(sourcePath =>
+        fs.readFileSync(sourcePath, 'utf-8'),
+      );
       assert.notEqual(formattedMarkdown, markdown);
 
       fs.writeFileSync(auditPath, '');
       fs.writeFileSync(markdownPath, markdown);
-      fs.writeFileSync(sourcePath, source);
+      for (const sourcePath of sourcePaths)
+        fs.writeFileSync(sourcePath, source);
       const controlArgs = formatter.args!.filter(
         argument => !argument.startsWith('--threads='),
       );
@@ -136,15 +159,17 @@ if (${JSON.stringify(mode)} === 'stdin') {
         ...(mode === 'stdin' ? { input: markdown } : {}),
       });
       assert.equal(control.status, 0, control.stderr);
-      // Oxfmt formats Markdown from stdin without an external worker.
-      assertWorkers(readAudit(), mode === 'workspace' ? 2 : 0);
+      assertWorkers(readAudit(), 2, mode === 'workspace');
       assert.equal(
         mode === 'stdin'
           ? control.stdout
           : fs.readFileSync(markdownPath, 'utf-8'),
         formattedMarkdown,
       );
-      assert.equal(fs.readFileSync(sourcePath, 'utf-8'), formattedSource);
+      assert.deepEqual(
+        sourcePaths.map(sourcePath => fs.readFileSync(sourcePath, 'utf-8')),
+        formattedSources,
+      );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

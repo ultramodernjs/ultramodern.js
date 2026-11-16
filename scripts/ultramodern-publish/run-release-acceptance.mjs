@@ -21,6 +21,7 @@ import {
   defaultProjectName,
   scaleProfiles,
 } from '../ultramodern-production-readiness/published-create-proof/constants.mjs';
+import { run } from '../ultramodern-production-readiness/published-create-proof/process.mjs';
 import { readReleaseManifest } from './lib/source-create-proof/release-manifest.mjs';
 import { startEphemeralRegistry } from './lib/source-create-proof/runtime-proof/registry.mjs';
 
@@ -323,14 +324,26 @@ function verifyProducedReceipt({ release, options, runIdentity }) {
 }
 
 async function executeAcceptanceProfile(options) {
+  const { supportAdmissionRun } = await import(
+    './lib/support-release-admission.mjs'
+  );
   const { runAcceptanceProfile } = await import(
     '../ultramodern-production-readiness/published-create-proof/acceptance-profile.mjs'
   );
-  return runAcceptanceProfile(options);
+  return runAcceptanceProfile({
+    ...options,
+    runImpl: supportAdmissionRun(run),
+  });
 }
 
 async function runPrepublish({ release, options, runIdentity }) {
   if (options.continueFrom) {
+    const { verifyInstalledSupportWorkspace } = await import(
+      './lib/support-release-admission.mjs'
+    );
+    verifyInstalledSupportWorkspace(
+      path.join(options.workDir, options.projectName),
+    );
     const { runAcceptanceContinuation } = await import(
       '../ultramodern-production-readiness/published-create-proof/acceptance-continuation.mjs'
     );

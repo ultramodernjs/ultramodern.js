@@ -1,4 +1,4 @@
-import * as OpenTelemetry from '@effect/opentelemetry';
+import * as NodeSdk from '@effect/opentelemetry/NodeSdk';
 import * as Effect from 'effect/Effect';
 import { HttpClient, HttpClientRequest } from 'effect/http';
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from 'effect/http-api';
@@ -7,7 +7,7 @@ import * as Schema from 'effect/Schema';
 import { makeEffectHttpApiClient } from '../src/effect-client';
 
 type TraceSpanProcessor = Exclude<
-  OpenTelemetry.NodeSdk.Configuration['spanProcessor'],
+  NodeSdk.Configuration['spanProcessor'],
   ReadonlyArray<unknown> | undefined
 >;
 type FinishedSpan = Parameters<TraceSpanProcessor['onEnd']>[0];
@@ -67,7 +67,7 @@ describe('makeEffectHttpApiClient tracing', () => {
       }).pipe(
         Effect.withSpan('bff-effect.trace.parent', { kind: 'server' }),
         Effect.provide(
-          OpenTelemetry.NodeSdk.layer(() => ({
+          NodeSdk.layer(() => ({
             resource: {
               serviceName: 'bff-effect-trace-test',
             },

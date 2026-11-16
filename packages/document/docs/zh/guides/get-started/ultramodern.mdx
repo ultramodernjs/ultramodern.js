@@ -75,7 +75,7 @@ export default defineConfig({
 ```
 
 Solid 2.0.0-rc.13 和 Octane 是 Node 预览配置，支持 CSR、原生流式 SSR、
-hydration 和框架管理的文件路由。使用 Node 26.7.0 或更新版本。组件使用
+hydration 和框架管理的文件路由。使用 Node 26.13.1 或更新版本。组件使用
 `solid-js` / `@solidjs/web` 或 `octane` 的原生语法；路由原语从
 `@modern-js/renderer-solid/router` 或 `@modern-js/renderer-octane/router`
 导入。生成的入口负责挂载和 hydration。更改渲染器后，需要匹配的原生源码和
@@ -130,8 +130,8 @@ curl -I -H 'Accept-Language: cs-CZ,cs;q=0.9,en;q=0.1' https://<worker-host>/
 ```
 
 严格 Effect 生成 workspace 会通过 pnpm overrides 固定兼容版本组：
-`effect@4.0.0-rc.117`、`@effect/opentelemetry@4.0.0-rc.117` 和
-`@effect/vitest@4.0.0-rc.117`。不要添加与这些 overrides 冲突的 app 本地直接
+`effect@4.1.4`、`@effect/opentelemetry@4.1.4` 和
+`@effect/vitest@4.1.4`。不要添加与这些 overrides 冲突的 app 本地直接
 Effect 版本。严格的 24 小时发布年龄门禁适用于实际安装的包；当前版本组不包含 Effect
 年龄豁免，仅用于 override 的 `@effect/vitest` 也不是已安装的审批目标。
 
@@ -139,13 +139,13 @@ Effect 版本。严格的 24 小时发布年龄门禁适用于实际安装的包
 
 | 范围 | 固定版本 |
 | --- | --- |
-| Effect runtime 与测试版本组 | `effect`、`@effect/opentelemetry`、`@effect/vitest`：`4.0.0-rc.117` |
-| Effect compiler | `@effect/tsgo@0.45.0` |
-| Oxc 与 Ultracite | `oxlint@1.85.0`、`oxfmt@0.70.0`、`ultracite@7.12.0` |
-| TanStack Router | `@tanstack/react-router@1.170.41`、`@tanstack/router-core@1.171.34`、`@tanstack/history@1.162.4` |
-| Module Federation | `bridge-react`、`manifest`、`modern-js-v3`、`rspack`：`2.9.2`；`@module-federation/node@2.7.52` |
-| Tailwind CSS | `tailwindcss@4.3.3` |
-| Node 与包管理工具 | Node `26.7.0`、`@types/node@^26.6.2`、pnpm `11.27.1` |
+| Effect runtime 与测试版本组 | `effect`、`@effect/opentelemetry`、`@effect/vitest`：`4.1.4` |
+| Effect compiler | `@effect/tsgo@0.69.0` |
+| Oxc 与 Ultracite | `oxlint@1.93.0`、`oxfmt@0.78.0`、`ultracite@8.2.1` |
+| TanStack Router | `@tanstack/react-router@1.170.46`、`@tanstack/router-core@1.171.39`、`@tanstack/history@1.162.5` |
+| Module Federation | `bridge-react`、`manifest`、`modern-js-v3`、`rspack`：`2.9.3`；`@module-federation/node@2.7.53` |
+| Tailwind CSS | `tailwindcss@4.3.5` |
+| Node 与包管理工具 | Node `26.13.1`、`@types/node@^26.6.6`、pnpm `12.21.0` |
 
 生成的 workspace 默认使用 `@module-federation/bridge-react` 的
 router-free base entry（`bridge.enableBridgeRouter: false`），应用路由由

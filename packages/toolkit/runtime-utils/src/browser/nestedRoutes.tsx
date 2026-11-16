@@ -57,7 +57,6 @@ export const renderNestedRoute = (
     id: nestedRoute.id,
     loader: createLoader(nestedRoute),
     action: nestedRoute.action,
-    hasErrorBoundary: nestedRoute.hasErrorBoundary,
     shouldRevalidate: nestedRoute.shouldRevalidate,
     handle: {
       ...handle,

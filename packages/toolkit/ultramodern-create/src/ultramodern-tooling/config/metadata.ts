@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { yaml } from '@modern-js/utils';
+import { readSupportArtifacts } from '../../ultramodern-workspace/package-source';
 import type { ResolvedPackageSource } from '../../ultramodern-workspace/types';
 import { readOptionalJsonObject } from './json';
 
@@ -18,6 +19,8 @@ export function readWorkspacePackageSource(
 ): ResolvedPackageSource {
   const manifestPath = path.join(workspaceRoot, 'package.json');
   const manifest = readOptionalJsonObject(manifestPath);
+  const supportArtifacts = readSupportArtifacts(manifest);
+  const support = supportArtifacts ? { supportArtifacts } : {};
   const name = '@modern-js/ultramodern-create';
   let request =
     manifest.devDependencies?.[name] ?? manifest.dependencies?.[name];
@@ -35,7 +38,11 @@ export function readWorkspacePackageSource(
       );
   }
   if (request.startsWith('workspace:'))
-    return { strategy: 'workspace', modernPackageVersion: 'workspace:*' };
+    return {
+      strategy: 'workspace',
+      modernPackageVersion: 'workspace:*',
+      ...support,
+    };
   const alias = /^npm:@([^/]+)\/([^@]+)@([^@]+)$/u.exec(request);
   if (alias) {
     const [, aliasScope, target, modernPackageVersion] = alias;
@@ -44,6 +51,7 @@ export function readWorkspacePackageSource(
       throw new Error(`Unsupported framework package alias: ${request}.`);
     return {
       strategy: 'install',
+      ...support,
       modernPackageVersion,
       aliasScope,
       aliasPackageNamePrefix: target.slice(0, -suffix.length),
@@ -54,5 +62,5 @@ export function readWorkspacePackageSource(
       `Framework dependency must use an exact version or workspace source: ${request}.`,
     );
   }
-  return { strategy: 'install', modernPackageVersion: request };
+  return { strategy: 'install', modernPackageVersion: request, ...support };
 }

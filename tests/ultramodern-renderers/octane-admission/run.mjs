@@ -31,9 +31,8 @@ const { packageVersions, nativeArtifact, nativeRouterArtifact } =
   await validateAdmissionPackages({
     root,
     workspacePath: privateManifest.ultramodernAdmission?.workspacePath,
-    nativeArtifact: privateManifest.ultramodernAdmission?.nativeArtifact,
-    nativeRouterArtifact:
-      privateManifest.ultramodernAdmission?.nativeRouterArtifact,
+    nativeArtifacts: privateManifest.ultramodernAdmission?.nativeArtifacts,
+    nativeArchives: privateManifest.ultramodernAdmission?.nativeArchives,
   });
 
 const compilationEvidence = [];

@@ -18,6 +18,7 @@ import {
   createVerticalDescriptor,
   shellApp,
 } from '../src/ultramodern-workspace/descriptors';
+import { readSupportArtifacts } from '../src/ultramodern-workspace/package-source';
 import { initializeGeneratedRendererIdentity } from '../src/ultramodern-workspace/renderer-initial-identity';
 import { getRendererGenerationProfile } from '../src/ultramodern-workspace/renderer-profile';
 import type {
@@ -55,6 +56,38 @@ for (const renderer of renderers) {
       const files = snapshotWorkspace(targetDir);
       const manifest = JSON.parse(files[`${appDirectory}/package.json`]!);
       const rootManifest = JSON.parse(files['package.json']!);
+      const support = readSupportArtifacts(
+        JSON.parse(
+          fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'),
+        ),
+      );
+      assert.ok(
+        support,
+        'The generator must carry its admitted support cohort.',
+      );
+      assert.deepEqual(readSupportArtifacts(rootManifest), support);
+      assert.deepEqual(readSupportArtifacts(manifest), support);
+      const supportPins = new Map(Object.entries(support.packages));
+      assert.equal(manifest.engines.node, '>=26.13.1');
+      if (renderer === 'solid') {
+        for (const name of ['solid-js', '@solidjs/web', '@solidjs/signals']) {
+          assert.equal(
+            manifest.dependencies[name],
+            name === 'solid-js'
+              ? support.packages['solid-js'].request
+              : '2.0.0-rc.22',
+          );
+        }
+        assert.equal(
+          manifest.devDependencies['@solidjs/compiler'],
+          '2.0.0-rc.22',
+        );
+      }
+      if (renderer === 'octane') {
+        assert.equal(manifest.dependencies['@tsrx/oxc'], '0.24.0');
+        assert.equal(manifest.dependencies.seroval, '1.8.1');
+        assert.equal(manifest.dependencies['seroval-plugins'], '1.8.0');
+      }
       if (renderer !== 'react') {
         const [filter, packages, operation, script] =
           localizedNavigationSharedCheckCommand;
@@ -171,16 +204,20 @@ for (const renderer of renderers) {
       }
 
       for (const [name, version] of Object.entries(profile.dependencies)) {
+        const pin = supportPins.get(name);
+        if (pin) assert.equal(pin.version, version, `${renderer}: ${name}`);
         assert.equal(
           manifest.dependencies[name],
-          version,
+          pin?.request ?? version,
           `${renderer}: ${name}`,
         );
       }
       for (const [name, version] of Object.entries(profile.devDependencies)) {
+        const pin = supportPins.get(name);
+        if (pin) assert.equal(pin.version, version, `${renderer}: ${name}`);
         assert.equal(
           manifest.devDependencies[name],
-          version,
+          pin?.request ?? version,
           `${renderer}: ${name}`,
         );
       }
@@ -200,7 +237,7 @@ declare const ULTRAMODERN_SITE_URL: string;
         );
         assert.equal(
           manifest.dependencies['@tanstack/react-router'],
-          profile.dependencies['@tanstack/react-router'],
+          support.packages['@tanstack/react-router'].request,
         );
         assert.ok(files[`${appDirectory}/module-federation.config.ts`]);
         assert.ok(files[`${appDirectory}/src/modern.runtime.ts`]);

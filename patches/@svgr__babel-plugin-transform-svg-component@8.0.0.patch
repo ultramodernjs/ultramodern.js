@@ -1,0 +1,19 @@
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,5 +1,4 @@
+-import { types, ConfigAPI, NodePath } from '@babel/core';
+-import { TemplateBuilder } from '@babel/template';
++import { types, ConfigAPI, NodePath, template } from '@babel/core';
+ 
+ interface TemplateVariables {
+     componentName: string;
+@@ -11,7 +10,7 @@ interface TemplateVariables {
+ }
+ interface TemplateContext {
+     options: Options;
+-    tpl: TemplateBuilder<types.Statement | types.Statement[]>['ast'];
++    tpl: typeof template.smart.ast;
+ }
+ interface Template {
+     (variables: TemplateVariables, context: TemplateContext): types.Statement | types.Statement[];

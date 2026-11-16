@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { assertSupportedNodeVersion } from '../../ultramodern-node-policy/check-node-version.mjs';
 import { readReleaseManifest } from '../../ultramodern-publish/lib/source-create-proof/release-manifest.mjs';
 import {
   runChecked,
@@ -198,11 +199,7 @@ export async function runCommand(
 }
 
 export async function runProof(options) {
-  const version = process.versions.node.split('.').map(Number);
-  assert(
-    version[0] > 26 || (version[0] === 26 && version[1] >= 10),
-    'Node >=26.12.0 is required',
-  );
+  assertSupportedNodeVersion();
   const release = readReleaseManifest({ manifestPath: options.manifestPath });
   assert.equal(release.source.commit, options.expectedSourceRevision);
   assert.equal(release.release.version, options.expectedVersion);

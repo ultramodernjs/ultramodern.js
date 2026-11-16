@@ -12,7 +12,7 @@
     "@modern-js/app-tools": "workspace:*",
     "@modern-js/runtime": "workspace:*",
     "autoprefixer": "10.6.2",
-    "postcss": "^8.5.31",
+    "postcss": "^8.5.33",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tailwindcss": "^2.2.19"

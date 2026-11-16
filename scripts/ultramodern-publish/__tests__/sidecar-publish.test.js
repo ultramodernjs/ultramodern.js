@@ -209,7 +209,7 @@ test('recipe-only sidecar closure records exact publication identities and alias
   );
   assert.equal(byName.has('@bleedingdev/rsbuild-core'), false);
   assert.equal(byName.has('@bleedingdev/jiti'), false);
-  assert.equal(byName.get('@bleedingdev/mf-sdk').version, '2.9.2');
+  assert.equal(byName.get('@bleedingdev/mf-sdk').version, '2.9.5');
   assert.equal(byName.has('@bleedingdev/ipx'), false);
   assert.equal(byName.has('@bleedingdev/effect'), false);
   assert.equal(byName.has('@bleedingdev/msgpackr'), false);
@@ -245,7 +245,7 @@ test('recipe-only sidecar closure records exact publication identities and alias
     ],
     [
       'ultracite',
-      '8.0.1',
+      '8.2.2',
       {
         'fast-glob': 'npm:@bleedingdev/fast-glob@3.3.3',
         'find-workspaces': 'npm:@bleedingdev/find-workspaces@0.3.1',
@@ -398,7 +398,7 @@ test('every repository recipe has a cohort or independently qualified SDK consum
           dependencies: { '@module-federation/enhanced': '2.9.2' },
         },
       ]),
-    /@bleedingdev\/modern-js-server dependencies\.@module-federation\/enhanced is 2\.9\.2; declare npm:@bleedingdev\/mf-enhanced@2\.9\.3 in source/,
+    /@bleedingdev\/modern-js-server dependencies\.@module-federation\/enhanced is 2\.9\.2; declare npm:@bleedingdev\/mf-enhanced@2\.9\.5 in source/,
   );
 });
 
@@ -421,7 +421,7 @@ test('every staging and publication path requires the signed Redact sidecar alia
   );
   assert.equal(
     appTools.dependencies['@tanstack/redact'],
-    'npm:@bleedingdev/tanstack-redact@0.2.2',
+    'npm:@bleedingdev/tanstack-redact@0.3.2',
   );
   const upstream = published.map(manifest =>
     manifest === appTools
@@ -429,14 +429,14 @@ test('every staging and publication path requires the signed Redact sidecar alia
           ...manifest,
           dependencies: {
             ...manifest.dependencies,
-            '@tanstack/redact': '0.2.1',
+            '@tanstack/redact': '0.3.1',
           },
         }
       : manifest,
   );
   assert.throws(
     () => assertRepositoryRecipeConsumers(upstream),
-    /dependencies\.@tanstack\/redact is 0\.2\.1; declare npm:@bleedingdev\/tanstack-redact@0\.2\.2 in source/u,
+    /dependencies\.@tanstack\/redact is 0\.3\.1; declare npm:@bleedingdev\/tanstack-redact@0\.3\.2 in source/u,
   );
   const source = fs.readFileSync(
     path.join(__dirname, '../lib/prepare-bleedingdev-packages/workflow.mjs'),
@@ -482,7 +482,7 @@ test('the staged Redact sidecar packs the reviewed stream marker', async () => {
       fs.readFileSync(path.join(directory, packed.artifact.tarballPath)),
     );
     assert.equal(inspection.packageJson.name, '@bleedingdev/tanstack-redact');
-    assert.equal(inspection.packageJson.version, '0.2.2');
+    assert.equal(inspection.packageJson.version, '0.3.2');
     assert.equal(
       inspection.fileContents
         .get('dist/server/stream.js')

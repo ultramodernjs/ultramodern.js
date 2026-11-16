@@ -54,7 +54,8 @@ test('rsbuild-plugin-dts input is the signed npm source and exact canonical patc
   );
   const patch = read(`../../${input.patchPath}`);
   assert.equal(p.sha256(patch), input.patchSha256);
-  // Producer input only: never projected into repository patchedDependencies.
+  // The producer binds the canonical bytes independently of the repository's
+  // installation policy for its own Rslib dependency.
   const entry = inventory.find(
     item =>
       item.packageName === 'rsbuild-plugin-dts' &&
@@ -62,6 +63,5 @@ test('rsbuild-plugin-dts input is the signed npm source and exact canonical patc
   );
   assert.equal(entry?.path, input.patchPath);
   assert.equal(entry.sha256, input.patchSha256);
-  assert.equal(entry.repository, false);
   assert.equal(entry.workspace, null);
 });

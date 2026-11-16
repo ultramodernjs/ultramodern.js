@@ -18,7 +18,7 @@ title: API 参考
 | `localisedUrls` | `boolean \| Record<string, Record<string, string>>` | 来自 `localeDetection.localisedUrls` 的本地化 URL 映射 |
 | `isLanguageSupported` | `(lang: string) => boolean` | 检查语言是否在支持列表中 |
 | `isResourcesReady` | `boolean` | 当前语言的翻译资源是否已加载完成 |
-| `i18nInstance` | `I18nInstance` | i18next 实例（用于高级场景） |
+| `i18nInstance` | `I18nRuntimeInstance` | 配置的 i18next 实例或自定义包装实例（用于高级场景） |
 
 启用 `localePathRedirect` 且省略 `localisedUrls` 时，Modern.js 会保持 `/en/about` 这类仅语言前缀路径。只有提供非空 `localisedUrls` 映射时，才会启用路径片段翻译。也只有在该映射启用时，路由生成才会校验每个可本地化路径是否覆盖所有已配置语言。
 
@@ -149,15 +149,19 @@ const myPlugin = (): RuntimePlugin => ({
 `I18nInstance` 不再声明顶层的 `[key: string]: unknown` 索引签名：TypeScript 永远不会
 为 interface 自动添加隐式索引签名，该成员会让文档中的
 `runtime: { i18n: { i18nInstance: i18next } }` 用法无法通过类型检查。读取下方未声明的
-属性现在会报类型错误（TS2339），请改为断言到具体的实例类型。`t` 现在是**必需**成员，
-因此以对象字面量构造 `I18nInstance` 时必须提供 `t`。
+属性现在会报类型错误（TS2339），请改为断言到具体的实例类型。
+
+`t` 是**必需**成员，类型为 i18next 自身的 `i18n['t']`，`getFixedT` 的类型为
+`i18n['getFixedT']`。因此 key、重载、selector 以及你的 `CustomTypeOptions` 类型扩展
+都会作用于 `i18nInstance.t` 和 `useModernI18n<I18nInstance>()` 返回的 `t`（即绑定到该实例的 `t`）。
+`I18nInstance` 必须携带真实的 i18next `t`，例如通过 `i18next.createInstance()` 创建；
+手写的翻译函数会被拒绝。
 :::
 
 ```ts
-type TranslateFn = (
-  key: string | string[],
-  options?: Record<string, unknown>,
-) => string;
+import type { i18n } from 'i18next';
+
+type TranslateFn = i18n['t'];
 
 interface I18nInstance {
   language: string;
@@ -168,11 +172,7 @@ interface I18nInstance {
   use(plugin: any): unknown;
   t: TranslateFn;
   exists?: (key: string | string[], options?: Record<string, unknown>) => boolean;
-  getFixedT?: (
-    lng: string | readonly string[] | null,
-    ns?: string | readonly string[] | null,
-    keyPrefix?: string,
-  ) => TranslateFn;
+  getFixedT?: i18n['getFixedT'];
   hasLoadedNamespace?: (
     ns: string | readonly string[],
     options?: Record<string, unknown>,
@@ -182,6 +182,8 @@ interface I18nInstance {
   resolvedLanguage?: string;
   createInstance?(options?: any, callback?: any): I18nInstance;
   cloneInstance?(options?: any, callback?: any): I18nInstance;
+  on?: i18n['on'];
+  off?: i18n['off'];
   options?: {
     detection?: any;
     backend?: any;
@@ -191,6 +193,37 @@ interface I18nInstance {
   // ...完整成员列表见 src/runtime/i18n/instance.ts。
 }
 ```
+
+### I18nWrapperInstance 与 I18nRuntimeInstance
+
+`i18nInstance` 也可以是自定义包装实例，它在 `i18nInstance.instance` 上持有原生 i18next
+实例。插件会直接初始化、切换以及（在服务端）克隆包装实例本身，因此包装实例的 `t`
+仍由它自己的初始化控制。资源、语言检测和 react-i18next Provider 使用原生实例。
+`useModernI18n()` 返回配置的实例以及绑定到该实例的 `t`，因此包装实例的翻译 API
+仍决定输出。不传类型参数时，两者都按任一类型（`I18nRuntimeInstance`）推断，`t` 只接受
+两者都接受的调用，例如 `t('key')`。如果确定实例就是 i18next 本身，可传入
+`useModernI18n<I18nInstance>()` 以获得 i18next 的选项、重载和 selector；对包装实例则传入
+你的包装类型。
+
+```ts
+import type { CloneOptions, InitOptions } from 'i18next';
+
+interface I18nWrapperInstance
+  extends Omit<
+    I18nInstance,
+    't' | 'on' | 'off' | 'cloneInstance' | 'createInstance'
+  > {
+  i18nInstance: { instance: I18nInstance };
+  t(key: string): string;
+  on?(...args: Parameters<i18n['on']>): unknown;
+  off?(...args: Parameters<i18n['off']>): unknown;
+  createInstance?(options?: InitOptions): I18nWrapperInstance;
+  cloneInstance?(options?: CloneOptions): I18nWrapperInstance;
+}
+
+type I18nRuntimeInstance = I18nInstance | I18nWrapperInstance;
+```
+
 
 ### I18nSdkLoader
 

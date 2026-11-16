@@ -48,6 +48,14 @@ function app(files: Record<string, string>): string {
 }
 
 const manifestRemote = 'remote@https://remote.example/mf-manifest.json';
+// The owning renderer's authenticated native descriptor pins every Octane
+// artifact; installed owners must resolve to exactly those versions.
+const octaneArtifacts: Record<string, { version: string }> = JSON.parse(
+  fs.readFileSync(
+    path.resolve(__dirname, '../../../../runtime/renderer-octane/package.json'),
+    'utf8',
+  ),
+).ultramodern.nativeArtifacts.packages;
 const nativeRenderers = ['solid', 'octane'] as const;
 type NativeRenderer = (typeof nativeRenderers)[number];
 
@@ -163,8 +171,8 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
         expect(bindings.imports).not.toHaveProperty(name);
         expect(bindings.versions).not.toHaveProperty(name);
       }
-      expect(bindings.versions['solid-js']).toBe('2.0.0-rc.15');
-      expect(bindings.versions['@solidjs/web']).toBe('2.0.0-rc.15');
+      expect(bindings.versions['solid-js']).toBe('2.0.0-rc.22');
+      expect(bindings.versions['@solidjs/web']).toBe('2.0.0-rc.22');
       expect(bindings.aliases['@solidjs/web$']).toBe(
         bindings.imports['@solidjs/web'],
       );
@@ -181,7 +189,7 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
       const installed = versions(renderer);
       const runtime = renderer === 'solid' ? 'solid-js' : 'octane';
       expect(installed[runtime]).toBe(
-        renderer === 'solid' ? '2.0.0-rc.15' : '0.13.8',
+        renderer === 'solid' ? '2.0.0-rc.22' : octaneArtifacts.octane.version,
       );
       expect(installed['@modern-js/renderer-core/']).toMatch(/^\d+\.\d+\.\d+/u);
       expect(() => resolveNativeSharedVersions(renderer, os.tmpdir())).toThrow(
@@ -253,7 +261,9 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
         eager: false,
       });
     }
-    expect(installed['@tanstack/router-core']).toBe('1.171.38');
+    expect(installed['@tanstack/router-core']).toBe(
+      octaneArtifacts['@tanstack/router-core'].version,
+    );
     expect(installed['@tanstack/history']).toBe('1.162.5');
     // Localization is optional; its context belongs to the shared SDK prefix.
     expect(shared.i18next).toBeUndefined();
@@ -318,10 +328,12 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
       path.join(root, 'node_modules/@modern-js/renderer-octane'),
     );
     const installed = resolveNativeSharedVersions('octane', root);
-    expect(installed.octane).toBe('0.13.8');
-    expect(installed['@tanstack/router-core']).toBe('1.171.38');
+    expect(installed.octane).toBe(octaneArtifacts.octane.version);
+    expect(installed['@tanstack/router-core']).toBe(
+      octaneArtifacts['@tanstack/router-core'].version,
+    );
     expect(installed['@tanstack/history']).toBe('1.162.5');
-    expect(installed.seroval).toBe('1.6.9');
+    expect(installed.seroval).toBe('1.8.1');
     const bindings = resolveNativeSharedBindings('octane', root, 'server');
     const selected = fs.realpathSync(
       path.resolve(
@@ -414,12 +426,13 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
     );
     internal.enableServerSignalBindings();
     const slot = server.hookSlots(1);
+    // Octane's hydratable server HTML opens with its hydration protocol mark.
     expect(
       server.renderToString(() => {
         internal.beginNativeReadScope(undefined, 1);
         return signals.useSignal$('selected-native-owner', slot).get();
       }).html,
-    ).toBe('selected-native-owner');
+    ).toBe('<!--3-->selected-native-owner');
     const client = resolveNativeSharedBindings(
       'octane',
       path.resolve(__dirname, '../..'),

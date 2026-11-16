@@ -28,8 +28,8 @@ const require = createRequire(path.join(root, 'package.json'));
 const packages = await validateAdmissionPackages({
   root,
   workspacePath: workspace,
-  nativeArtifact: manifest.ultramodernAdmission?.nativeArtifact,
-  nativeRouterArtifact: manifest.ultramodernAdmission?.nativeRouterArtifact,
+  nativeArtifacts: manifest.ultramodernAdmission?.nativeArtifacts,
+  nativeArchives: manifest.ultramodernAdmission?.nativeArchives,
 });
 assert.ok(packages.nativeArtifact?.installedBytesVerified);
 assert.ok(packages.nativeRouterArtifact?.installedBytesVerified);

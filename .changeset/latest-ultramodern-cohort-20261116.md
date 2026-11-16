@@ -1,0 +1,54 @@
+---
+'@modern-js/adapter-rstest': patch
+'@modern-js/app-tools': patch
+'@modern-js/app-tools-extensions': patch
+'@modern-js/backend-federation-contracts': patch
+'@modern-js/bff-core': patch
+'@modern-js/bff-effect': patch
+'@modern-js/bff-runtime': patch
+'@modern-js/boundary-debugger': patch
+'@modern-js/builder': patch
+'@modern-js/code-tools': patch
+'@modern-js/create': patch
+'@modern-js/create-request': patch
+'@modern-js/federation-runtime': patch
+'@modern-js/i18n-integration': patch
+'@modern-js/i18n-runtime-extensions': patch
+'@modern-js/i18n-utils': patch
+'@modern-js/image': patch
+'@modern-js/main-doc': patch
+'@modern-js/mcp-apps': patch
+'@modern-js/plugin': patch
+'@modern-js/plugin-bff': patch
+'@modern-js/plugin-bff-build-extensions': patch
+'@modern-js/plugin-bff-extensions': patch
+'@modern-js/plugin-data-loader': patch
+'@modern-js/plugin-i18n': patch
+'@modern-js/plugin-polyfill': patch
+'@modern-js/plugin-ssg': patch
+'@modern-js/plugin-styled-components': patch
+'@modern-js/plugin-tanstack': patch
+'@modern-js/prod-server': patch
+'@modern-js/render': patch
+'@modern-js/renderer-core': patch
+'@modern-js/renderer-octane': patch
+'@modern-js/renderer-solid': patch
+'@modern-js/runtime': patch
+'@modern-js/runtime-extensions': patch
+'@modern-js/runtime-renderer-extensions': patch
+'@modern-js/runtime-utils': patch
+'@modern-js/sandpack-react': patch
+'@modern-js/server': patch
+'@modern-js/server-core': patch
+'@modern-js/server-runtime': patch
+'@modern-js/server-runtime-extensions': patch
+'@modern-js/server-utils': patch
+'@modern-js/surface-resolution': patch
+'@modern-js/types': patch
+'@modern-js/ultramodern-app-tools': patch
+'@modern-js/ultramodern-create': patch
+'@modern-js/ultramodern-sandpack-profile': patch
+'@modern-js/utils': patch
+---
+
+Advance the UltraModern dependency and compiler cohort, require application-owned renderer singletons, and authenticate corrected package archives during release and installed-workspace acceptance.

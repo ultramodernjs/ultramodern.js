@@ -1028,10 +1028,10 @@ function collectBleedingdevModeInputErrors(workflow, relativePath) {
     inputs.sidecar_profile?.required !== true ||
     inputs.sidecar_profile?.default !== 'parser' ||
     JSON.stringify(inputs.sidecar_profile?.options) !==
-      JSON.stringify(['parser', 'mf-sdk', 'mf-cohort', 'tanstack-redact'])
+      JSON.stringify(['parser', 'mf-sdk', 'tanstack-redact', 'mf-cohort'])
   ) {
     errors.push(
-      `${relativePath} sidecar profile must be the required parser/mf-sdk/mf-cohort/tanstack-redact choice with parser default`,
+      `${relativePath} sidecar profile must be the required parser/mf-sdk/tanstack-redact/mf-cohort choice with parser default`,
     );
   }
   const expression = value => ['${{', value, '}}'].join(' ');
@@ -1076,7 +1076,7 @@ function collectBleedingdevModeInputErrors(workflow, relativePath) {
     '[[ "$PUBLISH_VERSION" =~ ^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-ultramodern\\.[1-9][0-9]*$ ]]',
     ';;',
     'sidecars)',
-    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == mf-cohort || "$SIDECAR_PROFILE" == tanstack-redact ]]',
+    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == tanstack-redact || "$SIDECAR_PROFILE" == mf-cohort ]]',
     '[[ -z "$PUBLISH_VERSION" && -z "$RECOVERY_RUN_ID" && -z "$RECOVERY_RUN_ATTEMPT" && -z "$RECOVERY_QUALIFICATION_ATTEMPT" ]]',
     ';;',
     '*) exit 1 ;;',
@@ -2975,7 +2975,7 @@ function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
             : 'node@26.13.1 pnpm@11.21.0 pnpm@12.21.0') ||
         installer[0].with?.version !== '2026.11.8' ||
         installer[0].with?.cache !== false ||
-        (support && installer[0].with?.cache_save !== false) ||
+        installer[0].with?.cache_save !== false ||
         installer[0].if !== undefined ||
         installer[0]['continue-on-error'] !== undefined ||
         job.steps.indexOf(installer[0]) >= job.steps.indexOf(steps[0])

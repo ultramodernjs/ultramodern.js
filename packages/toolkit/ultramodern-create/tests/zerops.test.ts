@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -150,35 +151,64 @@ test('Zerops commands preserve interpolated arguments and launch the materialize
       'utf-8',
     );
 
-    writeExecutable(
-      path.join(fakeBin, 'curl'),
-      "process.stdout.write(':\\n');\n",
-    );
-    writeExecutable(
-      path.join(fakeHome, '.local/bin/mise'),
+    const fixture = `#!/usr/bin/env node
+const fs = require('node:fs');
+if (process.argv[2] === '--version') { process.stdout.write('2026.11.8 fixture'); }
+else fs.appendFileSync(process.env.UM_ZEROPS_COMMAND_RECORD, JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd() }) + '\\n');
+`;
+    const fixturePath = path.join(tempRoot, 'fixture');
+    fs.writeFileSync(fixturePath, fixture);
+    const preload = path.join(tempRoot, 'bootstrap-preload.cjs');
+    fs.writeFileSync(
+      preload,
       `
 const fs = require('node:fs');
-fs.appendFileSync(
-  process.env.UM_ZEROPS_COMMAND_RECORD,
-  JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd() }) + '\\n',
-);
+const cp = require('node:child_process');
+const exec = cp.execFileSync;
+// Test-only platform selection. The executable is portable JavaScript, not Linux ELF.
+Object.defineProperty(process, 'platform', { value: 'linux' });
+Object.defineProperty(process, 'arch', { value: 'x64' });
+global.fetch = async () => new Response(process.env.UM_ZEROPS_CORRUPT ? Buffer.alloc(fs.statSync(${JSON.stringify(fixturePath)}).size) : fs.readFileSync(${JSON.stringify(fixturePath)}));
+cp.execFileSync = (file, args, options) => exec(process.execPath, [file, ...args], options);
 `,
     );
+    const fixtureDigest = createHash('sha256').update(fixture).digest('hex');
+    const buildCommand = service.build.buildCommands[0]
+      .replaceAll(/size: \d+/gu, `size: ${Buffer.byteLength(fixture)}`)
+      .replaceAll(/sha256: '[a-f0-9]+'/gu, `sha256: '${fixtureDigest}'`);
 
     const probeEnvironment = {
       ...process.env,
       HOME: fakeHome,
+      NODE_OPTIONS: `--require=${preload}`,
       PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ''}`,
       ULTRAMODERN_ZEROPS_SERVICE: app.id,
       UM_ZEROPS_COMMAND_RECORD: commandRecordPath,
       UM_ZEROPS_SERVE_RECORD: serveRecordPath,
     };
-    execFileSync(shell, ['-c', service.build.buildCommands[0]], {
+    const existingMise = path.join(fakeHome, '.local/bin/mise');
+    writeExecutable(existingMise, "throw new Error('old mise must not run');");
+    const existingBytes = fs.readFileSync(existingMise);
+    assert.throws(
+      () =>
+        execFileSync(shell, ['-c', buildCommand], {
+          cwd: tempRoot,
+          env: { ...probeEnvironment, UM_ZEROPS_CORRUPT: '1' },
+          stdio: 'pipe',
+        }),
+      /SHA-256 mismatch/u,
+    );
+    assert.deepEqual(fs.readFileSync(existingMise), existingBytes);
+    assert.deepEqual(fs.readdirSync(path.dirname(existingMise)), ['mise']);
+    assert.equal(fs.existsSync(commandRecordPath), false);
+    execFileSync(shell, ['-c', buildCommand], {
       cwd: tempRoot,
       env: probeEnvironment,
       stdio: 'pipe',
     });
 
+    assert.equal(fs.readFileSync(existingMise, 'utf8'), fixture);
+    assert.deepEqual(fs.readdirSync(path.dirname(existingMise)), ['mise']);
     assert.deepEqual(readCommandRecords(commandRecordPath), [
       { argv: ['install'], cwd: workspaceRealPath },
       {
@@ -229,7 +259,10 @@ fs.appendFileSync(
 
     execFileSync(shell, ['-c', service.run.start], {
       cwd: tempRoot,
-      env: probeEnvironment,
+      env: {
+        ...probeEnvironment,
+        NODE_OPTIONS: process.env.NODE_OPTIONS ?? '',
+      },
       stdio: 'pipe',
     });
     const startResult = JSON.parse(

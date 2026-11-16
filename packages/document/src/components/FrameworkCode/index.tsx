@@ -41,6 +41,54 @@ interface FrameworkCodeProps {
   defaultImportPath?: string;
 }
 
+/**
+ * Component wrapper that clones ShikiPre and replaces import paths in the code
+ * This preserves shiki's syntax highlighting structure by only replacing the import path string
+ * in text nodes, without modifying the HTML structure
+ */
+const ShikiPreWithCode: React.FC<{
+  originalElement: React.ReactElement;
+  sourcePath: string;
+  targetPath: string;
+}> = ({ originalElement, sourcePath, targetPath }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      // Find the pre element inside
+      const preElement = containerRef.current.querySelector('pre');
+      if (preElement) {
+        // Get the code element (usually inside pre)
+        const codeElement = preElement.querySelector('code') || preElement;
+
+        // Escape special regex characters in source path
+        const escapedSource = sourcePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(escapedSource, 'g');
+
+        // Replace import paths in all text nodes, preserving the HTML structure
+        const walker = document.createTreeWalker(
+          codeElement,
+          NodeFilter.SHOW_TEXT,
+          null,
+        );
+
+        let node;
+        while ((node = walker.nextNode())) {
+          if (node.nodeType === Node.TEXT_NODE && node.textContent) {
+            const originalText = node.textContent;
+            // Only replace if the text contains the source path
+            if (originalText.includes(sourcePath)) {
+              node.textContent = originalText.replace(regex, targetPath);
+            }
+          }
+        }
+      }
+    }
+  }, [originalElement, sourcePath, targetPath]);
+
+  return <div ref={containerRef}>{cloneElement(originalElement)}</div>;
+};
+
 const FrameworkCode: React.FC<PropsWithChildren<FrameworkCodeProps>> = ({
   children,
   frameworks,
@@ -76,58 +124,6 @@ const FrameworkCode: React.FC<PropsWithChildren<FrameworkCodeProps>> = ({
     return code.replace(importExportRegex, `$1$2${target}$3`);
   };
 
-  /**
-   * Component wrapper that clones ShikiPre and replaces import paths in the code
-   * This preserves shiki's syntax highlighting structure by only replacing the import path string
-   * in text nodes, without modifying the HTML structure
-   */
-  const ShikiPreWithCode: React.FC<{
-    originalElement: React.ReactElement;
-    newCode: string;
-    originalCode: string;
-    sourcePath: string;
-    targetPath: string;
-  }> = ({ originalElement, newCode, originalCode, sourcePath, targetPath }) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-      if (containerRef.current) {
-        // Find the pre element inside
-        const preElement = containerRef.current.querySelector('pre');
-        if (preElement) {
-          // Get the code element (usually inside pre)
-          const codeElement = preElement.querySelector('code') || preElement;
-
-          // Escape special regex characters in source path
-          const escapedSource = sourcePath.replace(
-            /[.*+?^${}()|[\]\\]/g,
-            '\\$&',
-          );
-          const regex = new RegExp(escapedSource, 'g');
-
-          // Replace import paths in all text nodes, preserving the HTML structure
-          const walker = document.createTreeWalker(
-            codeElement,
-            NodeFilter.SHOW_TEXT,
-            null,
-          );
-
-          let node;
-          while ((node = walker.nextNode())) {
-            if (node.nodeType === Node.TEXT_NODE && node.textContent) {
-              const originalText = node.textContent;
-              // Only replace if the text contains the source path
-              if (originalText.includes(sourcePath)) {
-                node.textContent = originalText.replace(regex, targetPath);
-              }
-            }
-          }
-        }
-      }
-    }, [sourcePath, targetPath]);
-
-    return <div ref={containerRef}>{cloneElement(originalElement)}</div>;
-  };
   const parseCodeBlocks = (
     children: React.ReactNode,
   ): Array<{
@@ -462,8 +458,6 @@ const FrameworkCode: React.FC<PropsWithChildren<FrameworkCodeProps>> = ({
               <ShikiPreWithCode
                 key={block.title || block.meta || `block-${index}`}
                 originalElement={block.originalElement}
-                newCode={transformedCode}
-                originalCode={block.code}
                 sourcePath={sourcePath}
                 targetPath={framework.importPath}
               />
@@ -517,8 +511,6 @@ const FrameworkCode: React.FC<PropsWithChildren<FrameworkCodeProps>> = ({
             const codeElement = block.originalElement ? (
               <ShikiPreWithCode
                 originalElement={block.originalElement}
-                newCode={transformedCode}
-                originalCode={block.code}
                 sourcePath={sourcePath}
                 targetPath={framework.importPath}
               />
@@ -571,8 +563,6 @@ const FrameworkCode: React.FC<PropsWithChildren<FrameworkCodeProps>> = ({
               const codeElement = block.originalElement ? (
                 <ShikiPreWithCode
                   originalElement={block.originalElement}
-                  newCode={transformedCode}
-                  originalCode={block.code}
                   sourcePath={sourcePath}
                   targetPath={framework.importPath}
                 />

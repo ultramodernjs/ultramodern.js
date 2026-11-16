@@ -31,6 +31,23 @@ function renderBoundary(context: Record<string, unknown>) {
   );
 }
 
+function AddToCartFragment() {
+  const props = useDistributedSsrFragmentProps<CheckoutRemoteProps>({
+    boundaryId: 'verticalCheckout',
+    expose: './AddToCart',
+  });
+
+  return <output>{`${props.sku}:${props.price}`}</output>;
+}
+
+function MiniCartFragment() {
+  useDistributedSsrFragmentProps({
+    boundaryId: 'verticalCheckout',
+    expose: './MiniCart',
+  });
+  return null;
+}
+
 describe('DistributedSsrBoundary', () => {
   it('renders the typed fallback when a required Worker fragment is degraded', () => {
     const html = renderBoundary({
@@ -66,17 +83,6 @@ describe('DistributedSsrBoundary', () => {
 
 describe('useDistributedSsrFragmentProps', () => {
   it('returns only props verified for the rendered remote expose', () => {
-    const Fragment = () => {
-      const props = useDistributedSsrFragmentProps<{
-        price: number;
-        sku: string;
-      }>({
-        boundaryId: 'verticalCheckout',
-        expose: './AddToCart',
-      });
-
-      return <output>{`${props.sku}:${props.price}`}</output>;
-    };
     const html = renderToString(
       <RuntimeContext.Provider
         value={
@@ -100,7 +106,7 @@ describe('useDistributedSsrFragmentProps', () => {
           } as never
         }
       >
-        <Fragment />
+        <AddToCartFragment />
       </RuntimeContext.Provider>,
     );
 
@@ -108,14 +114,6 @@ describe('useDistributedSsrFragmentProps', () => {
   });
 
   it('rejects a fragment request for a different expose', () => {
-    const Fragment = () => {
-      useDistributedSsrFragmentProps({
-        boundaryId: 'verticalCheckout',
-        expose: './MiniCart',
-      });
-      return null;
-    };
-
     expect(() =>
       renderToString(
         <RuntimeContext.Provider
@@ -139,7 +137,7 @@ describe('useDistributedSsrFragmentProps', () => {
             } as never
           }
         >
-          <Fragment />
+          <MiniCartFragment />
         </RuntimeContext.Provider>,
       ),
     ).toThrow(/fragment request contract mismatch/u);

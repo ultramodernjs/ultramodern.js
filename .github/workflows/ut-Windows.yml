@@ -45,7 +45,7 @@ jobs:
       - name: Setup mise
         uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
-          version: 2026.9.18
+          version: 2026.11.8
           cache_save: false
           install: true
 
@@ -99,6 +99,7 @@ jobs:
 
       - name: Verify complete disjoint Windows test coverage
         if: matrix.lane == '1/2'
+        shell: pwsh
         run: |
           node --test scripts/__tests__/windows-unit-selection.test.mjs scripts/ci/__tests__/windows-dependency-snapshot.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

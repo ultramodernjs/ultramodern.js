@@ -6,6 +6,11 @@ const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const sidecarRecipes = require('../../../ultramodern-supply/sidecars.json');
+const manifestProducerRecipe = sidecarRecipes.find(
+  recipe => recipe.id === 'mf-rspack',
+);
+const runtimeRecipe = sidecarRecipes.find(recipe => recipe.id === 'mf-runtime');
 const generatorRequire = createRequire(
   path.resolve(
     __dirname,
@@ -430,8 +435,8 @@ async function writeVerticalRelease(
     marker,
     sourceRevision = 'a'.repeat(40),
     platform = 'node',
-    pluginVersion = '2.9.2',
-    runtimeVersion = '2.9.1',
+    pluginVersion = manifestProducerRecipe.upstream.version,
+    runtimeVersion = runtimeRecipe.fork.version,
   } = {},
 ) {
   const app = {
@@ -456,21 +461,23 @@ async function writeVerticalRelease(
   const producerRoot = `${app.path}/node_modules/@module-federation/modern-js-v3`;
   writeJson(root, `${producerRoot}/package.json`, {
     name: '@module-federation/modern-js-v3',
-    version: '2.9.4',
+    version: sidecarRecipes.find(recipe => recipe.id === 'mf-modern-js-v3')
+      .upstream.version,
     main: 'index.js',
   });
   fs.writeFileSync(path.join(root, producerRoot, 'index.js'), '');
   const enhancedRoot = `${producerRoot}/node_modules/@module-federation/enhanced`;
   writeJson(root, `${enhancedRoot}/package.json`, {
     name: '@module-federation/enhanced',
-    version: pluginVersion,
+    version: sidecarRecipes.find(recipe => recipe.id === 'mf-enhanced').upstream
+      .version,
     exports: { './rspack': './rspack.js' },
   });
   fs.writeFileSync(path.join(root, enhancedRoot, 'rspack.js'), '');
   const rspackRoot = `${enhancedRoot}/node_modules/@module-federation/rspack`;
   writeJson(root, `${rspackRoot}/package.json`, {
     name: '@module-federation/rspack',
-    version: '2.9.2',
+    version: manifestProducerRecipe.upstream.version,
     exports: { './plugin': './plugin.js' },
   });
   fs.writeFileSync(path.join(root, rspackRoot, 'plugin.js'), '');
@@ -1004,9 +1011,14 @@ test('browser smoke binds the native manifest producer separately from the runti
   const root = tempRoot();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const built = await writeVerticalRelease(root, {
-    pluginVersion: '2.9.2',
-    runtimeVersion: '2.9.3',
+    pluginVersion: manifestProducerRecipe.upstream.version,
+    runtimeVersion: runtimeRecipe.fork.version,
   });
+  assert.notEqual(
+    manifestProducerRecipe.upstream.version,
+    runtimeRecipe.fork.version,
+    'The fixture must distinguish the native producer from the runtime fork',
+  );
   const producerRoot = path.join(
     root,
     built.app.path,
@@ -1040,14 +1052,14 @@ test('browser smoke binds the native manifest producer separately from the runti
   );
   assert.deepEqual(
     releaseIdentity(root, built.app, 'node').surfaces.frontend.moduleFederation,
-    [{ packageName: '@module-federation/runtime', version: '2.9.3' }],
+    [
+      {
+        packageName: '@module-federation/runtime',
+        version: runtimeRecipe.fork.version,
+      },
+    ],
   );
-  const recipes = JSON.parse(
-    fs.readFileSync(
-      path.resolve(__dirname, '../../../ultramodern-supply/sidecars.json'),
-      'utf8',
-    ),
-  );
+  const recipes = sidecarRecipes;
   const recipe = recipes.find(item => item.id === 'mf-rspack');
   writeJson(producerRoot, 'package.json', {
     ...recipes.find(item => item.id === 'mf-modern-js-v3').fork,
@@ -1063,7 +1075,12 @@ test('browser smoke binds the native manifest producer separately from the runti
   });
   assert.deepEqual(
     releaseIdentity(root, built.app, 'node').surfaces.frontend.moduleFederation,
-    [{ packageName: '@module-federation/runtime', version: '2.9.3' }],
+    [
+      {
+        packageName: '@module-federation/runtime',
+        version: runtimeRecipe.fork.version,
+      },
+    ],
   );
   for (const replacement of [
     { name: '@bleedingdev/unknown-rspack', version: recipe.fork.version },
@@ -1079,7 +1096,7 @@ test('browser smoke binds the native manifest producer separately from the runti
       /differs from its exact sidecar recipe/u,
     );
   }
-  for (const version of ['2.9.3', '^2.9.2', undefined]) {
+  for (const version of ['2.9.2', '^2.9.2', undefined]) {
     writeJson(rspackRoot, 'package.json', {
       name: '@module-federation/rspack',
       version,
@@ -1087,7 +1104,7 @@ test('browser smoke binds the native manifest producer separately from the runti
     });
     assert.throws(
       () => releaseIdentity(root, built.app, 'node'),
-      version === '2.9.3'
+      version === '2.9.2'
         ? /differs from its exact sidecar recipe/u
         : /producer version is invalid/u,
     );
@@ -1095,8 +1112,8 @@ test('browser smoke binds the native manifest producer separately from the runti
   const wrongManifestRoot = tempRoot();
   t.after(() => fs.rmSync(wrongManifestRoot, { recursive: true, force: true }));
   const wrongManifest = await writeVerticalRelease(wrongManifestRoot, {
-    pluginVersion: '2.9.3',
-    runtimeVersion: '2.9.3',
+    pluginVersion: `${manifestProducerRecipe.upstream.version}-foreign`,
+    runtimeVersion: runtimeRecipe.fork.version,
   });
   assert.throws(
     () => releaseIdentity(wrongManifestRoot, wrongManifest.app, 'node'),

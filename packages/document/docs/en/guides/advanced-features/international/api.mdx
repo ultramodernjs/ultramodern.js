@@ -18,7 +18,7 @@ title: API Reference
 | `localisedUrls` | `boolean \| Record<string, Record<string, string>>` | Localised URL mapping from `localeDetection.localisedUrls` |
 | `isLanguageSupported` | `(lang: string) => boolean` | Checks whether a language is in the supported list |
 | `isResourcesReady` | `boolean` | Whether translation resources for the current language have finished loading |
-| `i18nInstance` | `I18nInstance` | i18next instance for advanced scenarios |
+| `i18nInstance` | `I18nRuntimeInstance` | The configured i18next instance or custom wrapper, for advanced scenarios |
 
 When `localePathRedirect` is enabled and `localisedUrls` is omitted, Modern.js keeps prefix-only paths such as `/en/about`. Translated path segments are enabled only by a non-empty `localisedUrls` map. Route generation validates every localisable path and every configured language only while that map is enabled.
 
@@ -150,16 +150,20 @@ The i18next instance type used by the plugin. It is a subset of the i18next `i18
 signature: TypeScript never grants an interface an implicit index signature, so
 that member made the documented `runtime: { i18n: { i18nInstance: i18next } }`
 usage fail to typecheck. Reading a property that is not declared below is now a
-type error (TS2339) — cast to the concrete instance type instead. `t` is now a
-REQUIRED member, so object literals that produce an `I18nInstance` must supply
-one.
+type error (TS2339) — cast to the concrete instance type instead.
+
+`t` is a REQUIRED member typed as i18next's own `i18n['t']`, and `getFixedT` as
+`i18n['getFixedT']`. Keys, overloads, selectors and your `CustomTypeOptions`
+augmentation therefore apply to `i18nInstance.t` and to the `t` returned by
+`useModernI18n<I18nInstance>()`, which is the instance's `t` bound to it. An `I18nInstance`
+must carry a genuine i18next `t`, for example one created with
+`i18next.createInstance()`; a hand-written translate function is rejected.
 :::
 
 ```ts
-type TranslateFn = (
-  key: string | string[],
-  options?: Record<string, unknown>,
-) => string;
+import type { i18n } from 'i18next';
+
+type TranslateFn = i18n['t'];
 
 interface I18nInstance {
   language: string;
@@ -170,11 +174,7 @@ interface I18nInstance {
   use(plugin: any): unknown;
   t: TranslateFn;
   exists?: (key: string | string[], options?: Record<string, unknown>) => boolean;
-  getFixedT?: (
-    lng: string | readonly string[] | null,
-    ns?: string | readonly string[] | null,
-    keyPrefix?: string,
-  ) => TranslateFn;
+  getFixedT?: i18n['getFixedT'];
   hasLoadedNamespace?: (
     ns: string | readonly string[],
     options?: Record<string, unknown>,
@@ -184,6 +184,8 @@ interface I18nInstance {
   resolvedLanguage?: string;
   createInstance?(options?: any, callback?: any): I18nInstance;
   cloneInstance?(options?: any, callback?: any): I18nInstance;
+  on?: i18n['on'];
+  off?: i18n['off'];
   options?: {
     detection?: any;
     backend?: any;
@@ -193,6 +195,39 @@ interface I18nInstance {
   // ...see src/runtime/i18n/instance.ts for the full member list.
 }
 ```
+
+### I18nWrapperInstance and I18nRuntimeInstance
+
+`i18nInstance` may also be a custom wrapper that owns a native i18next instance
+at `i18nInstance.instance`. The plugin initialises, switches and (on the server)
+clones the wrapper itself, so the wrapper's own initialisation stays in charge of
+its `t`. Resources, detection and the react-i18next provider use the native
+instance. `useModernI18n()` returns the configured instance and that instance's
+own `t`, bound to it, so a wrapper's translate API keeps producing the output.
+Without a type argument both are typed for either kind (`I18nRuntimeInstance`),
+so `t` accepts what both accept, such as `t('key')`. Pass
+`useModernI18n<I18nInstance>()` when you know the instance is i18next itself to get
+i18next's options, overloads and selectors, or your wrapper type for its API.
+
+```ts
+import type { CloneOptions, InitOptions } from 'i18next';
+
+interface I18nWrapperInstance
+  extends Omit<
+    I18nInstance,
+    't' | 'on' | 'off' | 'cloneInstance' | 'createInstance'
+  > {
+  i18nInstance: { instance: I18nInstance };
+  t(key: string): string;
+  on?(...args: Parameters<i18n['on']>): unknown;
+  off?(...args: Parameters<i18n['off']>): unknown;
+  createInstance?(options?: InitOptions): I18nWrapperInstance;
+  cloneInstance?(options?: CloneOptions): I18nWrapperInstance;
+}
+
+type I18nRuntimeInstance = I18nInstance | I18nWrapperInstance;
+```
+
 
 ### I18nSdkLoader
 

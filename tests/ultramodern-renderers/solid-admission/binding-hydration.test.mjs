@@ -9,6 +9,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { resolveDiskGuardian } from '../../../scripts/ultramodern-production-readiness/renderer-worker-lifecycle-proof/support.mjs';
 
+import { assertNativeRendererManifest } from './packages.mjs';
+
 const execute = promisify(execFile);
 const fixtureRoot = fileURLToPath(
   new URL('./binding-fixture/', import.meta.url),
@@ -60,9 +62,7 @@ before(async () => {
   const resolve = createRequire(path.join(consumer, 'package.json'));
   const packageFile = resolve.resolve('@modern-js/renderer-solid/package.json');
   const manifest = JSON.parse(await readFile(packageFile, 'utf8'));
-  assert.equal(manifest.dependencies['@tanstack/router-core'], '1.171.37');
-  assert.equal(manifest.dependencies['@tanstack/history'], '1.162.5');
-  assert.equal(manifest.dependencies['@tanstack/solid-router'], undefined);
+  assertNativeRendererManifest(manifest);
   await access(
     path.join(
       path.dirname(packageFile),

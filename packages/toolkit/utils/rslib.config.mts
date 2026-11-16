@@ -75,6 +75,14 @@ const lib: RslibConfig['lib'] = rslibConfig.lib?.map(config => {
   if (config.format === 'cjs') {
     return {
       ...config,
+      // Declarations must keep the specifiers tsgo checked. Extension
+      // redirection probes dist/compiled, which the copy below writes
+      // concurrently, so `.mjs` imports randomly became `.js` and loaded a
+      // second, nominally distinct chokidar declaration.
+      redirect: {
+        ...config.redirect,
+        dts: { ...config.redirect?.dts, extension: false },
+      },
       output: {
         ...config.output,
         externals: [

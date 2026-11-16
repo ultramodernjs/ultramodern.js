@@ -15,7 +15,14 @@ const repoRoot = path.resolve(
 );
 
 test('rejects legacy and malformed Node runtimes with an actionable error', () => {
-  for (const version of ['20.19.5', '22.23.2', '26.6.99', 'unknown']) {
+  for (const version of [
+    '20.19.5',
+    '22.23.2',
+    '26.6.99',
+    '26.12.0',
+    '26.13.0',
+    'unknown',
+  ]) {
     assert.throws(
       () => assertSupportedNodeVersion(version),
       error =>
@@ -27,6 +34,12 @@ test('rejects legacy and malformed Node runtimes with an actionable error', () =
   }
 });
 
+test('supports the exact current Node pin and newer stable runtimes', () => {
+  assert.equal(MINIMUM_NODE_VERSION, '26.13.1');
+  for (const version of ['26.13.1', '26.13.2', '26.14.0', '27.0.0'])
+    assert.equal(assertSupportedNodeVersion(version), version);
+});
+
 test('app-tools rejects unsupported Node before loading dependencies', () => {
   for (const bin of ['modern.js', 'modern-bundle-docs.js']) {
     const binPath = path.join(
@@ -34,7 +47,7 @@ test('app-tools rejects unsupported Node before loading dependencies', () => {
       'packages/solutions/app-tools/bin',
       bin,
     );
-    for (const version of ['22.23.2', 'bogus']) {
+    for (const version of ['22.23.2', '26.12.0', '26.13.0', 'bogus']) {
       const result = spawnSync(
         process.execPath,
         [

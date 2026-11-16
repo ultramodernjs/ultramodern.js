@@ -47,7 +47,7 @@ export function useI18n(): UseI18nReturn {
   }
   const { instance, languages, localisedUrls, language } = context;
 
-  const t: I18nInstanceLike['t'] = (key, options) => instance.t(key, options);
+  const t = instance.t.bind(instance);
 
   const router = useRouter({ warn: false });
 
