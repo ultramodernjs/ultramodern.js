@@ -47,12 +47,12 @@ test('default-branch caches seed the two actual compiler variants before integra
   assert.equal(cache.jobs['effect-compiler-payload'].uses, producerPath);
   assert.equal(
     cache.jobs['effect-compiler-payload'].if,
-    "github.ref == 'refs/heads/main-ultramodern'",
+    "github.ref == 'refs/heads/main-ultramodern' || github.event_name == 'workflow_dispatch'",
   );
   assert.equal(cache.jobs.seed.needs, 'effect-compiler-payload');
   assert.equal(
     cache.jobs.seed.if,
-    "github.ref == 'refs/heads/main-ultramodern'",
+    "github.ref == 'refs/heads/main-ultramodern' || github.event_name == 'workflow_dispatch'",
   );
   const entries = cache.jobs.seed.strategy.matrix.include;
   assert.equal(

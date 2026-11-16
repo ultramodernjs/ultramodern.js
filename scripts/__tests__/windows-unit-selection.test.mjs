@@ -375,9 +375,9 @@ test('the Windows unit matrix dispatches exactly these lanes', () => {
   assert.ok(matrix, 'ut-Windows.yml must declare a one-line lane matrix');
   const dispatched = matrix.groups.lanes.split(',');
   assert.deepEqual(
-    dispatched.map(lane => lane.trim().replace(/^'|'$/gu, '')),
+    dispatched.map(lane => lane.trim().replace(/^['"]|['"]$/gu, '')),
     windowsLanes,
-    windowsGeneratorLanes,
+    'the dispatched matrix must cover exactly the selector lanes',
   );
   assert.ok(
     workflow.includes(`if: matrix.lane == '${firstLane}'`),

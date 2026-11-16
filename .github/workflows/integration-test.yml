@@ -74,32 +74,32 @@ jobs:
         # these shards; dispatch still depends on runner availability.
         include:
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+            runner: depot-windows-2025-16
             suite: framework
             framework_suite: core
             shard: 4/6
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+            runner: depot-windows-2025-16
             suite: framework
             framework_suite: core
             shard: 3/6
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+            runner: depot-windows-2025-16
             suite: framework
             framework_suite: core
             shard: 2/6
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+            runner: depot-windows-2025-16
             suite: framework
             framework_suite: core
             shard: 1/6
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+            runner: depot-windows-2025-16
             suite: framework
             framework_suite: core
             shard: 6/6
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+            runner: depot-windows-2025-16
             suite: framework
             framework_suite: core
             shard: 5/6
@@ -138,7 +138,7 @@ jobs:
             suite: framework-generator-workspace
             framework_suite: generator-workspace
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+            runner: depot-windows-2025-16
             suite: framework-generator-workspace
             framework_suite: generator-workspace
           - platform: Linux
@@ -146,14 +146,14 @@ jobs:
             suite: framework-generator-bff
             framework_suite: generator-bff
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+            runner: depot-windows-2025-16
             suite: framework-generator-bff
             framework_suite: generator-bff
           - platform: Linux
             runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             suite: rstest-adapter
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+            runner: depot-windows-2025-16
             suite: rstest-adapter
           - platform: Linux
             runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
@@ -211,8 +211,8 @@ jobs:
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
       # Restore only; ci-cache.yml seeds these keys on main-ultramodern.
-      # Windows also restores pnpm policy verification, but never a linked
-      # node_modules tree: NTFS junctions do not survive cache transport.
+      # Windows restores regular installed files and reconstructs native
+      # junctions separately; no junction crosses cache transport.
       - name: Restore pnpm store cache
         if: runner.os != 'Windows'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -223,10 +223,14 @@ jobs:
             pnpm-store-${{ runner.os }}-
 
       - name: Restore Windows dependencies
+        id: dependencies
         if: runner.os == 'Windows'
         uses: ./.github/actions/windows-dependencies
 
       - name: Install Dependencies
+        shell: bash
+        # Revalidate checkout mtimes against the restored installation before
+        # running scripts. pnpm retains unchanged installed package files.
         run: pnpm install --frozen-lockfile
 
       - name: Download corrected Effect compiler payload

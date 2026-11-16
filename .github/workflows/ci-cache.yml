@@ -3,8 +3,9 @@ name: CI Cache
 # The one writer of the dependency caches PR jobs restore. Caches saved on a
 # PR ref are visible only to that PR, so per-PR saves parked one ~500 MB pnpm
 # store (plus mise and browsers) per PR and OS and blew the 10 GB repository
-# quota. Jobs on other refs restore only; this workflow saves on
-# main-ultramodern, whose caches every ref can read.
+# quota. Jobs on ephemeral refs restore only. This workflow saves on
+# main-ultramodern (readable everywhere), or on an explicitly dispatched
+# durable branch to measure a new snapshot before merging it.
 on:
   push:
     branches: [main-ultramodern]
@@ -12,7 +13,7 @@ on:
   # GitHub evicts entries nobody read for 7 days. A weekly refresh lands on
   # that boundary, so refresh twice a week to stay well inside it.
   schedule:
-    - cron: '17 3 * * 1,4'
+    - cron: "17 3 * * 1,4"
 
   workflow_dispatch:
 
@@ -26,21 +27,21 @@ permissions:
 
 jobs:
   effect-compiler-payload:
-    if: github.ref == 'refs/heads/main-ultramodern'
+    if: github.ref == 'refs/heads/main-ultramodern' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/effect-compiler-payload.yml
 
   seed:
     needs: effect-compiler-payload
-    # workflow_dispatch accepts any ref; a seed there would park branch-scoped
-    # entries again.
-    if: github.ref == 'refs/heads/main-ultramodern'
+    # Explicit dispatch can warm a durable development branch for measurement.
+    # PR and merge-queue refs never write caches.
+    if: github.ref == 'refs/heads/main-ultramodern' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
         include:
           - runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             compiler_payload: false
-          - runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+          - runner: depot-windows-2025-16
             compiler_payload: false
           - runner: ${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}
             compiler_payload: false
@@ -49,7 +50,7 @@ jobs:
           # there is no macOS integration consumer.
           - runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             compiler_payload: true
-          - runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+          - runner: depot-windows-2025-16
             compiler_payload: true
 
     runs-on: ${{ matrix.runner }}
@@ -75,7 +76,20 @@ jobs:
       - name: Setup Node.js 26.12.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '26.12.0'
+          node-version: "26.12.0"
+
+      - name: Identify Windows dependency snapshot
+        id: windows-identity
+        if: runner.os == 'Windows' && matrix.compiler_payload == false
+        run: node scripts/ci/windows-dependency-snapshot.mjs key
+
+      - name: Restore Windows dependency snapshot
+        id: windows-snapshot
+        if: runner.os == 'Windows' && matrix.compiler_payload == false
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ci-windows-dependencies/snapshot
+          key: ${{ steps.windows-identity.outputs.key }}
 
       - name: Resolve pnpm store path
         id: pnpm-store
@@ -100,14 +114,14 @@ jobs:
       # pnpm writes this result only after its own policy verification passes.
       # Keep the writer on the trusted default branch; PR jobs restore only.
       - name: Validate pnpm verification seed
-        if: matrix.compiler_payload == false && steps.pnpm-verification.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main-ultramodern' && matrix.compiler_payload == false && steps.pnpm-verification.outputs.cache-hit != 'true'
         run: |
           pnpm_version="$(pnpm --version)"
           cache_directory="$(pnpm cache path)"
           node scripts/ci/pnpm-verification-cache.mjs seed "$pnpm_version" "$cache_directory"
 
       - name: Save pnpm verification
-        if: matrix.compiler_payload == false && steps.pnpm-verification.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main-ultramodern' && matrix.compiler_payload == false && steps.pnpm-verification.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.pnpm-verification.outputs.path }}
@@ -196,4 +210,32 @@ jobs:
         with:
           path: .ci-build-cache/snapshot
           key: ${{ steps.build-cache-key.outputs.key }}
+
+      # Snapshot last: moving regular trees avoids a second copy of 2 GB.
+      # Installation and all genuine native install hooks have already passed.
+      - name: Encode Windows dependency links and snapshot regular files
+        if: runner.os == 'Windows' && matrix.compiler_payload == false && steps.windows-snapshot.outputs.cache-hit != 'true'
+        run: node scripts/ci/windows-dependency-snapshot.mjs snapshot
+
+      # Prove the full real installation survives tar, not just a fixture.
+      - name: Verify Windows snapshot transport and native executables
+        if: runner.os == 'Windows' && matrix.compiler_payload == false && steps.windows-snapshot.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          node scripts/ci/windows-dependency-snapshot.mjs verify-transport
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm exec nx --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm exec rstest --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/prepare-effect-compiler.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/ci/windows-dependency-snapshot.mjs snapshot
+
+      - name: Save Windows dependency snapshot
+        if: runner.os == 'Windows' && matrix.compiler_payload == false && steps.windows-snapshot.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ci-windows-dependencies/snapshot
+          key: ${{ steps.windows-identity.outputs.key }}
 
