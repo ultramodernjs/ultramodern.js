@@ -2,6 +2,7 @@ import { fs, logger, mergeAlias, semver } from '@modern-js/utils';
 import type { LibConfig, Rspack } from '@rslib/core';
 import path from 'path';
 import type { CompileOptions, IConfig, ServerCompiler } from '../common';
+import type { DeclarationPluginOptions } from '../compiler';
 import {
   createResolvedTsgoConfig,
   getTsgoBinPath,
@@ -285,7 +286,12 @@ const compileWithCompiler = async (
     '.mjs': 'esm',
     '.cjs': 'cjs',
   };
-  const createLibs = (
+  const declarationOptions: DeclarationPluginOptions = {
+    distPath: distDir,
+    abortOnError: failOnTypeError,
+    redirect: { extension: moduleType === 'module' },
+  };
+  const createLibs = async (
     entries: Record<OutputExtension, string[]>,
     emitDeclarations: boolean,
   ) => {
@@ -302,16 +308,16 @@ const compileWithCompiler = async (
         }),
       );
     // TS-Go emits declarations for the whole program; one library runs it.
-    if (emitDeclarations) {
-      libs[0].redirect = { dts: { extension: moduleType === 'module' } };
+    if (emitDeclarations && compiler) {
+      libs[0].plugins = [await compiler.declarationPlugin(declarationOptions)];
+    } else if (emitDeclarations) {
+      libs[0].redirect = { dts: declarationOptions.redirect };
       libs[0].dts = {
         bundle: false,
-        distPath: distDir,
+        distPath: declarationOptions.distPath,
         tsgo: true,
-        typescriptPath:
-          compiler?.typescriptPath ?? getTsgoModulePath(appDirectory),
-        // Emit-only diagnostics (such as TS2742) surface only here.
-        abortOnError: failOnTypeError,
+        typescriptPath: getTsgoModulePath(appDirectory),
+        abortOnError: declarationOptions.abortOnError,
       };
     }
     return libs;
@@ -348,7 +354,7 @@ const compileWithCompiler = async (
       const rslib = await createRslib({
         cwd: appDirectory,
         config: {
-          lib: createLibs(
+          lib: await createLibs(
             groupEntries(appDirectory, sources),
             emitDeclarations,
           ),

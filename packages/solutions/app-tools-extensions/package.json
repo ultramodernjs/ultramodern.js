@@ -263,7 +263,8 @@
     "@modern-js/runtime-renderer-extensions": "workspace:^3.8.3",
     "react": "^19.3.1",
     "@effect/tsgo": "0.69.0",
-    "tsrs": "0.25.0-ts7.1.0-beta"
+    "tsrs": "0.25.0-ts7.1.0-beta",
+    "rsbuild-plugin-dts": "1.0.7"
   },
   "peerDependenciesMeta": {
     "@loadable/component": {
@@ -307,7 +308,8 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "@effect/tsgo": "0.69.0",
-    "tsrs": "0.25.0-ts7.1.0-beta"
+    "tsrs": "0.25.0-ts7.1.0-beta",
+    "rsbuild-plugin-dts": "1.0.7"
   },
   "sideEffects": false,
   "publishConfig": {

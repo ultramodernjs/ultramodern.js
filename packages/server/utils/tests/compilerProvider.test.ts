@@ -1,8 +1,91 @@
 import { fs } from '@modern-js/utils';
+import type { RsbuildPlugin } from '@rslib/core';
 import os from 'os';
 import path from 'path';
 import { compile, type ServerCompiler } from '../src/common';
-import { createResolvedTsgoConfig } from '../src/compilers/tsgo';
+import type { DeclarationPluginOptions } from '../src/compiler';
+import {
+  createResolvedTsgoConfig,
+  getTsgoBinPath,
+  runTsgo,
+} from '../src/compilers/tsgo';
+
+const unrequestedDeclarations = (): never => {
+  throw new Error('Declarations were not requested');
+};
+
+/**
+ * A provider-bound declaration emitter: a real Rsbuild plugin that runs the
+ * stable TS-Go over the build's tsconfig after the JavaScript output.
+ */
+const declarationProvider = (appDirectory: string) => {
+  const tsgo = getTsgoBinPath(appDirectory);
+  const requested: DeclarationPluginOptions[] = [];
+  let emits = 0;
+  const compiler: ServerCompiler = {
+    command: { executable: process.execPath, args: [tsgo] },
+    readConfig: async tsconfigPath =>
+      JSON.parse(
+        (
+          await runTsgo(tsgo, ['--showConfig', '-p', tsconfigPath], {
+            cwd: path.dirname(tsconfigPath),
+          })
+        ).stdout,
+      ),
+    declarationPlugin: (options): RsbuildPlugin => {
+      requested.push(options);
+      return {
+        name: 'test:provider-declarations',
+        setup(api) {
+          let tsconfigPath = '';
+          api.onBeforeEnvironmentCompile(({ environment }) => {
+            tsconfigPath = environment.config.source.tsconfigPath ?? '';
+          });
+          api.onAfterBuild(async () => {
+            emits += 1;
+            const result = await runTsgo(
+              tsgo,
+              [
+                '-p',
+                tsconfigPath,
+                '--emitDeclarationOnly',
+                '--outDir',
+                options.distPath,
+              ],
+              { cwd: appDirectory, reject: false },
+            );
+            if (result.code !== 0 && options.abortOnError) {
+              throw new Error(
+                `Provider declarations failed:\n${result.stdout}`,
+              );
+            }
+          });
+        },
+      };
+    },
+  };
+  return { compiler, requested, emits: () => emits };
+};
+
+const declarationApp = async (prefix: string, noEmitOnError = true) => {
+  const appDirectory = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), prefix)),
+  );
+  await fs.outputJSON(path.join(appDirectory, 'tsconfig.json'), {
+    compilerOptions: {
+      declaration: true,
+      module: 'nodenext',
+      target: 'es2022',
+      types: [],
+      noEmitOnError,
+    },
+    include: ['api'],
+  });
+  return appDirectory;
+};
+
+const resolvedConfigs = async (directory: string) =>
+  (await fs.readdir(directory)).filter(file => file.endsWith('.resolved.json'));
 
 describe('neutral server compiler provider', () => {
   it('clears inherited emit, cache and deprecated options without restoring client roots', async () => {
@@ -127,8 +210,8 @@ describe('neutral server compiler provider', () => {
             ],
           },
           readConfig,
-          // Declarations are not requested, so this must never be loaded.
-          typescriptPath: path.join(appDirectory, 'not-a-compiler.cjs'),
+          // Declarations are not requested, so this must never be called.
+          declarationPlugin: unrequestedDeclarations,
           dispose: disposed,
         }),
       );
@@ -181,7 +264,7 @@ describe('neutral server compiler provider', () => {
           {
             compiler: () => ({
               command: { executable: process.execPath, args: [] },
-              typescriptPath: 'unused',
+              declarationPlugin: unrequestedDeclarations,
               readConfig: async () => {
                 throw new Error('invalid native config');
               },
@@ -199,4 +282,120 @@ describe('neutral server compiler provider', () => {
       await fs.remove(appDirectory);
     }
   });
+
+  it('emits declarations once through each sibling provider plugin across passes and formats', async () => {
+    const apps = await Promise.all(
+      ['server-compiler-dts-a-', 'server-compiler-dts-b-'].map(prefix =>
+        declarationApp(prefix),
+      ),
+    );
+    try {
+      const builds = await Promise.all(
+        apps.map(async (appDirectory, index) => {
+          // `api/index.ts` reaches `lib/value.ts`, which a second pass emits;
+          // `api/esm.mts` adds a second library.
+          await fs.outputFile(
+            path.join(appDirectory, 'api/index.ts'),
+            "export { value } from '../lib/value';\n",
+          );
+          await fs.outputFile(
+            path.join(appDirectory, 'lib/value.ts'),
+            `export const value: number = ${index};\n`,
+          );
+          await fs.outputFile(
+            path.join(appDirectory, 'api/esm.mts'),
+            'export const format: string = "esm";\n',
+          );
+          const provider = declarationProvider(appDirectory);
+          await compile(
+            appDirectory,
+            {},
+            {
+              compiler: () => provider.compiler,
+              sourceDirs: [path.join(appDirectory, 'api')],
+              distDir: path.join(appDirectory, 'dist'),
+              tsconfigPath: path.join(appDirectory, 'tsconfig.json'),
+              throwErrorInsteadOfExit: true,
+            },
+          );
+          return provider;
+        }),
+      );
+      for (const [index, appDirectory] of apps.entries()) {
+        const dist = path.join(appDirectory, 'dist');
+        expect(builds[index].requested).toEqual([
+          {
+            distPath: dist,
+            abortOnError: true,
+            redirect: { extension: false },
+          },
+        ]);
+        expect(builds[index].emits()).toBe(1);
+        expect(require(path.join(dist, 'api/index.js')).value).toBe(index);
+        expect(
+          await fs.readFile(path.join(dist, 'lib/value.d.ts'), 'utf8'),
+        ).toContain('export declare const value: number;');
+        expect(
+          await fs.readFile(path.join(dist, 'api/esm.d.mts'), 'utf8'),
+        ).toContain('export declare const format: string;');
+        expect(await resolvedConfigs(appDirectory)).toEqual([]);
+      }
+    } finally {
+      await Promise.all(apps.map(app => fs.remove(app)));
+    }
+  });
+
+  it.each([true, false])(
+    'propagates emit-only declaration diagnostics when noEmitOnError=%s and always cleans up',
+    async noEmitOnError => {
+      const appDirectory = await declarationApp(
+        'server-compiler-dts-error-',
+        noEmitOnError,
+      );
+      const provider = declarationProvider(appDirectory);
+      const dispose = rstest.fn(async () => {});
+      try {
+        const tsconfigPath = path.join(appDirectory, 'tsconfig.json');
+        await fs.outputFile(
+          path.join(appDirectory, 'api/index.ts'),
+          'export const broken: string = 42;\n',
+        );
+        const result = compile(
+          appDirectory,
+          {},
+          {
+            // The checker passes, so only the declaration plugin sees the error.
+            compiler: () => ({
+              ...provider.compiler,
+              command: {
+                executable: process.execPath,
+                args: ['-e', '', '--'],
+              },
+              dispose,
+            }),
+            sourceDirs: [path.join(appDirectory, 'api')],
+            distDir: path.join(appDirectory, 'dist'),
+            tsconfigPath,
+            throwErrorInsteadOfExit: true,
+          },
+        );
+        if (noEmitOnError) {
+          await expect(result).rejects.toThrow('TS2322');
+        } else {
+          await expect(result).resolves.toBeUndefined();
+          expect(
+            require(path.join(appDirectory, 'dist/api/index.js')).broken,
+          ).toBe(42);
+        }
+        expect(provider.requested).toEqual([
+          expect.objectContaining({ abortOnError: noEmitOnError }),
+        ]);
+        expect(provider.emits()).toBe(1);
+        expect(dispose).toHaveBeenCalledTimes(1);
+        expect(await resolvedConfigs(appDirectory)).toEqual([]);
+      } finally {
+        await fs.remove(appDirectory);
+      }
+    },
+  );
 });
