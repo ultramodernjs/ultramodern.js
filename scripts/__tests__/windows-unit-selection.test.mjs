@@ -302,41 +302,51 @@ test('unsupported future project shapes fail instead of silently losing coverage
   );
 });
 
-// Every Windows lane and Windows integration job restores the dependency
-// tree instead of relinking it, and actions/cache hashes the literal path
-// strings into the entry version: a restore whose list drifts from the save
-// misses forever without reporting anything.
-test('the Windows dependency cache names one path list and one key', () => {
-  const entry =
-    /path: \|\n(?<paths>(?:[^\S\n]*\S+\n)+?)[^\S\n]*key: (?<key>windows-dependencies-.+)\n/gu;
-  const declared = [];
-  for (const file of [
+// Caching the resolved node_modules tree is the obvious lever against the
+// 145 s `pnpm install --frozen-lockfile` every Windows job pays, and it does
+// not work. pnpm links an isolated layout with NTFS junctions - 1293 inside
+// node_modules, measured in run 43888513585 - and a restored reparse point is
+// not a traversable junction, so the next frozen install dies on one:
+//
+//   ERR_PNPM_PACKAGE_MANAGER_INSPECT_OPTIONAL_DEPENDENCY
+//     Failed to inspect optional dependency at
+//     "...\node_modules\.pnpm\react-i18next@17.0.18_...\node_modules\typescript":
+//     Access is denied. (os error 5)
+//
+// All 7 lanes of run 43891404231, deterministically. The archive itself was
+// fine (2.1 GB of content, 480 MB compressed, 24 s to save), so the evidence
+// a future attempt needs is not "is it too big" but "do junctions survive the
+// transport" - and restoring 480 MB cost 69 s against the 31 s store restore
+// it replaced, which caps the whole lever near 1.5 min even if they did.
+test('no workflow caches a resolved node_modules tree', () => {
+  const files = [
     '.github/actions/windows-dependencies/action.yml',
     '.github/workflows/ci-cache.yml',
-  ]) {
+    '.github/workflows/ut-Windows.yml',
+    '.github/workflows/integration-test.yml',
+  ];
+  for (const file of files) {
     const content = readRepoText(file);
-    for (const match of content.matchAll(entry)) {
-      const lines = match.groups.paths.trim().split('\n');
-      declared.push({
-        file,
-        key: match.groups.key.trim(),
-        paths: lines.map(line => line.trim()),
-      });
-    }
+    const paths = [...content.matchAll(/^\s*path: \|\n(?<list>(?:[^\S\n]*\S+\n)+)/gmu)]
+      .flatMap(match => match.groups.list.trim().split('\n'))
+      .map(line => line.trim());
+    const trees = paths.filter(line => line.endsWith('node_modules'));
+    assert.deepEqual(
+      trees,
+      [],
+      `${file} caches ${trees.join(', ')}; a restored NTFS junction graph is not traversable, so the next frozen install fails`,
+    );
+    assert.ok(
+      !/windows-dependencies-v\d/u.test(content),
+      `${file} still names the dependency-tree cache key`,
+    );
   }
-  // One restore in the action, one restore and one save in the seed workflow.
-  const files = declared.map(cache => cache.file);
-  assert.equal(declared.length, 3, JSON.stringify(files));
-  for (const cache of declared) {
-    assert.deepEqual(cache.paths, declared[0].paths, cache.file);
-    assert.equal(cache.key, declared[0].key, cache.file);
-  }
-  assert.ok(declared[0].paths.includes('node_modules'));
-  assert.ok(declared[0].paths.every(line => line.endsWith('node_modules')));
-  // The key must retire the tree with the lockfile and the pinned toolchain.
-  for (const input of [/runner\.os/u, /pnpm-lock\.yaml/u, /\.mise\.toml/u]) {
-    assert.match(declared[0].key, input);
-  }
+  // The store cache stays: it is what makes the install "reused 2218,
+  // downloaded 0" rather than a download, and it round-trips as plain files.
+  assert.match(
+    readRepoText('.github/actions/windows-dependencies/action.yml'),
+    /key: pnpm-store-\$\{\{ runner\.os \}\}/u,
+  );
 });
 
 // A lane this module assigns but the matrix never dispatches would skip its
