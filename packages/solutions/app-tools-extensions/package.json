@@ -128,6 +128,10 @@
       "import": "./dist/esm-node/runtime-package-resolution.mjs",
       "require": "./dist/cjs/runtime-package-resolution.js"
     },
+    "./svgr": {
+      "types": "./dist/types/svgr.d.ts",
+      "modern:source": "./src/svgr.ts"
+    },
     "./policy-defaults": {
       "types": "./dist/types/policy-defaults.d.ts",
       "modern:source": "./src/policy-defaults.ts",
@@ -286,7 +290,9 @@
     "@module-federation/modern-js-v3": "npm:@bleedingdev/mf-modern-js-v3@2.9.5",
     "@module-federation/runtime-tools": "npm:@bleedingdev/mf-runtime-tools@2.9.5",
     "@rsbuild/core": "2.3.2",
+    "@rsbuild/plugin-svgr": "2.0.5",
     "@rslib/core": "1.0.7",
+    "@types/babel__core": "^7.20.5",
     "@scripts/rstest-config": "workspace:*",
     "@types/babel__traverse": "7.28.0",
     "@types/node": "^26.6.6",
@@ -297,6 +303,7 @@
     "@loadable/component": "5.16.7",
     "@modern-js/runtime-renderer-extensions": "workspace:*",
     "pg": "8.23.1",
+    "prettier": "~3.10.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "@effect/tsgo": "0.69.0",

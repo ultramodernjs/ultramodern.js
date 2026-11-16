@@ -161,9 +161,7 @@
     "mlly": "^1.8.2",
     "ndepe": "^0.1.13",
     "pkg-types": "^2.4.0",
-    "std-env": "4.3.0",
-    "@types/babel__core": "^7.20.5",
-    "prettier": "~3.10.1"
+    "std-env": "4.3.0"
   },
   "devDependencies": {
     "@modern-js/rslib": "workspace:*",

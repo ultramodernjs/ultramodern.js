@@ -178,8 +178,6 @@
     "@modern-js/types": "workspace:*",
     "@modern-js/utils": "workspace:*",
     "@rsbuild/core": "2.3.2",
-    "@types/babel__core": "^7.20.5",
-    "prettier": "~3.10.1",
     "@tanstack/redact": "npm:@bleedingdev/tanstack-redact@0.3.2",
     "react": "^19.3.1"
   },
