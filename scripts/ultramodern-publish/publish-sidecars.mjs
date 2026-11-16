@@ -40,8 +40,9 @@ import {
 } from './lib/prepare-bleedingdev-packages/provenance.mjs';
 import { lookupRegistryPackument } from './lib/prepare-bleedingdev-packages/registry.mjs';
 import {
+  createRegistryPropagationDeadline,
   pollRegistryPropagation,
-  registryPropagationDelaysMs,
+  registryPropagationBudgetMs,
 } from './lib/prepare-bleedingdev-packages/registry-propagation.mjs';
 import { verifyRegistryTarball } from './lib/prepare-bleedingdev-packages/registry-read.mjs';
 import { verifyReleaseArtifacts } from './lib/prepare-bleedingdev-packages/release-artifacts.mjs';
@@ -479,11 +480,9 @@ async function awaitPublishedSidecar(sidecar, options, dependencies = {}) {
 
 // npm declares a version's `dist.attestations` and serves its attestation
 // bundle only some time after the version itself is readable (the cohort
-// verifier observed 404s a minute after publish).
-const attestationLagMs = registryPropagationDelaysMs.reduce(
-  (total, delay) => total + delay,
-  0,
-);
+// verifier observed 404s a minute after publish), so a version younger than
+// one propagation budget can still be mid-publication.
+const attestationLagMs = registryPropagationBudgetMs;
 
 /**
  * A non-grandfathered version published within one propagation window, or
@@ -560,6 +559,13 @@ async function verifyFreshSidecar(sidecar, { source }, dependencies = {}) {
     dependencies.verifyFreshProvenance ?? verifyRegistryProvenance;
   const verifyTarball =
     dependencies.verifyFreshTarball ?? verifyRegistryTarball;
+  // The sidecar set's propagation deadline. npm served
+  // @bleedingdev/mf-dts-plugin@2.9.5's tarball later than the old per-call
+  // 2-minute window allowed (run 43804632305, 11.4 min of wall clock lost);
+  // one deadline for the whole lane waits that out without multiplying the
+  // wait by the number of sidecars in flight.
+  const deadline =
+    dependencies.propagationDeadline ?? createRegistryPropagationDeadline();
   const expectation = createRegistryProvenanceExpectation({ source });
   if (!expectation.invocation)
     throw new Error(
@@ -575,7 +581,9 @@ async function verifyFreshSidecar(sidecar, { source }, dependencies = {}) {
       if (pending) return { settled: false, detail: pending.detail };
       await sidecarRegistryDecision(sidecar, packument);
       const dist = packument.versions[sidecar.version].dist;
-      await verifyTarball({ ...sidecar, targetName: sidecar.name }, dist);
+      await verifyTarball({ ...sidecar, targetName: sidecar.name }, dist, {
+        deadline,
+      });
       if (
         !Object.hasOwn(dist, 'attestations') ||
         (isPlainObject(dist.attestations) &&
@@ -644,6 +652,14 @@ async function publishSidecars(options, dependencies = {}) {
   }
 
   const readPackument = dependencies.readPackument ?? readSidecarPackument;
+  // One propagation deadline for the whole sidecar set, so eleven sidecars
+  // waiting on npm's read-after-write lag cost one propagation window between
+  // them instead of one each.
+  const freshSidecarDependencies = {
+    ...dependencies,
+    propagationDeadline:
+      dependencies.propagationDeadline ?? createRegistryPropagationDeadline(),
+  };
   const verifyReuse = (sidecar, packument) =>
     awaitSidecarReuseProvenance(
       sidecar,
@@ -728,7 +744,7 @@ async function publishSidecars(options, dependencies = {}) {
       await verifyFreshSidecar(
         sidecar,
         { source: release.manifest.source },
-        dependencies,
+        freshSidecarDependencies,
       );
       console.log(settledMessage(decision));
     });

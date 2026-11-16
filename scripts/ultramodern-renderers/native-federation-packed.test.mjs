@@ -6,6 +6,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { registerOwnedRoot } from '../ultramodern-production-readiness/react-rsc-worker-proof/lifecycle.mjs';
+import {
+  inspectOwnedProcessGroup,
+  retireOwnedProcessGroup,
+} from '../ultramodern-production-readiness/react-rsc-worker-proof/runtime.mjs';
 import { nativeStartSharedPeers } from './native-federation-inputs.mjs';
 import {
   packedCompilerRequests,
@@ -275,9 +279,41 @@ setInterval(() => {}, 10_000);
       });
     });
     clearTimeout(timer);
-    const retirement = await retirePackedNativeFederationInstaller(witness);
+    // The retirement's membership counts come from a snapshot of every process
+    // on the machine, parsed strictly, taken again every 25 ms while the leader
+    // winds down. One unrelated row the OS prints mid-exit therefore decided
+    // this assertion, which is the 'Invalid owned process inspection
+    // identifier' seen once and gone on the rerun. The property under test is
+    // this group's membership, so the snapshot names this group's leader and
+    // the observer, and nothing else.
+    const groupSnapshot = () =>
+      `${execFileSync(
+        '/bin/ps',
+        [
+          '-p',
+          `${witness.pid},${process.pid}`,
+          '-o',
+          'pid=',
+          '-o',
+          'pgid=',
+          '-o',
+          'uid=',
+          '-o',
+          'stat=',
+        ],
+        { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } },
+      ).trimEnd()}\n`;
+    const retirement = await retirePackedNativeFederationInstaller(witness, {
+      inspectGroup: pid =>
+        inspectOwnedProcessGroup(pid, { snapshotImpl: groupSnapshot }),
+      retireClosedGroup: pid =>
+        retireOwnedProcessGroup(pid, { snapshotImpl: groupSnapshot }),
+    });
     await closed;
     assert.equal((retirement.after ?? retirement.before).liveMemberCount, 0);
+    // No surviving PID in the group, read straight from the kernel rather than
+    // from a parsed snapshot.
+    assert.throws(() => process.kill(-witness.pid, 0), { code: 'ESRCH' });
   } finally {
     clearTimeout(timer);
     if (child.exitCode === null && child.signalCode === null)

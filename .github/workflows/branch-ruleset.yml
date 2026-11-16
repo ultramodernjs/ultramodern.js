@@ -15,7 +15,7 @@ permissions:
 jobs:
   main-ultramodern-ruleset:
     name: main-ultramodern ruleset
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 5
     steps:
       - name: Harden Runner
@@ -27,23 +27,40 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           # One context per line for every required job; a renamed or new
-          # matrix job belongs here and in the ruleset.
+          # matrix job belongs here and in the ruleset. These are the exact
+          # contexts the ruleset requires today: the integration shard names
+          # themselves, not an aggregate N/3 stand-in.
           REQUIRED_CHECKS: |
-            ut-linux
-            type-check
-            lint-linux
-            e2e-test
-            workflow-security
+            advisories
             boundary-anti-pattern-checks
-            integration-Linux (framework 1/3)
-            integration-Linux (framework 2/3)
-            integration-Linux (framework 3/3)
+            check
+            e2e-test
+            integration-Linux (framework 1/6)
+            integration-Linux (framework 2/6)
+            integration-Linux (framework 3/6)
+            integration-Linux (framework 4/6)
+            integration-Linux (framework 5/6)
+            integration-Linux (framework 6/6)
+            integration-Linux (framework-generator-bff)
+            integration-Linux (framework-generator-workspace)
             integration-Linux (rstest-adapter)
             integration-Linux (utils)
-            integration-Windows (framework 1/3)
-            integration-Windows (framework 2/3)
-            integration-Windows (framework 3/3)
+            integration-Windows (framework 1/6)
+            integration-Windows (framework 2/6)
+            integration-Windows (framework 3/6)
+            integration-Windows (framework 4/6)
+            integration-Windows (framework 5/6)
+            integration-Windows (framework 6/6)
+            integration-Windows (framework-generator-bff)
+            integration-Windows (framework-generator-workspace)
             integration-Windows (rstest-adapter)
+            lint-linux
+            native-compatibility
+            type-check
+            ut-linux
+            ut-mac
+            ut-windows
+            workflow-security
         run: |
           set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/rules/branches/main-ultramodern" > rules.json
@@ -51,10 +68,11 @@ jobs:
             ($required | split("\n") | map(select(. != ""))) as $expected
             | (map(.type) | index("pull_request") and index("required_status_checks")
               and index("non_fast_forward") and index("deletion"))
-            and (map(select(.type == "pull_request"))[0].parameters.allowed_merge_methods == ["rebase"])
+            and (map(select(.type == "pull_request"))[0].parameters.allowed_merge_methods
+              | any(. == "rebase"))
             and ($expected - [map(select(.type == "required_status_checks"))[].parameters.required_status_checks[].context] == [])
           ' rules.json > /dev/null || {
-            echo "::error::main-ultramodern no longer requires PRs, rebase merges, every required check, and no force push or deletion."
+            echo "::error::main-ultramodern no longer requires PRs, allows rebase merges, requires every required check, or rejects force push and deletion."
             jq . rules.json
             exit 1
           }

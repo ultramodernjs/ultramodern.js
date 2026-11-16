@@ -20,7 +20,10 @@ import path from 'node:path';
 import { npmPublishAttempts, npmPublishRetryDelayMs } from './constants.mjs';
 import { run, sleep } from './commands.mjs';
 import { publishLevels } from './manifest.mjs';
-import { pollRegistryPropagation } from './registry-propagation.mjs';
+import {
+  createRegistryPropagationDeadline,
+  pollRegistryPropagation,
+} from './registry-propagation.mjs';
 import {
   preflightTrustedPublishingPackages,
   publishAcceptedPackage,
@@ -548,22 +551,26 @@ async function assertRegistrySourceCommitUnpublished(
   };
 }
 
+// `deadline` is the publish set's shared propagation deadline; this function
+// only forwards it, so the tarball wait of every member of one set is bounded
+// together.
 async function verifyRegistryPackageDist(
   item,
   dist,
   provenanceExpectation,
-  registry = {
-    assertRegistryDistMatches,
-    verifyRegistryProvenance,
-    verifyRegistryTarball,
-  },
+  {
+    deadline,
+    assertRegistryDistMatches: assertDistMatches = assertRegistryDistMatches,
+    verifyRegistryProvenance: verifyProvenance = verifyRegistryProvenance,
+    verifyRegistryTarball: verifyTarball = verifyRegistryTarball,
+  } = {},
 ) {
-  registry.assertRegistryDistMatches(item, dist);
-  await registry.verifyRegistryTarball(item, dist);
+  assertDistMatches(item, dist);
+  await verifyTarball(item, dist, { deadline });
   // An immutable version may have been placed by an earlier failed run. Its
   // signed source commit is authenticated from the bundle; exact tarball bytes
   // establish equivalence with this release rather than mutable run identity.
-  await registry.verifyRegistryProvenance(
+  await verifyProvenance(
     item,
     dist,
     historicalProvenanceExpectation(provenanceExpectation),
@@ -571,16 +578,21 @@ async function verifyRegistryPackageDist(
   return dist;
 }
 
+// `registry.deadline` is the publish set's propagation deadline. A caller that
+// verifies one package on its own (not as part of a set) is its own set and
+// gets its own.
 async function verifyRegistryPackage(
   item,
   provenanceExpectation,
-  registry = {
-    assertRegistryDistMatches,
-    lookupRegistryPackageDist,
-    verifyRegistryPackageDist,
-    verifyRegistryProvenance,
-    verifyRegistryTarball,
-  },
+  {
+    deadline = createRegistryPropagationDeadline(),
+    assertRegistryDistMatches: assertDistMatches = assertRegistryDistMatches,
+    lookupRegistryPackageDist: lookupPackageDist = lookupRegistryPackageDist,
+    verifyRegistryPackageDist: verifyPackageDist = verifyRegistryPackageDist,
+    verifyRegistryProvenance: verifyProvenance = verifyRegistryProvenance,
+    verifyRegistryTarball: verifyTarball = verifyRegistryTarball,
+    wait,
+  } = {},
 ) {
   // npm's attestation propagation regularly exceeds one minute right after
   // publish (observed: attestations endpoint 404s ~60s in, then appears), so
@@ -601,16 +613,13 @@ async function verifyRegistryPackage(
     if (tarballVerified) {
       return;
     }
-    await registry.verifyRegistryTarball(tarballItem, dist, ...rest);
+    await verifyTarball(tarballItem, dist, ...rest);
     tarballVerified = true;
   };
 
   const outcome = await pollRegistryPropagation(
     async () => {
-      const dist = await registry.lookupRegistryPackageDist(
-        item.targetName,
-        item.version,
-      );
+      const dist = await lookupPackageDist(item.targetName, item.version);
       if (dist === null) {
         return {
           detail: `${item.targetName}@${item.version} is not present in the registry`,
@@ -618,16 +627,12 @@ async function verifyRegistryPackage(
         };
       }
       try {
-        await registry.verifyRegistryPackageDist(
-          item,
-          dist,
-          provenanceExpectation,
-          {
-            assertRegistryDistMatches: registry.assertRegistryDistMatches,
-            verifyRegistryProvenance: registry.verifyRegistryProvenance,
-            verifyRegistryTarball: verifyTarballOnce,
-          },
-        );
+        await verifyPackageDist(item, dist, provenanceExpectation, {
+          assertRegistryDistMatches: assertDistMatches,
+          deadline,
+          verifyRegistryProvenance: verifyProvenance,
+          verifyRegistryTarball: verifyTarballOnce,
+        });
         return { settled: true, value: dist };
       } catch (error) {
         return {
@@ -636,7 +641,7 @@ async function verifyRegistryPackage(
         };
       }
     },
-    { wait: registry.wait },
+    { wait },
   );
   if (outcome.settled) {
     if (outcome.firstDetail !== undefined) {
@@ -738,12 +743,16 @@ async function preflightRegistryPackages(
   publishItems,
   options,
   provenanceExpectation,
-  registry = {
-    lookupRegistryDistTag,
-    lookupRegistryPackageDist,
-    lookupRegistryPackument,
-    verifyRegistryPackageDist,
-  },
+  {
+    // One deadline for the whole preflight phase. These versions were published
+    // by an earlier run, so a tarball npm lists but does not serve is waited
+    // out across the set instead of once per package.
+    deadline = createRegistryPropagationDeadline(),
+    lookupRegistryDistTag: lookupDistTag = lookupRegistryDistTag,
+    lookupRegistryPackageDist: lookupPackageDist = lookupRegistryPackageDist,
+    lookupRegistryPackument: lookupPackument = lookupRegistryPackument,
+    verifyRegistryPackageDist: verifyPackageDist = verifyRegistryPackageDist,
+  } = {},
 ) {
   const failures = [];
   const { default: semver } = await import('semver');
@@ -757,9 +766,9 @@ async function preflightRegistryPackages(
   // One packument answers both phases, so it may only stand in for lookups the
   // caller has not replaced with its own implementations.
   const packumentLookup =
-    registry.lookupRegistryDistTag === lookupRegistryDistTag &&
-    registry.lookupRegistryPackageDist === lookupRegistryPackageDist
-      ? registry.lookupRegistryPackument
+    lookupDistTag === lookupRegistryDistTag &&
+    lookupPackageDist === lookupRegistryPackageDist
+      ? lookupPackument
       : undefined;
   // `undefined`: no packument, fall back to the npm-view lookups. `null`: the
   // package itself is absent from the registry.
@@ -788,10 +797,7 @@ async function preflightRegistryPackages(
         const packument = await readPackument(item.targetName);
         if (packument === undefined) {
           return {
-            currentTag: await registry.lookupRegistryDistTag(
-              item.targetName,
-              options.tag,
-            ),
+            currentTag: await lookupDistTag(item.targetName, options.tag),
           };
         }
         return {
@@ -835,10 +841,7 @@ async function preflightRegistryPackages(
         const packument = await readPackument(item.targetName);
         let dist;
         if (packument === undefined) {
-          dist = await registry.lookupRegistryPackageDist(
-            item.targetName,
-            item.version,
-          );
+          dist = await lookupPackageDist(item.targetName, item.version);
         } else {
           dist =
             packument === null
@@ -846,11 +849,9 @@ async function preflightRegistryPackages(
               : registryPackumentDist(packument, item.targetName, item.version);
         }
         if (dist !== null) {
-          await registry.verifyRegistryPackageDist(
-            item,
-            dist,
-            provenanceExpectation,
-          );
+          await verifyPackageDist(item, dist, provenanceExpectation, {
+            deadline,
+          });
           if (currentTag !== item.version) {
             throw new Error(
               `${item.targetName} dist-tag ${options.tag} points at ${currentTag ?? '<missing>'}, expected ${item.version}`,
@@ -929,6 +930,10 @@ async function publishPackage(artifact, options, overrides = {}) {
     verifyRegistryTarball,
     ...overrides.registry,
   };
+  // The publish loop's shared propagation deadline, so the reuse check below
+  // waits with the rest of the publish set instead of on its own window.
+  const deadline =
+    overrides.propagationDeadline ?? createRegistryPropagationDeadline();
   const artifactReader =
     overrides.artifactReader ?? readVerifiedPackageArtifactBytes;
   const acceptedBytes = Buffer.from(
@@ -976,6 +981,7 @@ async function publishPackage(artifact, options, overrides = {}) {
             options.provenanceExpectation,
             {
               assertRegistryDistMatches: registry.assertRegistryDistMatches,
+              deadline,
               verifyRegistryProvenance: registry.verifyRegistryProvenance,
               verifyRegistryTarball: registry.verifyRegistryTarball,
             },
@@ -1022,21 +1028,27 @@ async function validateRegistryCohort(
   }
 
   const provenanceExpectation = createRegistryProvenanceExpectation(manifest);
+  // One deadline for the whole published cohort: the tarball wait of all 50
+  // members (concurrency 8) ends together, so the cohort cannot multiply one
+  // propagation window into the job timeout.
+  const deadline = registry.deadline ?? createRegistryPropagationDeadline();
   let failureCount = 0;
   const outcomes = await mapWithConcurrency(
     manifest.packages,
     resolveRegistryConcurrency(options),
     async item => {
-      // Every member keeps its full propagation window, but once this many have
-      // definitively failed the cohort cannot become coherent, so the remaining
-      // windows would only burn the job timeout.
+      // Every member keeps its full packument read schedule, but once this many
+      // have definitively failed the cohort cannot become coherent, so the
+      // remaining windows would only burn the job timeout.
       if (failureCount >= cohortVerificationFailureBudget) {
         return { unverified: true };
       }
       const startedAt = now();
       const elapsed = () => `${((now() - startedAt) / 1000).toFixed(1)}s`;
       try {
-        await registry.verifyRegistryPackage(item, provenanceExpectation);
+        await registry.verifyRegistryPackage(item, provenanceExpectation, {
+          deadline,
+        });
         await registry.verifyRegistryDistTag(
           item.targetName,
           options.tag,
@@ -1159,6 +1171,10 @@ async function publishManifestPackages(
     );
   }
 
+  // One propagation deadline for this publish loop: every reuse check after an
+  // npm publish error shares it, so a cohort that errors on many packages
+  // still waits out one propagation window in total.
+  const propagationDeadline = createRegistryPropagationDeadline();
   const levels = publishLevels(manifest).map(level =>
     level.map(targetName => artifactsByTarget.get(targetName)),
   );
@@ -1179,11 +1195,15 @@ async function publishManifestPackages(
       return;
     }
 
-    const publishedName = await registry.publishPackage(artifact, {
-      ...options,
-      acceptedTools: manifest.tools,
-      provenanceExpectation,
-    });
+    const publishedName = await registry.publishPackage(
+      artifact,
+      {
+        ...options,
+        acceptedTools: manifest.tools,
+        provenanceExpectation,
+      },
+      { propagationDeadline },
+    );
     console.log(
       options.dryRun
         ? `Dry-run validated ${publishedName}@${artifact.version}`

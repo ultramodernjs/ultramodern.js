@@ -22,7 +22,7 @@ permissions:
 jobs:
   lint-linux:
     # The type of runner that the job will run on
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:

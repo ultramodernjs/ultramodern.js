@@ -4,9 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inspectNpmTarball } from '../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs';
+import { assertReleaseCompilerPayload } from '../ultramodern-publish/stage-effect-compiler-payload.mjs';
 
-const format = 2;
+const format = 3;
 const storage = '.ci-build-cache';
+const compilerPackage = 'packages/solutions/app-tools-extensions';
+const compilerPayload = `${compilerPackage}/compiler/payload`;
 const generatedTracked = new Set([
   'packages/runtime/plugin-runtime/static/modern-inline.js',
   'packages/runtime/plugin-runtime/static/modern-run-router-data-fn.js',
@@ -89,7 +92,23 @@ export function buildInputs(root, environment = process.env, toolchain = {}) {
   const inputs = Object.fromEntries(
     files.map(file => [file, fingerprint(root, file)]),
   );
+  let compiler = null;
+  if (fs.existsSync(path.join(root, compilerPayload))) {
+    const { manifest } = assertReleaseCompilerPayload(
+      path.join(root, compilerPackage),
+      { sameRun: false },
+    );
+    // Validate the actual bytes, not just a claimed identity. Run receipts
+    // change on every invocation, while the source and file inventory name
+    // exactly the compiler that produced these build outputs and test packs.
+    compiler = {
+      schemaVersion: manifest.schemaVersion,
+      source: manifest.source,
+      targets: manifest.targets,
+    };
+  }
   const runtime = {
+    compiler,
     platform: process.platform,
     arch: process.arch,
     node: process.version,
@@ -135,6 +154,9 @@ function outputFiles(root) {
       )
         continue;
       const file = `${relative}/${entry.name}`;
+      // The caller stages and validates its own same-run compiler receipt.
+      // Never overwrite it with a cache seed's historical producer identity.
+      if (file === compilerPayload) continue;
       if (entry.isDirectory()) visit(file);
       else files.push(file);
     }

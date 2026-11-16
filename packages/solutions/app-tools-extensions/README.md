@@ -7,15 +7,17 @@ The package is composed into upstream app-tools through existing deploy/plugin e
 ## Compiler platforms
 
 UltraModern's bundled compiler supports macOS on Apple Silicon **M3 or newer**,
-Linux x64/arm64 with glibc, and Windows x64. Intel Macs and x64 Node under Rosetta
-are unsupported and fail before compiler selection; there is no Intel fallback.
-Use native arm64 Node on a supported Mac.
+Linux x64/arm64 with **glibc 2.39 or newer** (Ubuntu 24.04 and equivalents), and
+Windows x64. Intel Macs and x64 Node under Rosetta are unsupported and fail
+before compiler selection; there is no Intel fallback. Use native arm64 Node on
+a supported Mac.
 
 The macOS release runner is checked for M3-or-newer hardware before building.
 The arm64 payload is not a CPU-generation detector: M1/M2 machines are outside
 the support policy, not claimed to be rejected by an instruction-set check.
-Release compiler builds use Depot; Linux builds retain Ubuntu 22.04 so moving
-runners does not raise their glibc baseline.
+Release compiler builds use Depot on Ubuntu 24.04, which is this repository's
+minimum. The Linux binaries therefore carry a glibc 2.39 baseline and do not
+run on Ubuntu 22.04 or any older Linux of equivalent vintage.
 
 ## Private origins and module-scope bindings
 

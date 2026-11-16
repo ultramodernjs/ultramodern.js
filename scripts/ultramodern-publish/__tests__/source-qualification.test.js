@@ -484,7 +484,10 @@ test('the source registry uses the same explicit external store for its integrit
           calls.push({ stage: 'integrity', env: options.env });
           return JSON.stringify(VERDACCIO_INTEGRITY);
         },
-        reservePortImpl: async () => 12345,
+        leasePortImpl: async () => ({
+          port: 12345,
+          release: async () => 12345,
+        }),
         spawnImpl: (command, args, options) => {
           assert.equal(command, 'pnpm');
           assert.equal(args[0], 'dlx');
@@ -527,7 +530,7 @@ test('invalid source-registry stores fail before integrity, allocation, or child
           rootDir,
           storeDir,
           runImpl: unexpected,
-          reservePortImpl: unexpected,
+          leasePortImpl: unexpected,
           spawnImpl: unexpected,
         }),
         /must be an absolute path|must be outside/u,
@@ -623,7 +626,10 @@ for (const failure of [undefined, 'seed', 'restart']) {
         },
         rootDir,
         runImpl: () => JSON.stringify(VERDACCIO_INTEGRITY),
-        reservePortImpl: async () => 12345,
+        leasePortImpl: async () => ({
+          port: 12345,
+          release: async () => 12345,
+        }),
         ...fixture,
       });
       if (failure) {

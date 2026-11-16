@@ -53,9 +53,7 @@ jobs:
     env:
       MODERN_TEST_FRAMEWORK_SUITE: ${{ matrix.framework_suite || 'full' }}
 
-    # The GitHub-hosted public runner has 4 vCPU / 16 GB. A healthy job is ~15 min;
-    # this ceiling turns a hung fixture into a clean failure instead of letting
-    # the job sit on the GitHub default of 6 hours.
+    # Fail hung fixtures instead of waiting for the six-hour Actions default.
     timeout-minutes: 60
 
     # One job per suite, so a red suite never hides the ones after it behind
@@ -76,89 +74,89 @@ jobs:
         # these shards; dispatch still depends on runner availability.
         include:
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'windows-latest' }}
+            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
             suite: framework
             framework_suite: core
             shard: 4/6
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'windows-latest' }}
+            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
             suite: framework
             framework_suite: core
             shard: 3/6
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'windows-latest' }}
+            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
             suite: framework
             framework_suite: core
             shard: 2/6
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'windows-latest' }}
+            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
             suite: framework
             framework_suite: core
             shard: 1/6
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'windows-latest' }}
+            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
             suite: framework
             framework_suite: core
             shard: 6/6
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'windows-latest' }}
+            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
             suite: framework
             framework_suite: core
             shard: 5/6
           - platform: Linux
-            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             suite: framework
             framework_suite: core
             shard: 1/6
           - platform: Linux
-            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             suite: framework
             framework_suite: core
             shard: 2/6
           - platform: Linux
-            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             suite: framework
             framework_suite: core
             shard: 3/6
           - platform: Linux
-            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             suite: framework
             framework_suite: core
             shard: 4/6
           - platform: Linux
-            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             suite: framework
             framework_suite: core
             shard: 5/6
           - platform: Linux
-            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             suite: framework
             framework_suite: core
             shard: 6/6
           - platform: Linux
-            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             suite: framework-generator-workspace
             framework_suite: generator-workspace
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'windows-latest' }}
+            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
             suite: framework-generator-workspace
             framework_suite: generator-workspace
           - platform: Linux
-            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             suite: framework-generator-bff
             framework_suite: generator-bff
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'windows-latest' }}
+            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
             suite: framework-generator-bff
             framework_suite: generator-bff
           - platform: Linux
-            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             suite: rstest-adapter
           - platform: Windows
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'windows-latest' }}
+            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
             suite: rstest-adapter
           - platform: Linux
-            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+            runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             suite: utils
 
     steps:
@@ -208,11 +206,15 @@ jobs:
 
       - name: Resolve pnpm store path
         id: pnpm-store
+        if: runner.os != 'Windows'
         shell: bash
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
-      # Restore only; ci-cache.yml seeds this key on main-ultramodern.
+      # Restore only; ci-cache.yml seeds these keys on main-ultramodern.
+      # Windows also restores pnpm policy verification, but never a linked
+      # node_modules tree: NTFS junctions do not survive cache transport.
       - name: Restore pnpm store cache
+        if: runner.os != 'Windows'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
@@ -220,9 +222,9 @@ jobs:
           restore-keys: |
             pnpm-store-${{ runner.os }}-
 
-      - name: Restore pnpm lockfile verification
+      - name: Restore Windows dependencies
         if: runner.os == 'Windows'
-        uses: ./.github/actions/restore-pnpm-verification
+        uses: ./.github/actions/windows-dependencies
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
@@ -238,9 +240,14 @@ jobs:
       - name: Validate and restage corrected Effect compiler payload
         run: node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-input --complete-manifest
 
-      # Prepared caches predate the corrected compiler identity. Rebuild until
-      # their cache/manifest owner includes the complete payload fingerprint.
+      # The key validates the complete corrected compiler inventory but omits
+      # per-run receipt metadata. Snapshots never replace the staged payload.
+      - name: Restore prepared build outputs
+        id: build-cache
+        uses: ./.github/actions/restore-build-cache
+
       - name: Prepare
+        if: steps.build-cache.outputs.cache-hit != 'true'
         run: pnpm run prepare-build
 
       # scripts/lib/browser-provisioning.js is the one browser provisioner: it
@@ -263,18 +270,24 @@ jobs:
 
       - name: Test - Framework
         if: matrix.suite == 'framework'
+        env:
+          MODERN_TEST_PACKAGE_MANIFEST: ${{ steps.build-cache.outputs.package-manifest }}
         run: >-
           pnpm --filter tests run test:framework:prepared --shard ${{ matrix.shard }}
           --reporters default --reporters blob
 
       - name: Test - Framework workspace generator
         if: matrix.suite == 'framework-generator-workspace'
+        env:
+          MODERN_TEST_PACKAGE_MANIFEST: ${{ steps.build-cache.outputs.package-manifest }}
         run: >-
           pnpm --filter tests run test:framework:prepared
           --reporters default --reporters blob
 
       - name: Test - Framework BFF generator
         if: matrix.suite == 'framework-generator-bff'
+        env:
+          MODERN_TEST_PACKAGE_MANIFEST: ${{ steps.build-cache.outputs.package-manifest }}
         run: >-
           pnpm --filter tests run test:framework:prepared
           --reporters default --reporters blob
@@ -300,23 +313,3 @@ jobs:
         if: matrix.suite == 'utils'
         working-directory: tests
         run: pnpm run test:utils
-
-  # Repository protection requires the original three framework check names.
-  # Each check waits for all six core shards, both generator fixtures on each
-  # platform, and the side suites. Failed, cancelled, or skipped jobs cannot pass.
-  required-framework:
-    name: integration-${{ matrix.platform }} (framework ${{ matrix.required_shard }}/3)
-    if: always()
-    needs: integration
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
-    timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [Linux, Windows]
-        required_shard: [1, 2, 3]
-    steps:
-      - name: Require every integration job to pass
-        env:
-          INTEGRATION_RESULT: ${{ needs.integration.result }}
-        run: test "$INTEGRATION_RESULT" = success

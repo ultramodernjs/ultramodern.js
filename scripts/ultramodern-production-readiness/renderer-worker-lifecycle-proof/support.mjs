@@ -6,9 +6,36 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-const guardian =
-  process.env.DISK_GUARDIAN_ARTIFACTS ??
-  '/Users/satan/bin/disk-guardian-artifacts';
+
+/**
+ * The disk guardian this machine is configured with, or undefined when it has
+ * none. This is the only place the executable is resolved.
+ *
+ * `DISK_GUARDIAN_ARTIFACTS` names it explicitly; otherwise it is the ordinary
+ * `disk-guardian-artifacts` on PATH, the resolution
+ * scripts/native-compatibility/consumer.mjs already uses. A hardcoded
+ * developer path is not a resolution: it made every CI spawn of the guardian
+ * an ENOENT, which is what failed clean-room acceptance twelve times.
+ *
+ * A configured guardian that cannot run is still a loud failure: callers spawn
+ * what this returns and let the error propagate. `undefined` means there is no
+ * guardian to talk to - on a runner the job's own lease owns the directory -
+ * and it is the machine's state, not an opt-out.
+ */
+export function resolveDiskGuardian(env = process.env) {
+  if (env.DISK_GUARDIAN_ARTIFACTS) return env.DISK_GUARDIAN_ARTIFACTS;
+  for (const directory of (env.PATH ?? '').split(path.delimiter)) {
+    if (!directory) continue;
+    const candidate = path.join(directory, 'disk-guardian-artifacts');
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {}
+  }
+  return undefined;
+}
+
+const guardian = resolveDiskGuardian();
 
 export function sourceEvidence(file) {
   const bytes = fs.readFileSync(file);
@@ -64,7 +91,7 @@ const registered = new Map();
 
 export function registerArtifact(directory, { owner, ownerPid, kind }) {
   fs.mkdirSync(directory, { recursive: true });
-  if (!fs.existsSync(guardian)) return false;
+  if (!guardian) return false;
   registered.set(directory, owner);
   const result = spawnSync(
     guardian,
@@ -91,7 +118,7 @@ export function registerArtifact(directory, { owner, ownerPid, kind }) {
 
 function releaseArtifact(directory, owner) {
   registered.delete(directory);
-  if (!fs.existsSync(guardian)) return;
+  if (!guardian) return;
   spawnSync(guardian, ['release', directory, '--owner', owner], {
     encoding: 'utf8',
     timeout: 30_000,

@@ -16,10 +16,84 @@ const producer = read('effect-compiler-payload');
 const integration = read('integration-test');
 const native = read('native-compatibility');
 const publish = read('publish-bleedingdev');
+const cache = read('ci-cache');
 const expression = value => ['$' + '{{', value, '}}'].join(' ');
 const producerPath = './.github/workflows/effect-compiler-payload.yml';
+const compilerSource = JSON.parse(
+  fs.readFileSync(
+    new URL(
+      '../../../packages/solutions/app-tools-extensions/compiler/source.json',
+      import.meta.url,
+    ),
+    'utf8',
+  ),
+);
+const cachePin = '55cc8345863c7cc4c66a329aec7e433d2d1c52a9';
+const cachedTargets = producer.jobs.build.strategy.matrix.include.map(
+  entry => entry.target,
+);
+const step = (jobId, matcher) =>
+  producer.jobs[jobId].steps.find(
+    item =>
+      item.id === matcher ||
+      item.name === matcher ||
+      (typeof item.name === 'string' && item.name.startsWith(matcher)),
+  );
 const stage =
   'node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-input --complete-manifest';
+
+test('default-branch caches seed the two actual compiler variants before integration reuses them', () => {
+  assert.equal(cache.permissions.actions, 'read');
+  assert.equal(cache.jobs['effect-compiler-payload'].uses, producerPath);
+  assert.equal(
+    cache.jobs['effect-compiler-payload'].if,
+    "github.ref == 'refs/heads/main-ultramodern'",
+  );
+  assert.equal(cache.jobs.seed.needs, 'effect-compiler-payload');
+  assert.equal(
+    cache.jobs.seed.if,
+    "github.ref == 'refs/heads/main-ultramodern'",
+  );
+  const entries = cache.jobs.seed.strategy.matrix.include;
+  assert.equal(
+    entries.filter(entry => entry.compiler_payload === false).length,
+    3,
+  );
+  assert.equal(
+    entries.filter(entry => entry.compiler_payload === true).length,
+    2,
+  );
+  assert.ok(
+    entries
+      .filter(entry => entry.compiler_payload)
+      .every(entry => !entry.runner.includes('MACOS')),
+  );
+  const steps = cache.jobs.seed.steps;
+  const staged = steps.findIndex(step => step.run === stage);
+  const identified = steps.findIndex(step => step.id === 'build-cache-key');
+  assert.ok(staged >= 0 && staged < identified);
+  assert.equal(steps[staged].if, 'matrix.compiler_payload');
+
+  const consumer = integration.jobs.integration.steps;
+  const restore = consumer.findIndex(step => step.id === 'build-cache');
+  const staging = consumer.findIndex(step => step.run === stage);
+  const prepare = consumer.findIndex(step => step.name === 'Prepare');
+  assert.ok(staging < restore && restore < prepare);
+  assert.equal(
+    consumer[prepare].if,
+    "steps.build-cache.outputs.cache-hit != 'true'",
+  );
+  for (const name of [
+    'Test - Framework',
+    'Test - Framework workspace generator',
+    'Test - Framework BFF generator',
+  ])
+    assert.equal(
+      consumer.find(step => step.name === name).env
+        .MODERN_TEST_PACKAGE_MANIFEST,
+      expression('steps.build-cache.outputs.package-manifest'),
+    );
+});
 
 function assertHandoff(job, before, conditional = false) {
   const download = job.steps.findIndex(
@@ -40,8 +114,12 @@ function assertHandoff(job, before, conditional = false) {
   assert.ok(!job.steps.some(step => /chmod|\bcp\b/.test(step.run ?? '')));
 }
 
-test('compiler matrix uses four Depot builds without Intel Mac or a newer glibc baseline', () => {
-  assert.deepEqual(producer.on, { workflow_call: null });
+test('compiler matrix uses four Depot builds without Intel Mac or Ubuntu 22.04', () => {
+  assert.deepEqual(producer.on, {
+    workflow_call: null,
+    push: { branches: ['main-ultramodern'] },
+    workflow_dispatch: null,
+  });
   assert.deepEqual(producer.jobs.build.strategy.matrix.include, [
     {
       target: 'darwin-arm64',
@@ -51,12 +129,12 @@ test('compiler matrix uses four Depot builds without Intel Mac or a newer glibc 
     {
       target: 'linux-x64',
       rust_target: 'x86_64-unknown-linux-gnu',
-      runner: 'depot-ubuntu-22.04-8',
+      runner: 'depot-ubuntu-24.04-8',
     },
     {
       target: 'linux-arm64',
       rust_target: 'aarch64-unknown-linux-gnu',
-      runner: 'depot-ubuntu-22.04-arm-8',
+      runner: 'depot-ubuntu-24.04-arm-8',
     },
     {
       target: 'win32-x64',
@@ -134,15 +212,21 @@ test('compiler matrix uses four Depot builds without Intel Mac or a newer glibc 
   ])
     assert.ok(notices.run.includes(name));
   assert.match(receipt.run, /--artifact-dir "\$ARTIFACT_DIR"/);
-  const upload = steps.find(step =>
+  const uploads = steps.filter(step =>
     step.uses?.startsWith('actions/upload-artifact@'),
   );
-  assert.equal(
-    upload.with.name,
-    `effect-compiler-target-${expression('matrix.target')}-${expression('github.sha')}`,
+  // The receipt artifact `aggregate` stages from, and the pre-receipt
+  // directory the single x64 cache writer saves. Both are required: the
+  // receipt is run-identity bound and must never be cached.
+  assert.deepEqual(
+    uploads.map(step => step.with.name),
+    [
+      `effect-compiler-cache-${expression('matrix.target')}-${expression('github.sha')}`,
+      `effect-compiler-target-${expression('matrix.target')}-${expression('github.sha')}`,
+    ],
   );
   const aggregate = producer.jobs.aggregate;
-  assert.equal(aggregate.needs, 'build');
+  assert.deepEqual([...aggregate.needs].sort(), ['build', 'resolve']);
   const download = aggregate.steps.find(step =>
     step.uses?.startsWith('actions/download-artifact@'),
   );
@@ -200,6 +284,242 @@ ${guard.run}`,
   }
 });
 
+test('a verified full restore skips the build matrix and the aggregate job', () => {
+  const resolve = producer.jobs.resolve;
+  assert.equal(
+    resolve['runs-on'],
+    expression("vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'"),
+  );
+  assert.equal(resolve['timeout-minutes'], 15);
+  assert.deepEqual(resolve.outputs, {
+    hit: expression('steps.payload.outputs.hit'),
+  });
+  for (const id of ['build', 'aggregate']) {
+    const needs = producer.jobs[id].needs;
+    assert.ok((Array.isArray(needs) ? needs : [needs]).includes('resolve'), id);
+    assert.equal(producer.jobs[id].if, "needs.resolve.outputs.hit != 'true'");
+  }
+  // The hit path reuses aggregate's bare checkout, Node and staging command;
+  // it installs nothing and downloads no per-target artifacts.
+  const aggregate = producer.jobs.aggregate.steps;
+  for (const index of [0, 1])
+    assert.deepEqual(resolve.steps[index], aggregate[index]);
+  assert.equal(
+    step('resolve', 'Validate and stage the complete compiler payload').run,
+    aggregate.find(item => item.run?.includes('stage --input')).run,
+  );
+  assert.deepEqual(
+    step('resolve', 'Upload the complete staged payload').with,
+    aggregate.find(item => item.uses?.startsWith('actions/upload-artifact@'))
+      .with,
+  );
+  assert.ok(
+    !resolve.steps.some(item =>
+      /pnpm install|npm ci|download-artifact/.test(
+        `${item.run ?? ''}${item.uses ?? ''}`,
+      ),
+    ),
+  );
+  for (const name of [
+    'Smoke the cached Linux release binary',
+    'Produce the target inventory and same-run receipt',
+    'Validate and stage the complete compiler payload',
+    'Upload the complete staged payload',
+    "Report the cached payload as this run's payload",
+  ])
+    assert.equal(
+      step('resolve', name).if,
+      "steps.identity.outputs.usable == 'true'",
+      name,
+    );
+  assert.equal(
+    step('resolve', 'payload').run,
+    'echo "hit=true" >> "$GITHUB_OUTPUT"',
+  );
+  // The Linux smoke keeps running on the hit path, and it runs on the staged
+  // payload rather than the restored directory: the cached bytes now reach
+  // this job through artifact transport, which strips the executable mode,
+  // and the stager is the only thing allowed to repair it. Smoking after
+  // staging therefore executes exactly the bytes consumers receive.
+  const resolveSteps = producer.jobs.resolve.steps;
+  const smoke = step('resolve', 'Smoke the cached Linux release binary');
+  assert.equal(
+    smoke.env.ARTIFACT_DIR,
+    'packages/solutions/app-tools-extensions/compiler/payload/linux-x64',
+  );
+  assert.ok(
+    resolveSteps.indexOf(
+      resolveSteps.find(item => item.run?.includes('stage --input')),
+    ) < resolveSteps.indexOf(smoke),
+    'the smoke must run after the stager repaired the executable mode',
+  );
+  assert.match(smoke.run, /Version 7\.1\.0-beta\+effect-tsgo\.0\.67\.0/);
+  assert.match(smoke.run, /lib\.d\.ts/);
+});
+
+// Measured in run 43889178478: Depot serves the Actions cache from its own
+// backend and that backend does not span CPU architectures. The x64 `resolve`
+// job restored linux-x64 and win32-x64 and reported "Cache not found" for
+// darwin-arm64 and linux-arm64, whose entries the build matrix had just
+// written from arm64 machines under byte-identical keys. One writer per
+// architecture therefore cannot be read by one reader, and because a partial
+// restore rebuilds every target it wasted the whole lever. Every entry is
+// written by `aggregate`, on the one architecture `resolve` reads from.
+test('one x64 job writes every cache entry, and the build matrix writes none', () => {
+  const saves = producer.jobs.aggregate.steps.filter(item =>
+    item.uses?.startsWith('actions/cache/save@'),
+  );
+  assert.equal(saves.length, 4);
+  assert.equal(
+    producer.jobs.aggregate['runs-on'],
+    producer.jobs.resolve['runs-on'],
+    'the cache writer must run on the architecture the reader reads from',
+  );
+  for (const item of producer.jobs.build.steps)
+    assert.ok(
+      !/^actions\/cache/.test(item.uses ?? ''),
+      `${item.name} writes the cache from a per-target runner; arm64 entries written there are invisible to the x64 reader`,
+    );
+});
+
+test('the cache key carries every pinned identity, the epoch and the runner label', () => {
+  const targets = producer.jobs.build.strategy.matrix.include;
+  assert.equal(targets.length, 4);
+  for (const entry of targets) {
+    const save = producer.jobs.aggregate.steps.find(
+      item => item.with?.path === `.effect-compiler-cache/${entry.target}`,
+    );
+    assert.ok(save?.uses?.startsWith('actions/cache/save@'), entry.target);
+    // Durable-ref events only. A pull_request or merge_group ref is discarded
+    // after the run, so an entry written there is unreadable dead quota - the
+    // parking ci-cache.yml's header records. Asserting the condition rather
+    // than a branch name is what keeps both of those events excluded.
+    assert.equal(
+      save.if,
+      "github.event_name == 'push' || github.event_name == 'workflow_dispatch'",
+    );
+    assert.equal(save.with.enableCrossOsArchive, true);
+    assert.ok(
+      save.with.key.startsWith(
+        `effect-compiler-payload-v2-${expression('steps.cache-key.outputs.epoch')}-${entry.target}-${entry.runner}-`,
+      ),
+      entry.target,
+    );
+    for (const file of [
+      'packages/solutions/app-tools-extensions/compiler/source.json',
+      'packages/solutions/app-tools-extensions/compiler/constraint.patch',
+      '.github/workflows/effect-compiler-payload.yml',
+    ])
+      assert.ok(
+        save.with.key.includes(expression(`hashFiles('${file}')`)),
+        `${entry.target}: ${file}`,
+      );
+    // .github/actions/setup-repo resolves inside the Effect-TS/tsgo checkout
+    // and does not exist in this repository, so it adds nothing to a digest.
+    assert.ok(!save.with.key.includes('setup-repo'));
+    // The one failure mode of a split writer and reader is a key that differs
+    // by a character, which is a permanent silent miss rather than an error.
+    const restore = step('resolve', `cache-${entry.target}`);
+    assert.equal(restore.with.path, save.with.path);
+    assert.equal(restore.with.enableCrossOsArchive, true);
+    assert.equal(restore.with['restore-keys'], undefined);
+    assert.equal(restore.with.key, save.with.key, entry.target);
+  }
+  for (const item of [
+    ...producer.jobs.resolve.steps,
+    ...producer.jobs.build.steps,
+    ...producer.jobs.aggregate.steps,
+  ])
+    if (/^actions\/cache/.test(item.uses ?? ''))
+      assert.equal(item.uses.split('@')[1].split(' ')[0], cachePin);
+});
+
+test('the cache epoch is one committed integer that only a human bumps', () => {
+  const content = fs.readFileSync(
+    new URL('../../../.github/effect-compiler-cache-epoch', import.meta.url),
+    'utf8',
+  );
+  const values = content
+    .split('\n')
+    .filter(line => line.trim() && !line.startsWith('#'));
+  assert.deepEqual(values.length, 1);
+  assert.match(values[0], /^\d+$/);
+  assert.match(content, /[Bb]ump/);
+  assert.match(content, /runner image/);
+  // Both jobs check out the repository root, so neither needs the harness/
+  // prefix the build matrix used while it still wrote its own entries.
+  for (const [jobId, file] of [
+    ['resolve', '.github/effect-compiler-cache-epoch'],
+    ['aggregate', '.github/effect-compiler-cache-epoch'],
+  ]) {
+    const key = step(jobId, 'cache-key');
+    assert.equal(key.env.EPOCH_FILE, file);
+    assert.ok(key.run.includes('*[!0-9]*)'));
+    assert.ok(key.run.includes('echo "epoch=$epoch" >> "$GITHUB_OUTPUT"'));
+  }
+});
+
+test('a partial restore or a foreign identity rebuilds instead of staging', () => {
+  assert.deepEqual(cachedTargets, compilerSource.targets);
+  const identity = step('resolve', 'identity');
+  assert.equal(identity.if, undefined);
+  assert.deepEqual(
+    identity.env.RESTORED.trim()
+      .split('\n')
+      .map(line => line.trim()),
+    cachedTargets.map(
+      target =>
+        `${target} ${expression(`steps.cache-${target}.outputs.cache-hit`)}`,
+    ),
+  );
+  assert.match(identity.run, /verify-identity/);
+  assert.match(identity.run, /usable=false/);
+  assert.ok(identity.run.includes('echo "usable=$usable" >> "$GITHUB_OUTPUT"'));
+  assert.deepEqual(
+    step('resolve', 'Produce the target inventory').env.TARGETS.split(' '),
+    cachedTargets,
+  );
+});
+
+test('only bytes the stager accepted in the same run are cached, and never the receipt', () => {
+  const steps = producer.jobs.build.steps;
+  const at = matcher => steps.indexOf(step('build', matcher));
+  const notices = at('Include source licenses');
+  const copy = at('Copy the verified target directory');
+  const receipt = at('Produce the target');
+  const handoff = at('Upload the verified target directory for the cache');
+  const upload = at('Upload the complete target directory and receipt');
+  assert.ok(
+    notices < copy && copy < receipt && receipt < handoff && handoff < upload,
+  );
+  // What the cache writer receives is the pre-receipt directory. The receipt
+  // is run-identity bound, so caching it would let a later run present a
+  // foreign run's receipt as its own; it travels in the other artifact and
+  // every consuming run produces its own.
+  assert.equal(
+    steps[handoff].with.path,
+    `.effect-compiler-cache/${expression('matrix.target')}`,
+  );
+  assert.equal(steps[handoff].if, undefined);
+  assert.ok(!steps[handoff].with.path.includes('.modern'));
+  assert.equal(steps[copy].if, undefined);
+  assert.match(steps[copy].run, /write-identity/);
+  assert.match(steps[copy].run, /MB/);
+  assert.match(steps[copy].run, /\.effect-compiler-cache/);
+  assert.ok(!steps[copy].run.includes('.modern/effect-compiler-target'));
+
+  // And nothing is written until the stager accepted the complete payload in
+  // the writer's own run, so a run that cannot produce a valid inventory for
+  // all four targets seeds nothing.
+  const writer = producer.jobs.aggregate.steps;
+  const stage = writer.findIndex(item => item.run?.includes('stage --input'));
+  const saves = writer
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => item.uses?.startsWith('actions/cache/save@'));
+  assert.equal(saves.length, 4);
+  for (const { index } of saves) assert.ok(stage < index);
+});
+
 test('every fresh build stages the complete payload before selecting a compiler', () => {
   for (const [id, build] of [
     ['native-framework-contracts', 'Prepare'],
@@ -210,12 +530,6 @@ test('every fresh build stages the complete payload before selecting a compiler'
   }
   assert.equal(native.jobs['effect-compiler-payload'].uses, producerPath);
   assertHandoff(integration.jobs.integration, 'Prepare');
-  assert.equal(
-    integration.jobs.integration.steps.some(
-      step => step.uses === './.github/actions/restore-build-cache',
-    ),
-    false,
-  );
   for (const [id, build] of [
     ['qualify-source-compute', 'Qualify release source'],
     ['prepare-release', 'Build Packages'],

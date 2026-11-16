@@ -242,23 +242,3 @@ jobs:
         if: matrix.suite == 'utils'
         working-directory: tests
         run: pnpm run test:utils
-
-  # Repository protection requires the original three framework check names.
-  # Each check waits for all six core shards, both generator fixtures on each
-  # platform, and the side suites. Failed, cancelled, or skipped jobs cannot pass.
-  required-framework:
-    name: integration-${{ matrix.platform }} (framework ${{ matrix.required_shard }}/3)
-    if: always()
-    needs: integration
-    runs-on: depot-ubuntu-24.04-8
-    timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [Linux]
-        required_shard: [1, 2, 3]
-    steps:
-      - name: Require every integration job to pass
-        env:
-          INTEGRATION_RESULT: ${{ needs.integration.result }}
-        run: test "$INTEGRATION_RESULT" = success

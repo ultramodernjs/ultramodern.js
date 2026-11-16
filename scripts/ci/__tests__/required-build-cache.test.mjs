@@ -9,11 +9,13 @@ const { scripts } = JSON.parse(
 test('required CI builds execute the complete compiler-backed graph without depending on remote cache availability', () => {
   const required = scripts['build:required'].split(' ');
   const ordinary = scripts['prepare-build'].split(' ');
+  // Both CI build entrypoints skip the remote cache: a 500 from the remote
+  // cache endpoint failed Native Compatibility after Nx had already built all
+  // 49 projects, so `prepare-build` carries the flag too and the two commands
+  // are now identical.
   assert.equal(required.filter(arg => arg === '--skipRemoteCache').length, 1);
-  assert.deepEqual(
-    required.filter(arg => arg !== '--skipRemoteCache'),
-    ordinary,
-  );
+  assert.equal(ordinary.filter(arg => arg === '--skipRemoteCache').length, 1);
+  assert.deepEqual(required, ordinary);
   assert.equal(required.includes('--skipNxCache'), false);
   assert.deepEqual(required.slice(0, 5), [
     'node',

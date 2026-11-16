@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { createServer } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { parseSync } from '@babel/core';
 import tsgoInvocation from '../../../scripts/lib/tsgo-invocation.js';
+import { leasePort } from '../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 import {
   checkInstalledCohort,
   readCohort,
@@ -845,19 +845,6 @@ export async function checkGeneratedSolidBrowser({
   }
 }
 
-async function reservePort() {
-  const server = createServer();
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
-  const { port } = server.address();
-  await new Promise((resolve, reject) =>
-    server.close(error => (error ? reject(error) : resolve())),
-  );
-  return port;
-}
-
 /** The qualifying entry point builds and starts the exact authenticated app. */
 export async function runGeneratedSolidConsumer({
   appRoot,
@@ -879,8 +866,11 @@ export async function runGeneratedSolidConsumer({
       appRoot,
       execute: scope.execute,
     });
-    const port = await reservePort();
+    const lease = await leasePort();
+    const { port } = lease;
     const origin = `http://127.0.0.1:${port}`;
+    // Unbind in the statement before the server that binds this port starts.
+    await lease.release();
     const server = scope.start(
       process.execPath,
       [installedBin(appRoot), 'serve'],

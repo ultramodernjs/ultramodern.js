@@ -11,6 +11,18 @@
 //       [--required-features --native-inputs <authenticated native archive inputs.json>]
 //       [--tractor-source <tractor demo checkout> [--tractor-revision <rev>]]
 //
+// The required renderer features can also be executed and sealed by two
+// different CI jobs, so the ERP acceptance they bind to runs concurrently
+// instead of before them:
+//
+//   --emit-rows <file>  execute every row, then write {rows, evidenceRoot,
+//                       registryUrl, binding, runIdentity} instead of the
+//                       receipt. Needs --work-dir; rejects the receipt options.
+//   --rows <file>       execute nothing: bind that file's rows to the ERP
+//                       receipt and write the feature receipt. The evidence
+//                       must be restored under the recorded absolute
+//                       evidenceRoot, which is --work-dir/logs.
+//
 // For each renderer: generate a workspace with the packed create CLI,
 // (Solid, Octane) build and serve its untouched starter, put the
 // tests/integration/renderer-<r> app into its shell, install from a local
@@ -27,6 +39,7 @@
 // downstream adoption of that exact baseline, or of --tractor-revision (any
 // revision of the source checkout, e.g. a local adoption commit) when given.
 // Prints a PASS/FAIL/SKIP table and exits 1 on any failure.
+import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -46,6 +59,7 @@ import {
   assertRendererFeatureRow,
   rendererAcceptanceRegistryUrl,
   rendererFeatureBinding,
+  requiredRendererFeatureRows,
   writeRendererFeatureReceipt,
 } from './feature-gates.mjs';
 import { checkInstalledCohort, readCohort } from './installed-cohort.mjs';
@@ -87,10 +101,14 @@ const { values: opts } = parseArgs({
     'source-feature-receipt': { type: 'string' },
     'source-acceptance-receipt': { type: 'string' },
     'feature-receipt': { type: 'string' },
+    'emit-rows': { type: 'string' },
+    rows: { type: 'string' },
     'run-identity': { type: 'string' },
     'registry-url': { type: 'string', default: 'https://registry.npmjs.org/' },
   },
 });
+const rendererFeatureRowsSchema =
+  'bleedingdev.ultramodern.renderer-feature-rows';
 const renderers = opts.renderers.split(',').map(name => name.trim());
 for (const renderer of renderers)
   if (!allRenderers.includes(renderer))
@@ -107,13 +125,38 @@ if (opts['tractor-revision'] && !opts['tractor-source'])
   throw new Error('--tractor-revision needs --tractor-source');
 if (!['source', 'published'].includes(opts['acceptance-mode']))
   throw new Error('--acceptance-mode must be source or published');
+if (opts['emit-rows'] && opts.rows)
+  throw new Error('Pass at most one of --emit-rows or --rows');
+if (opts['emit-rows']) {
+  if (!opts['required-features'])
+    throw new Error('--emit-rows needs --required-features');
+  // The sealing job reconstructs this exact directory, so it cannot be a
+  // temporary one this process invents.
+  if (!opts['work-dir']) throw new Error('--emit-rows needs --work-dir');
+  for (const option of ['acceptance-receipt', 'feature-receipt'])
+    if (opts[option])
+      throw new Error(`--emit-rows writes no receipt; drop --${option}`);
+}
+if (opts.rows) {
+  if (opts['required-features'])
+    throw new Error('--rows seals executed rows and runs none of them');
+  if (opts['acceptance-mode'] !== 'source')
+    throw new Error('--rows seals source acceptance only');
+  for (const option of [
+    'cohort-dir',
+    'acceptance-receipt',
+    'feature-receipt',
+    'run-identity',
+    'work-dir',
+  ])
+    if (!opts[option]) throw new Error(`--rows needs --${option}`);
+}
 if (opts['required-features']) {
   for (const option of [
     'cohort-dir',
     'native-inputs',
-    'acceptance-receipt',
-    'feature-receipt',
     'run-identity',
+    ...(opts['emit-rows'] ? [] : ['acceptance-receipt', 'feature-receipt']),
   ])
     if (!opts[option]) throw new Error(`--required-features needs --${option}`);
   if (!['solid', 'octane'].every(renderer => renderers.includes(renderer)))
@@ -431,7 +474,7 @@ function playwrightRoot() {
   );
 }
 
-async function main() {
+async function accept() {
   let cohortDir = opts['cohort-dir'] && path.resolve(opts['cohort-dir']);
   // The publish preparer only writes under .modern/bleedingdev-publish; a
   // cohort this run builds is removed again when the run ends.
@@ -1015,42 +1058,65 @@ async function main() {
           }
         });
       }
-      await step('renderer feature acceptance receipt', async () => {
-        assertAcceptanceReceipt(
-          readJson(path.resolve(opts['acceptance-receipt'])),
-          {
-            release,
-            expectedMode: opts['acceptance-mode'],
+      // --emit-rows stops here: the ERP receipt these rows bind to is produced
+      // by a concurrent job, so another `release.mjs --rows` seals them.
+      if (opts['emit-rows'])
+        await step('renderer feature rows', () => {
+          assert.deepEqual(
+            Object.keys(rows).sort(),
+            Object.keys(requiredRendererFeatureRows).sort(),
+            'Every renderer feature row must execute exactly once',
+          );
+          const file = path.resolve(opts['emit-rows']);
+          fs.mkdirSync(path.dirname(file), { recursive: true });
+          writeJson(file, {
+            schema: rendererFeatureRowsSchema,
+            schemaVersion: 1,
+            mode: opts['acceptance-mode'],
             runIdentity: opts['run-identity'],
-          },
-        );
-        if (opts['acceptance-mode'] === 'published') {
+            registryUrl: acceptanceRegistryUrl,
+            evidenceRoot: logs,
+            binding,
+            rows,
+          });
+        });
+      else
+        await step('renderer feature acceptance receipt', async () => {
           assertAcceptanceReceipt(
-            readJson(path.resolve(opts['source-acceptance-receipt'])),
+            readJson(path.resolve(opts['acceptance-receipt'])),
             {
               release,
-              expectedMode: 'source',
+              expectedMode: opts['acceptance-mode'],
               runIdentity: opts['run-identity'],
             },
           );
-        }
-        writeRendererFeatureReceipt({
-          receiptPath: path.resolve(opts['feature-receipt']),
-          registryUrl: acceptanceRegistryUrl,
-          evidenceRoot: logs,
-          sourceAcceptanceReceiptPath:
-            opts['source-acceptance-receipt'] &&
-            path.resolve(opts['source-acceptance-receipt']),
-          rows,
-          binding,
-          mode: opts['acceptance-mode'],
-          runIdentity: opts['run-identity'],
-          acceptanceReceiptPath: path.resolve(opts['acceptance-receipt']),
-          sourceFeatureReceiptPath:
-            opts['source-feature-receipt'] &&
-            path.resolve(opts['source-feature-receipt']),
+          if (opts['acceptance-mode'] === 'published') {
+            assertAcceptanceReceipt(
+              readJson(path.resolve(opts['source-acceptance-receipt'])),
+              {
+                release,
+                expectedMode: 'source',
+                runIdentity: opts['run-identity'],
+              },
+            );
+          }
+          writeRendererFeatureReceipt({
+            receiptPath: path.resolve(opts['feature-receipt']),
+            registryUrl: acceptanceRegistryUrl,
+            evidenceRoot: logs,
+            sourceAcceptanceReceiptPath:
+              opts['source-acceptance-receipt'] &&
+              path.resolve(opts['source-acceptance-receipt']),
+            rows,
+            binding,
+            mode: opts['acceptance-mode'],
+            runIdentity: opts['run-identity'],
+            acceptanceReceiptPath: path.resolve(opts['acceptance-receipt']),
+            sourceFeatureReceiptPath:
+              opts['source-feature-receipt'] &&
+              path.resolve(opts['source-feature-receipt']),
+          });
         });
-      });
     }
     await step(
       'tractor',
@@ -1116,6 +1182,79 @@ async function main() {
     if (ownedCohortRoot)
       fs.rmSync(ownedCohortRoot, { recursive: true, force: true });
   }
+}
+
+/**
+ * Runs only the last step of `accept` over rows another job executed, against
+ * the manifest bytes in --cohort-dir rather than anything the rows claim. The
+ * evidence must already sit under the recorded evidenceRoot: every digest is
+ * verified against the bytes on disk, exactly as it is unsplit.
+ */
+async function sealRendererFeatures() {
+  const release = readReleaseManifest({
+    manifestPath: path.join(path.resolve(opts['cohort-dir']), 'manifest.json'),
+  });
+  const cohort = readCohort(release.manifestPath);
+  await step('renderer feature acceptance receipt', () => {
+    const executed = readJson(path.resolve(opts.rows));
+    assert.equal(
+      executed.schema,
+      rendererFeatureRowsSchema,
+      'Unknown renderer feature rows schema',
+    );
+    assert.equal(executed.schemaVersion, 1, 'Unknown rows schema version');
+    assert.equal(
+      executed.mode,
+      opts['acceptance-mode'],
+      'Renderer feature rows ran in another acceptance mode',
+    );
+    assert.equal(
+      executed.runIdentity,
+      opts['run-identity'],
+      'Renderer feature rows ran in another producer run',
+    );
+    assert.deepEqual(
+      executed.binding,
+      rendererFeatureBinding(cohort),
+      'Renderer feature rows ran against another cohort',
+    );
+    // The same gate the executing job passed, re-applied to carried bytes.
+    assert.equal(
+      executed.registryUrl,
+      rendererAcceptanceRegistryUrl(executed.mode, {
+        sourceRegistry: { registryUrl: executed.registryUrl },
+      }),
+      'Renderer feature rows recorded an unusable acceptance registry',
+    );
+    assert.equal(
+      executed.evidenceRoot,
+      logs,
+      `Restore the renderer feature evidence under ${executed.evidenceRoot}, not ${logs}`,
+    );
+    assertAcceptanceReceipt(
+      readJson(path.resolve(opts['acceptance-receipt'])),
+      {
+        release,
+        expectedMode: opts['acceptance-mode'],
+        runIdentity: opts['run-identity'],
+      },
+    );
+    writeRendererFeatureReceipt({
+      receiptPath: path.resolve(opts['feature-receipt']),
+      registryUrl: executed.registryUrl,
+      evidenceRoot: executed.evidenceRoot,
+      rows: executed.rows,
+      binding: executed.binding,
+      mode: executed.mode,
+      runIdentity: executed.runIdentity,
+      acceptanceReceiptPath: path.resolve(opts['acceptance-receipt']),
+    });
+  });
+}
+
+async function main() {
+  if (opts.rows) await sealRendererFeatures();
+  else await accept();
   const failed = results.some(r => r.status === 'FAIL');
   process.stdout.write(
     `\n${table()}\n\nlogs: ${logs}\n${failed ? 'FAILED' : 'PASSED'}\n`,

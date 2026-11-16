@@ -1,0 +1,6 @@
+# Cache epoch for the corrected Effect compiler payload. Bump this integer by
+# hand whenever a Depot runner image changes behind a label that is already in
+# the cache key (a new rustc inside an unchanged image is invisible to the key),
+# so previously cached compiler bytes stop being served. Nothing in CI writes
+# this file; one integer line, no other content.
+1

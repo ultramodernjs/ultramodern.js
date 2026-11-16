@@ -16,13 +16,10 @@ const workflow = yaml.load(
   ),
 );
 
-test('macOS recovery stays in the PR-associated check suite', () => {
-  assert.deepEqual(workflow.on.pull_request.types, [
-    'opened',
-    'synchronize',
-    'reopened',
-    'labeled',
-    'unlabeled',
+test('macOS units stay in the PR-associated check suite', () => {
+  assert.deepEqual(workflow.on.pull_request.branches, [
+    'main',
+    'main-ultramodern',
   ]);
   assert.equal(
     workflow.concurrency.group,
@@ -30,18 +27,26 @@ test('macOS recovery stays in the PR-associated check suite', () => {
   );
 });
 
-test('only explicit recovery selects GitHub-hosted macOS over the configured pool', () => {
+// Every job of this repository runs on Depot. The former `ci:github-hosted-macos`
+// label and the `runner_backend` dispatch input selected GitHub-hosted macOS,
+// which is exactly what this check must no longer be able to do: a blocked
+// Depot pool has to block the required check, not move it to other hardware.
+test('the macOS units select Depot with no GitHub-hosted escape', () => {
   assert.equal(
-    workflow.on.workflow_dispatch.inputs.runner_backend.default,
-    'configured',
+    workflow.jobs['ut-mac-shards']['runs-on'],
+    `\${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}`,
   );
-  assert.equal(
-    workflow.jobs['ut-mac-shards']['runs-on'].replace(/\s+/gu, ' ').trim(),
-    `\${{ (github.event_name == 'workflow_dispatch' && inputs.runner_backend == 'github-hosted' || github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:github-hosted-macos')) && 'macos-26' || vars.DEPOT_MACOS_RUNNER || 'macos-26' }}`,
+  assert.equal(workflow.on.workflow_dispatch, null);
+  assert.equal(workflow.on.pull_request.types, undefined);
+  const source = readFileSync(
+    new URL('../../.github/workflows/ut-macOS.yml', import.meta.url),
+    'utf8',
   );
+  assert.doesNotMatch(source, /runner_backend|ci:github-hosted-macos/u);
+  assert.doesNotMatch(source, /macos-26(?!-)(?<!depot-macos-26)/u);
 });
 
-test('macOS recovery retains every shard and the fail-closed required gate', () => {
+test('macOS units retain every shard and the fail-closed required gate', () => {
   const shards = workflow.jobs['ut-mac-shards'];
   assert.equal(shards.if, undefined);
   assert.equal(shards.strategy['fail-fast'], false);

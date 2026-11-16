@@ -103,8 +103,11 @@ const {
   recordPackedNativeFederationProcess,
   verifyPackedNativeFederationInputs,
 } = await harness('scripts/ultramodern-renderers/native-federation-packed.mjs');
-const { launchServer, ready, reservePort } = await harness(
+const { launchServer, ready } = await harness(
   'scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/runtime.mjs',
+);
+const { leasePort } = await harness(
+  'scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs',
 );
 
 const renderers = values.renderers.split(',');
@@ -484,8 +487,11 @@ try {
           `${renderer}-typecheck`,
         );
       }
-      const port = await reservePort();
+      const lease = await leasePort();
+      const { port } = lease;
       const origin = `http://127.0.0.1:${port}`;
+      // Unbind in the statement before the server that binds this port starts.
+      await lease.release();
       const server = launchServer(process.execPath, installedBin(appRoot), {
         cwd: appRoot,
         env: { ...env, PORT: String(port), [shell.portEnv]: String(port) },

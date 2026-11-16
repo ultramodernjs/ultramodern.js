@@ -112,28 +112,6 @@ test('adapter and package utility coverage still runs once per supported platfor
   );
 });
 
-test('existing required framework checks reject failure, cancellation, and skips', () => {
-  const gate = workflow.jobs['required-framework'];
-  assert.equal(gate.needs, 'integration');
-  assert.equal(gate.if, 'always()');
-  assert.equal(gate.strategy['fail-fast'], false);
-  assert.deepEqual(gate.strategy.matrix.platform, ['Linux', 'Windows']);
-  assert.deepEqual(gate.strategy.matrix.required_shard, [1, 2, 3]);
-  assert.equal(
-    gate.name,
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions expands these expressions.
-    'integration-${{ matrix.platform }} (framework ${{ matrix.required_shard }}/3)',
-  );
-  assert.equal(gate.steps.length, 1);
-  assert.equal(
-    gate.steps[0].env.INTEGRATION_RESULT,
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions expands this expression.
-    '${{ needs.integration.result }}',
-  );
-  assert.equal(gate.steps[0].run, 'test "$INTEGRATION_RESULT" = success');
-  assert.equal(gate.steps[0]['continue-on-error'], undefined);
-});
-
 const run = promisify(execFile);
 
 test('core integration jobs fetch the immutable native baseline before running tests', () => {

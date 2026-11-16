@@ -40,7 +40,7 @@ jobs:
       github.repository_id == '1151231350' &&
       github.ref == 'refs/heads/main-ultramodern' &&
       github.actor == 'BleedingDev' && github.triggering_actor == 'BleedingDev'
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 25
     outputs:
       bundle_artifact: ${{ steps.original.outputs.bundle_artifact }}
@@ -119,7 +119,7 @@ jobs:
   record-recovery:
     name: Record recovered acceptance for the original publication
     needs: [recover-evidence, tractor-downstream]
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 20
     permissions:
       actions: read

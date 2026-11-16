@@ -97,14 +97,14 @@ test('browser-driving steps run after the shared provisioner installed their run
     }
   }
   for (const expected of [
-    'ultramodern-nightly.yml:superapp-certification-nightly:\\btest:build-consumers(?![\\w:-])',
+    'ultramodern-nightly.yml:build-consumers:\\btest:build-consumers(?![\\w:-])',
     'ut-Linux.yml:ut-linux:\\btest:build-consumers(?![\\w:-])',
     'ut-Linux.yml:ut-linux:\\btest:ut(?::prepared)?(?![\\w:-])',
     'ut-Windows.yml:ut-windows-shards:\\btest:ut(?::prepared)?(?![\\w:-])',
     'ut-macOS.yml:ut-mac-shards:\\btest:ut(?::prepared)?(?![\\w:-])',
     'integration-test.yml:integration:\\btest:framework(?::prepared)?(?![\\w:-])',
     'integration-test.yml:integration:\\btest:rstest-adapter(?![\\w:-])',
-    'ultramodern-nightly.yml:superapp-certification-nightly:\\bvalidate:superapp-certification(?![\\w-])',
+    'ultramodern-nightly.yml:superapp:\\bvalidate:superapp-certification(?![\\w-])',
   ]) {
     assert.ok(checked.includes(expected), `expected to check ${expected}`);
   }

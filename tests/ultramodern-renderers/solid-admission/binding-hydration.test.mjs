@@ -7,6 +7,7 @@ import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import { resolveDiskGuardian } from '../../../scripts/ultramodern-production-readiness/renderer-worker-lifecycle-proof/support.mjs';
 
 const execute = promisify(execFile);
 const fixtureRoot = fileURLToPath(
@@ -14,7 +15,9 @@ const fixtureRoot = fileURLToPath(
 );
 const consumer = process.env.ULTRAMODERN_SOLID_FIXTURE_DIRECTORY;
 const temporary = process.env.OWNED_TEMP_DIR;
-const guardian = '/Users/satan/bin/disk-guardian-artifacts';
+// On a runner there is no guardian: the job's own directory lease owns the
+// build output. A configured guardian that cannot run still fails loudly.
+const guardian = resolveDiskGuardian();
 const owner = 'solid-native-binding-hydration';
 let output;
 let outputCreated = false;
@@ -27,6 +30,7 @@ let hostUrl;
 const documents = new Map();
 
 async function guardianCommand(args) {
+  assert.ok(guardian, 'No disk guardian is configured');
   const deadline = Date.now() + 30_000;
   while (true) {
     try {
@@ -68,17 +72,19 @@ before(async () => {
   output = path.join(temporary, 'dist');
   await mkdir(output);
   outputCreated = true;
-  await guardianCommand([
-    'register',
-    output,
-    '--owner',
-    owner,
-    '--owner-pid',
-    String(process.pid),
-    '--kind',
-    'build',
-  ]);
-  registered = true;
+  if (guardian) {
+    await guardianCommand([
+      'register',
+      output,
+      '--owner',
+      owner,
+      '--owner-pid',
+      String(process.pid),
+      '--kind',
+      'build',
+    ]);
+    registered = true;
+  }
   const { createRsbuild } = await import(
     pathToFileURL(resolve.resolve('@rsbuild/core')).href
   );
