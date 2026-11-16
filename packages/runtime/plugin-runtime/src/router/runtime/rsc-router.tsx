@@ -5,6 +5,7 @@ import {
 } from '@modern-js/render/client';
 import {
   createBrowserRouter,
+  createStaticHandler,
   createStaticRouter,
   type DataStrategyMatch,
   type DataStrategyResult,
@@ -608,16 +609,35 @@ const createRSCStaticRouterComponent = (
   payload: ServerPayload,
   basename?: string,
 ) => {
-  const routerContext = {
+  const processedRoutes = payload.routes.reduceRight<PayloadRoute[]>(
+    (previous, route) => {
+      if (previous.length > 0) {
+        return [
+          {
+            ...route,
+            children: previous,
+          },
+        ];
+      }
+      return [route];
+    },
+    [],
+  );
+  const routes = (processedRoutes as NestedPayloadRoute[]).map(
+    toReactRouterRoute,
+  );
+  const staticHandler = createStaticHandler(routes, { basename });
+
+  const routerContext: StaticHandlerContext = {
     actionData: payload.actionData,
     actionHeaders: {},
-    activeDeferreds: {},
     basename: basename || '',
     errors: payload.errors,
     loaderData: payload.loaderData,
     loaderHeaders: {},
     location: payload.location,
     statusCode: 200,
+    _match: staticHandler.match,
     matches: payload.routes.map(match => ({
       params: match.params,
       pathname: match.pathname,
@@ -634,25 +654,7 @@ const createRSCStaticRouterComponent = (
     })),
   };
 
-  const processedRoutes = payload.routes.reduceRight<PayloadRoute[]>(
-    (previous, route) => {
-      if (previous.length > 0) {
-        return [
-          {
-            ...route,
-            children: previous,
-          },
-        ];
-      }
-      return [route];
-    },
-    [],
-  );
-
-  const router = createStaticRouter(
-    (processedRoutes as NestedPayloadRoute[]).map(toReactRouterRoute),
-    routerContext,
-  );
+  const router = createStaticRouter(routes, routerContext);
 
   return (
     <StaticRouterProvider

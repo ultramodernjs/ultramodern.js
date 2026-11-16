@@ -3071,7 +3071,9 @@ five previously invalid advisory rows remain non-authorizing historical prose.
     {"path":"packages/document/docs/zh/tutorials/examples/csr-auth.mdx","owner":"bleedingdev","reason":"2026-11-16: Repair authored links and page-owned section headings exposed by Rspress 2.1.3 anchor validation; preserve anchor checks and published documentation semantics.","dispositions":["inline-patch"]},
     {"path":"packages/document/src/components/FrameworkCode/index.tsx","owner":"bleedingdev","reason":"2026-11-16: Hoist the Shiki code wrapper to module scope to preserve React component identity across renders; remove unused props and rerun path replacement when the original highlighted element changes.","dispositions":["inline-patch"]},
     {"path":"packages/document/src/pages/index.module.scss","owner":"bleedingdev","reason":"2026-11-16: Order the dark announcement-arrow color rule before its higher-specificity hover transform without changing declarations or visual behavior.","dispositions":["inline-patch"]},
-    {"path":"packages/cli/builder/tests/loaders/fixtures/inline-actions.tsx","owner":"bleedingdev","reason":"2026-11-16: Make the two remaining inline server-action fixture functions async as required by React; retain fixture contents without a lint suppression.","dispositions":["inline-patch"]}
+    {"path":"packages/cli/builder/tests/loaders/fixtures/inline-actions.tsx","owner":"bleedingdev","reason":"2026-11-16: Make the two remaining inline server-action fixture functions async as required by React; retain fixture contents without a lint suppression.","dispositions":["inline-patch"]},
+    {"path":"packages/runtime/plugin-runtime/src/router/runtime/rsc-router.tsx","owner":"bleedingdev","reason":"2026-11-16: Supply React Router 8.5.1 StaticHandlerContext with the genuine matcher from createStaticHandler over the exact same RSC payload route tree and basename; remove obsolete activeDeferreds metadata.","dispositions":["inline-patch"]},
+    {"path":"packages/runtime/plugin-runtime/tests/router/rsc-router.test.tsx","owner":"bleedingdev","reason":"2026-11-16: Render a real RSC static-router payload and require native router.match to resolve a different nested location with its basename; reproduces the missing-matcher failure before the owning fix.","dispositions":["inline-patch"]}
   ]
 }
 ```
@@ -5053,6 +5055,8 @@ five previously invalid advisory rows remain non-authorizing historical prose.
 | `packages/document/src/components/FrameworkCode/index.tsx` | bleedingdev | 2026-11-16: Hoist the Shiki code wrapper to module scope to preserve React component identity across renders; remove unused props and rerun path replacement when the original highlighted element changes. | `inline-patch` |
 | `packages/document/src/pages/index.module.scss` | bleedingdev | 2026-11-16: Order the dark announcement-arrow color rule before its higher-specificity hover transform without changing declarations or visual behavior. | `inline-patch` |
 | `packages/cli/builder/tests/loaders/fixtures/inline-actions.tsx` | bleedingdev | 2026-11-16: Make the two remaining inline server-action fixture functions async as required by React; retain fixture contents without a lint suppression. | `inline-patch` |
+| `packages/runtime/plugin-runtime/src/router/runtime/rsc-router.tsx` | bleedingdev | 2026-11-16: Supply React Router 8.5.1 StaticHandlerContext with the genuine matcher from createStaticHandler over the exact same RSC payload route tree and basename; remove obsolete activeDeferreds metadata. | `inline-patch` |
+| `packages/runtime/plugin-runtime/tests/router/rsc-router.test.tsx` | bleedingdev | 2026-11-16: Render a real RSC static-router payload and require native router.match to resolve a different nested location with its basename; reproduces the missing-matcher failure before the owning fix. | `inline-patch` |
 <!-- /fork-evidence:table -->
 
 ### 2026-10-11 published stable Modern.js v3.9.3 integration
