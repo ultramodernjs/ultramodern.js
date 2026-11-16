@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import { devNull } from 'node:os';
 import path from 'node:path';
 import { validateMappings } from './mappings.mjs';
 
@@ -163,12 +164,22 @@ export function createPatch(original, corrected, destination) {
       '--no-renames',
       '--no-color',
       '--unified=3',
+      '--indent-heuristic',
       '--binary',
       '--',
       'a',
       'b',
     ],
-    { cwd: scratch, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
+    {
+      cwd: scratch,
+      env: {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: devNull,
+        GIT_CONFIG_NOSYSTEM: '1',
+      },
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024,
+    },
   );
   assert.equal(result.status, 1);
   assert(result.stdout.startsWith('diff --git a/'));
