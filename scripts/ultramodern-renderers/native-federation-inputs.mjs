@@ -8,24 +8,24 @@ import { parseArgs } from 'node:util';
 import { inspectNpmTarball } from '../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs';
 import { readReleaseManifest } from '../ultramodern-publish/lib/source-create-proof/release-manifest.mjs';
 
-import { sha256, validateDescriptor } from './native-artifacts/protocol.mjs';
+import {
+  assetFilename,
+  cohort,
+  sha256,
+  validateDescriptor,
+} from './native-artifacts/protocol.mjs';
 import {
   authenticateDescriptor,
   githubReader,
   readBytes,
 } from './native-artifacts/transport.mjs';
 
-const packages = {
-  octane: ['octane', 'octane'],
-  '@octanejs/tanstack-router': ['octane', 'octanejs-tanstack-router'],
-  '@octanejs/rspack-plugin': ['octane', 'octanejs-rspack-plugin'],
-  '@tanstack/router-core': ['router', 'tanstack-router-core'],
-};
 const startPackages = {
   '@tanstack/start-storage-context': 'storage',
   '@tanstack/start-client-core': 'client',
   '@tanstack/start-server-core': 'server',
 };
+const startNames = ['@octanejs/tanstack-start', ...Object.keys(startPackages)];
 export const nativeStartSharedPeers = Object.freeze({
   '@tanstack/start-storage-context': ['@tanstack/router-core'],
   '@tanstack/start-client-core': [
@@ -41,9 +41,7 @@ export const nativeStartSharedPeers = Object.freeze({
 
 /** Consumer roots must agree on shared native requests in every direct block. */
 export function nativeFederationPackageRequests(manifest) {
-  const start = ['@octanejs/tanstack-start', ...Object.keys(startPackages)];
-  const shared = [...Object.keys(packages), ...start];
-  for (const name of shared) {
+  for (const name of [...Object.keys(cohort), ...startNames]) {
     const production = manifest.dependencies?.[name];
     const development = manifest.devDependencies?.[name];
     if (production !== undefined && development !== undefined)
@@ -52,7 +50,7 @@ export function nativeFederationPackageRequests(manifest) {
         development,
         `Conflicting native request: ${name}`,
       );
-    if (start.includes(name))
+    if (startNames.includes(name))
       assert(
         !Object.hasOwn(manifest.optionalDependencies ?? {}, name),
         `Native Start authority cannot be optional: ${name}`,
@@ -63,12 +61,7 @@ export function nativeFederationPackageRequests(manifest) {
 
 /** Start uses one explicitly declared host authority, never inferred registry peers. */
 export function nativeStartArchiveRequests(requests) {
-  if (
-    !['@octanejs/tanstack-start', ...Object.keys(startPackages)].some(name =>
-      Object.hasOwn(requests, name),
-    )
-  )
-    return {};
+  if (!startNames.some(name => Object.hasOwn(requests, name))) return {};
   return Object.fromEntries(
     ['@tanstack/router-core', ...Object.keys(startPackages)].map(name => {
       const request = requests[name];
@@ -122,182 +115,55 @@ const inside = (parent, child) => {
   );
 };
 
-/** Read only the descriptor carried by the verified packed renderer manifest. */
+/** Read only the canonical typed descriptor carried by the packed renderer. */
 export function nativeFederationArtifacts(rendererPackage) {
   assert.equal(rendererPackage.sourceName, '@modern-js/renderer-octane');
   const manifest = rendererPackage.packageJson;
   assert.equal(manifest.name, rendererPackage.targetName);
   assert.equal(manifest.ultramodern?.sourceName, rendererPackage.sourceName);
   nativeFederationPackageRequests(manifest);
-  const artifacts = manifest.ultramodern.nativeArtifacts;
-  assert(
-    artifacts && typeof artifacts === 'object' && !Array.isArray(artifacts),
-    'Packed Octane renderer is missing nativeArtifacts',
-  );
-  // Presence of a typed envelope is a protocol commitment, never a legacy fallback.
-  if (
-    ['protocol', 'producer', 'manifest', 'packages'].some(key =>
-      Object.hasOwn(artifacts, key),
-    )
-  ) {
-    validateDescriptor(artifacts);
-    for (const name of [
-      '@octanejs/tanstack-start',
-      ...Object.keys(startPackages),
-    ])
-      assert(
-        ![
-          'dependencies',
-          'devDependencies',
-          'optionalDependencies',
-          'peerDependencies',
-        ].some(block => Object.hasOwn(manifest[block] ?? {}, name)),
-        'Typed native producer v1 does not qualify a Start closure',
-      );
-    return Object.fromEntries(
-      Object.entries(artifacts.packages).map(([name, artifact]) => {
-        assert(
-          !Object.hasOwn(manifest.dependencies ?? {}, name),
-          `${name}: native renderer must not ship an archive implementation dependency`,
-        );
-        assert(
-          !Object.hasOwn(manifest.optionalDependencies ?? {}, name),
-          `${name}: native authority cannot be an optional dependency`,
-        );
-        if (Object.hasOwn(manifest.devDependencies ?? {}, name))
-          assert.equal(
-            manifest.devDependencies[name],
-            artifact.request,
-            `${name} differs from its packed renderer devDependencies request`,
-          );
-        assert.equal(
-          manifest.peerDependencies?.[name],
-          artifact.version,
-          `${name} differs from its packed renderer peer`,
-        );
-        if (name === '@tanstack/router-core')
-          assert.notEqual(
-            manifest.peerDependenciesMeta?.[name]?.optional,
-            true,
-            'Native shared core peer must be required',
-          );
-        return [
-          name,
-          {
-            ...artifact,
-            filename: new URL(artifact.request).pathname.split('/').at(-1),
-          },
-        ];
-      }),
-    );
-  }
-  const hasStart = [
-    '@octanejs/tanstack-start',
-    ...Object.keys(startPackages),
-  ].some(name =>
-    [
-      artifacts,
-      manifest.dependencies,
-      manifest.devDependencies,
-      manifest.optionalDependencies,
-      manifest.peerDependencies,
-    ].some(requests => Object.hasOwn(requests ?? {}, name)),
-  );
-  const selectedPackages = {
-    ...packages,
-    ...(hasStart
-      ? Object.fromEntries(
-          Object.keys(startPackages).map(name => [
-            name,
-            ['router', `tanstack-${name.slice('@tanstack/'.length)}`],
-          ]),
-        )
-      : {}),
-  };
-  assert.deepEqual(
-    Object.keys(artifacts).sort(),
-    Object.keys(selectedPackages).sort(),
-    'Native artifacts must name the complete runtime, router, compiler, core and declared Start closure',
-  );
-  let nativeRelease;
-  return Object.fromEntries(
-    Object.entries(selectedPackages).map(([name, [repository, basename]]) => {
-      const artifact = artifacts[name];
-      assert(
-        artifact && typeof artifact === 'object' && !Array.isArray(artifact),
-      );
-      assert.deepEqual(Object.keys(artifact).sort(), [
-        'integrity',
-        'request',
-        'version',
-      ]);
-      assert.match(artifact.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u);
-      assert.match(artifact.integrity, /^sha512-[A-Za-z0-9+/]{86}==$/u);
-      assert.equal(
-        Buffer.from(artifact.integrity.slice(7), 'base64').toString('base64'),
-        artifact.integrity.slice(7),
-      );
-      const request = new URL(artifact.request);
-      const prefix =
-        repository === 'octane'
-          ? 'ultramodern-octane-'
-          : startPackages[name]
-            ? `ultramodern-start-${startPackages[name]}-`
-            : 'ultramodern-router-core-';
-      const filename = `${basename}-${artifact.version}.tgz`;
-      assert.equal(
-        request.origin,
-        'https://github.com',
-        'Native inputs require HTTPS GitHub release archives',
-      );
-      assert(
-        !request.username &&
-          !request.password &&
-          !request.search &&
-          !request.hash,
-      );
-      const match = new RegExp(
-        `^/BleedingDev/${repository}/releases/download/(${prefix}[a-f0-9]{12})/`,
-      ).exec(request.pathname);
-      assert(match, 'Native input must select its owning hosted release');
-      assert.equal(
-        request.pathname,
-        `/BleedingDev/${repository}/releases/download/${match[1]}/${filename}`,
-      );
-      assert.equal(
-        request.href,
-        artifact.request,
-        'Native release request must be canonical',
-      );
-      if (repository === 'octane') {
-        nativeRelease ??= match[1];
-        assert.equal(
-          match[1],
-          nativeRelease,
-          'Native runtime, router and compiler must belong to one accepted cohort',
-        );
-      }
-      const declarations = [
+  const { packages } = validateDescriptor(manifest.ultramodern.nativeArtifacts);
+  for (const name of startNames)
+    assert(
+      ![
         'dependencies',
         'devDependencies',
         'optionalDependencies',
-      ].filter(block => Object.hasOwn(manifest[block] ?? {}, name));
+        'peerDependencies',
+      ].some(block => Object.hasOwn(manifest[block] ?? {}, name)),
+      'Typed native producer v1 does not qualify a Start closure',
+    );
+  return Object.fromEntries(
+    Object.entries(packages).map(([name, artifact]) => {
       assert(
-        declarations.length,
-        `${name} is missing its packed renderer request`,
+        !Object.hasOwn(manifest.dependencies ?? {}, name),
+        `${name}: native renderer must not ship an archive implementation dependency`,
       );
-      for (const block of declarations)
+      assert(
+        !Object.hasOwn(manifest.optionalDependencies ?? {}, name),
+        `${name}: native authority cannot be an optional dependency`,
+      );
+      if (Object.hasOwn(manifest.devDependencies ?? {}, name))
         assert.equal(
-          manifest[block][name],
+          manifest.devDependencies[name],
           artifact.request,
-          `${name} differs from its packed renderer ${block} request`,
+          `${name} differs from its packed renderer devDependencies request`,
         );
       assert.equal(
         manifest.peerDependencies?.[name],
         artifact.version,
         `${name} differs from its packed renderer peer`,
       );
-      return [name, { ...artifact, filename }];
+      if (name === '@tanstack/router-core')
+        assert.notEqual(
+          manifest.peerDependenciesMeta?.[name]?.optional,
+          true,
+          'Native shared core peer must be required',
+        );
+      return [
+        name,
+        { ...artifact, filename: assetFilename(name, artifact.version) },
+      ];
     }),
   );
 }
@@ -328,14 +194,10 @@ export async function stageNativeFederationInputs({
   signal?.throwIfAborted();
   fs.mkdirSync(directory);
   try {
-    const descriptor = rendererPackage.packageJson.ultramodern.nativeArtifacts;
-    const release = Object.hasOwn(descriptor, 'protocol')
-      ? await authenticateDescriptor(descriptor, {
-          readGithub,
-          fetchArtifact,
-          signal,
-        })
-      : undefined;
+    const release = await authenticateDescriptor(
+      rendererPackage.packageJson.ultramodern.nativeArtifacts,
+      { readGithub, fetchArtifact, signal },
+    );
     const inputs = {};
     for (const [name, artifact] of Object.entries(artifacts)) {
       signal?.throwIfAborted();
@@ -343,19 +205,10 @@ export async function stageNativeFederationInputs({
         fetchArtifact,
         signal,
       });
-      if (release) {
-        const asset = release.assets.find(
-          asset => asset.name === artifact.filename,
-        );
-        assert.equal(
-          asset.digest,
-          `sha256:${sha256(bytes)}`,
-          `${name} GitHub asset digest mismatch`,
-        );
-      }
-      assert(
-        bytes.length <= 128 * 1024 * 1024,
-        `${name} native archive exceeds the admission limit`,
+      assert.equal(
+        release.assets.find(asset => asset.name === artifact.filename)?.digest,
+        `sha256:${sha256(bytes)}`,
+        `${name} GitHub asset digest mismatch`,
       );
       assert.equal(
         `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
@@ -379,15 +232,6 @@ export async function stageNativeFederationInputs({
           artifacts['@tanstack/router-core'].version,
           'Native router must require the selected exact shared core',
         );
-      assertNativeStartPeers(
-        packed.packageJson,
-        Object.fromEntries(
-          Object.entries(artifacts).map(([name, value]) => [
-            name,
-            value.version,
-          ]),
-        ),
-      );
       signal?.throwIfAborted();
       const archivePath = path.join(directory, artifact.filename);
       fs.writeFileSync(archivePath, bytes, { flag: 'wx' });

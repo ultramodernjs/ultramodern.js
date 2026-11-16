@@ -98,6 +98,7 @@ jobs:
             scripts/__tests__/rslib-tsrs-options.test.mjs \
             scripts/native-compatibility/packed-workflows.test.mjs \
             scripts/ultramodern-renderers/*.test.mjs \
+            packages/runtime/renderer-octane/tests/{package-metadata,latest-profile}.test.mjs \
             packages/toolkit/ultramodern-create/tests/workerd-target-listeners.test.mjs \
             tests/ultramodern-renderers/octane-federation/{artifact-ownership,browser-temporary}.test.mjs \
             tests/ultramodern-renderers/octane-federation-workers/contract.test.mjs

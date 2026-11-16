@@ -37,7 +37,7 @@ export default [
     repository: false,
     workspace: null,
     reason:
-      'Let native localized masks inherit the canonical resolved search without rerunning middleware or validation, including public types and emitted CJS/ESM source maps. Retained for exact 1.171.34 artifact qualification only; the repository now resolves Octane router-core through its corrected 1.171.38 tarball, so this selector must not be projected into repository patchedDependencies. Generated workspaces remain patch-free; retire when their mature accepted router sidecar or upstream release supplies the same runtime and declaration contract.',
+      'Let native localized masks inherit the canonical resolved search without rerunning middleware or validation, including public types and emitted CJS/ESM source maps. Historical correction retained for exact 1.171.34 mask qualification only; the repository resolves router-core through the authenticated native 1.171.39 artifact, so this selector must not be projected into repository patchedDependencies. Generated workspaces remain patch-free.',
   },
   {
     packageName: '@tanstack/router-core',
@@ -54,20 +54,20 @@ export default [
     version: '1.171.39',
     path: 'patches/@tanstack__router-core@1.171.39.patch',
     sha256: '546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8',
-    repository: true,
+    repository: false,
     workspace: null,
     reason:
-      'Use the source-qualified router-core 1.171.39 correction for repository integration tests, including localized-mask search inheritance, loader lifecycle, SSR rewrites and public declarations. These exact canonical bytes also feed the native artifact producer. Generated workspaces remain patch-free and require the authenticated corrected archive.',
+      'Canonical source-qualified router-core 1.171.39 correction (localized-mask search inheritance, loader lifecycle, SSR rewrites and public declarations) fed byte-for-byte to the native artifact producer and retained as producer input and fixture evidence. Every repository resolution is the authenticated native 1.171.39 archive whose descriptor pins this patch SHA-256 and whose bytes already carry the correction, so the repository no longer reapplies it. Generated workspaces remain patch-free.',
   },
   {
     packageName: '@effect/opentelemetry',
     version: '4.1.4',
     path: 'patches/@effect__opentelemetry@4.1.4.patch',
     sha256: '41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804',
-    repository: true,
+    repository: false,
     workspace: null,
     reason:
-      'Use the exact reviewed support-producer correction for repository Effect telemetry tests: bind NodeSdk, WebSdk and declarations to the current sdk-trace and sdk-logs owning APIs. Generated workspaces remain patch-free and require the authenticated corrected support archive.',
+      'Canonical support-producer correction binding NodeSdk, WebSdk and declarations to the current sdk-trace and sdk-logs owning APIs, retained as producer input and fixture evidence. Every repository resolution is the authenticated support 4.1.4 archive whose descriptor pins this patch SHA-256 and whose bytes already carry the correction, so the repository no longer reapplies it. Generated workspaces remain patch-free.',
   },
   {
     packageName: '@svgr/babel-plugin-transform-svg-component',
@@ -84,10 +84,10 @@ export default [
     version: '2.0.0-rc.22',
     path: 'patches/solid-js@2.0.0-rc.22.patch',
     sha256: 'c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745',
-    repository: true,
+    repository: false,
     workspace: null,
     reason:
-      'Use the reviewed support-producer declaration correction for repository builds: re-export the existing heldRead runtime primitive required by @solidjs/web 2.0.0-rc.22. The reviewed hunk is unchanged, with only the Git diff header required by pnpm added; generated workspaces remain patch-free and require the authenticated corrected support archive.',
+      'Git-headed form of the reviewed support-producer declaration correction that re-exports the existing heldRead runtime primitive required by @solidjs/web 2.0.0-rc.22; the hunk is byte-identical to the producer input and retained as fixture evidence. Every repository resolution is the authenticated support 2.0.0-rc.22 archive whose descriptor pins the producer patch SHA-256 and whose bytes already carry the correction, so the repository no longer reapplies it. Generated workspaces remain patch-free.',
   },
   {
     packageName: 'ultracite',

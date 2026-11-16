@@ -83,10 +83,9 @@ test('repository MF source pins, installed identities and patch selectors use th
   const lock = parse(
     readFileSync(path.join(repoRoot, 'pnpm-lock.yaml'), 'utf8'),
   );
-  for (const identity of Object.keys(lock.packages ?? {})) {
-    const match = /^(@module-federation\/[^@]+)@([^()]+)/u.exec(identity);
-    if (match) assertPin(match[1], match[2], 'lock package');
-  }
+  // Check owned importers, not private transitive pins of third-party tools.
+  // Independent packages such as error-codes can legitimately retain an older
+  // exact dependency without selecting that release for framework consumers.
   for (const [importer, blocks] of Object.entries(lock.importers ?? {})) {
     for (const block of [
       'dependencies',
@@ -179,7 +178,10 @@ test('app-tools resolves Redact only through the exact signed sidecar alias', ()
   });
   assert.throws(
     () => assertRecipeConsumers([recipe], consumers(recipe.upstream.version)),
-    /declare npm:@bleedingdev\/tanstack-redact@0\.2\.2 in source/u,
+    error =>
+      error.message.includes(
+        `declare npm:${recipe.fork.name}@${recipe.fork.version} in source`,
+      ),
   );
   assertRecipeConsumers(
     [recipe],
@@ -191,20 +193,21 @@ importers:
   ${importer}:
     dependencies:
       '@tanstack/redact':
-        specifier: npm:@bleedingdev/tanstack-redact@0.2.2
+        specifier: npm:${recipe.fork.name}@${recipe.fork.version}
         version: '${version}'
 `;
   const importer = 'packages/solutions/ultramodern-app-tools';
   for (const version of [
-    '@bleedingdev/tanstack-redact@0.2.2',
-    '@bleedingdev/tanstack-redact@0.2.2(peer@1.0.0)',
+    `${recipe.fork.name}@${recipe.fork.version}`,
+    `${recipe.fork.name}@${recipe.fork.version}(peer@1.0.0)`,
   ]) {
     assert.deepEqual(upstreamRecipeEdges(lock(importer, version)), []);
   }
   for (const version of [
     '0.2.1',
     '0.2.1(patch_hash=reviewed)',
-    '0.2.2',
+    recipe.fork.version,
+    '@bleedingdev/tanstack-redact@0.2.2',
     '@bleedingdev/tanstack-redact@0.2.0',
     '@bleedingdev/tanstack-redact@0.2.1',
   ]) {

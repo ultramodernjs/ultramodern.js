@@ -12,10 +12,7 @@ async function main() {
   assertRendererRouterCore(workspace.getDependency('@tanstack/router-core'));
 
   // Use the workspace-pinned version to avoid unexpected breaking changes from @latest.
-  const command = `pnpm exec check-dependency-version-consistency . ${[
-    ...ignoreDeps,
-    '@tanstack/router-core',
-  ]
+  const command = `pnpm exec check-dependency-version-consistency . ${ignoreDeps
     .map(dep => `--ignore-dep "${dep}"`)
     .join(' ')} --ignore-package-pattern "^@examples/"`;
 

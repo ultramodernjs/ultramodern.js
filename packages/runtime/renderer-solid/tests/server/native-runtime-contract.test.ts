@@ -24,19 +24,19 @@ describe('Solid 2 native dependency ownership', () => {
     const manifest = JSON.parse(
       readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
     );
-    const coreRequest = manifest.devDependencies['@tanstack/router-core'];
-    expect(coreRequest).toBe(
-      'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz',
-    );
+    // The authenticated native producer descriptor owns the Core archive.
+    const nativeArtifacts = manifest.ultramodern.nativeArtifacts;
+    expect(nativeArtifacts.protocol).toBe('ultramodern.native-artifacts.v1');
+    const core = nativeArtifacts.packages['@tanstack/router-core'];
+    const coreRequest = core.request;
+    expect(manifest.devDependencies['@tanstack/router-core']).toBe(coreRequest);
     // Published consumers cannot install archive subdependencies, so the
     // renderer peers on the exact Core version and the generator installs it.
     expect(manifest.dependencies['@tanstack/router-core']).toBeUndefined();
     expect(manifest.peerDependencies['@tanstack/router-core']).toBe(
-      rendererAdapter.profile.router.coreVersion,
+      core.version,
     );
-    expect(
-      manifest.ultramodern.nativeArtifacts['@tanstack/router-core'].request,
-    ).toBe(coreRequest);
+    expect(rendererAdapter.profile.router.coreVersion).toBe(core.version);
     expect(
       rendererAdapter.create?.dependencies(rendererAdapter.profile, {
         typescriptVersion: '7.0.2',

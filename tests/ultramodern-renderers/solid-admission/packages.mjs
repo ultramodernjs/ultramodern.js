@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import {
   access,
   mkdir,
@@ -34,14 +35,17 @@ export const admissionTuple = Object.freeze({
   isbot: '5.2.3',
 });
 
-// Keep the currently accepted native artifact until its supplier qualifies a replacement.
-export const acceptedRouter = Object.freeze({
-  request:
-    'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz',
-  version: '1.171.38',
-  integrity:
-    'sha512-d/aGvcyEVwDh2Cn9MuZM1n1dqTIqkFYi7AHY2Na/6x/a0jVSDVTNVVVY7QEsuKFXktaJF9zjVwetaRm/0MALZg==',
-});
+// The authored owner's authenticated native descriptor is the only accepted
+// router-core artifact; packed owners must carry it unchanged.
+const ownerNativeArtifacts = JSON.parse(
+  readFileSync(
+    path.join(workspaceRoot, 'packages/runtime/renderer-solid/package.json'),
+    'utf8',
+  ),
+).ultramodern.nativeArtifacts;
+export const acceptedRouter = Object.freeze(
+  ownerNativeArtifacts.packages['@tanstack/router-core'],
+);
 
 /** Read only the generator's two literal, bounded serializer corrections. */
 export function admissionSerializerOverrides(source) {
@@ -109,10 +113,7 @@ export function assertNativeRendererManifest(manifest) {
     manifest.peerDependencies['@tanstack/router-core'],
     acceptedRouter.version,
   );
-  assert.deepEqual(
-    manifest.ultramodern.nativeArtifacts['@tanstack/router-core'],
-    acceptedRouter,
-  );
+  assert.deepEqual(manifest.ultramodern.nativeArtifacts, ownerNativeArtifacts);
   assert.equal(manifest.dependencies['@tanstack/history'], '1.162.5');
   assert.equal(manifest.dependencies.isbot, admissionTuple.isbot);
   for (const name of [

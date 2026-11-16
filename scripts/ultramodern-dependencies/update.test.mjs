@@ -933,12 +933,27 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     signal,
   };
   const authority = await admitArtifactDescriptors(options);
-  const root = fileURLToPath(new URL('../../', import.meta.url));
   const selectedFiles = [
     ...new Set(
       Object.values(artifactOwners).flatMap(owners => Object.keys(owners)),
     ),
   ];
+  // The live checkout may already carry the real admitted artifacts. Synthetic
+  // descriptors transition only the authoritative pre-activation originals.
+  const checkout = fileURLToPath(new URL('../../', import.meta.url));
+  const root = path.join(directory, 'source');
+  const git = (...args) =>
+    execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe' });
+  git('clone', '--quiet', '--shared', '--no-checkout', checkout, root);
+  git(
+    '-C',
+    root,
+    'checkout',
+    '--quiet',
+    '--detach',
+    git('-C', checkout, 'rev-parse', 'HEAD').trim(),
+  );
+  git('-C', root, 'checkout', sourceRevision, '--', ...selectedFiles);
   let reviewedEdges = 0;
   for (const file of selectedFiles) {
     const expected = JSON.parse(
@@ -1000,6 +1015,20 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     }
   }
   assert(reviewedEdges > 50);
+  // The batch reviews current source selections as well as manifest edges.
+  // Keep the real reviewed source descriptor while exercising the transition
+  // from original dependency edges to deliberately synthetic admitted URLs.
+  const sourceOwner = 'packages/runtime/renderer-octane/package.json';
+  const stagedOwner = JSON.parse(
+    fs.readFileSync(path.join(root, sourceOwner), 'utf8'),
+  );
+  stagedOwner.ultramodern.nativeArtifacts = JSON.parse(
+    fs.readFileSync(path.join(checkout, sourceOwner), 'utf8'),
+  ).ultramodern.nativeArtifacts;
+  fs.writeFileSync(
+    path.join(root, sourceOwner),
+    `${JSON.stringify(stagedOwner, null, 2)}\n`,
+  );
   const batch = runUpdater({ root, artifactAuthority: authority });
   for (const edge of batch.unresolved)
     assert(

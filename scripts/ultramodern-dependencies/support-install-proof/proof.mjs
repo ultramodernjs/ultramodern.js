@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as native from '../../ultramodern-renderers/native-artifacts/protocol.mjs';
 
 export function authenticate(bytes, integrity) {
   assert.equal(
@@ -24,6 +25,27 @@ export function policy(registry, store) {
     'strictPeerDependencies: true',
     '',
   ].join('\n');
+}
+
+const core = '@tanstack/router-core';
+
+/** The renderer's own admitted native descriptor and the Core tuple it installs. */
+export function admittedRouterCore(manifest) {
+  const descriptor = native.validateDescriptor(
+    manifest.ultramodern?.nativeArtifacts,
+  );
+  const pin = descriptor.packages[core];
+  assert.equal(
+    manifest.devDependencies?.[core],
+    pin.request,
+    'renderer must install its admitted Core archive',
+  );
+  assert.equal(
+    manifest.peerDependencies?.[core],
+    pin.version,
+    'renderer host peer must be the admitted Core version',
+  );
+  return { ...pin, producer: descriptor.producer };
 }
 
 const root = path.resolve(
@@ -51,15 +73,12 @@ async function main() {
   const policyBefore = fs.readFileSync(generatorPolicy);
   assert.match(policyBefore.toString(), /blockExoticSubdeps: true/);
   assert.match(policyBefore.toString(), /trustPolicy: 'no-downgrade'/);
-  const descriptor = JSON.parse(
-    fs.readFileSync(
-      path.join(root, 'packages/runtime/renderer-solid/package.json'),
+  const pin = admittedRouterCore(
+    JSON.parse(
+      fs.readFileSync(
+        path.join(root, 'packages/runtime/renderer-solid/package.json'),
+      ),
     ),
-  ).ultramodern.nativeArtifacts['@tanstack/router-core'];
-  assert.equal(descriptor.version, '1.171.38');
-  assert.match(
-    descriptor.request,
-    /^https:\/\/github\.com\/BleedingDev\/router\/releases\/download\//,
   );
   const env = Object.fromEntries(
     ['PATH', 'HOME', 'TMPDIR', 'SystemRoot']
@@ -75,18 +94,15 @@ async function main() {
     execFileSync('pnpm', ['--version'], { env, encoding: 'utf8' }).trim(),
     '12.21.0',
   );
-  const response = await fetch(descriptor.request, {
+  const response = await fetch(pin.request, {
     signal: AbortSignal.timeout(60000),
   });
   assert.equal(response.status, 200);
   const bytes = Buffer.from(await response.arrayBuffer());
-  authenticate(bytes, descriptor.integrity);
+  authenticate(bytes, pin.integrity);
   assert.throws(
     () =>
-      authenticate(
-        Buffer.concat([bytes, Buffer.from('wrong')]),
-        descriptor.integrity,
-      ),
+      authenticate(Buffer.concat([bytes, Buffer.from('wrong')]), pin.integrity),
     /integrity mismatch/,
   );
   const archive = path.join(owned, 'actual-router.tgz');
@@ -98,10 +114,10 @@ async function main() {
     fs.readFileSync(path.join(unpacked, 'package/package.json')),
   );
   assert.equal(actual.name, '@tanstack/router-core');
-  assert.equal(actual.version, descriptor.version);
+  assert.equal(actual.version, pin.version);
   console.log(
     JSON.stringify({
-      payload: descriptor,
+      payload: pin,
       bytes: bytes.length,
       peers: actual.peerDependencies ?? {},
       dependencies: actual.dependencies,
@@ -112,7 +128,7 @@ async function main() {
 
   const parents = new Map();
   for (const [name, manifest] of [
-    [ownerName, { dependencies: { [actual.name]: descriptor.request } }],
+    [ownerName, { dependencies: { [actual.name]: pin.request } }],
     [
       '@support-install-proof/synthetic-peer-parent',
       { peerDependencies: { [actual.name]: actual.version } },
@@ -258,10 +274,7 @@ async function main() {
     const blocked = await scenario('transitive-only');
     assert.notEqual(blocked.code, 0);
     assert.match(blocked.output, /ERR_PNPM_.*EXOTIC/);
-    const rootAuthority = await scenario(
-      'exact-root-direct',
-      descriptor.request,
-    );
+    const rootAuthority = await scenario('exact-root-direct', pin.request);
     const transitiveAccepted = rootAuthority.code === 0;
     if (!transitiveAccepted) {
       assert.match(rootAuthority.output, /ERR_PNPM_.*EXOTIC/);
@@ -271,13 +284,13 @@ async function main() {
     }
     const wrong = await scenario(
       'wrong-root-request',
-      `${descriptor.request}?wrong-root-authority=1`,
+      `${pin.request}?wrong-root-authority=1`,
     );
     assert.notEqual(wrong.code, 0);
     assert.match(wrong.output, /ERR_PNPM_.*EXOTIC/);
     const accepted = transitiveAccepted
       ? rootAuthority
-      : await scenario('direct-only-control', descriptor.request, false);
+      : await scenario('direct-only-control', pin.request, false);
     assert.equal(
       accepted.code,
       0,
@@ -344,6 +357,16 @@ async function main() {
     const lockBefore = fs.readFileSync(
       path.join(accepted.cwd, 'pnpm-lock.yaml'),
     );
+    const resolvesPin = lock =>
+      assert(
+        lock
+          .toString()
+          .includes(
+            `resolution: {integrity: ${pin.integrity}, tarball: ${pin.request}}`,
+          ),
+        'lockfile must resolve the admitted Core request and integrity',
+      );
+    resolvesPin(lockBefore);
     const frozen = await run(
       ['install', '--frozen-lockfile', '--reporter=append-only'],
       accepted.cwd,
@@ -363,7 +386,7 @@ async function main() {
     const peerOwner = '@support-install-proof/synthetic-peer-parent';
     const peer = await scenario(
       'ordinary-peer-root-direct',
-      descriptor.request,
+      pin.request,
       true,
       peerOwner,
     );
@@ -388,6 +411,7 @@ async function main() {
     );
     compare(path.join(unpacked, 'package'), '', peerRouter);
     const peerLock = fs.readFileSync(path.join(peer.cwd, 'pnpm-lock.yaml'));
+    resolvesPin(peerLock);
     const peerFrozen = await run(
       ['install', '--frozen-lockfile', '--reporter=append-only'],
       peer.cwd,
@@ -408,7 +432,7 @@ async function main() {
     compare(path.join(unpacked, 'package'));
     const incompatible = await scenario(
       'incompatible-peer',
-      descriptor.request,
+      pin.request,
       true,
       '@support-install-proof/synthetic-incompatible-peer-parent',
     );

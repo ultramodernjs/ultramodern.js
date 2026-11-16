@@ -93,10 +93,10 @@ jobs:
           cache_save: false
           install: true
 
-      - name: Setup Node.js 26.x
+      - name: Setup Node.js 26.13.1
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '26.x'
+          node-version: '26.13.1'
 
       - name: Resolve pnpm store path
         id: pnpm-store
@@ -162,10 +162,10 @@ jobs:
           cache_save: false
           install: true
 
-      - name: Setup Node.js 26.x
+      - name: Setup Node.js 26.13.1
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '26.x'
+          node-version: '26.13.1'
 
       - name: Resolve pnpm store path
         id: pnpm-store

@@ -82,7 +82,7 @@ test('real source dev apps directly supply the explicitly selected shared core a
     failures: false,
     development: true,
   });
-  const coreArchive = 'file:/owned/tanstack-router-core-1.171.38.tgz';
+  const coreArchive = `file:/owned/tanstack-router-core-${cohort['@tanstack/router-core']}.tgz`;
   for (const label of ['host', 'remote']) {
     const original = JSON.parse(fixtures[label]['package.json']);
     const packageRequests = Object.fromEntries(

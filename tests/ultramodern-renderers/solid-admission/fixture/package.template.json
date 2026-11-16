@@ -10,7 +10,7 @@
     "@solidjs/compiler": "2.0.0-rc.22",
     "@modern-js/renderer-core": "3.8.3",
     "@modern-js/renderer-solid": "3.8.3",
-    "@tanstack/router-core": "https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz"
+    "@tanstack/router-core": "https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz"
   },
   "devDependencies": {
     "@rsbuild/core": "2.3.2",

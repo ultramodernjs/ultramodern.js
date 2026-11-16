@@ -11,6 +11,7 @@ import {
   auxiliarySourcePins,
   inspectSourcePins,
   repositorySourceFiles,
+  reviewedSourcePaths,
   sourcePinCoverage,
   verdaccioIntegrity,
 } from './source-pins.mjs';
@@ -29,15 +30,18 @@ const inspect = (extra = {}, additionalFiles = []) =>
     read: file => extra[file] ?? read(file),
   });
 
-test('tracked source pin coverage passes but delegated identities remain unresolved', () => {
+test('tracked source selections are reviewed independently of consumer acceptance', () => {
   assert.deepEqual(baseline.errors, []);
   assert.ok(baseline.executableFiles > 1000);
   assert.ok(baseline.fixtureFiles > 1000);
-  assert.equal(
-    baseline.inventory.filter(item => item.status === 'reviewed').length,
-    8,
+  assert.deepEqual(
+    baseline.inventory
+      .filter(item => item.status === 'reviewed')
+      .map(item => item.path),
+    reviewedSourcePaths(read),
   );
-  assert.equal(baseline.complete, false);
+  assert.equal(baseline.complete, true);
+  assert.deepEqual(baseline.unresolved, []);
   assert(
     !baseline.unresolved.some(item => item.path.endsWith('skills-lock.json')),
   );
@@ -57,7 +61,11 @@ test('worktree inventory follows deletions and includes new source without hidin
     assert.deepEqual(repositorySourceFiles(temp), ['new.mjs']);
     const result = inspectSourcePins({
       files: repositorySourceFiles(temp),
-      read: () => "run('npx', ['unreviewed-tool@1.0.0']);",
+      // Reviewed identities still come from the repository's owning manifests.
+      read: file =>
+        file.endsWith('package.json')
+          ? read(file)
+          : "run('npx', ['unreviewed-tool@1.0.0']);",
     });
     assert(
       result.errors.some(error => error.includes('unclassified source pins')),
@@ -69,8 +77,9 @@ test('worktree inventory follows deletions and includes new source without hidin
       () =>
         inspectSourcePins({
           files: ['unreadable.mjs'],
-          read: () => {
-            throw new Error('unreadable source');
+          read: file => {
+            if (file === 'unreadable.mjs') throw new Error('unreadable source');
+            return read(file);
           },
         }),
       /unreadable source/u,
@@ -136,6 +145,57 @@ test('the actually missed old Playwright default fails the guard', () => {
   );
 });
 
+test('evidence-reviewed native and toolchain pins reject stale and unnoticed versions', () => {
+  const sharedCore =
+    'scripts/ultramodern-renderers/octane-corrections/shared-core-peer.mjs';
+  const stale = inspect({
+    [sharedCore]: read(sharedCore).replace("'1.171.39'", "'1.171.38'"),
+  }).errors;
+  assert(stale.some(error => error.includes('missing reviewed source pin')));
+  assert(stale.some(error => error.includes("sharedCoreVersion = '1.171.38")));
+  const routerQualify =
+    'scripts/ultramodern-renderers/router-corrections/qualify.mjs';
+  assert(
+    inspect({
+      [routerQualify]: `${read(routerQualify)}\nconst next = 'pnpm@11.22.0';`,
+    }).errors.some(error =>
+      error.includes('unreviewed source pin pnpm@11.22.0'),
+    ),
+  );
+  const manifest = 'packages/runtime/renderer-octane/src/manifest.ts';
+  assert(
+    inspect({
+      [manifest]: read(manifest).replace(
+        `OCTANE_RUNTIME_VERSION = '${targets.octane}'`,
+        "OCTANE_RUNTIME_VERSION = '0.13.8'",
+      ),
+    }).errors.some(error => error.includes('OCTANE_RUNTIME_VERSION = ')),
+  );
+});
+
+test('reviewed native URLs follow the activated descriptor, not a legacy one', () => {
+  const owner = 'packages/runtime/renderer-octane/package.json';
+  const manifest = JSON.parse(read(owner));
+  manifest.ultramodern.nativeArtifacts.packages.octane.version = '0.13.8';
+  assert(
+    inspect({ [owner]: JSON.stringify(manifest) }).errors.some(error =>
+      error.includes('activated native octane must be snapshot 0.18.0'),
+    ),
+  );
+  const profile = 'packages/runtime/renderer-octane/src/plugin/profile.ts';
+  const request =
+    manifest.ultramodern.nativeArtifacts.packages['@tanstack/router-core']
+      .request;
+  assert(
+    inspect({
+      [profile]: read(profile).replace(
+        request,
+        'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz',
+      ),
+    }).errors.some(error => error.includes('unreviewed source pin https://')),
+  );
+});
+
 test('new installer pins in existing and new files cannot silently pass', () => {
   assert.ok(
     inspect({
@@ -151,6 +211,27 @@ test('new installer pins in existing and new files cannot silently pass', () => 
       [file],
     ).errors.some(message => message.includes('unclassified source pins')),
   );
+});
+
+test('generated-only pins retain their reviewed versions and nested runtime identity', () => {
+  const file =
+    'packages/toolkit/ultramodern-create/src/ultramodern-workspace/versions.ts';
+  for (const [name, current, stale] of [
+    ['NODE_FETCH_VERSION', '3.3.2', '2.7.0'],
+    ['LEFTHOOK_VERSION', '2.2.2', '2.2.1'],
+    ['BRACES_FORK_VERSION', '3.0.4', '3.0.3'],
+    ['WORKERD_VERSION', '1.20261113.1', '1.20261115.1'],
+  ]) {
+    const source = read(file).replace(
+      `const ${name} = '${current}'`,
+      `const ${name} = '${stale}'`,
+    );
+    assert(
+      inspect({ [file]: source }).errors.some(error =>
+        error.includes(`missing reviewed source pin const ${name}`),
+      ),
+    );
+  }
 });
 
 test('reviewed WebSocket peer restoration stays exact and keeps runtime protection', () => {

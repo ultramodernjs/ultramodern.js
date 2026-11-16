@@ -101,16 +101,16 @@ pnpm --filter "./apps/shell-super-app" serve
 Run these as separate commands. Use the matching app directory in the filter
 to serve an added app.
 
-The generated toolchain pins Node `26.10.0`, pnpm `12.8.1`, and
-`@types/node@26.6.4`; the generator requires Node `>=26.10.0`, and generated
-workspaces declare an engine baseline of Node `>=26` with pnpm `12+`.
+The generated toolchain pins Node `26.13.1`, pnpm `12.21.0`, and
+`@types/node@26.6.6`; the generator requires Node `>=26.13.1`, and generated
+workspaces declare an engine baseline of Node `>=26.13.1` with pnpm `>=12.21.0`.
 `packageManager`, `.mise.toml`, generated validation, and CI should all agree
 on those values; do not reintroduce Corepack or older pnpm aliases.
 
-The current React dependency cohort also pins `@effect/tsgo@0.67.0`,
-`@tanstack/react-router@1.170.41`, `@tanstack/router-core@1.171.34`,
-`@tanstack/history@1.162.4`, and the Module Federation integration `2.9.2`
-cohort, `@module-federation/node@2.7.52`. Move these only through the
+The current React dependency cohort also pins `@effect/tsgo@0.69.0`,
+`@tanstack/react-router@1.170.46`, `@tanstack/router-core@1.171.39`,
+`@tanstack/history@1.162.5`, and the Module Federation integration `2.9.3`
+cohort, `@module-federation/node@2.7.53`. Move these only through the
 generator-owned version policy so templates, validation, and the published
 workspace contract stay aligned.
 
@@ -138,7 +138,7 @@ includes a boundary test that scans generator sources, templates, and generated
 workspace output for compiler API imports.
 
 Generated workspaces and apps pin `tsrs@0.21.0-ts7.1.0-beta` and
-`@effect/tsgo@0.67.0`. Root postinstall runs
+`@effect/tsgo@0.69.0`. Root postinstall runs
 `ultramodern-create ultramodern compiler-prepare` before skills install.
 The installed tsrs platform metadata selects the official
 `effect-tsgo tsrs --version` readiness check on supported hosts.

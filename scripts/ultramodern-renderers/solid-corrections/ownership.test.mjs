@@ -58,12 +58,21 @@ test('the owning declaration, compiler ABI, runtime identity and generator profi
     ),
     /@solidjs\/web 2\.0\.0-rc\.22/u,
   );
-  // Router qualification is independent of the registry Solid tuple.
+  // Router qualification is independent of the registry Solid tuple: the
+  // binding source is pinned by provenance, the core by the owning native
+  // artifact descriptor.
   assert.equal(
     identity.routerSource,
     '4fbd65c5c3b40be87a6248867c22021c1c19bba8',
   );
-  assert.equal(identity.routerCore, '1.171.38');
+  const routerCore =
+    manifest.ultramodern.nativeArtifacts.packages['@tanstack/router-core'];
+  assert.equal(identity.routerCore, routerCore.version);
+  assert.equal(solidProfile.router.coreVersion, routerCore.version);
+  assert.equal(
+    solidProfile.dependencies['@tanstack/router-core'],
+    routerCore.request,
+  );
   assert.equal(
     solidProfile.dependencies['@tanstack/router-core'],
     manifest.devDependencies['@tanstack/router-core'],

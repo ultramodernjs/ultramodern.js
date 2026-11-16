@@ -67,10 +67,7 @@ allowBuilds:
 
 patchedDependencies:
   'rsbuild-plugin-dts@1.0.7': patches/rsbuild-plugin-dts@1.0.7.patch
-  '@tanstack/router-core@1.171.39': patches/@tanstack__router-core@1.171.39.patch
-  '@effect/opentelemetry@4.1.4': patches/@effect__opentelemetry@4.1.4.patch
   '@svgr/babel-plugin-transform-svg-component@8.0.0': patches/@svgr__babel-plugin-transform-svg-component@8.0.0.patch
-  'solid-js@2.0.0-rc.22': patches/solid-js@2.0.0-rc.22.patch
   'braces@3.0.3': patches/braces@3.0.3.patch
   '@module-federation/sdk@2.9.3': patches/@module-federation__sdk@2.9.3.patch
 overrides:
@@ -211,8 +208,6 @@ minimumReleaseAgeExclude:
   - '@shikijs/primitive@4.5.0'
   - '@shikijs/transformers@4.5.0'
   - '@shikijs/types@4.5.0'
-  - '@tanstack/react-router@1.170.41'
-  - '@tanstack/router-core@1.171.34'
   - '@vitest/mocker@5.0.3 || 5.0.5'
   - '@vitest/spy@5.0.3 || 5.0.5'
   - dotenv@18.0.5
@@ -232,9 +227,7 @@ minimumReleaseAgeExclude:
   - zephyr-modernjs-plugin@1.4.2
   - zephyr-rspack-plugin@1.4.2
   - zephyr-xpack-internal@1.4.2
-  - '@octanejs/tanstack-router@0.2.10'
   - jsdom@30.1.3
-  - octane@0.13.8
   - webpack@5.112.0
   - argparse@3.0.3
   - es-module-lexer@3.0.4

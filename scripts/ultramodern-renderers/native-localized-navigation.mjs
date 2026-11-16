@@ -17,6 +17,7 @@ import {
   readInstalledPackageFiles,
   verifyInstalledPackage,
 } from './installed-cohort.mjs';
+import { validateDescriptor } from './native-artifacts/protocol.mjs';
 import { nativeFederationArtifacts } from './native-federation-inputs.mjs';
 import {
   retirePackedNativeFederationInstaller,
@@ -104,8 +105,11 @@ export function localizedNavigationInputs(release, nativeInputs) {
   const solid = renderer('solid').packageJson;
   // A published renderer cannot install archive subdependencies, so Solid
   // declares the fork Core as nativeArtifacts metadata plus an exact peer.
+  const solidDescriptor = solid.ultramodern?.nativeArtifacts;
   const solidArtifact =
-    solid.ultramodern?.nativeArtifacts?.['@tanstack/router-core'];
+    solidDescriptor === undefined
+      ? undefined
+      : validateDescriptor(solidDescriptor).packages['@tanstack/router-core'];
   const solidUsesNativeCore = solidArtifact !== undefined;
   if (solidUsesNativeCore) {
     const accepted = artifacts['@tanstack/router-core'];

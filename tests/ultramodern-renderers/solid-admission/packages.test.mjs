@@ -8,6 +8,7 @@ import test from 'node:test';
 import { parseSync, traverse } from '@babel/core';
 import { targets } from '../../../scripts/ultramodern-dependencies/snapshot.mjs';
 import {
+  acceptedRouter,
   admissionSerializerOverrides,
   admissionTuple,
   assertNativePackageGraph,
@@ -237,15 +238,17 @@ test('native owner metadata retains the accepted artifact and rejects stale decl
       value.dependencies['@tanstack/router-core'] = '1.171.37';
     },
     value => {
-      value.peerDependencies['@tanstack/router-core'] = '1.171.39';
+      value.peerDependencies['@tanstack/router-core'] = '1.171.38';
     },
     value => {
-      value.ultramodern.nativeArtifacts['@tanstack/router-core'].request =
-        'https://example.test/unreviewed.tgz';
+      value.ultramodern.nativeArtifacts.packages[
+        '@tanstack/router-core'
+      ].request = 'https://example.test/unreviewed.tgz';
     },
     value => {
-      value.ultramodern.nativeArtifacts['@tanstack/router-core'].integrity =
-        'sha512-unreviewed';
+      value.ultramodern.nativeArtifacts.packages[
+        '@tanstack/router-core'
+      ].integrity = 'sha512-unreviewed';
     },
     value => {
       value.dependencies.seroval = '1.8.1';
@@ -290,7 +293,7 @@ test('the verifier enforces the latest tuple and obsolete-runtime rejection in a
   });
   for (const [name, version] of Object.entries({
     ...admissionTuple,
-    '@tanstack/router-core': '1.171.38',
+    '@tanstack/router-core': acceptedRouter.version,
     '@tanstack/history': '1.162.5',
   }))
     await add(name, {

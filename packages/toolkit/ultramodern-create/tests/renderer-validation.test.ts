@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { validateRendererRouterBindings } from '@modern-js/backend-federation-contracts';
@@ -31,6 +32,8 @@ import {
 } from '../src/ultramodern-workspace/versions';
 import { createWorkspaceValidationContract } from '../src/ultramodern-workspace/workspace-validation-contract';
 import { linkInstalledCompiler } from './helpers/workspace-kit';
+
+const require = createRequire(import.meta.url);
 
 function nativeProjection(
   renderer: 'solid' | 'octane',
@@ -1245,11 +1248,28 @@ test('maintained Octane distribution pins match the generated requests exactly',
       );
     }
   }
-  assert.equal(generation.profile.router.coreVersion, '1.171.38');
-  assert.equal(
-    generation.dependencies[generation.profile.router.coreName],
-    'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz',
+  // The owning renderer's authenticated native descriptor is the only pin
+  // authority: every generated Octane request is its exact artifact.
+  const native: Record<string, { version: string; request: string }> =
+    require('@modern-js/renderer-octane/package.json').ultramodern
+      .nativeArtifacts.packages;
+  const pinned = [
+    generation.profile.compiler,
+    generation.profile.hydration,
+    generation.profile.router,
+    {
+      name: generation.profile.router.coreName,
+      version: generation.profile.router.coreVersion,
+    },
+  ];
+  assert.deepEqual(
+    pinned.map(({ name }) => name).sort(),
+    Object.keys(native).sort(),
   );
+  for (const { name, version } of pinned) {
+    assert.equal(version, native[name].version, name);
+    assert.equal(generation.dependencies[name], native[name].request, name);
+  }
 });
 
 test('framework router workspace requests require actual producer version evidence', () => {

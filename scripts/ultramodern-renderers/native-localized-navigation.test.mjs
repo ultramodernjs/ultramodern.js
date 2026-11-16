@@ -10,6 +10,13 @@ import {
   settleLocalizedNavigation,
 } from '../../tests/ultramodern-renderers/i18n/navigation-browser.mjs';
 import { rendererAcceptanceRegistryUrl } from './feature-gates.mjs';
+import { fixture as nativeProducerFixture } from './native-artifacts/fixtures.test-support.mjs';
+import {
+  assetFilename,
+  cohort,
+  descriptorFor,
+  protocol,
+} from './native-artifacts/protocol.mjs';
 import {
   localizedNavigationBrowserRequest,
   localizedNavigationChecks,
@@ -142,34 +149,29 @@ test('derives distinct Solid and Octane tuples from verified packed requests and
     ),
   );
   t.after(() => fs.rmSync(directory, { recursive: true }));
-  const manifest = {
-    name: '@bleedingdev/modern-js-renderer-octane',
-    ultramodern: {
-      sourceName: '@modern-js/renderer-octane',
-      nativeArtifacts: {},
-    },
-    devDependencies: {},
-    peerDependencies: {},
-  };
+  // Octane admission reads only the typed producer descriptor; fabricated
+  // archives are bound through the owning protocol, never a flat request map.
+  const { producer, descriptor: template } = nativeProducerFixture();
+  const packages = {};
   const nativeInputs = {};
-  for (const [name, basename] of Object.entries({
-    octane: 'octane',
-    '@octanejs/tanstack-router': 'octanejs-tanstack-router',
-    '@octanejs/rspack-plugin': 'octanejs-rspack-plugin',
-    '@tanstack/router-core': 'tanstack-router-core',
-  })) {
+  for (const [name, version] of Object.entries(cohort)) {
+    const basename = assetFilename(name, version).slice(0, -'.tgz'.length);
     const source = path.join(directory, basename);
     fs.mkdirSync(path.join(source, 'package'), { recursive: true });
     fs.writeFileSync(
       path.join(source, 'package/package.json'),
       JSON.stringify({
         name,
-        version: '1.0.0',
+        version,
         ...(name === '@tanstack/router-core'
           ? { dependencies: { '@tanstack/history': '1.2.3' } }
           : {}),
         ...(name === '@octanejs/tanstack-router'
-          ? { peerDependencies: { '@tanstack/router-core': '1.0.0' } }
+          ? {
+              peerDependencies: {
+                '@tanstack/router-core': cohort['@tanstack/router-core'],
+              },
+            }
           : {}),
       }),
     );
@@ -177,22 +179,26 @@ test('derives distinct Solid and Octane tuples from verified packed requests and
     execFileSync('tar', ['-czf', archivePath, '-C', source, 'package'], {
       env: { ...process.env, COPYFILE_DISABLE: '1' },
     });
-    const repository = name === '@tanstack/router-core' ? 'router' : 'octane';
-    const tag =
-      name === '@tanstack/router-core'
-        ? 'ultramodern-router-core-bbbbbbbbbbbb'
-        : 'ultramodern-octane-aaaaaaaaaaaa';
-    const request = `https://github.com/BleedingDev/${repository}/releases/download/${tag}/${basename}-1.0.0.tgz`;
     const integrity = `sha512-${createHash('sha512').update(fs.readFileSync(archivePath)).digest('base64')}`;
-    manifest.ultramodern.nativeArtifacts[name] = {
-      request,
+    packages[name] = { ...template.packages[name], integrity };
+    nativeInputs[name] = {
+      request: packages[name].request,
       integrity,
-      version: '1.0.0',
+      archivePath,
     };
-    manifest.devDependencies[name] = request;
-    manifest.peerDependencies[name] = '1.0.0';
-    nativeInputs[name] = { request, integrity, archivePath };
   }
+  const manifest = {
+    name: '@bleedingdev/modern-js-renderer-octane',
+    ultramodern: {
+      sourceName: '@modern-js/renderer-octane',
+      nativeArtifacts: descriptorFor({ protocol, producer, packages }),
+    },
+    devDependencies: Object.fromEntries(
+      Object.entries(packages).map(([name, item]) => [name, item.request]),
+    ),
+    peerDependencies: { ...cohort },
+  };
+  const coreVersion = cohort['@tanstack/router-core'];
   const solid = {
     sourceName: '@modern-js/renderer-solid',
     packageJson: {
@@ -216,10 +222,10 @@ test('derives distinct Solid and Octane tuples from verified packed requests and
     release,
     nativeInputs,
   ).expectedNativeTuples;
-  assert.equal(tuples.octane.routerCore.version, '1.0.0');
+  assert.equal(tuples.octane.routerCore.version, coreVersion);
   assert.equal(tuples.octane.history.version, '1.2.3');
   assert.equal(tuples.solid.routerCore.version, '1.171.37');
-  solid.packageJson.dependencies['@tanstack/router-core'] = '1.0.0';
+  solid.packageJson.dependencies['@tanstack/router-core'] = coreVersion;
   const registrySelection = localizedNavigationInputs(release, nativeInputs);
   assert.equal(
     registrySelection.solidUsesNativeCore,
@@ -230,7 +236,14 @@ test('derives distinct Solid and Octane tuples from verified packed requests and
     registrySelection.expectedNativeTuples.solid.routerCore.version,
     registrySelection.expectedNativeTuples.octane.routerCore.version,
   );
-  const coreDirectory = path.join(directory, 'tanstack-router-core/package');
+  const coreDirectory = path.join(
+    directory,
+    assetFilename('@tanstack/router-core', coreVersion).slice(
+      0,
+      -'.tgz'.length,
+    ),
+    'package',
+  );
   verifyLocalizedNavigationCore(
     coreDirectory,
     nativeInputs['@tanstack/router-core'],
@@ -272,11 +285,16 @@ test('derives distinct Solid and Octane tuples from verified packed requests and
     nativeInputs['@tanstack/router-core'].request;
   solid.packageJson.ultramodern = {
     nativeArtifacts: {
-      '@tanstack/router-core':
-        manifest.ultramodern.nativeArtifacts['@tanstack/router-core'],
+      '@tanstack/router-core': packages['@tanstack/router-core'],
     },
   };
-  solid.packageJson.peerDependencies = { '@tanstack/router-core': '1.0.0' };
+  assert.throws(() => localizedNavigationInputs(release, nativeInputs));
+  solid.packageJson.ultramodern.nativeArtifacts = descriptorFor({
+    protocol,
+    producer,
+    packages,
+  });
+  solid.packageJson.peerDependencies = { '@tanstack/router-core': coreVersion };
   assert.throws(
     () => localizedNavigationInputs(release, nativeInputs),
     /must not install the Router Core archive/u,
@@ -289,14 +307,14 @@ test('derives distinct Solid and Octane tuples from verified packed requests and
   assert.equal(
     localizedNavigationInputs(release, nativeInputs).expectedNativeTuples.solid
       .routerCore.version,
-    '1.0.0',
+    coreVersion,
   );
-  solid.packageJson.peerDependencies['@tanstack/router-core'] = '1.0.1';
+  solid.packageJson.peerDependencies['@tanstack/router-core'] = '0.0.1';
   assert.throws(
     () => localizedNavigationInputs(release, nativeInputs),
     /exact accepted Router Core version/u,
   );
-  solid.packageJson.peerDependencies['@tanstack/router-core'] = '1.0.0';
+  solid.packageJson.peerDependencies['@tanstack/router-core'] = coreVersion;
   assert.throws(
     () => localizedNavigationInputs(release, {}),
     /requires authenticated native input octane/u,

@@ -10,6 +10,7 @@ import { parse as parseYaml } from 'yaml';
 import { confinedPath } from '../../../scripts/lib/file-evidence.mjs';
 import { leasePorts } from '../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 import { resolveDiskGuardian } from '../../../scripts/ultramodern-production-readiness/renderer-worker-lifecycle-proof/support.mjs';
+import { cohort } from '../../../scripts/ultramodern-renderers/native-artifacts/protocol.mjs';
 import {
   installedBin,
   runPackedNativeFederationCommand as runWitnessedCommand,
@@ -727,11 +728,7 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
       const request = createRequire(
         path.join(workspaceRoot, app.path, 'package.json'),
       );
-      const expected = {
-        octane: '0.13.8',
-        '@octanejs/tanstack-router': '0.2.10',
-        '@octanejs/rspack-plugin': '0.2.4',
-      };
+      const expected = cohort;
       for (const [name, version] of Object.entries(expected)) {
         const directory = installedOwner(request, name);
         const actual = readJson(path.join(directory, 'package.json'));
