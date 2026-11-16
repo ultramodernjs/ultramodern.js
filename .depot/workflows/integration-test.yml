@@ -6,18 +6,9 @@
 
 name: Integration Test
 
+# Provider comparisons are explicit runs. Required GitHub Actions workflows
+# already execute these suites on Depot; automatic mirrors duplicate that work.
 on:
-  # No path filter: a required check must report on every pull request and
-  # merge-queue entry, and merge_group does not support path filters.
-  pull_request:
-    branches: [main, main-ultramodern]
-
-  merge_group:
-
-  # publish-bleedingdev.yml calls this on the exact commit it releases; a
-  # called workflow shares the caller's github.sha.
-  workflow_call:
-
   workflow_dispatch:
 
 permissions:

@@ -109,3 +109,21 @@ test('Depot Linux images retain the Ubuntu 24.04 minimum', () => {
   );
   assert.doesNotThrow(() => assertRunner('depot-ubuntu-24.04-16', 'current'));
 });
+
+test('native provider comparisons are manual-only, not automatic duplicates of required Depot-backed checks', () => {
+  const native = new URL('../../../.depot/workflows/', import.meta.url);
+  const files = fs.readdirSync(native).filter(file => /\.ya?ml$/u.test(file));
+  assert.ok(files.length > 0);
+  for (const file of files) {
+    const workflow = yaml.load(fs.readFileSync(new URL(file, native), 'utf8'));
+    assert.deepEqual(Object.keys(workflow.on), ['workflow_dispatch'], file);
+    for (const [id, job] of Object.entries(workflow.jobs)) {
+      if (job['runs-on'] === `\${{ matrix.runner }}`) {
+        for (const entry of job.strategy.matrix.include)
+          assertRunner(entry.runner, `${file}:${id}`);
+      } else {
+        assertRunner(job['runs-on'], `${file}:${id}`);
+      }
+    }
+  }
+});

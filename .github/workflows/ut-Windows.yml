@@ -23,6 +23,8 @@ jobs:
   ut-windows-shards:
     # The type of runner that the job will run on
     runs-on: depot-windows-2025-16
+    env:
+      WINDOWS_UNIT_WORKERS: ${{ startsWith(matrix.lane, 'generator-') && 1 || 4 }}
     strategy:
       fail-fast: false
       matrix:
@@ -30,7 +32,7 @@ jobs:
         # scripts/ci/windows-unit-selection.mjs, which also owns the
         # assignment. Keep this list equal to its windowsLanes: a lane that is
         # assigned work but never dispatched would skip those files silently.
-        lane: ["1/4", "2/4", "3/4", "4/4", "generator-shell", "generator-workspace"]
+        lane: ["1/2", "2/2", "generator-shell", "generator-workspace"]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -92,11 +94,11 @@ jobs:
           --version ${{ steps.browser-runtime.outputs.version }}
 
       - name: Verify dependency bundle module classification
-        if: matrix.lane == '1/4'
+        if: matrix.lane == '1/2'
         run: node --test --test-name-pattern="prebundle distinguishes" scripts/prebundle/ultramodern/packed-utils-consumer.test.mjs
 
       - name: Verify complete disjoint Windows test coverage
-        if: matrix.lane == '1/4'
+        if: matrix.lane == '1/2'
         run: |
           node --test scripts/__tests__/windows-unit-selection.test.mjs scripts/ci/__tests__/windows-dependency-snapshot.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -107,11 +109,12 @@ jobs:
           node --input-type=module --eval "import os from 'node:os';
           console.log(JSON.stringify({platform:process.platform,
           availableParallelism:os.availableParallelism(),cpuCount:os.cpus().length,
-          totalMemoryBytes:os.totalmem(),testFileWorkers:${{ startsWith(matrix.lane, 'generator-') && 1 || 2 }}}))"
+          totalMemoryBytes:os.totalmem(),testFileWorkers:Number(process.env.WINDOWS_UNIT_WORKERS)}))"
 
       # Give each measured slow generator file its own runner. Remaining
-      # ordinary lanes use two file workers on 16 cores. Each generator stays
-      # isolated with one worker. Six VMs replace ten without losing any files.
+      # ordinary lanes use four file workers on measured 16-core/64-GB VMs.
+      # Keep the same eight ordinary workers on two VMs, plus two isolated
+      # generators. Every file still runs once, with two fewer runner allocations.
       - name: Test
         env:
           WINDOWS_UNIT_LANE: ${{ matrix.lane }}
@@ -120,7 +123,7 @@ jobs:
         shell: pwsh
         run: >-
           pnpm run test:ut:prepared --config=scripts/ci/rstest-windows.config.mts
-          --pool.maxWorkers=${{ startsWith(matrix.lane, 'generator-') && 1 || 2 }} --reporters default --reporters blob
+          --pool.maxWorkers=${{ env.WINDOWS_UNIT_WORKERS }} --reporters default --reporters blob
 
       # Keep exact per-file timings for the next balancing pass, including red
       # runs. Each lane writes its own blob on its isolated runner.
