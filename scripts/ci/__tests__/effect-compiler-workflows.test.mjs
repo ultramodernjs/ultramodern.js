@@ -131,27 +131,27 @@ test('default-branch caches seed the two actual compiler variants before integra
     );
 });
 
-test('ordinary cache writers are independent of compiler allocation and Windows seeds restore installed files', () => {
+test('ordinary cache writers are independent of compiler allocation and Windows and macOS seeds restore installed files', () => {
   const seed = cache.jobs.seed;
   assert.equal(seed.needs, undefined);
   assert.equal(cache.jobs['seed-integration'].needs, 'effect-compiler-payload');
   const steps = seed.steps;
   const restore = steps.findIndex(
-    step => step.name === 'Rebuild native Windows dependency links',
+    step => step.name === 'Rebuild native installed dependency links',
   );
   const install = steps.findIndex(step => step.name === 'Install Dependencies');
   assert.ok(restore >= 0 && restore < install);
   assert.equal(
-    steps.find(step => step.id === 'windows-snapshot').if,
-    "runner.os == 'Windows'",
+    steps.find(step => step.id === 'dependencies-snapshot').if,
+    "(runner.os == 'Windows' || runner.os == 'macOS')",
   );
   assert.equal(
     steps[restore].if,
-    "runner.os == 'Windows' && steps.windows-snapshot.outputs.cache-hit == 'true'",
+    "(runner.os == 'Windows' || runner.os == 'macOS') && steps.dependencies-snapshot.outputs.cache-hit == 'true'",
   );
   assert.equal(
     steps[restore].run,
-    'node scripts/ci/windows-dependency-snapshot.mjs restore',
+    'node scripts/ci/dependency-snapshot.mjs restore',
   );
   assert.ok(!steps.some(step => step.run?.includes('verify-transport')));
 });

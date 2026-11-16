@@ -1,13 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import test from 'node:test';
-
-// Use the prebundler's declared parser without requiring generated framework output.
-const require = createRequire(
-  new URL('../prebundle/package.json', import.meta.url),
-);
-const yaml = require('js-yaml');
+import yaml from '../../packages/toolkit/utils/compiled/js-yaml/index.js';
 
 const workflow = yaml.load(
   readFileSync(
@@ -33,7 +27,7 @@ test('macOS units stay in the PR-associated check suite', () => {
 // Depot pool has to block the required check, not move it to other hardware.
 test('the macOS units select Depot with no GitHub-hosted escape', () => {
   assert.equal(
-    workflow.jobs['ut-mac-shards']['runs-on'],
+    workflow.jobs['ut-mac']['runs-on'],
     `\${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}`,
   );
   assert.equal(workflow.on.workflow_dispatch, null);
@@ -46,25 +40,32 @@ test('the macOS units select Depot with no GitHub-hosted escape', () => {
   assert.doesNotMatch(source, /macos-26(?!-)(?<!depot-macos-26)/u);
 });
 
-test('macOS units retain every shard and the fail-closed required gate', () => {
-  const shards = workflow.jobs['ut-mac-shards'];
-  assert.equal(shards.if, undefined);
-  assert.equal(shards.strategy['fail-fast'], false);
-  assert.deepEqual(shards.strategy.matrix.shard, [1, 2, 3]);
+test('one Mac executes the entire suite with eight workers and no selection filter', () => {
+  assert.deepEqual(Object.keys(workflow.jobs), ['ut-mac']);
+  const job = workflow.jobs['ut-mac'];
+  assert.equal(job.if, undefined);
+  assert.equal(job.needs, undefined);
+  assert.equal(job.strategy, undefined);
   assert.equal(
-    shards.steps.find(step => step.name === 'Test').run,
-    `pnpm run test:ut:prepared --shard=\${{ matrix.shard }}/3`,
+    job.steps.find(step => step.name === 'Test').run,
+    '/usr/bin/time -l pnpm run test:ut:prepared --pool.maxWorkers=8',
   );
-  const gate = workflow.jobs['ut-mac'];
-  assert.equal(gate.if, `\${{ always() }}`);
-  assert.equal(gate.needs, 'ut-mac-shards');
+  assert.ok(!job.steps.some(step => step['continue-on-error']));
+  assert.ok(
+    !job.steps.some(step => step.run?.includes('browser-provisioning')),
+  );
   assert.equal(
-    gate.steps[0].env.SHARD_RESULT,
-    `\${{ needs.ut-mac-shards.result }}`,
+    job.steps.find(step => step.name === 'Restore installed dependencies').with[
+      'store-required'
+    ],
+    'false',
   );
-  assert.match(
-    gate.steps[0].run,
-    /if \[\[ "\$SHARD_RESULT" != "success" \]\]/u,
+  assert.equal(
+    job.steps.find(step => step.name === 'Install Dependencies').run,
+    'pnpm install --frozen-lockfile',
   );
-  assert.match(gate.steps[0].run, /exit 1/u);
+  assert.equal(
+    job.steps.find(step => step.name === 'Build Required Pkg').if,
+    "steps.build-cache.outputs.cache-hit != 'true'",
+  );
 });

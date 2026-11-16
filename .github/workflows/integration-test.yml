@@ -227,7 +227,7 @@ jobs:
       - name: Restore Windows dependencies
         id: dependencies
         if: runner.os == 'Windows'
-        uses: ./.github/actions/windows-dependencies
+        uses: ./.github/actions/installed-dependencies
         with:
           # The measured upstream/fork native consumers install fresh packages
           # on core 1/6 and 3/6. Other core lanes use the installed snapshot.
