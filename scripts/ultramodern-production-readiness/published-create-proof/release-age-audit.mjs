@@ -25,7 +25,7 @@ const dependencyBlocks = Object.freeze([
 const exactVersionPattern =
   /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u;
 const exactPackageNamePattern =
-  /^(?:@[a-z0-9][a-z0-9._~-]*\/[a-z0-9][a-z0-9._~-]*|[a-z0-9][a-z0-9._~-]*)$/u;
+  /^(?:@[a-z0-9][a-z0-9._~-]*\/[a-z0-9][a-z0-9._~-]*|[A-Za-z0-9][A-Za-z0-9._~-]*)$/u;
 const integrityPattern = /^sha512-[A-Za-z0-9+/]+={0,2}$/u;
 const sha256Pattern = /^[a-f0-9]{64}$/u;
 
@@ -255,7 +255,7 @@ function splitPeerContext(locator) {
       continue;
     }
     const peer = parsePackageKey(segment);
-    if (!peer || isHttpsTarballLocator(peer.version)) {
+    if (!peer) {
       return { unresolved: locator };
     }
     peers.push(peer);
@@ -439,7 +439,7 @@ function buildDependencyClosure(lock) {
 
   function recordUnresolved(identity, pathParts, reason) {
     unresolved.push({
-      package: identity ? identityKey(identity) : undefined,
+      ...(identity ? { package: identityKey(identity) } : {}),
       path: pathParts,
       reason,
     });
