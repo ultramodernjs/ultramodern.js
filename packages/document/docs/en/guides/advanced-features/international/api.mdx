@@ -18,7 +18,7 @@ title: API Reference
 | `localisedUrls` | `boolean \| Record<string, Record<string, string>>` | Localised URL mapping from `localeDetection.localisedUrls` |
 | `isLanguageSupported` | `(lang: string) => boolean` | Checks whether a language is in the supported list |
 | `isResourcesReady` | `boolean` | Whether translation resources for the current language have finished loading |
-| `i18nInstance` | `I18nRuntimeInstance` | The configured i18next instance or custom wrapper, for advanced scenarios |
+| `i18nInstance` | `I18nInstance` by default | The configured instance; pass your wrapper type for a custom wrapper |
 
 When `localePathRedirect` is enabled and `localisedUrls` is omitted, Modern.js keeps prefix-only paths such as `/en/about`. Translated path segments are enabled only by a non-empty `localisedUrls` map. Route generation validates every localisable path and every configured language only while that map is enabled.
 
@@ -155,7 +155,7 @@ type error (TS2339) — cast to the concrete instance type instead.
 `t` is a REQUIRED member typed as i18next's own `i18n['t']`, and `getFixedT` as
 `i18n['getFixedT']`. Keys, overloads, selectors and your `CustomTypeOptions`
 augmentation therefore apply to `i18nInstance.t` and to the `t` returned by
-`useModernI18n<I18nInstance>()`, which is the instance's `t` bound to it. An `I18nInstance`
+`useModernI18n()`, which is the instance's `t` bound to it. An `I18nInstance`
 must carry a genuine i18next `t`, for example one created with
 `i18next.createInstance()`; a hand-written translate function is rejected.
 :::
@@ -204,10 +204,9 @@ clones the wrapper itself, so the wrapper's own initialisation stays in charge o
 its `t`. Resources, detection and the react-i18next provider use the native
 instance. `useModernI18n()` returns the configured instance and that instance's
 own `t`, bound to it, so a wrapper's translate API keeps producing the output.
-Without a type argument both are typed for either kind (`I18nRuntimeInstance`),
-so `t` accepts what both accept, such as `t('key')`. Pass
-`useModernI18n<I18nInstance>()` when you know the instance is i18next itself to get
-i18next's options, overloads and selectors, or your wrapper type for its API.
+Without a type argument both use i18next's types, including options, overloads
+and selectors. If you configure a wrapper, pass `useModernI18n<MyWrapper>()`
+for its API; the hook does not check this type argument at runtime.
 
 ```ts
 import type { CloneOptions, InitOptions } from 'i18next';

@@ -18,10 +18,8 @@ export const title: string = instance.t($ => $.title);
 instance.t($ => $.missing);
 
 export function ModernTitle() {
-  const { t } = useModernI18n<I18nInstance>();
+  const { t } = useModernI18n();
   // @ts-expect-error The hook's `t` follows the same selector augmentation.
   t($ => $.missing);
-  // @ts-expect-error Without the type argument the instance may be a wrapper.
-  useModernI18n().t($ => $.greeting);
-  return t($ => $.greeting);
+  return `${t($ => $.greeting)}${useModernI18n<I18nInstance>().t($ => $.title)}`;
 }

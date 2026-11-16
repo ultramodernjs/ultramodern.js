@@ -8,7 +8,7 @@ import {
   isI18nLanguageSupported,
   isI18nResourcesReady,
 } from './contextHelpers';
-import type { I18nRuntimeInstance } from './i18n';
+import type { I18nInstance, I18nRuntimeInstance } from './i18n';
 import { getActualI18nextInstance, type Resources } from './i18n/instance';
 
 import { useI18nRouterAdapter } from './routerAdapter';
@@ -87,7 +87,7 @@ export const FederatedI18nBoundary: FC<FederatedI18nBoundaryProps> = props => {
 };
 
 export interface UseModernI18nReturn<
-  TInstance extends I18nRuntimeInstance = I18nRuntimeInstance,
+  TInstance extends I18nRuntimeInstance = I18nInstance,
 > {
   language: string;
   changeLanguage: (newLang: string) => Promise<void>;
@@ -114,18 +114,17 @@ export interface UseModernI18nReturn<
  * - List of supported languages
  * - Helper function to check if language is supported
  *
- * Without a type argument, `i18nInstance` and `t` are typed for whichever
- * instance the provider holds (`I18nRuntimeInstance`). The type argument
- * (e.g. `useModernI18n<I18nInstance>()` for i18next itself, or a wrapper
- * type) is a caller assertion that the overload records; it is not verified
- * at runtime. Pass it only when you know which instance the provider was given.
+ * Without a type argument, `i18nInstance` and `t` are typed for an i18next
+ * instance, so `t` keeps i18next's keys, options and selectors. An app that
+ * configures a wrapper passes its type (e.g. `useModernI18n<MyWrapper>()`).
+ * Either way the type is a caller assertion that the overload records; it is
+ * not verified at runtime.
  * @returns Object containing i18n functionality and utilities
  */
-export function useModernI18n(): UseModernI18nReturn;
 export function useModernI18n<
-  TInstance extends I18nRuntimeInstance,
+  TInstance extends I18nRuntimeInstance = I18nInstance,
 >(): UseModernI18nReturn<TInstance>;
-export function useModernI18n(): UseModernI18nReturn {
+export function useModernI18n(): UseModernI18nReturn<I18nRuntimeInstance> {
   const context = useContext(ModernI18nContext);
   if (!context) {
     throw new Error('useModernI18n must be used within ModernI18nProvider');

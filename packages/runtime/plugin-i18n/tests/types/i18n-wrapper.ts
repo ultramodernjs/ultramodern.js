@@ -47,16 +47,15 @@ export const native: I18nRuntimeInstance = i18next;
 export const notNative: I18nInstance = new CustomI18nInstance();
 
 export function WrapperConsumer() {
-  const { i18nInstance, t } = useModernI18n();
+  // An app that configures a wrapper names it; the hook's `t` is its own `t`.
+  const { i18nInstance, t } = useModernI18n<I18nWrapperInstance>();
   const update = () => {};
   i18nInstance.on?.('loaded', update);
   i18nInstance.off?.('languageChanged', update);
   const own: string = i18nInstance.t('key');
-  // The hook's `t` is the configured instance's own `t`.
   const viaHook: string = t('key');
-  const wrapperT: (key: string) => string =
-    useModernI18n<I18nWrapperInstance>().t;
+  const wrapperT: (key: string) => string = t;
   // @ts-expect-error A wrapper's `t` takes no i18next options.
-  useModernI18n<I18nWrapperInstance>().t('key', { count: 1 });
+  t('key', { count: 1 });
   return `${own}${viaHook}${wrapperT('key')}`;
 }
