@@ -61,14 +61,21 @@ Set these GitHub repository variables:
 
 GitHub workflows select these runners for builds, tests, docs, cache seeds, and
 release preparation. Depot CI workflows use their fixed Linux runner directly.
-Without these variables, GitHub workflows use GitHub-hosted runners.
-The existing `SELF_LINUX_LABELS` and `BLEEDINGDEV_ACCEPT_RUNNER_LABELS` overrides
-still work when `DEPOT_LINUX_RUNNER` is unset.
+Every fallback is a Depot label too, so an unset variable selects Depot rather
+than GitHub-hosted compute, and `SELF_LINUX_LABELS` and
+`BLEEDINGDEV_ACCEPT_RUNNER_LABELS` no longer select anything.
+`scripts/ci/__tests__/depot-runner-policy.test.mjs` fails on a GitHub-hosted
+label anywhere in a `runs-on` expression.
+
+The Effect compiler's three Rust builds name 16-core labels directly
+(`depot-ubuntu-24.04-16`, `depot-ubuntu-24.04-arm-16`, `depot-windows-2025-16`):
+cargo builds crates in parallel and those jobs are the long pole of every
+caller's cold path. The labels are literal, not variables, because the cache key
+and the shipped glibc baseline must not move when a variable does.
 
 Two jobs, `publish` and `publish-sidecars`, always use GitHub's `ubuntu-24.04`.
 [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) requires
-GitHub-hosted runners. The boundary check for external pull requests also stays
-on GitHub-hosted compute, selected by the trusted base workflow.
+GitHub-hosted runners, so these two are the repository's only exception.
 
 Release dispatches require both the actor and the triggering actor to be the
 maintainer `BleedingDev`, including after organization ownership changes.
