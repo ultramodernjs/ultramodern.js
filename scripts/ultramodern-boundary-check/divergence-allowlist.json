@@ -4,9 +4,9 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1456,
-  "totalHunks": 4903,
-  "totalChangedLines": 104412,
+  "totalFiles": 1467,
+  "totalHunks": 4946,
+  "totalChangedLines": 105028,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -990,8 +990,8 @@
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/international/api.mdx",
-      "hunks": 14,
-      "changedLines": 86
+      "hunks": 15,
+      "changedLines": 123
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/international/best-practices.mdx",
@@ -1755,8 +1755,8 @@
     },
     {
       "file": "packages/document/docs/zh/guides/advanced-features/international/api.mdx",
-      "hunks": 14,
-      "changedLines": 77
+      "hunks": 15,
+      "changedLines": 112
     },
     {
       "file": "packages/document/docs/zh/guides/advanced-features/international/best-practices.mdx",
@@ -2180,8 +2180,8 @@
     },
     {
       "file": "packages/runtime/plugin-i18n/package.json",
-      "hunks": 11,
-      "changedLines": 100
+      "hunks": 12,
+      "changedLines": 103
     },
     {
       "file": "packages/runtime/plugin-i18n/README.md",
@@ -2196,7 +2196,7 @@
     {
       "file": "packages/runtime/plugin-i18n/rstest.config.mts",
       "hunks": 1,
-      "changedLines": 56
+      "changedLines": 58
     },
     {
       "file": "packages/runtime/plugin-i18n/src/cli/index.ts",
@@ -2220,13 +2220,13 @@
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/context.tsx",
-      "hunks": 31,
-      "changedLines": 311
+      "hunks": 33,
+      "changedLines": 318
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/contextHelpers.ts",
       "hunks": 1,
-      "changedLines": 253
+      "changedLines": 232
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/contexts.ts",
@@ -2236,12 +2236,12 @@
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/core.tsx",
       "hunks": 1,
-      "changedLines": 186
+      "changedLines": 188
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/hooks.ts",
-      "hunks": 32,
-      "changedLines": 160
+      "hunks": 38,
+      "changedLines": 176
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/backend/defaults.node.ts",
@@ -2255,13 +2255,18 @@
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/backend/middleware.common.ts",
-      "hunks": 4,
-      "changedLines": 9
+      "hunks": 6,
+      "changedLines": 15
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/backend/middleware.node.ts",
+      "hunks": 4,
+      "changedLines": 36
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/src/runtime/i18n/backend/middleware.ts",
       "hunks": 2,
-      "changedLines": 32
+      "changedLines": 4
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/backend/sdk-backend.ts",
@@ -2295,13 +2300,13 @@
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/detection/middleware.node.ts",
-      "hunks": 8,
-      "changedLines": 63
+      "hunks": 10,
+      "changedLines": 71
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/detection/middleware.ts",
-      "hunks": 7,
-      "changedLines": 24
+      "hunks": 9,
+      "changedLines": 32
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/detection/path.ts",
@@ -2326,12 +2331,12 @@
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/index.ts",
       "hunks": 3,
-      "changedLines": 4
+      "changedLines": 6
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/instance.ts",
-      "hunks": 30,
-      "changedLines": 236
+      "hunks": 33,
+      "changedLines": 285
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/react-i18next.ts",
@@ -2340,8 +2345,8 @@
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/utils.ts",
-      "hunks": 11,
-      "changedLines": 87
+      "hunks": 18,
+      "changedLines": 109
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/I18nLink.tsx",
@@ -2386,7 +2391,7 @@
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/providerComposition.tsx",
       "hunks": 1,
-      "changedLines": 200
+      "changedLines": 210
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/reactI18next.ts",
@@ -2402,6 +2407,11 @@
       "file": "packages/runtime/plugin-i18n/src/runtime/sharedContexts.ts",
       "hunks": 1,
       "changedLines": 8
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/src/runtime/types.ts",
+      "hunks": 3,
+      "changedLines": 6
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/utils.ts",
@@ -2484,14 +2494,29 @@
       "changedLines": 65
     },
     {
+      "file": "packages/runtime/plugin-i18n/tests/helpers/i18nInstance.ts",
+      "hunks": 1,
+      "changedLines": 26
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/helpers/i18nWrapper.ts",
+      "hunks": 1,
+      "changedLines": 60
+    },
+    {
       "file": "packages/runtime/plugin-i18n/tests/i18nUtils.test.ts",
       "hunks": 1,
       "changedLines": 60
     },
     {
+      "file": "packages/runtime/plugin-i18n/tests/i18nWrapper.test.ts",
+      "hunks": 1,
+      "changedLines": 58
+    },
+    {
       "file": "packages/runtime/plugin-i18n/tests/link.test.tsx",
       "hunks": 1,
-      "changedLines": 139
+      "changedLines": 126
     },
     {
       "file": "packages/runtime/plugin-i18n/tests/localisedRouteGeneration.test.ts",
@@ -2511,7 +2536,7 @@
     {
       "file": "packages/runtime/plugin-i18n/tests/navigation.test.tsx",
       "hunks": 1,
-      "changedLines": 403
+      "changedLines": 534
     },
     {
       "file": "packages/runtime/plugin-i18n/tests/reactI18nextRegistration.test.ts",
@@ -2531,7 +2556,37 @@
     {
       "file": "packages/runtime/plugin-i18n/tests/routerAdapter.test.tsx",
       "hunks": 1,
-      "changedLines": 221
+      "changedLines": 207
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/typeContracts.test.ts",
+      "hunks": 1,
+      "changedLines": 26
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/types/i18n-wrapper.ts",
+      "hunks": 1,
+      "changedLines": 62
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/types/i18next-instance.ts",
+      "hunks": 1,
+      "changedLines": 37
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/types/selector/i18next-selector-instance.ts",
+      "hunks": 1,
+      "changedLines": 27
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/types/selector/tsconfig.json",
+      "hunks": 1,
+      "changedLines": 8
+    },
+    {
+      "file": "packages/runtime/plugin-i18n/tests/types/tsconfig.json",
+      "hunks": 1,
+      "changedLines": 8
     },
     {
       "file": "packages/runtime/plugin-i18n/tests/urlStrategySerialization.test.ts",
