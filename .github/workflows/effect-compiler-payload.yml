@@ -123,15 +123,38 @@ jobs:
           done <<< "$RESTORED"
           echo "usable=$usable" >> "$GITHUB_OUTPUT"
 
+      - name: Produce the target inventory and same-run receipt
+        if: steps.identity.outputs.usable == 'true'
+        env:
+          TARGETS: darwin-arm64 linux-x64 linux-arm64 win32-x64
+        run: |
+          set -euo pipefail
+          for target in $TARGETS; do
+            node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs produce \
+              --artifact-dir ".effect-compiler-cache/$target/artifact" --target "$target" \
+              --output ".modern/effect-compiler-targets/$target"
+          done
+
+      - name: Validate and stage the complete compiler payload
+        if: steps.identity.outputs.usable == 'true'
+        run: node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-targets
+
       # The win32 and darwin smokes run only in the jobs that build those
       # targets. Here the Linux binary proves the restored bytes execute and
       # type-check with their own adjacent lib files; the Effect diagnostic leg
       # needs the pinned tsgo fixture tree, which this job does not check out.
+      #
+      # It smokes the staged payload rather than the restored cache directory,
+      # because the cached bytes now travel as an artifact and arrive without
+      # their executable mode. The stager is the only thing allowed to repair
+      # that mode, and it does so from the inventory it just verified, so
+      # smoking after staging also smokes exactly the bytes consumers get
+      # rather than a copy of them.
       - name: Smoke the cached Linux release binary
         if: steps.identity.outputs.usable == 'true'
         timeout-minutes: 5
         env:
-          ARTIFACT_DIR: .effect-compiler-cache/linux-x64/artifact
+          ARTIFACT_DIR: packages/solutions/app-tools-extensions/compiler/payload/linux-x64
         run: |
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
@@ -162,22 +185,6 @@ jobs:
             assert.doesNotMatch(checked.stdout, /error TS/);
           } finally { fs.rmSync(root, { recursive: true, force: true }); }
           JS
-
-      - name: Produce the target inventory and same-run receipt
-        if: steps.identity.outputs.usable == 'true'
-        env:
-          TARGETS: darwin-arm64 linux-x64 linux-arm64 win32-x64
-        run: |
-          set -euo pipefail
-          for target in $TARGETS; do
-            node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs produce \
-              --artifact-dir ".effect-compiler-cache/$target/artifact" --target "$target" \
-              --output ".modern/effect-compiler-targets/$target"
-          done
-
-      - name: Validate and stage the complete compiler payload
-        if: steps.identity.outputs.usable == 'true'
-        run: node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-targets
 
       - name: Upload the complete staged payload
         if: steps.identity.outputs.usable == 'true'
@@ -427,44 +434,30 @@ jobs:
           --artifact-dir "$ARTIFACT_DIR" --target "$TARGET"
           --output .modern/effect-compiler-target
 
-      # hashFiles digests file contents, not paths, so the harness/ prefix here
-      # yields the same key `resolve` computes from the repository root. The key
-      # is printed on every run, including pull requests, so a drift between the
-      # two jobs is visible without waiting for a restore to miss.
-      - name: Identify the cacheable payload key
-        id: cache-key
-        env:
-          EPOCH_FILE: harness/.github/effect-compiler-cache-epoch
-        run: |
-          set -euo pipefail
-          epoch="$(grep -Ev '^[[:space:]]*(#|$)' "$EPOCH_FILE" | tr -d '[:space:]')"
-          case "$epoch" in
-            '' | *[!0-9]*)
-              echo "::error::$EPOCH_FILE must hold exactly one integer line"
-              exit 1
-              ;;
-          esac
-          echo "epoch=$epoch" >> "$GITHUB_OUTPUT"
-
-      # Saved after the stager accepted these exact bytes in this run, so a run
-      # that cannot produce a valid inventory never seeds the cache.
+      # This job does NOT write the cache entry for the target it just built,
+      # and that is measured rather than stylistic. Depot serves the Actions
+      # cache from its own backend, and that backend does not span CPU
+      # architectures: in run 43889178478 the x64 `resolve` job restored
+      # linux-x64 and win32-x64 (saved on x64 Linux and x64 Windows) and
+      # reported "Cache not found" for darwin-arm64 and linux-arm64, whose
+      # entries this matrix had just written from arm64 machines with
+      # byte-identical keys. Four writers on four architectures therefore
+      # cannot be read by one reader, and a partial restore rebuilds
+      # everything. So every entry is written by `aggregate` on x64 Linux, the
+      # same architecture `resolve` reads from, out of this artifact.
       #
-      # `push` and `workflow_dispatch` are this repository's two events whose
-      # github.ref is a durable branch: on the default branch they write the
-      # entries every ref can read, and on a working branch they write entries
-      # that branch's own later runs can read. `pull_request` (refs/pull/N/
-      # merge) and `merge_group` (refs/heads/gh-readonly-queue/...) are
-      # excluded, because their refs are thrown away after the run - that is
-      # the per-PR parking ci-cache.yml's header records, and it is also why a
-      # cache lever could not be verified before merging it. A reusable call
-      # inherits the caller's event, so a PR-triggered call still never saves.
-      - name: Save the verified target directory for identical future runs
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Mode stripping across artifact transport is not a problem here: the
+      # cached bytes are the pre-receipt artifact directory, and
+      # stage-effect-compiler-payload.mjs derives `executable` from which file
+      # is the target's binary (line 316) and restores 0o755 itself when it
+      # copies the inventory (line 216), so it never reads a filesystem mode.
+      - name: Upload the verified target directory for the cache writer
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
+          name: effect-compiler-cache-${{ matrix.target }}-${{ github.sha }}
           path: .effect-compiler-cache/${{ matrix.target }}
-          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-${{ matrix.target }}-${{ matrix.runner }}-${{ hashFiles('harness/packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('harness/packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('harness/.github/workflows/effect-compiler-payload.yml') }}
-          enableCrossOsArchive: true
+          include-hidden-files: true
+          if-no-files-found: error
 
       - name: Upload the complete target directory and receipt
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -503,3 +496,80 @@ jobs:
           path: packages/solutions/app-tools-extensions/compiler/payload
           include-hidden-files: true
           if-no-files-found: error
+
+      # Every entry is written here, on the one architecture `resolve` reads
+      # from, and only after the step above accepted the complete payload - so
+      # a run that cannot produce a valid inventory for all four targets seeds
+      # nothing. The four keys below must stay byte-identical to the four
+      # restores in `resolve`; they are printed on every run, including pull
+      # requests, so a drift is visible without waiting for a restore to miss.
+      - name: Download the verified target directories to cache
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: effect-compiler-cache-*-${{ github.sha }}
+          path: .effect-compiler-cache-upload
+          merge-multiple: false
+
+      # Lay the four directories out exactly as `resolve` restores them, and
+      # fail closed if a target is missing rather than seeding a partial set
+      # that would make every later run restore two of four and rebuild all.
+      - name: Identify the cacheable payload key
+        id: cache-key
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          EPOCH_FILE: .github/effect-compiler-cache-epoch
+          TARGETS: darwin-arm64 linux-x64 linux-arm64 win32-x64
+        run: |
+          set -euo pipefail
+          epoch="$(grep -Ev '^[[:space:]]*(#|$)' "$EPOCH_FILE" | tr -d '[:space:]')"
+          case "$epoch" in
+            '' | *[!0-9]*)
+              echo "::error::$EPOCH_FILE must hold exactly one integer line"
+              exit 1
+              ;;
+          esac
+          echo "epoch=$epoch" >> "$GITHUB_OUTPUT"
+          for target in $TARGETS; do
+            from=".effect-compiler-cache-upload/effect-compiler-cache-$target-${{ github.sha }}"
+            if [ ! -f "$from/source-identity.json" ] || [ ! -d "$from/artifact" ]; then
+              echo "::error::$from is not a complete cacheable target directory"
+              exit 1
+            fi
+            mkdir -p .effect-compiler-cache
+            mv "$from" ".effect-compiler-cache/$target"
+            printf 'Cacheable %s directory: %s\n' "$target" \
+              "$(du -sh ".effect-compiler-cache/$target" | cut -f1)"
+          done
+
+      - name: Save the verified darwin-arm64 compiler
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .effect-compiler-cache/darwin-arm64
+          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-darwin-arm64-${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
+          enableCrossOsArchive: true
+
+      - name: Save the verified linux-x64 compiler
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .effect-compiler-cache/linux-x64
+          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-linux-x64-depot-ubuntu-24.04-8-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
+          enableCrossOsArchive: true
+
+      - name: Save the verified linux-arm64 compiler
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .effect-compiler-cache/linux-arm64
+          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-linux-arm64-depot-ubuntu-24.04-arm-8-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
+          enableCrossOsArchive: true
+
+      - name: Save the verified win32-x64 compiler
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .effect-compiler-cache/win32-x64
+          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-win32-x64-${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
+          enableCrossOsArchive: true
