@@ -1201,7 +1201,7 @@ test('release validator requires the closed sidecar profile choice and parser de
     {
       required: true,
       type: 'choice',
-      options: ['parser', 'mf-sdk', 'tanstack-redact'],
+      options: ['parser', 'mf-sdk', 'mf-cohort', 'tanstack-redact'],
       default: 'parser',
     },
   );
@@ -1210,21 +1210,44 @@ test('release validator requires the closed sidecar profile choice and parser de
     ['optional profile', setField('required', false)],
     ['unrestricted profile', setField('type', 'string')],
     ['SDK default', setField('default', 'mf-sdk')],
+    ['MF cohort default', setField('default', 'mf-cohort')],
+    [
+      'missing MF cohort option',
+      setField('options', ['parser', 'mf-sdk', 'tanstack-redact']),
+    ],
     ['unknown default', setField('default', 'other')],
     ['Redact default', setField('default', 'tanstack-redact')],
     [
       'missing parser option',
-      setField('options', ['mf-sdk', 'tanstack-redact']),
+      setField('options', ['mf-sdk', 'mf-cohort', 'tanstack-redact']),
     ],
-    ['missing SDK option', setField('options', ['parser', 'tanstack-redact'])],
-    ['missing Redact option', setField('options', ['parser', 'mf-sdk'])],
+    [
+      'missing SDK option',
+      setField('options', ['parser', 'mf-cohort', 'tanstack-redact']),
+    ],
+    [
+      'missing Redact option',
+      setField('options', ['parser', 'mf-sdk', 'mf-cohort']),
+    ],
     [
       'unknown option',
-      setField('options', ['parser', 'mf-sdk', 'tanstack-redact', 'other']),
+      setField('options', [
+        'parser',
+        'mf-sdk',
+        'mf-cohort',
+        'tanstack-redact',
+        'other',
+      ]),
     ],
     [
       'duplicate option',
-      setField('options', ['parser', 'mf-sdk', 'tanstack-redact', 'parser']),
+      setField('options', [
+        'parser',
+        'mf-sdk',
+        'mf-cohort',
+        'tanstack-redact',
+        'parser',
+      ]),
     ],
   ];
   for (const [label, mutate, root] of mutations) {
@@ -1234,7 +1257,7 @@ test('release validator requires the closed sidecar profile choice and parser de
         const inputs = workflow.on.workflow_dispatch.inputs;
         mutate(root ? inputs : inputs.sidecar_profile);
       },
-      /sidecar profile.*parser\/mf-sdk\/tanstack-redact.*parser default/u,
+      /sidecar profile.*parser\/mf-sdk\/mf-cohort\/tanstack-redact.*parser default/u,
     );
   }
 });
@@ -1319,7 +1342,7 @@ test('release validator accepts matching profile overrides and inherited profile
 test('release validator rejects SDK cohort inputs and unknown sidecar profiles', () => {
   const parserGuard = '[[ "$SIDECAR_PROFILE" == parser ]]';
   const sidecarGuard =
-    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == tanstack-redact ]]';
+    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == mf-cohort || "$SIDECAR_PROFILE" == tanstack-redact ]]';
   for (const [label, guard, replacement] of [
     ['SDK in cohort mode', parserGuard, sidecarGuard],
     ['unguarded cohort profile', parserGuard, 'true'],
@@ -1364,11 +1387,14 @@ test('release validator requires preparation to pass the dispatched profile expl
   }
 });
 
-test('release validator requires SDK and Redact probe tests before qualification', () => {
+test('release validator requires candidate separation and every selected probe test before qualification', () => {
   const name = 'Test sidecar artifact and qualification contracts';
   for (const file of [
     'scripts/ultramodern-publish/__tests__/packed-mf-sdk-probe.test.js',
     'scripts/ultramodern-publish/__tests__/packed-redact-probe.test.js',
+    'scripts/ultramodern-publish/__tests__/candidate-set-separation.test.js',
+    'scripts/ultramodern-publish/__tests__/mf-cohort-profile.test.js',
+    'scripts/ultramodern-publish/__tests__/packed-mf-cohort-probe.test.js',
   ]) {
     assertStepMutationRejected(
       'qualify-sidecars',

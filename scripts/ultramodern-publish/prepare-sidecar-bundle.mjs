@@ -24,6 +24,7 @@ import {
   sidecarProfile,
   writeSidecarBundle,
 } from './sidecar-bundle.mjs';
+import { sidecarProfileRecipes } from './sidecar-profiles.mjs';
 
 export async function prepareSidecarBundle(
   out,
@@ -46,6 +47,7 @@ export async function prepareSidecarBundle(
   const tools = resolveToolVersions();
   const sidecars = collectSidecarPackages(repoRoot, {
     roots: selected.recipeIds.map(id => `packages/sidecar/${id}`),
+    reviewedRecipes: sidecarProfileRecipes(profile),
   });
   fs.mkdirSync(path.dirname(output), { recursive: true });
   const staging = fs.mkdtempSync(path.join(path.dirname(output), 'stage-'));

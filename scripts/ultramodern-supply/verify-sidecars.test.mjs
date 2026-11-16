@@ -238,15 +238,15 @@ test('closed SDK qualification consumes only its declared exact fork and leaves 
   );
   const sdk = {
     id: 'mf-sdk',
-    upstream: { name: '@module-federation/sdk', version: '2.9.2' },
-    fork: { name: '@bleedingdev/mf-sdk', version: '2.9.2' },
+    upstream: { name: '@module-federation/sdk', version: '2.9.3' },
+    fork: { name: '@bleedingdev/mf-sdk', version: '2.9.5' },
     manifestChanges: {},
   };
   const consumers = { generatorPins: [pins], publishedManifests: [] };
   assertRecipeConsumers([sdk], consumers);
   for (const fork of [
-    { name: '@bleedingdev/mf-sdk', version: '2.9.3' },
-    { name: '@bleedingdev/mf-other', version: '2.9.2' },
+    { name: '@bleedingdev/mf-sdk', version: '2.9.2' },
+    { name: '@bleedingdev/mf-other', version: '2.9.5' },
   ]) {
     assert.throws(
       () => assertRecipeConsumers([{ ...sdk, fork }], consumers),

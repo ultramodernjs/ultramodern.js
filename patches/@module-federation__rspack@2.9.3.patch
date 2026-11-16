@@ -1,0 +1,382 @@
+diff --git a/dist/ModuleFederationPlugin.js b/dist/ModuleFederationPlugin.js
+--- a/dist/ModuleFederationPlugin.js
++++ b/dist/ModuleFederationPlugin.js
+@@ -69,8 +69,6 @@
+ const manifest_namespaceObject = require("@module-federation/manifest");
+ ;// CONCATENATED MODULE: external "@module-federation/managers"
+ const managers_namespaceObject = require("@module-federation/managers");
+-;// CONCATENATED MODULE: external "@module-federation/dts-plugin"
+-const dts_plugin_namespaceObject = require("@module-federation/dts-plugin");
+ ;// CONCATENATED MODULE: external "@module-federation/bridge-react-webpack-plugin"
+ const bridge_react_webpack_plugin_namespaceObject = require("@module-federation/bridge-react-webpack-plugin");
+ var bridge_react_webpack_plugin_default = /*#__PURE__*/__webpack_require__.n(bridge_react_webpack_plugin_namespaceObject);
+@@ -96,7 +94,6 @@
+ 
+ 
+ 
+-
+ const PLUGIN_NAME = 'RspackModuleFederationPlugin';
+ function hasExposes(exposes) {
+     return Boolean(exposes && (Array.isArray(exposes) ? exposes.length > 0 : Object.keys(exposes).length > 0));
+@@ -194,7 +191,7 @@
+                 throw new Error('You can only set provideExternalRuntime: true in pure consumer which not expose modules.');
+             }
+             const runtimePlugins = options.runtimePlugins || [];
+-            options.runtimePlugins = runtimePlugins.concat(require.resolve('@module-federation/inject-external-runtime-core-plugin'));
++            options.runtimePlugins = runtimePlugins.concat(require.resolve('./runtime-plugins/inject-external-runtime-core-plugin'));
+         }
+         if (options.experiments?.externalRuntime === true) {
+             const Externals = compiler.webpack.ExternalsPlugin;
+@@ -207,7 +204,11 @@
+         let disableManifest = options.manifest === false;
+         let disableDts = options.dts === false;
+         if (!disableDts) {
+-            const dtsPlugin = new dts_plugin_namespaceObject.DtsPlugin(options);
++            // Load dts-plugin lazily so `dts: false` never pulls in its TypeScript
++            // toolchain. `__non_webpack_require__` keeps the ESM build from hoisting
++            // this into a static import.
++            const { DtsPlugin } = (typeof require === 'function' ? require : require)('@module-federation/dts-plugin');
++            const dtsPlugin = new DtsPlugin(options);
+             // @ts-ignore
+             dtsPlugin.apply(compiler);
+             dtsPlugin.addRuntimePlugins();
+diff --git a/dist/ModuleFederationPlugin.mjs b/dist/ModuleFederationPlugin.mjs
+--- a/dist/ModuleFederationPlugin.mjs
++++ b/dist/ModuleFederationPlugin.mjs
+@@ -1,15 +1,14 @@
+ import { bindLoggerToCompiler, composeKeyWithSeparator } from "@module-federation/sdk";
+ import { StatsPlugin } from "@module-federation/manifest";
+ import { ContainerManager, utils } from "@module-federation/managers";
+-import { DtsPlugin } from "@module-federation/dts-plugin";
+ import bridge_react_webpack_plugin from "@module-federation/bridge-react-webpack-plugin";
+ import node_path from "node:path";
+ import node_fs from "node:fs";
+ import { RemoteEntryPlugin } from "./RemoteEntryPlugin.mjs";
+ import logger from "./logger.mjs";
+ 
+-
+-
++import { createRequire as __rspack_createRequire } from "node:module";
++const __rspack_createRequire_require = __rspack_createRequire(import.meta.url);
+ 
+ 
+ 
+@@ -124,7 +123,7 @@
+                 throw new Error('You can only set provideExternalRuntime: true in pure consumer which not expose modules.');
+             }
+             const runtimePlugins = options.runtimePlugins || [];
+-            options.runtimePlugins = runtimePlugins.concat(require.resolve('@module-federation/inject-external-runtime-core-plugin'));
++            options.runtimePlugins = runtimePlugins.concat(__rspack_createRequire_require.resolve('./runtime-plugins/inject-external-runtime-core-plugin'));
+         }
+         if (options.experiments?.externalRuntime === true) {
+             const Externals = compiler.webpack.ExternalsPlugin;
+@@ -137,6 +136,10 @@
+         let disableManifest = options.manifest === false;
+         let disableDts = options.dts === false;
+         if (!disableDts) {
++            // Load dts-plugin lazily so `dts: false` never pulls in its TypeScript
++            // toolchain. `__non_webpack_require__` keeps the ESM build from hoisting
++            // this into a static import.
++            const { DtsPlugin } = (typeof __rspack_createRequire_require === 'function' ? __rspack_createRequire_require : require)('@module-federation/dts-plugin');
+             const dtsPlugin = new DtsPlugin(options);
+             // @ts-ignore
+             dtsPlugin.apply(compiler);
+diff --git a/dist/runtime-plugins/inject-external-runtime-core-plugin/LICENSE b/dist/runtime-plugins/inject-external-runtime-core-plugin/LICENSE
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-plugins/inject-external-runtime-core-plugin/LICENSE
+@@ -0,0 +1,21 @@
++MIT License
++
++Copyright (c) 2024-present zhanghang(2heal1)
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/dist/runtime-plugins/inject-external-runtime-core-plugin/README.md b/dist/runtime-plugins/inject-external-runtime-core-plugin/README.md
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-plugins/inject-external-runtime-core-plugin/README.md
+@@ -0,0 +1,7 @@
++# `@module-federation/inject-external-runtime-core-plugin`
++
++This runtime plugin will inject `@module-federation/runtime-core` .
++
++And the plugin will be automatic applied when set `experiments.externalRuntime: 'provide'` by build plugin.
++
++The provider can use host's runtime when set `experiments.externalRuntime: true`.
+diff --git a/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/LICENSE b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/LICENSE
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/LICENSE
+@@ -0,0 +1,21 @@
++MIT License
++
++Copyright (c) 2024-present zhanghang(2heal1)
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/_virtual/_rolldown/runtime.cjs b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/_virtual/_rolldown/runtime.cjs
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/_virtual/_rolldown/runtime.cjs
+@@ -0,0 +1,29 @@
++//#region \0rolldown/runtime.js
++var __create = Object.create;
++var __defProp = Object.defineProperty;
++var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
++var __getOwnPropNames = Object.getOwnPropertyNames;
++var __getProtoOf = Object.getPrototypeOf;
++var __hasOwnProp = Object.prototype.hasOwnProperty;
++var __copyProps = (to, from, except, desc) => {
++	if (from && typeof from === "object" || typeof from === "function") {
++		for (var keys = __getOwnPropNames(from), i = 0, n = keys.length, key; i < n; i++) {
++			key = keys[i];
++			if (!__hasOwnProp.call(to, key) && key !== except) {
++				__defProp(to, key, {
++					get: ((k) => from[k]).bind(null, key),
++					enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
++				});
++			}
++		}
++	}
++	return to;
++};
++var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", {
++	value: mod,
++	enumerable: true
++}) : target, mod));
++
++//#endregion
++
++exports.__toESM = __toESM;
+\ No newline at end of file
+diff --git a/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.cjs b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.cjs
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.cjs
+@@ -0,0 +1,31 @@
++const require_runtime = require('./_virtual/_rolldown/runtime.cjs');
++let _module_federation_runtime_tools_runtime_core = require("@module-federation/runtime-tools/runtime-core");
++_module_federation_runtime_tools_runtime_core = require_runtime.__toESM(_module_federation_runtime_tools_runtime_core);
++
++//#region src/index.ts
++function injectExternalRuntimeCorePlugin() {
++	return {
++		name: "inject-external-runtime-core-plugin",
++		version: "2.9.3",
++		beforeInit(args) {
++			const globalRef = _module_federation_runtime_tools_runtime_core.Global;
++			if (!globalRef || typeof globalRef !== "object") return args;
++			const name = args.options.name;
++			const version = "2.9.3";
++			if (globalRef._FEDERATION_RUNTIME_CORE && globalRef._FEDERATION_RUNTIME_CORE_FROM && (globalRef._FEDERATION_RUNTIME_CORE_FROM.name !== name || globalRef._FEDERATION_RUNTIME_CORE_FROM.version !== version)) {
++				console.warn(`Detect multiple module federation runtime! Injected runtime from ${globalRef._FEDERATION_RUNTIME_CORE_FROM.name}@${globalRef._FEDERATION_RUNTIME_CORE_FROM.version} and current is ${name}@${version}, pleasure ensure there is only one consumer to provider runtime!`);
++				return args;
++			}
++			globalRef._FEDERATION_RUNTIME_CORE = _module_federation_runtime_tools_runtime_core;
++			globalRef._FEDERATION_RUNTIME_CORE_FROM = {
++				version,
++				name
++			};
++			return args;
++		}
++	};
++}
++
++//#endregion
++module.exports = injectExternalRuntimeCorePlugin;
++//# sourceMappingURL=index.cjs.map
+\ No newline at end of file
+diff --git a/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.cjs.map b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.cjs.map
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.cjs.map
+@@ -0,0 +1 @@
++{"version":3,"file":"index.cjs","names":["runtimeCore"],"sources":["../src/index.ts"],"sourcesContent":["import * as runtimeCore from '@module-federation/runtime-tools/runtime-core';\n\nimport type { ModuleFederationRuntimePlugin } from '@module-federation/runtime-tools/runtime-core';\ndeclare global {\n  var __VERSION__: string;\n  var _FEDERATION_RUNTIME_CORE: typeof runtimeCore;\n  var _FEDERATION_RUNTIME_CORE_FROM: {\n    version: string;\n    name: string;\n  };\n}\n\nfunction injectExternalRuntimeCorePlugin(): ModuleFederationRuntimePlugin {\n  return {\n    name: 'inject-external-runtime-core-plugin',\n    version: __VERSION__,\n    beforeInit(args) {\n      const globalRef = (\n        runtimeCore as typeof runtimeCore & {\n          Global?: typeof runtimeCore.Global;\n        }\n      ).Global;\n      if (!globalRef || typeof globalRef !== 'object') {\n        return args;\n      }\n      const name = args.options.name;\n      const version = __VERSION__;\n      if (\n        globalRef._FEDERATION_RUNTIME_CORE &&\n        globalRef._FEDERATION_RUNTIME_CORE_FROM &&\n        (globalRef._FEDERATION_RUNTIME_CORE_FROM.name !== name ||\n          globalRef._FEDERATION_RUNTIME_CORE_FROM.version !== version)\n      ) {\n        console.warn(\n          `Detect multiple module federation runtime! Injected runtime from ${globalRef._FEDERATION_RUNTIME_CORE_FROM.name}@${globalRef._FEDERATION_RUNTIME_CORE_FROM.version} and current is ${name}@${version}, pleasure ensure there is only one consumer to provider runtime!`,\n        );\n        return args;\n      }\n      globalRef._FEDERATION_RUNTIME_CORE = runtimeCore;\n      globalRef._FEDERATION_RUNTIME_CORE_FROM = {\n        version,\n        name,\n      };\n      return args;\n    },\n  };\n}\n\nexport default injectExternalRuntimeCorePlugin;\n"],"mappings":";;;;;AAYA,SAAS,kCAAiE;AACxE,QAAO;EACL,MAAM;EACN;EACA,WAAW,MAAM;GACf,MAAM,YACJA,8CAGA;AACF,OAAI,CAAC,aAAa,OAAO,cAAc,SACrC,QAAO;GAET,MAAM,OAAO,KAAK,QAAQ;GAC1B,MAAM;AACN,OACE,UAAU,4BACV,UAAU,kCACT,UAAU,8BAA8B,SAAS,QAChD,UAAU,8BAA8B,YAAY,UACtD;AACA,YAAQ,KACN,oEAAoE,UAAU,8BAA8B,KAAK,GAAG,UAAU,8BAA8B,QAAQ,kBAAkB,KAAK,GAAG,QAAQ,mEACvM;AACD,WAAO;;AAET,aAAU,2BAA2BA;AACrC,aAAU,gCAAgC;IACxC;IACA;IACD;AACD,UAAO;;EAEV"}
+\ No newline at end of file
+diff --git a/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.d.cts b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.d.cts
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.d.cts
+@@ -0,0 +1,15 @@
++import * as runtimeCore from "@module-federation/runtime-tools/runtime-core";
++import { ModuleFederationRuntimePlugin } from "@module-federation/runtime-tools/runtime-core";
++
++//#region src/index.d.ts
++declare global {
++  var __VERSION__: string;
++  var _FEDERATION_RUNTIME_CORE: typeof runtimeCore;
++  var _FEDERATION_RUNTIME_CORE_FROM: {
++    version: string;
++    name: string;
++  };
++}
++declare function injectExternalRuntimeCorePlugin(): ModuleFederationRuntimePlugin;
++export = injectExternalRuntimeCorePlugin;
++//# sourceMappingURL=index.d.cts.map
+\ No newline at end of file
+diff --git a/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.d.ts b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.d.ts
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.d.ts
+@@ -0,0 +1,16 @@
++import * as runtimeCore from "@module-federation/runtime-tools/runtime-core";
++import { ModuleFederationRuntimePlugin } from "@module-federation/runtime-tools/runtime-core";
++
++//#region src/index.d.ts
++declare global {
++  var __VERSION__: string;
++  var _FEDERATION_RUNTIME_CORE: typeof runtimeCore;
++  var _FEDERATION_RUNTIME_CORE_FROM: {
++    version: string;
++    name: string;
++  };
++}
++declare function injectExternalRuntimeCorePlugin(): ModuleFederationRuntimePlugin;
++//#endregion
++export { injectExternalRuntimeCorePlugin as default };
++//# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
+diff --git a/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.js b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.js
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.js
+@@ -0,0 +1,29 @@
++import * as runtimeCore from "@module-federation/runtime-tools/runtime-core";
++
++//#region src/index.ts
++function injectExternalRuntimeCorePlugin() {
++	return {
++		name: "inject-external-runtime-core-plugin",
++		version: "2.9.3",
++		beforeInit(args) {
++			const globalRef = runtimeCore.Global;
++			if (!globalRef || typeof globalRef !== "object") return args;
++			const name = args.options.name;
++			const version = "2.9.3";
++			if (globalRef._FEDERATION_RUNTIME_CORE && globalRef._FEDERATION_RUNTIME_CORE_FROM && (globalRef._FEDERATION_RUNTIME_CORE_FROM.name !== name || globalRef._FEDERATION_RUNTIME_CORE_FROM.version !== version)) {
++				console.warn(`Detect multiple module federation runtime! Injected runtime from ${globalRef._FEDERATION_RUNTIME_CORE_FROM.name}@${globalRef._FEDERATION_RUNTIME_CORE_FROM.version} and current is ${name}@${version}, pleasure ensure there is only one consumer to provider runtime!`);
++				return args;
++			}
++			globalRef._FEDERATION_RUNTIME_CORE = runtimeCore;
++			globalRef._FEDERATION_RUNTIME_CORE_FROM = {
++				version,
++				name
++			};
++			return args;
++		}
++	};
++}
++
++//#endregion
++export { injectExternalRuntimeCorePlugin as default };
++//# sourceMappingURL=index.js.map
+\ No newline at end of file
+diff --git a/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.js.map b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.js.map
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-plugins/inject-external-runtime-core-plugin/dist/index.js.map
+@@ -0,0 +1 @@
++{"version":3,"file":"index.js","names":[],"sources":["../src/index.ts"],"sourcesContent":["import * as runtimeCore from '@module-federation/runtime-tools/runtime-core';\n\nimport type { ModuleFederationRuntimePlugin } from '@module-federation/runtime-tools/runtime-core';\ndeclare global {\n  var __VERSION__: string;\n  var _FEDERATION_RUNTIME_CORE: typeof runtimeCore;\n  var _FEDERATION_RUNTIME_CORE_FROM: {\n    version: string;\n    name: string;\n  };\n}\n\nfunction injectExternalRuntimeCorePlugin(): ModuleFederationRuntimePlugin {\n  return {\n    name: 'inject-external-runtime-core-plugin',\n    version: __VERSION__,\n    beforeInit(args) {\n      const globalRef = (\n        runtimeCore as typeof runtimeCore & {\n          Global?: typeof runtimeCore.Global;\n        }\n      ).Global;\n      if (!globalRef || typeof globalRef !== 'object') {\n        return args;\n      }\n      const name = args.options.name;\n      const version = __VERSION__;\n      if (\n        globalRef._FEDERATION_RUNTIME_CORE &&\n        globalRef._FEDERATION_RUNTIME_CORE_FROM &&\n        (globalRef._FEDERATION_RUNTIME_CORE_FROM.name !== name ||\n          globalRef._FEDERATION_RUNTIME_CORE_FROM.version !== version)\n      ) {\n        console.warn(\n          `Detect multiple module federation runtime! Injected runtime from ${globalRef._FEDERATION_RUNTIME_CORE_FROM.name}@${globalRef._FEDERATION_RUNTIME_CORE_FROM.version} and current is ${name}@${version}, pleasure ensure there is only one consumer to provider runtime!`,\n        );\n        return args;\n      }\n      globalRef._FEDERATION_RUNTIME_CORE = runtimeCore;\n      globalRef._FEDERATION_RUNTIME_CORE_FROM = {\n        version,\n        name,\n      };\n      return args;\n    },\n  };\n}\n\nexport default injectExternalRuntimeCorePlugin;\n"],"mappings":";;;AAYA,SAAS,kCAAiE;AACxE,QAAO;EACL,MAAM;EACN;EACA,WAAW,MAAM;GACf,MAAM,YACJ,YAGA;AACF,OAAI,CAAC,aAAa,OAAO,cAAc,SACrC,QAAO;GAET,MAAM,OAAO,KAAK,QAAQ;GAC1B,MAAM;AACN,OACE,UAAU,4BACV,UAAU,kCACT,UAAU,8BAA8B,SAAS,QAChD,UAAU,8BAA8B,YAAY,UACtD;AACA,YAAQ,KACN,oEAAoE,UAAU,8BAA8B,KAAK,GAAG,UAAU,8BAA8B,QAAQ,kBAAkB,KAAK,GAAG,QAAQ,mEACvM;AACD,WAAO;;AAET,aAAU,2BAA2B;AACrC,aAAU,gCAAgC;IACxC;IACA;IACD;AACD,UAAO;;EAEV"}
+\ No newline at end of file
+diff --git a/dist/runtime-plugins/inject-external-runtime-core-plugin/package.json b/dist/runtime-plugins/inject-external-runtime-core-plugin/package.json
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-plugins/inject-external-runtime-core-plugin/package.json
+@@ -0,0 +1 @@
++{"private":true,"type":"module","main":"./dist/index.cjs"}
+diff --git a/dist/runtime-plugins/inject-external-runtime-core-plugin/src/index.ts b/dist/runtime-plugins/inject-external-runtime-core-plugin/src/index.ts
+new file mode 100644
+--- /dev/null
++++ b/dist/runtime-plugins/inject-external-runtime-core-plugin/src/index.ts
+@@ -0,0 +1,49 @@
++import * as runtimeCore from '@module-federation/runtime-tools/runtime-core';
++
++import type { ModuleFederationRuntimePlugin } from '@module-federation/runtime-tools/runtime-core';
++declare global {
++  var __VERSION__: string;
++  var _FEDERATION_RUNTIME_CORE: typeof runtimeCore;
++  var _FEDERATION_RUNTIME_CORE_FROM: {
++    version: string;
++    name: string;
++  };
++}
++
++function injectExternalRuntimeCorePlugin(): ModuleFederationRuntimePlugin {
++  return {
++    name: 'inject-external-runtime-core-plugin',
++    version: __VERSION__,
++    beforeInit(args) {
++      const globalRef = (
++        runtimeCore as typeof runtimeCore & {
++          Global?: typeof runtimeCore.Global;
++        }
++      ).Global;
++      if (!globalRef || typeof globalRef !== 'object') {
++        return args;
++      }
++      const name = args.options.name;
++      const version = __VERSION__;
++      if (
++        globalRef._FEDERATION_RUNTIME_CORE &&
++        globalRef._FEDERATION_RUNTIME_CORE_FROM &&
++        (globalRef._FEDERATION_RUNTIME_CORE_FROM.name !== name ||
++          globalRef._FEDERATION_RUNTIME_CORE_FROM.version !== version)
++      ) {
++        console.warn(
++          `Detect multiple module federation runtime! Injected runtime from ${globalRef._FEDERATION_RUNTIME_CORE_FROM.name}@${globalRef._FEDERATION_RUNTIME_CORE_FROM.version} and current is ${name}@${version}, pleasure ensure there is only one consumer to provider runtime!`,
++        );
++        return args;
++      }
++      globalRef._FEDERATION_RUNTIME_CORE = runtimeCore;
++      globalRef._FEDERATION_RUNTIME_CORE_FROM = {
++        version,
++        name,
++      };
++      return args;
++    },
++  };
++}
++
++export default injectExternalRuntimeCorePlugin;
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -28,7 +28,6 @@
+     "@module-federation/dts-plugin": "2.9.3",
+     "@module-federation/managers": "2.9.3",
+     "@module-federation/sdk": "2.9.3",
+-    "@module-federation/inject-external-runtime-core-plugin": "2.9.3",
+     "@module-federation/runtime-tools": "2.9.3",
+     "@module-federation/manifest": "2.9.3"
+   },

@@ -14,6 +14,7 @@ import { rejectInlineOptionSyntax } from './lib/option-syntax.mjs';
 import { repoRoot } from './lib/prepare-bleedingdev-packages/constants.mjs';
 import { assertAcceptedPublishToolchain } from './lib/prepare-bleedingdev-packages/npm-buffer-publisher.mjs';
 import { inspectNpmTarball } from './lib/prepare-bleedingdev-packages/release-artifacts.mjs';
+import { packedMfCohortProbeMain } from './packed-mf-cohort-probe.mjs';
 import { packedMfSdkProbeMain } from './packed-mf-sdk-probe.mjs';
 import { packedRedactProbeMain } from './packed-redact-probe.mjs';
 import {
@@ -29,6 +30,7 @@ const { createProcessEnv, killChild } = processKit;
 const forkAlias = /^npm:(@bleedingdev\/[a-z0-9.-]+)@([^@]+)$/u;
 const profileProbeMains = {
   'mf-sdk': packedMfSdkProbeMain,
+  'mf-cohort': packedMfCohortProbeMain,
   'tanstack-redact': packedRedactProbeMain,
 };
 const dependencyBlocks = [
@@ -612,6 +614,7 @@ export async function qualifyPackedSidecars(
               verified.sidecars.packages.map(item => [item.name, item.version]),
             )),
           ...(profile === 'parser' ? { typescript: '7.0.2' } : {}),
+          ...selected.qualificationDependencies,
         },
       }),
     );
@@ -696,12 +699,14 @@ export async function qualifyPackedSidecars(
     const probePath = path.join(workspace, 'probe.mjs');
     fs.writeFileSync(
       probePath,
-      `await (${(profileProbeMains[profile] ?? packedApiProbeMain).toString()})();\n`,
+      `${profile === 'mf-cohort' ? `const sdkProbe = ${packedMfSdkProbeMain.toString()};\n` : ''}await (${(profileProbeMains[profile] ?? packedApiProbeMain).toString()})(${profile === 'mf-cohort' ? 'sdkProbe' : ''});\n`,
     );
     await run(
       process.execPath,
       [
-        ...(profile === 'mf-sdk' ? ['--experimental-vm-modules'] : []),
+        ...(['mf-sdk', 'mf-cohort'].includes(profile)
+          ? ['--experimental-vm-modules']
+          : []),
         probePath,
       ],
       {

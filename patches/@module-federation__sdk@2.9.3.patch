@@ -1,0 +1,131 @@
+diff --git a/dist/node.cjs b/dist/node.cjs
+--- a/dist/node.cjs
++++ b/dist/node.cjs
+@@ -13,10 +13,7 @@
+ 	return promise;
+ }
+ const lazyLoaderHookFetch = async (input, init, loaderHook) => {
+-	const hook = (url, init) => {
+-		return loaderHook.lifecycle.fetch.emit(url, init);
+-	};
+-	const res = await hook(input, init || {});
++	const res = await loaderHook.fetch([input, init || {}]);
+ 	if (!res || !(res instanceof Response)) return fetch(input, init || {});
+ 	return res;
+ };
+@@ -70,7 +67,12 @@
+ 			fetch: f,
+ 			vm: await importNodeModule("vm")
+ 		}).then(async (module) => {
+-			await module.evaluate();
++			try {
++				await module.evaluate();
++			} catch (error) {
++				if (esmModuleCache.get(urlObj.href) === module) esmModuleCache.delete(urlObj.href);
++				throw error;
++			}
+ 			cb(void 0, module.namespace);
+ 		}).catch((e) => {
+ 			cb(e instanceof Error ? e : /* @__PURE__ */ new Error(`Script execution error: ${e}`));
+@@ -153,7 +155,11 @@
+ 	return module;
+ }
+ async function loadModule(url, options) {
+-	if (esmModuleCache.has(url)) return esmModuleCache.get(url);
++	const cached = esmModuleCache.get(url);
++	if (cached) {
++		if (cached.status !== "errored") return cached;
++		if (esmModuleCache.get(url) === cached) esmModuleCache.delete(url);
++	}
+ 	const { fetch, vm } = options;
+ 	if (!isFetchableRemoteModuleUrl(url)) throw new Error(`Unsupported ESM module URL "${url}". Only http(s) remote modules and Node.js built-in modules are supported.`);
+ 	const code = await (await fetch(url)).text();
+@@ -168,9 +174,14 @@
+ 		}
+ 	});
+ 	esmModuleCache.set(url, sourceTextModule);
+-	await sourceTextModule.link(async (specifier) => {
+-		return loadResolvedModule(specifier, url, options);
+-	});
++	try {
++		await sourceTextModule.link(async (specifier) => {
++			return loadResolvedModule(specifier, url, options);
++		});
++	} catch (error) {
++		if (esmModuleCache.get(url) === sourceTextModule) esmModuleCache.delete(url);
++		throw error;
++	}
+ 	return sourceTextModule;
+ }
+ 
+diff --git a/dist/node.d.ts b/dist/node.d.ts
+--- a/dist/node.d.ts
++++ b/dist/node.d.ts
+@@ -8,6 +8,7 @@
+   attrs?: Record<string, any>;
+   loaderHook?: {
+     createScriptHook?: CreateScriptHookNode;
++    fetch?: FetchHook;
+   };
+ }) => Promise<void>;
+ //#endregion
+diff --git a/dist/node.js b/dist/node.js
+--- a/dist/node.js
++++ b/dist/node.js
+@@ -12,10 +12,7 @@
+ 	return promise;
+ }
+ const lazyLoaderHookFetch = async (input, init, loaderHook) => {
+-	const hook = (url, init) => {
+-		return loaderHook.lifecycle.fetch.emit(url, init);
+-	};
+-	const res = await hook(input, init || {});
++	const res = await loaderHook.fetch([input, init || {}]);
+ 	if (!res || !(res instanceof Response)) return fetch(input, init || {});
+ 	return res;
+ };
+@@ -69,7 +66,12 @@
+ 			fetch: f,
+ 			vm: await importNodeModule("vm")
+ 		}).then(async (module) => {
+-			await module.evaluate();
++			try {
++				await module.evaluate();
++			} catch (error) {
++				if (esmModuleCache.get(urlObj.href) === module) esmModuleCache.delete(urlObj.href);
++				throw error;
++			}
+ 			cb(void 0, module.namespace);
+ 		}).catch((e) => {
+ 			cb(e instanceof Error ? e : /* @__PURE__ */ new Error(`Script execution error: ${e}`));
+@@ -152,7 +154,11 @@
+ 	return module;
+ }
+ async function loadModule(url, options) {
+-	if (esmModuleCache.has(url)) return esmModuleCache.get(url);
++	const cached = esmModuleCache.get(url);
++	if (cached) {
++		if (cached.status !== "errored") return cached;
++		if (esmModuleCache.get(url) === cached) esmModuleCache.delete(url);
++	}
+ 	const { fetch, vm } = options;
+ 	if (!isFetchableRemoteModuleUrl(url)) throw new Error(`Unsupported ESM module URL "${url}". Only http(s) remote modules and Node.js built-in modules are supported.`);
+ 	const code = await (await fetch(url)).text();
+@@ -167,9 +173,14 @@
+ 		}
+ 	});
+ 	esmModuleCache.set(url, sourceTextModule);
+-	await sourceTextModule.link(async (specifier) => {
+-		return loadResolvedModule(specifier, url, options);
+-	});
++	try {
++		await sourceTextModule.link(async (specifier) => {
++			return loadResolvedModule(specifier, url, options);
++		});
++	} catch (error) {
++		if (esmModuleCache.get(url) === sourceTextModule) esmModuleCache.delete(url);
++		throw error;
++	}
+ 	return sourceTextModule;
+ }
+ 

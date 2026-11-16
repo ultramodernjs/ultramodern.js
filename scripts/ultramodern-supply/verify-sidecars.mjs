@@ -13,7 +13,6 @@ import {
   ULTRAMODERN_PACKAGE_PINS,
 } from '../../packages/toolkit/ultramodern-create/src/ultramodern-workspace/versions.ts';
 import { packageMetadataRepository } from '../ultramodern-publish/lib/prepare-bleedingdev-packages/constants.mjs';
-import { sidecarProfile } from '../ultramodern-publish/sidecar-profiles.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const recipes = JSON.parse(
@@ -173,13 +172,15 @@ export function assertRecipeConsumers(
 /** Check the repository recipes against the generator's runtime pins and the published cohort manifests. */
 export function assertRepositoryRecipeConsumers(publishedManifests) {
   assertModuleFederationRelease(recipes);
-  const qualifiedProfilePins = ['mf-sdk', 'tanstack-redact'].map(profile =>
-    Object.fromEntries(
-      Object.entries(sidecarProfile(profile).dependencies).map(
-        ([name, version]) => [name, `npm:${name}@${version}`],
-      ),
-    ),
-  );
+  // These active recipe roots are qualified independently. Candidate profiles
+  // must never introduce unpublished identities into the active consumer graph.
+  const qualifiedProfilePins = ['mf-sdk', 'tanstack-redact'].map(id => {
+    const recipe = recipes.find(item => item.id === id);
+    assert.ok(recipe, `missing active qualification recipe: ${id}`);
+    return {
+      [recipe.fork.name]: `npm:${recipe.fork.name}@${recipe.fork.version}`,
+    };
+  });
   assertRecipeGraph(recipes, {
     generatorPins: [
       ...Object.values(ULTRAMODERN_PACKAGE_PINS),
@@ -513,6 +514,16 @@ async function fetchPinnedTarball(url) {
 export async function verifySidecar(id, { artifactsDir, materializeTo } = {}) {
   const recipe = recipes.find(item => item.id === id);
   assert.ok(recipe, `unknown sidecar: ${id}`);
+  return reconstructSidecarRecipe(recipe, { artifactsDir, materializeTo });
+}
+
+// Internal producer API: callers supply the already validated, source-bound recipe.
+// No CLI or environment option can select an alternate recipe file.
+export async function reconstructSidecarRecipe(
+  recipe,
+  { artifactsDir, materializeTo } = {},
+) {
+  const { id } = recipe;
   assert.deepEqual(
     recipe.artifacts,
     ['*'],

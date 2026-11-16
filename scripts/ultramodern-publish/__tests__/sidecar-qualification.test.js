@@ -24,9 +24,9 @@ async function fixture(t, { sdk = false, redact = false } = {}) {
     '../lib/prepare-bleedingdev-packages/release-artifacts.mjs'
   );
   const definitions = sdk
-    ? [{ name: '@bleedingdev/mf-sdk', version: '2.9.2' }]
+    ? [{ name: '@bleedingdev/mf-sdk', version: '2.9.5' }]
     : redact
-      ? [{ name: '@bleedingdev/tanstack-redact', version: '0.2.2' }]
+      ? [{ name: '@bleedingdev/tanstack-redact', version: '0.3.2' }]
       : [
           { name: '@bleedingdev/braces', version: '3.0.4' },
           {
@@ -402,7 +402,7 @@ test('SDK profile installs only its closed dependency and runs native VM probes'
             fs.readFileSync(path.join(options.cwd, 'package.json')),
           );
           assert.deepEqual(manifest.dependencies, {
-            '@bleedingdev/mf-sdk': '2.9.2',
+            '@bleedingdev/mf-sdk': '2.9.5',
           });
           f.install(options.cwd);
         }
@@ -467,7 +467,7 @@ test('Redact profile installs only its closed dependency and runs the Redact pro
             fs.readFileSync(path.join(options.cwd, 'package.json')),
           );
           assert.deepEqual(manifest.dependencies, {
-            '@bleedingdev/tanstack-redact': '0.2.2',
+            '@bleedingdev/tanstack-redact': '0.3.2',
           });
           f.install(options.cwd);
         }
