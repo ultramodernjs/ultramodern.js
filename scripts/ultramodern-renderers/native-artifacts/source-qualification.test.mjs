@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
@@ -175,6 +176,48 @@ test('actual build diff contains normalized npm paths, not temporary host identi
   const diff = builtPatch(a, b).toString();
   assert.match(diff, /--- a\/index.js\n\+\+\+ b\/index.js/u);
   assert(!diff.includes(directory));
+});
+test('built patch bytes are the reviewed histogram diff under any user git configuration', t => {
+  const directory = root(t);
+  const a = path.join(directory, 'before');
+  const b = path.join(directory, 'after');
+  fs.mkdirSync(a);
+  fs.mkdirSync(b);
+  fs.writeFileSync(
+    path.join(a, 'index.js'),
+    'x\nx\n{\n}\n{\ny\n}\n1\n2\n3\n4\n5\n6\n7\nold\n',
+  );
+  fs.writeFileSync(
+    path.join(b, 'index.js'),
+    'y\nz\nx\nz\ny\n1\n2\n3\n4\n5\n6\n7\nnew\n',
+  );
+  const clean = path.join(directory, 'clean-home');
+  const adversarial = path.join(directory, 'adversarial-home');
+  fs.mkdirSync(clean);
+  fs.mkdirSync(adversarial);
+  fs.writeFileSync(
+    path.join(adversarial, '.gitconfig'),
+    '[diff]\n\talgorithm = patience\n\tindentHeuristic = false\n\tcontext = 1\n\tinterHunkContext = 4\n\tnoprefix = true\n[core]\n\tabbrev = 16\n[color]\n\tdiff = always\n',
+  );
+  const home = process.env.HOME;
+  t.after(() => {
+    process.env.HOME = home;
+  });
+  const expected =
+    'diff --git a/index.js b/index.js\nindex 410d0bfd9c..ea8dfbc8f5 100644\n--- a/index.js\n+++ b/index.js\n@@ -1,10 +1,8 @@\n-x\n-x\n-{\n-}\n-{\n y\n-}\n+z\n+x\n+z\n+y\n 1\n 2\n 3\n@@ -12,4 +10,4 @@ y\n 5\n 6\n 7\n-old\n+new\n';
+  for (const candidate of [clean, adversarial]) {
+    process.env.HOME = candidate;
+    assert.equal(builtPatch(a, b).toString(), expected);
+    const ambient = spawnSync('git', ['diff', '--no-index', a, b], {
+      env: { PATH: process.env.PATH, HOME: candidate },
+      encoding: 'utf8',
+    }).stdout;
+    assert.notEqual(
+      ambient.slice(ambient.indexOf('@@')),
+      expected.slice(expected.indexOf('@@')),
+      'control: an unpinned diff of this fixture has other hunks',
+    );
+  }
 });
 test('unpacks the full npm layout without executing a package script', t => {
   const directory = root(t);

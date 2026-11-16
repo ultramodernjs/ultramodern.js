@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import { devNull } from 'node:os';
 import path from 'node:path';
 import {
   assertSameFiles,
@@ -57,8 +58,12 @@ export function canonicalPatch({ work, originalBytes, correctedBytes }) {
     [
       'diff',
       '--no-index',
+      '--diff-algorithm=histogram',
+      '--unified=3',
+      '--indent-heuristic',
       '--no-ext-diff',
       '--no-textconv',
+      '--no-renames',
       '--full-index',
       '--no-color',
       '--src-prefix=a/',
@@ -66,7 +71,16 @@ export function canonicalPatch({ work, originalBytes, correctedBytes }) {
       path.join(before, 'package.json'),
       path.join(after, 'package.json'),
     ],
-    { encoding: 'utf8', maxBuffer: 1024 * 1024 },
+    {
+      cwd: work,
+      env: {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: devNull,
+        GIT_CONFIG_NOSYSTEM: '1',
+      },
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    },
   );
   assert.equal(diff.status, 1);
   const patchBytes = Buffer.from(
