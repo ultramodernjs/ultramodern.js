@@ -37,6 +37,7 @@ test('both independent build jobs bind each owner to its exact installed pnpm', 
       installer.with.install_args,
       'node@26.13.1 pnpm@11.21.0 pnpm@12.21.0',
     );
+    assert.equal(installer.with.cache_save, false);
     const run = job.steps.find(step =>
       step.run?.includes('native-artifacts/main.mjs'),
     ).run;
