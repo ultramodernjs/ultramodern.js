@@ -138,22 +138,23 @@ test('unused imports, unused variables and @ts-ignore fail lint in fork-owned co
   }
 });
 
-test('module-initialized component factories do not disable the rule in other files', () => {
+test('component-factory exceptions name only the two module-initialized implementations', () => {
   const factories = [
     'packages/runtime/federation-runtime/src/module-federation/distributed-ssr.tsx',
     'packages/runtime/i18n-extensions/src/router-navigation/adapter.tsx',
   ];
-  const other = 'packages/runtime/federation-runtime/src/probe.tsx';
-  const rules = lintProbes(
-    [...factories, other],
-    `export function createComponent() {
-  return function Component() { return <div />; };
-}
-`,
+  const exceptions = biomeConfig.overrides.filter(
+    override =>
+      override.linter?.rules?.correctness?.noComponentHookFactories === 'off',
   );
-  for (const file of factories)
-    assert(!rules.get(file).has('lint/correctness/noComponentHookFactories'));
-  assert(rules.get(other).has('lint/correctness/noComponentHookFactories'));
+  assert.deepEqual(
+    exceptions.flatMap(override => override.includes).sort(),
+    factories.sort(),
+  );
+  assert.notEqual(
+    biomeConfig.linter.rules.correctness?.noComponentHookFactories,
+    'off',
+  );
 });
 
 test('upstream-owned packages keep upstream lint rules to stay shrink-only', () => {
