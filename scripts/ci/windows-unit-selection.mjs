@@ -8,14 +8,13 @@ export const generatorFiles = [
   'packages/toolkit/ultramodern-create/tests/workspace-integration.test.ts',
 ];
 
-// Six ordinary lanes come from the measurement below, not from a round
-// number. The two pinned generator fixtures keep their own runner and cost
-// 178.2 s together, so the slowest Test step cannot drop below that: six
-// lanes already put every ordinary lane under it (954.0 / 6 = 159.0 s) while
-// five would leave 190.8 s, and a seventh would add a Windows job that only
-// waits for the generators.
-export const windowsOrdinaryLanes = ['1/6', '2/6', '3/6', '4/6', '5/6', '6/6'];
-export const windowsLanes = [...windowsOrdinaryLanes, 'generators'];
+// Run 43898596159 still took 10m29s: the generator pair's Test step
+// was 255 s and ordinary lanes reached 219 s. Split the generator pair and
+// spread ordinary work across eight runners; keep one file worker because
+// these files launch nested compilers and package installs.
+export const windowsOrdinaryLanes = ['1/8', '2/8', '3/8', '4/8', '5/8', '6/8', '7/8', '8/8'];
+export const windowsGeneratorLanes = ['generator-shell', 'generator-workspace'];
+export const windowsLanes = [...windowsOrdinaryLanes, ...windowsGeneratorLanes];
 
 // Per-file Test-step cost in seconds, measured on Depot Windows in run
 // 43825084105: every lane ran with --pool.maxWorkers=1, so one file finishes
@@ -261,8 +260,10 @@ export function selectWindowsUnitFiles(root, baseline, lane) {
       throw new Error(`Measured Windows generator test is missing: ${file}`);
     }
   }
-  if (lane === 'generators')
-    return baseline.filter(entry => isGeneratorFile(root, entry));
+  if (windowsGeneratorLanes.includes(lane)) {
+    const file = generatorFiles[windowsGeneratorLanes.indexOf(lane)];
+    return baseline.filter(entry => relativeFile(root, entry.testPath) === file);
+  }
   return assignWindowsOrdinaryLanes(
     root,
     baseline.filter(entry => !isGeneratorFile(root, entry)),

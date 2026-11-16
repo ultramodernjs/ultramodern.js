@@ -30,7 +30,7 @@ jobs:
         # scripts/ci/windows-unit-selection.mjs, which also owns the
         # assignment. Keep this list equal to its windowsLanes: a lane that is
         # assigned work but never dispatched would skip those files silently.
-        lane: ['1/6', '2/6', '3/6', '4/6', '5/6', '6/6', 'generators']
+        lane: ['1/8', '2/8', '3/8', '4/8', '5/8', '6/8', '7/8', '8/8', 'generator-shell', 'generator-workspace']
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -53,9 +53,9 @@ jobs:
           pnpm_version="$(pnpm --version)"
           node scripts/ci/check-test-toolchain.mjs "$pnpm_version"
 
-      # Restore only; ci-cache.yml seeds the linked tree and the store on
-      # main-ultramodern. The frozen install below stays the gate: it either
-      # confirms the restored tree or builds it.
+      # Restore only; ci-cache.yml seeds the store on main-ultramodern.
+      # Always link dependencies with a frozen install: cached Windows
+      # junctions do not survive the Actions cache archive round trip.
       - name: Restore Windows dependencies
         uses: ./.github/actions/windows-dependencies
 
@@ -92,7 +92,7 @@ jobs:
         run: node --test --test-name-pattern="prebundle distinguishes" scripts/prebundle/ultramodern/packed-utils-consumer.test.mjs
 
       - name: Verify complete disjoint Windows test coverage
-        if: matrix.lane == '1/6'
+        if: matrix.lane == '1/8'
         run: |
           node --test scripts/__tests__/windows-unit-selection.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -105,8 +105,8 @@ jobs:
           availableParallelism:os.availableParallelism(),cpuCount:os.cpus().length,
           totalMemoryBytes:os.totalmem(),testFileWorkers:1}))"
 
-      # Give the two measured slow generator files their own runner. Remaining
-      # files also launch nested tools, so all seven lanes keep one file
+      # Give each measured slow generator file its own runner. Remaining
+      # files also launch nested tools, so all ten lanes keep one file
       # worker; with one worker a lane's cost is the sum of its files, which
       # is what windows-unit-selection.mjs balances.
       - name: Test

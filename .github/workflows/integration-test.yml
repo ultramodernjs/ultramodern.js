@@ -53,9 +53,7 @@ jobs:
     env:
       MODERN_TEST_FRAMEWORK_SUITE: ${{ matrix.framework_suite || 'full' }}
 
-    # The GitHub-hosted public runner has 4 vCPU / 16 GB. A healthy job is ~15 min;
-    # this ceiling turns a hung fixture into a clean failure instead of letting
-    # the job sit on the GitHub default of 6 hours.
+    # Fail hung fixtures instead of waiting for the six-hour Actions default.
     timeout-minutes: 60
 
     # One job per suite, so a red suite never hides the ones after it behind
@@ -212,10 +210,9 @@ jobs:
         shell: bash
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
-      # Restore only; ci-cache.yml seeds this key on main-ultramodern. Linux
-      # links the store into node_modules in 3 s, so the store is all it
-      # needs; Windows spends 132 s on that linking and restores the linked
-      # tree itself.
+      # Restore only; ci-cache.yml seeds these keys on main-ultramodern.
+      # Windows also restores pnpm policy verification, but never a linked
+      # node_modules tree: NTFS junctions do not survive cache transport.
       - name: Restore pnpm store cache
         if: runner.os != 'Windows'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
