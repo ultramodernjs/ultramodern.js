@@ -5,6 +5,10 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import {
+  admissionTuple,
+  validateAdmissionPackages,
+} from './native-artifact.mjs';
 
 const root = process.cwd();
 const receipt = path.join(root, 'tooling-evidence.json');
@@ -16,25 +20,25 @@ const require = createRequire(path.join(root, 'package.json'));
 const privateManifest = JSON.parse(
   fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
 );
-const maintainedVersion = '0.7.1+ultramodern.1331985ea3b0';
-const maintainedAdmission =
-  privateManifest.ultramodernAdmission?.nativeArtifact !== undefined;
-const nativeDeclarationHashes = {
-  'jsx-runtime.d.ts':
-    '5bb6d1114f7878d27e33e50c1a5e7c1bb4d5e6cf8ce593101ab5aa3c45ca1a62',
-  'jsx-runtime-strong.d.ts':
-    '4f78bcf211275640e3c6c3f10ebac3fbb9830e9ab546291561da3f36a960e98d',
-  'index.d.ts':
-    'a98629106809e3b2e5e136dd60b2021fda124e7085b1b025027575681d29f78c',
-  'public-types.d.ts':
-    '977558e8b7efc07b088c1ff2d9c2f7bbe4c796146f063e2d07f919b83cc41486',
-};
+const nativeDeclarationFiles = [
+  'jsx-runtime.d.ts',
+  'jsx-runtime-strong.d.ts',
+  'index.d.ts',
+  'public-types.d.ts',
+];
 const reactDeclarationHashes = {
   'index.d.ts':
-    '814d5c7384f3ca276e9dc4bcfde5545801a3ea0bfae09916b3336774e662fd1b',
+    '045c1b395851aa71ef76393398466330fe1eeebc113c8085eefc6d84abea3a88',
   'global.d.ts':
     '7e29f41b158de217f94cb9676bf9cbd0cd9b5a46e1985141ed36e075c52bf6ad',
 };
+// Authenticate the current owning descriptor before any compiler/tooling probe.
+const admittedPackages = await validateAdmissionPackages({
+  root,
+  workspacePath: privateManifest.ultramodernAdmission?.workspacePath,
+  nativeArtifacts: privateManifest.ultramodernAdmission?.nativeArtifacts,
+  nativeArchives: privateManifest.ultramodernAdmission?.nativeArchives,
+});
 const sdkManifestFile = fs.realpathSync(
   require.resolve('@modern-js/renderer-octane/package.json'),
 );
@@ -321,13 +325,18 @@ function incomingEdges(graph, file) {
   return graph.get(file);
 }
 
-function edgeSourceEvidence(edge, line, expectedStatement) {
-  const statement = fs.readFileSync(edge.from, 'utf8').split('\n')[line - 1];
-  assert.equal(
-    statement,
-    expectedStatement,
-    `Native type-owner edge: ${edge.from}:${line}`,
+function edgeSourceEvidence(edge, expectedStatement) {
+  const lines = fs.readFileSync(edge.from, 'utf8').split('\n');
+  const matches = lines.flatMap((statement, index) =>
+    statement === expectedStatement ? [index] : [],
   );
+  assert.equal(
+    matches.length,
+    1,
+    `Exact native type-owner statement: ${edge.from}`,
+  );
+  const line = matches[0] + 1;
+  const statement = lines[matches[0]];
   return {
     ...edge,
     line,
@@ -354,55 +363,22 @@ function rejectForeignAugmentations(inspection) {
 }
 
 async function maintainedTypeInterop(inspection, typeFiles) {
-  const admission = privateManifest.ultramodernAdmission;
-  assert.equal(admission.nativeArtifact.name, 'octane');
-  assert.equal(admission.nativeArtifact.version, maintainedVersion);
+  const verified = admittedPackages;
+  assert.equal(verified.nativeArtifact.version, admissionTuple.octane);
   assert.equal(
-    admission.nativeArtifact.sha256,
-    '363a3f81fa82665ccaa61bf14669209dbd87bb8955b5055e73e1d825e5a8f141',
-    'Audited maintained native runtime artifact',
+    verified.nativeRouterArtifact.version,
+    admissionTuple['@octanejs/tanstack-router'],
   );
-  assert.equal(
-    admission.nativeArtifact.provenanceSha256,
-    '6db01750e3abd612ba4f0d7346a1f003512b8fc806db5cf494c003dd9a1588eb',
-    'Audited maintained native runtime provenance',
-  );
-  if (admission.nativeRouterArtifact) {
-    assert.equal(
-      admission.nativeRouterArtifact.name,
-      '@octanejs/tanstack-router',
-    );
-    assert.equal(
-      admission.nativeRouterArtifact.version,
-      '0.1.60+ultramodern.0b9f76ee3003',
-    );
-    assert.equal(
-      admission.nativeRouterArtifact.sha256,
-      '0debe9e9bcf0d99e91d24b34b9d1a821d8b953167555ae7f7a494495e628377d',
-      'Audited maintained native router artifact',
-    );
-    assert.equal(
-      admission.nativeRouterArtifact.provenanceSha256,
-      '21f7c3d902ca2a27dd18d0ec92c5dad986f8419300c54f02929d3458d82306ee',
-      'Audited maintained native router provenance',
-    );
-  }
-  const { validateAdmissionPackages } = await import('./native-artifact.mjs');
-  const verified = await validateAdmissionPackages({
-    root,
-    workspacePath: admission.workspacePath,
-    nativeArtifact: admission.nativeArtifact,
-    nativeRouterArtifact: admission.nativeRouterArtifact,
-  });
   assert.equal(verified.nativeArtifact.installedBytesVerified, true);
   const graph = incomingGraph(inspection);
   const ownerRoot = verified.nativeArtifact.packageRoot;
-  const declarations = Object.entries(nativeDeclarationHashes).map(
-    ([file, hash]) => ({
-      packagePath: `octane/dist/${file}`,
-      ...fileEvidence(path.join(ownerRoot, 'dist', file), hash),
-    }),
-  );
+  const declarations = nativeDeclarationFiles.map(file => ({
+    packagePath: `octane/dist/${file}`,
+    ...fileEvidence(
+      path.join(ownerRoot, 'dist', file),
+      verified.nativeArtifact.fileHashes[`dist/${file}`],
+    ),
+  }));
   const owner = new Map(
     declarations.map(file => [file.packagePath, file.realpath]),
   );
@@ -433,7 +409,7 @@ async function maintainedTypeInterop(inspection, typeFiles) {
     fs.readFileSync(path.join(reactRoot, 'package.json'), 'utf8'),
   );
   assert.equal(reactManifest.name, '@types/react');
-  assert.equal(reactManifest.version, '19.2.18');
+  assert.equal(reactManifest.version, admissionTuple['@types/react']);
   const reactFiles = Object.entries(reactDeclarationHashes).map(
     ([file, hash]) => ({
       packagePath: `@types/react/${file}`,
@@ -530,22 +506,22 @@ async function maintainedTypeInterop(inspection, typeFiles) {
     nativeArtifact: verified.nativeArtifact,
     nativeRouterArtifact: verified.nativeRouterArtifact,
     nativeOwnerDeclarations: declarations,
-    reactPackage: { name: '@types/react', version: '19.2.18' },
+    reactPackage: {
+      name: '@types/react',
+      version: admissionTuple['@types/react'],
+    },
     reactFiles,
     incomingEdges: [
       edgeSourceEvidence(
         expectedReactEdges[0],
-        43,
         "import type * as React from 'react';",
       ),
       edgeSourceEvidence(
         expectedReactEdges[1],
-        2,
         "import type * as React from 'react';",
       ),
       edgeSourceEvidence(
         globalEdges[0],
-        5,
         '/// <reference path="global.d.ts" />',
       ),
       edgeSourceEvidence(
@@ -555,7 +531,6 @@ async function maintainedTypeInterop(inspection, typeFiles) {
           from: index,
           to: publicTypes,
         },
-        4,
         "export type * from './public-types.js';",
       ),
     ],
@@ -630,9 +605,7 @@ try {
     'Record the JSX type dependency authored by the admitted Octane release',
   );
   assert.throws(() => require.resolve('react'), { code: 'MODULE_NOT_FOUND' });
-  const nativeTypeInterop = maintainedAdmission
-    ? await maintainedTypeInterop(inspection, typeFiles)
-    : undefined;
+  const nativeTypeInterop = await maintainedTypeInterop(inspection, typeFiles);
   const formatted = command(formatter, [
     '--check',
     'src/Counter.tsrx',

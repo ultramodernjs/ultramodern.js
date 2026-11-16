@@ -108,20 +108,23 @@ export async function action({ request }: DataHandlerInput) {
 
 ### Octane
 
-Octane applications use the exact runtime, router and compiler archives from
-[Octane source `2383d2ab1e70`](https://github.com/BleedingDev/octane/releases/tag/ultramodern-octane-2383d2ab1e70),
-together with the Core archive from
-[Router source `585d3233f7f5`](https://github.com/BleedingDev/router/releases/tag/ultramodern-router-core-585d3233f7f5).
-This archive tuple is the supported contract. The generator writes its exact
-URLs into the application dependencies; retain those requests in the manifest
-or catalog. Workspace validation rejects different requests.
+Octane applications use the exact runtime (`octane`), router adapter
+(`@octanejs/tanstack-router`), compiler (`@octanejs/rspack-plugin`) and shared
+`@tanstack/router-core` archives from one authenticated
+[native renderer artifact release](https://github.com/ultramodernjs/ultramodern.js/releases?q=native-renderers&expanded=true).
+The SDK's `ultramodern.nativeArtifacts` descriptor names that release and is
+the supported contract. The generator writes its exact URLs into the
+application dependencies; retain those requests in the manifest or catalog.
+Workspace validation rejects different requests.
 
 The renderer SDK's version peers describe the ABI it expects. Most are optional
 so installing the SDK does not install an application toolchain. Registry
-packages with the same version numbers do not provide the required fork APIs
-and cannot replace these archives. The SDK's `ultramodern.nativeArtifacts`
-metadata records each archive URL, version and SHA512 integrity; native artifact
-qualification checks the downloaded bytes against that metadata.
+packages with the same version numbers lack the reviewed corrections and cannot
+replace these archives. The descriptor records the producing workflow run and
+source commit, the release manifest digest, and for each archive its URL,
+version, SHA512 integrity, correction patch digest and upstream registry
+provenance; native artifact qualification checks the downloaded bytes against
+that metadata.
 
 Router bindings come from `@bleedingdev/modern-js-renderer-octane/router`.
 Components are authored as `.tsx` today (the generator's starter); Octane

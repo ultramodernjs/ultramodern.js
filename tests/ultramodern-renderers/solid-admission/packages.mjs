@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import {
   access,
   mkdir,
@@ -13,10 +14,122 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { parseSync } from '@babel/core';
 
 const execute = promisify(execFile);
 const workspaceRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const packageNames = ['@modern-js/renderer-core', '@modern-js/renderer-solid'];
+
+export const admissionTuple = Object.freeze({
+  'solid-js': '2.0.0-rc.22',
+  '@solidjs/web': '2.0.0-rc.22',
+  '@solidjs/signals': '2.0.0-rc.22',
+  '@solidjs/compiler': '2.0.0-rc.22',
+  '@rsbuild/core': '2.3.2',
+  '@rspack/core': '2.3.2',
+  '@babel/core': '8.1.2',
+  playwright: '1.65.1',
+  typescript: '7.0.2',
+  seroval: '1.8.1',
+  'seroval-plugins': '1.8.0',
+  isbot: '5.2.3',
+});
+
+// The authored owner's authenticated native descriptor is the only accepted
+// router-core artifact; packed owners must carry it unchanged.
+const ownerNativeArtifacts = JSON.parse(
+  readFileSync(
+    path.join(workspaceRoot, 'packages/runtime/renderer-solid/package.json'),
+    'utf8',
+  ),
+).ultramodern.nativeArtifacts;
+export const acceptedRouter = Object.freeze(
+  ownerNativeArtifacts.packages['@tanstack/router-core'],
+);
+
+/** Read only the generator's two literal, bounded serializer corrections. */
+export function admissionSerializerOverrides(source) {
+  const ast = parseSync(source, {
+    babelrc: false,
+    configFile: false,
+    parserOpts: { plugins: ['typescript'] },
+  });
+  const declaration = ast.program.body
+    .flatMap(node =>
+      node.type === 'ExportNamedDeclaration' &&
+      node.declaration?.type === 'VariableDeclaration'
+        ? node.declaration.declarations
+        : [],
+    )
+    .find(node => node.id.name === 'ULTRAMODERN_WORKSPACE_POLICY');
+  const property = (object, key) => {
+    const matches =
+      object?.properties?.filter(
+        node =>
+          node.type === 'ObjectProperty' &&
+          !node.computed &&
+          (node.key.name ?? node.key.value) === key,
+      ) ?? [];
+    assert.equal(
+      matches.length,
+      1,
+      `Ambiguous or missing generator serializer policy: ${key}`,
+    );
+    return matches[0].value;
+  };
+  const policy = declaration?.init;
+  const overrides = property(
+    property(
+      policy?.type === 'TSAsExpression' ? policy.expression : policy,
+      'pnpm',
+    ),
+    'overrides',
+  );
+  return Object.fromEntries(
+    ['seroval@>=1.0.0 <1.8.1', 'seroval-plugins@>=1.0.0 <1.8.0'].map(
+      selector => {
+        const value = property(overrides, selector);
+        assert.equal(
+          value?.type,
+          'StringLiteral',
+          `Missing literal generator serializer policy: ${selector}`,
+        );
+        assert.equal(
+          value.value,
+          admissionTuple[selector.split('@')[0]],
+          `Generator serializer policy drift: ${selector}`,
+        );
+        return [selector, value.value];
+      },
+    ),
+  );
+}
+
+export function assertNativeRendererManifest(manifest) {
+  assert.equal(manifest.name, '@modern-js/renderer-solid');
+  assert.equal(manifest.version, '3.8.3');
+  assert.equal(manifest.dependencies['@tanstack/router-core'], undefined);
+  assert.equal(
+    manifest.peerDependencies['@tanstack/router-core'],
+    acceptedRouter.version,
+  );
+  assert.deepEqual(manifest.ultramodern.nativeArtifacts, ownerNativeArtifacts);
+  assert.equal(manifest.dependencies['@tanstack/history'], '1.162.5');
+  assert.equal(manifest.dependencies.isbot, admissionTuple.isbot);
+  for (const name of [
+    'solid-js',
+    '@solidjs/web',
+    '@solidjs/signals',
+    '@solidjs/compiler',
+  ])
+    assert.equal(
+      manifest.dependencies[name] ?? manifest.peerDependencies[name],
+      admissionTuple[name],
+      name,
+    );
+  for (const name of ['seroval', 'seroval-plugins', '@tanstack/solid-router'])
+    assert.equal(manifest.dependencies[name], undefined);
+}
 
 /** Local tarballs are transport for unpublished owning packages. Native package
  * versions and peer constraints remain exactly those authored by their producer. */
@@ -92,18 +205,30 @@ export async function prepareRendererPackages(
       await access(tarballs[name]);
     }
   }
-  // This matches the repository's packed-consumer transport. The overrides are
-  // limited to our unpublished packages, never Solid/TanStack or their peers.
+  // Transport unpublished owners and inherit only the generator's bounded
+  // serializer corrections. Native Solid/router requests remain unchanged.
+  const serializerOverrides = admissionSerializerOverrides(
+    await readFile(
+      path.join(
+        workspaceRoot,
+        'packages/toolkit/ultramodern-create/src/ultramodern-workspace/policy.ts',
+      ),
+      'utf8',
+    ),
+  );
   await writeFile(
     path.join(consumerDirectory, 'pnpm-workspace.yaml'),
     JSON.stringify({
       packages: [],
-      overrides: Object.fromEntries(
-        Object.entries(tarballs).map(([name, tarball]) => [
-          name,
-          `file:${tarball}`,
-        ]),
-      ),
+      overrides: {
+        ...Object.fromEntries(
+          Object.entries(tarballs).map(([name, tarball]) => [
+            name,
+            `file:${tarball}`,
+          ]),
+        ),
+        ...serializerOverrides,
+      },
     }),
   );
   return Object.fromEntries(
@@ -138,13 +263,7 @@ export async function assertNativePackageGraph(consumerDirectory) {
       'utf8',
     ),
   );
-  assert.equal(manifest.version, '3.8.3');
-  assert.equal(manifest.dependencies['@tanstack/router-core'], '1.171.37');
-  assert.equal(manifest.dependencies['@tanstack/history'], '1.162.5');
-  assert.equal(manifest.dependencies.isbot, '5.2.2');
-  assert.equal(manifest.dependencies.seroval, undefined);
-  assert.equal(manifest.dependencies['seroval-plugins'], undefined);
-  assert.equal(manifest.dependencies['@tanstack/solid-router'], undefined);
+  assertNativeRendererManifest(manifest);
   const nativeResolve = createRequire(router);
   const versions = {};
   async function installedManifest(name, resolver) {
@@ -164,12 +283,12 @@ export async function assertNativePackageGraph(consumerDirectory) {
     throw new Error(`Installed native package escaped the consumer: ${name}`);
   }
   for (const [name, expected] of Object.entries({
-    'solid-js': '2.0.0-rc.15',
-    '@solidjs/web': '2.0.0-rc.15',
-    '@solidjs/signals': '2.0.0-rc.15',
-    '@tanstack/router-core': '1.171.37',
+    'solid-js': admissionTuple['solid-js'],
+    '@solidjs/web': admissionTuple['@solidjs/web'],
+    '@solidjs/signals': admissionTuple['@solidjs/signals'],
+    '@tanstack/router-core': acceptedRouter.version,
     '@tanstack/history': '1.162.5',
-    isbot: '5.2.2',
+    isbot: admissionTuple.isbot,
   })) {
     const installed = await installedManifest(name, nativeResolve);
     assert.equal(
@@ -180,11 +299,11 @@ export async function assertNativePackageGraph(consumerDirectory) {
     versions[name] = installed.manifest.version;
   }
   for (const [name, expected] of Object.entries({
-    '@solidjs/compiler': '2.0.0-rc.15',
-    '@rsbuild/core': '2.2.11',
-    '@babel/core': '7.29.7',
-    playwright: '1.64.1',
-    typescript: '7.0.2',
+    '@solidjs/compiler': admissionTuple['@solidjs/compiler'],
+    '@rsbuild/core': admissionTuple['@rsbuild/core'],
+    '@babel/core': admissionTuple['@babel/core'],
+    playwright: admissionTuple.playwright,
+    typescript: admissionTuple.typescript,
   })) {
     const installed = await installedManifest(name, resolve);
     assert.equal(
@@ -199,7 +318,11 @@ export async function assertNativePackageGraph(consumerDirectory) {
     path.join(rsbuild.directory, 'package.json'),
   );
   const rspack = await installedManifest('@rspack/core', rsbuildResolve);
-  assert.equal(rspack.manifest.version, '2.2.8', 'Rspack version drift');
+  assert.equal(
+    rspack.manifest.version,
+    admissionTuple['@rspack/core'],
+    'Rspack version drift',
+  );
   versions['@rspack/core'] = rspack.manifest.version;
   const core = await installedManifest('@tanstack/router-core', nativeResolve);
   // Solid's hydration writer and its plugins must use one native serializer.
@@ -208,7 +331,11 @@ export async function assertNativePackageGraph(consumerDirectory) {
   const webResolve = createRequire(path.join(web.directory, 'package.json'));
   for (const name of ['seroval', 'seroval-plugins']) {
     const installed = await installedManifest(name, webResolve);
-    assert.equal(installed.manifest.version, '1.6.7');
+    assert.equal(
+      installed.manifest.version,
+      admissionTuple[name],
+      `${name} version drift`,
+    );
     versions[name] = installed.manifest.version;
   }
   const serializer = await realpath(webResolve.resolve('seroval'));
@@ -249,17 +376,22 @@ export async function assertNativePackageGraph(consumerDirectory) {
   );
   const coreResolve = createRequire(path.join(core.directory, 'package.json'));
   const plugin = await installedManifest('seroval-plugins', coreResolve);
+  assert.equal(
+    plugin.manifest.version,
+    admissionTuple['seroval-plugins'],
+    'Router HTTP serializer plugins version drift',
+  );
   const pluginResolve = createRequire(
     path.join(plugin.directory, 'package.json'),
   );
   assert.equal(
     (await installedManifest('seroval', pluginResolve)).manifest.version,
-    '1.6.9',
+    admissionTuple.seroval,
     'Router HTTP serializer plugin version drift',
   );
   assert.equal(
     (await installedManifest('seroval', coreResolve)).manifest.version,
-    '1.6.9',
+    admissionTuple.seroval,
     'Router HTTP serializer version drift',
   );
   const installed = await readdir(

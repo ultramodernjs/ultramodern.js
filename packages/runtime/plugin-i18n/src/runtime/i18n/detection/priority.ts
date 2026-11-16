@@ -1,4 +1,4 @@
-import { type I18nInstance, isI18nWrapperInstance } from '../instance';
+import { type I18nRuntimeInstance, isI18nWrapperInstance } from '../instance';
 
 import { detectLanguageFromI18nextDetector } from './detector';
 
@@ -20,7 +20,7 @@ import type {
  * Priority 4: User config language or fallback
  */
 export const detectLanguageWithPriority = async (
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   options: LanguageDetectionOptions,
 ): Promise<LanguageDetectionResult> => {
   const {

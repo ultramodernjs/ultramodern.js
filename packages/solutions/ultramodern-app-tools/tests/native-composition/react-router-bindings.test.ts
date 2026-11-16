@@ -3,6 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Entrypoint } from '@modern-js/types/cli/base';
 import { describe, expect, it } from '@rstest/core';
+import { validateDescriptor } from '../../../../../scripts/ultramodern-renderers/native-artifacts/protocol.mjs';
+import { supportProtocol } from '../../../../../scripts/ultramodern-support-artifacts/protocol.mjs';
 import { validateRendererRouterBindings } from '../../../../toolkit/backend-federation-contracts/src/backend-federation-contract';
 import { resolveReactRouterBindings } from '../../src/renderers/react/router-bindings';
 
@@ -11,16 +13,16 @@ const tanstack = '@modern-js/plugin-tanstack';
 const reactRouter = {
   framework: 'react-router',
   name: 'react-router',
-  version: '7.18.4',
+  version: '8.5.1',
   coreName: 'react-router',
-  coreVersion: '7.18.4',
+  coreVersion: '8.5.1',
 };
 const tanstackRouter = {
   framework: 'tanstack',
   name: '@tanstack/react-router',
-  version: '1.170.44',
+  version: '1.170.46',
   coreName: '@tanstack/router-core',
-  coreVersion: '1.171.37',
+  coreVersion: '1.171.39',
 };
 type RouterEntrypoint = Entrypoint & {
   __modernRoutesOwner?: string;
@@ -258,7 +260,7 @@ describe('React router owner bindings', () => {
       install(
         install(app, '@modern-js/runtime', '3.9.0'),
         'react-router',
-        '7.18.4',
+        '8.5.1',
       );
       const bindings = resolveReactRouterBindings({
         entrypoints: [entry('main')],
@@ -336,11 +338,27 @@ describe('React router owner bindings', () => {
       ),
     );
     expect(runtime.dependencies['react-router']).toBe(reactRouter.version);
-    expect(provider.dependencies['@tanstack/react-router']).toBe(
+    expect(provider.peerDependencies['@tanstack/react-router']).toBe(
       tanstackRouter.version,
     );
-    expect(provider.dependencies['@tanstack/router-core']).toBe(
+    expect(provider.peerDependencies['@tanstack/router-core']).toBe(
       tanstackRouter.coreVersion,
+    );
+    const support = supportProtocol.validateDescriptor(
+      provider.ultramodern.supportArtifacts,
+    );
+    const native = validateDescriptor(provider.ultramodern.nativeArtifacts);
+    expect(support.packages['@tanstack/react-router'].version).toBe(
+      tanstackRouter.version,
+    );
+    expect(native.packages['@tanstack/router-core'].version).toBe(
+      tanstackRouter.coreVersion,
+    );
+    expect(provider.devDependencies['@tanstack/react-router']).toBe(
+      support.packages['@tanstack/react-router'].request,
+    );
+    expect(provider.devDependencies['@tanstack/router-core']).toBe(
+      native.packages['@tanstack/router-core'].request,
     );
   });
 });

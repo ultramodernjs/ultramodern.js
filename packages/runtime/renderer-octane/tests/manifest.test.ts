@@ -5,6 +5,7 @@ import {
   OCTANE_RUNTIME_VERSION,
   validateOctaneModuleManifest,
 } from '../src/manifest';
+import { octaneProfile } from '../src/plugin/profile';
 
 const identity: RendererIdentity = {
   renderer: 'octane',
@@ -42,6 +43,11 @@ function createManifest() {
 }
 
 describe('Octane compiler manifest admission', () => {
+  test('pins the ABI of the native runtime and compiler that applications install', () => {
+    expect(OCTANE_RUNTIME_VERSION).toBe(octaneProfile.hydration.version);
+    expect(OCTANE_COMPILER_VERSION).toBe(octaneProfile.compiler.version);
+  });
+
   test('authenticates native compilation separately from the source/profile build', () => {
     const input = createManifest();
     const admitted = validateOctaneModuleManifest(

@@ -1,0 +1,157 @@
+import assert from 'node:assert/strict';
+import { afterAll, expect, it } from 'vitest';
+import { writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+const payloadEvidence: Record<string, { sha256: string; bytes: number }> = {};
+afterAll(() =>
+  writeFileSync(
+    'serializer-payload-evidence.json',
+    JSON.stringify(payloadEvidence),
+  ),
+);
+const recordPayload = (name: string, code: string) => {
+  payloadEvidence[name] = {
+    sha256: createHash('sha256').update(code).digest('hex'),
+    bytes: Buffer.byteLength(code),
+  };
+};
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  createMemoryHistory,
+} from '@octanejs/tanstack-router';
+import { attachRouterServerSsrUtils } from '@tanstack/router-core/ssr/server';
+import { hydrate } from '@tanstack/router-core/ssr/client';
+import { hydrateRoot, flushSync } from 'octane';
+import { renderToString } from 'octane/server';
+import { loadCompiledFixtureSource } from '../_server-fixture.js';
+
+it('roundtrips actual rich SSR loader data and adopts Octane DOM without reloading', async () => {
+  const source =
+    'export function App(props) {return <p id="data">{props.label}</p>}';
+  const serverModule = loadCompiledFixtureSource(source, {
+    id: '/Serializer.tsx',
+    mode: 'server',
+  });
+  const clientModule = loadCompiledFixtureSource(source, {
+    id: '/Serializer.tsx',
+    mode: 'client',
+  });
+  const make = (isServer: boolean, loader: () => unknown) => {
+    const root = createRootRoute();
+    const page = createRoute({ getParentRoute: () => root, path: '/', loader });
+    return createRouter({
+      routeTree: root.addChildren([page]),
+      history: createMemoryHistory({ initialEntries: ['/'] }),
+      isServer,
+    });
+  };
+  const value = {
+    label: 'café☕ </script><script>globalThis.bad=true</script>',
+    date: new Date('2026-11-16T00:00:00Z'),
+    big: 12345678901234567890n,
+    map: new Map([['answer', 42]]),
+    set: new Set(['a', 'b']),
+    bytes: new Uint8Array([0, 128, 255]),
+  };
+  Object.defineProperty(value, 'self', { value, enumerable: true });
+  const server = make(true, () => value);
+  attachRouterServerSsrUtils({ router: server, manifest: { routes: {} } });
+  await server.load();
+  await server.serverSsr!.dehydrate();
+  const scripts = server.serverSsr!.takeInitialHydrationScriptTags();
+  expect(scripts?.before.length).toBeGreaterThan(0);
+  const payload = scripts!.before.map(s => s.children).join('\n');
+  recordPayload('routerBootstrap', payload);
+  expect(payload).not.toContain('</script>');
+  expect(payload).toContain('tsr');
+  const { html } = renderToString(serverModule.App, { label: value.label });
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  document.body.append(container);
+  const original = container.querySelector('#data');
+  expect(original?.textContent).toBe(value.label);
+  // Execute precisely the emitted hydration sources; no JSON/synthetic replacement.
+  const context: Record<string, unknown> = {
+    atob: globalThis.atob,
+    document: { currentScript: { remove() {} } },
+  };
+  context.self = context;
+  const { runInNewContext } = await import('node:vm');
+  for (const script of scripts!.before)
+    runInNewContext(script.children!, context);
+  let calls = 0;
+  const client = make(false, () => {
+    calls++;
+    throw Error('hydration reran loader');
+  });
+  Object.assign(window, { $_TSR: context.$_TSR });
+  let root: ReturnType<typeof hydrateRoot> | undefined;
+  try {
+    await hydrate(client);
+    const restored = client.state.matches.at(-1)?.loaderData;
+    assert(restored && typeof restored === 'object');
+    expect(Reflect.get(restored, 'self')).toBe(restored);
+    expect(restored).not.toBe(value);
+    expect(Reflect.get(restored,'label')).toBe(value.label);
+    expect(Reflect.get(restored,'date').toISOString()).toBe(value.date.toISOString());
+    expect(Reflect.get(restored,'big')).toBe(value.big);
+    expect(Reflect.get(restored,'map').get('answer')).toBe(42);
+    expect([...Reflect.get(restored,'set')]).toEqual(['a','b']);
+    expect(ArrayBuffer.isView(Reflect.get(restored, 'bytes'))).toBe(true);
+    expect([...Reflect.get(restored, 'bytes')]).toEqual([0, 128, 255]);
+    const label: unknown = Reflect.get(restored, 'label');
+    assert.equal(typeof label, 'string');
+    expect(calls).toBe(0);
+    const errors: unknown[] = [];
+    root = hydrateRoot(
+      container,
+      clientModule.App,
+      { label },
+      { onRecoverableError: error => errors.push(error) },
+    );
+    flushSync(() => {});
+    expect(container.querySelector('#data')).toBe(original);
+    expect(errors).toEqual([]);
+    expect(container.textContent).toBe(value.label);
+  } finally {
+    root?.unmount();
+    container.remove();
+    server.serverSsr?.cleanup();
+    server.history.destroy();
+    client.history.destroy();
+    Reflect.deleteProperty(window, '$_TSR');
+  }
+});
+
+// Exercise the actual 1.8.0 web plugin with the 1.8.1 serializer, not merely its peer metadata.
+it('roundtrips ReadableStream data through the real Seroval web plugin', async () => {
+  const { crossSerializeAsync } = await import('seroval');
+  const { ReadableStreamPlugin } = await import('seroval-plugins/web');
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue('stream café☕');
+      controller.enqueue(new Uint8Array([0, 128, 255]));
+      controller.close();
+    },
+  });
+  const code = await crossSerializeAsync(
+    { stream },
+    { plugins: [ReadableStreamPlugin] },
+  );
+  recordPayload('webReadableStream', code);
+  const { runInNewContext } = await import('node:vm');
+  const restored = runInNewContext(code, {
+    $R: [],
+    ReadableStream,
+    atob: globalThis.atob,
+  });
+  const reader = restored.stream.getReader();
+  expect(await reader.read()).toMatchObject({
+    done: false,
+    value: 'stream café☕',
+  });
+  expect([...(await reader.read()).value]).toEqual([0, 128, 255]);
+  expect((await reader.read()).done).toBe(true);
+});

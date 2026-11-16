@@ -50,23 +50,23 @@
   "dependencies": {
     "@modern-js/runtime-utils": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@swc/helpers": "^0.5.23",
-    "path-to-regexp": "^8.4.2"
+    "@swc/helpers": "^0.5.24",
+    "path-to-regexp": "^9.0.0"
   },
   "devDependencies": {
     "@modern-js/rslib": "workspace:*",
     "@modern-js/server-core": "workspace:*",
     "@modern-js/types": "workspace:*",
     "@rsbuild/core": "2.3.2",
-    "@rslib/core": "1.0.3",
+    "@rslib/core": "1.0.7",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/supertest": "^7.2.1",
-    "memfs": "^4.80.0",
+    "memfs": "^4.80.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "server-only": "^0.0.1",
-    "supertest": "^7.3.1",
+    "supertest": "^7.3.2",
     "typescript": "7.0.2"
   },
   "peerDependencies": {

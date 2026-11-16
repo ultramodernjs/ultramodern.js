@@ -3,8 +3,8 @@ export type { OctaneDocumentBootstrap } from './bootstrap';
 
 export const OCTANE_RUNTIME_PROFILE = Object.freeze({
   renderer: 'octane',
-  runtime: '0.13.8',
-  router: '0.2.10',
-  routerCore: '1.171.34',
-  history: '1.162.4',
+  runtime: '0.18.0',
+  router: '0.3.4',
+  routerCore: '1.171.39',
+  history: '1.162.5',
 });

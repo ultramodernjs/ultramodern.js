@@ -1,4 +1,5 @@
 import type { LocalisedUrlsOption } from '@modern-js/i18n-runtime-extensions/paths';
+import type { i18n } from 'i18next';
 
 /**
  * The slice of an i18next-shaped instance this binding needs. Deliberately
@@ -8,10 +9,12 @@ import type { LocalisedUrlsOption } from '@modern-js/i18n-runtime-extensions/pat
  * require React/ReactDOM, which an Octane-only application must never need
  * to install. `on`/`off` are real i18next `EventEmitter` methods this
  * interface adds back for the reactive `languageChanged` subscription.
+ * `t` is i18next's own `TFunction`, so keys, overloads and selectors follow
+ * the application's i18next type configuration.
  */
 export interface I18nInstanceLike {
   language: string;
-  t(key: string | string[], options?: Record<string, unknown>): string;
+  t: i18n['t'];
   changeLanguage?(lng?: string): Promise<unknown> | unknown;
   on?(event: 'languageChanged', callback: (lng: string) => void): void;
   off?(event: 'languageChanged', callback: (lng: string) => void): void;

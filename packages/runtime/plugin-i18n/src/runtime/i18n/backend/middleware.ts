@@ -1,6 +1,6 @@
 import Backend from 'i18next-http-backend';
 import type { ExtendedBackendOptions } from '../../../shared/type';
-import type { I18nInstance } from '../instance';
+import type { I18nRuntimeInstance } from '../instance';
 import { useI18nextBackendCommon } from './middleware.common';
 
 /**
@@ -16,7 +16,7 @@ export class HttpBackendWithSave extends Backend {
 }
 
 export const useI18nextBackend = (
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   backend?: ExtendedBackendOptions,
 ) => {
   return useI18nextBackendCommon(

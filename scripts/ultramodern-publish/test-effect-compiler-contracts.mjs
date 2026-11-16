@@ -13,6 +13,7 @@ const result = spawnSync(
   [
     '--test',
     'packages/solutions/app-tools-extensions/tests/compiler-payload/resolve.test.cjs',
+    'packages/solutions/app-tools-extensions/tests/compiler-payload/constraint-contract.test.mjs',
     'scripts/ultramodern-publish/__tests__/stage-effect-compiler-payload.test.mjs',
     'scripts/__tests__/effect-tsrs-provider.test.mjs',
     'packages/solutions/app-tools-extensions/tests/build-config/owned-effect-discovery.test.mjs',

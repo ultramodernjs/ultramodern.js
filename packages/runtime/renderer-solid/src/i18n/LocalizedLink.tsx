@@ -22,7 +22,6 @@ export interface LocalizedLinkProps
   to: string;
   /** Localize for a specific language instead of the current one. */
   language?: string;
-  [key: `data-${string}`]: unknown;
 }
 
 /**

@@ -1,6 +1,6 @@
 import FsBackendModule from 'i18next-fs-backend';
 import type { ExtendedBackendOptions } from '../../../shared/type';
-import type { I18nInstance } from '../instance';
+import type { I18nRuntimeInstance } from '../instance';
 import { useI18nextBackendCommon } from './middleware.common';
 
 type BackendConstructor = new (...args: any[]) => any;
@@ -50,7 +50,7 @@ export class FsBackendWithSave extends Backend {
 export const HttpBackendWithSave = FsBackendWithSave;
 
 export const useI18nextBackend = (
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   backend?: ExtendedBackendOptions,
 ) => {
   return useI18nextBackendCommon(

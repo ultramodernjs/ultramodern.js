@@ -40,8 +40,8 @@ function fixture() {
   );
   packages.set('/octane-router:@tanstack/history', octaneHistory);
   for (const name of ['solid-js', '@solidjs/web', '@solidjs/signals'])
-    add('/solid-adapter', name, `/native/${name}`, '2.0.0-rc.15');
-  add('/app', '@solidjs/compiler', '/compiler', '2.0.0-rc.15');
+    add('/solid-adapter', name, `/native/${name}`, '2.0.0-rc.22');
+  add('/app', '@solidjs/compiler', '/compiler', '2.0.0-rc.22');
   packages.set(
     '/native/@solidjs/web:solid-js',
     packages.get('/solid-adapter:solid-js'),
@@ -51,7 +51,12 @@ function fixture() {
     packages.get('/solid-adapter:@solidjs/signals'),
   );
   for (const name of ['seroval', 'seroval-plugins']) {
-    const item = add('/native/solid-js', name, `/native/${name}`, '1.6.7');
+    const item = add(
+      '/native/solid-js',
+      name,
+      `/native/${name}`,
+      name === 'seroval' ? '1.8.1' : '1.8.0',
+    );
     packages.set(`/native/@solidjs/web:${name}`, item);
   }
   const expected = {
@@ -78,15 +83,16 @@ function fixture() {
   return { packages, expected, check };
 }
 
-test('accepts the exact Solid2 RC15 native graph and separate Octane router graph', () => {
+test('accepts the exact Solid2 RC22 native graph and separate Octane router graph', () => {
   const { check } = fixture();
-  assert.equal(check('solid').solid, '2.0.0-rc.15');
-  assert.equal(check('solid').nativeSerializer, '1.6.7');
+  assert.equal(check('solid').solid, '2.0.0-rc.22');
+  assert.equal(check('solid').nativeSerializer, '1.8.1');
+  assert.equal(check('solid').nativeSerializerPlugins, '1.8.0');
   assert.equal(check('octane').routerCore.version, '1.171.34');
 });
 
-for (const version of ['1.9.17', '2.0.0-rc.13'])
-  test(`rejects Solid ${version} as RC15 acceptance`, () => {
+for (const version of ['1.9.17', '2.0.0-rc.13', '2.0.0-rc.15'])
+  test(`rejects Solid ${version} as RC22 acceptance`, () => {
     const { packages, check } = fixture();
     packages.get('/solid-adapter:solid-js').manifest.version = version;
     assert.throws(() => check('solid'), /solid-js package version/);
@@ -99,7 +105,7 @@ for (const name of ['@solidjs/web', '@solidjs/signals'])
     assert.throws(() => check('solid'), /package version/);
   });
 
-test('requires the generated app compiler to be RC15', () => {
+test('requires the generated app compiler to be RC22', () => {
   const { packages, check } = fixture();
   packages.get('/app:@solidjs/compiler').manifest.version = '2.0.0-rc.13';
   assert.throws(() => check('solid'), /@solidjs\/compiler package version/);

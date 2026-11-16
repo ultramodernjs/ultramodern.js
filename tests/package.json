@@ -22,19 +22,149 @@
     "@modern-js/app-tools": "workspace:*",
     "@modern-js/plugin-polyfill": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@rstest/core": "0.12.3",
+    "@rstest/core": "https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz",
     "@scripts/rstest-config": "workspace:*",
-    "@swc/core": "1.16.21",
-    "@types/node": "^26.6.5",
+    "@swc/core": "1.16.22",
+    "@types/node": "^26.6.6",
     "cross-spawn": "^7.0.6",
-    "enhanced-resolve": "5.26.0",
+    "enhanced-resolve": "5.27.0",
     "fs-extra": "^11.4.1",
     "get-port": "7.2.0",
     "kill-port": "^2.0.1",
-    "playwright": "^1.64.1",
-    "puppeteer": "^25.14.0",
-    "rimraf": "^6.1.3",
+    "playwright": "^1.65.1",
+    "puppeteer": "^25.17.0",
+    "rimraf": "^6.1.4",
     "tree-kill": "^1.2.2",
     "typescript": "7.0.2"
+  },
+  "ultramodern": {
+    "supportArtifacts": {
+      "packages": {
+        "@effect/opentelemetry": {
+          "integrity": "sha512-PR6ZoYhufvmTJCTRgtEDhlJimW9sm9sPv2Fw42nLAzPJRK1v8KnfkCQVR5GocrwdR39JzS45pygUKdY/gfy5Aw==",
+          "patchSha256": "41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804",
+          "request": "https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz",
+          "upstream": {
+            "archiveRoot": "package",
+            "integrity": "sha512-VJnookNrIWk0ZHl51DYMTRHXZrogR13kSSOJzcDxGhyUNDHvgWg217OY4R6bOrtdgM3mrPQiLRGNZ0a7bGyAJg==",
+            "kind": "authenticated-npm-source",
+            "licensePath": "LICENSE",
+            "licenseSha256": "774c3bc5924ad8ae6c5a75f1c53db13feb238ade15989625c513d07b60dedf30",
+            "request": "https://registry.npmjs.org/@effect/opentelemetry/-/opentelemetry-4.1.4.tgz",
+            "sourceArchiveIntegrity": "sha512-VJnookNrIWk0ZHl51DYMTRHXZrogR13kSSOJzcDxGhyUNDHvgWg217OY4R6bOrtdgM3mrPQiLRGNZ0a7bGyAJg=="
+          },
+          "version": "4.1.4"
+        },
+        "@rstest/core": {
+          "integrity": "sha512-eNAi0XHVaK4xszz622KgNCem2JMBLEyET6owEqzqeTIFlfoNH0ENpkAx+FYWklykfTG0bA22IHYGPPgzkuhdGA==",
+          "patchSha256": "9128c18e017b2dfaa4f92adeb799964b628302d4add5240b244edb31c8d6bacd",
+          "request": "https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz",
+          "upstream": {
+            "archiveRoot": "package",
+            "integrity": "sha512-pOOij4Gj7h9fOJiRhcQ7zmVK+l3wSINpocwlsgq34ri60UOl9FACf5qyu7LMS2A3P4feqPdKmwS7QAT3vPk5ww==",
+            "kind": "authenticated-npm-source",
+            "licensePath": "LICENSE.md",
+            "licenseSha256": "7c7a74e7c463c4e747bd5c2de625beb088c55a42d58169b3fdb703691f03df55",
+            "request": "https://registry.npmjs.org/@rstest/core/-/core-0.12.6.tgz",
+            "sourceArchiveIntegrity": "sha512-pOOij4Gj7h9fOJiRhcQ7zmVK+l3wSINpocwlsgq34ri60UOl9FACf5qyu7LMS2A3P4feqPdKmwS7QAT3vPk5ww=="
+          },
+          "version": "0.12.6"
+        },
+        "@tanstack/react-router": {
+          "integrity": "sha512-BsG4WmzfgPUgboR/IdQBGkvQauDMAAXUcorqritojyWv8tjIZaJh1aLvDOZ8ryLUsd4ZEQlEoTpMLFm9lkVyrg==",
+          "patchSha256": "186e54be20a0d481731091924921ec409a15968fa13de5bfc3888a0ddbaf18d9",
+          "request": "https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/tanstack-react-router-1.170.46.tgz",
+          "upstream": {
+            "archiveRoot": "package",
+            "commit": "6b9fe6d29552270836c511bc9b343d73541f4424",
+            "integrity": "sha512-ez1iNIhsPjGlaDHg3BXWs67EWVIYzB2tbopEHYDESdkO7owgkGb5de52+5Kv2v1fxdkggcNzo35bdk4arTVGQw==",
+            "kind": "git-source",
+            "licensePath": "LICENSE",
+            "licenseSha256": "a405ee70c632bb938acb7ac5f210e814409b3760ea9d2329d8ed8ffcfd11a0e7",
+            "repository": "TanStack/router",
+            "request": "https://registry.npmjs.org/@tanstack/react-router/-/react-router-1.170.46.tgz",
+            "sourceArchiveIntegrity": "sha512-Ng/f9xHhLhmtYZL4/yy29bn1RA5kkAp5lnW4pWj1MNp9+HrtIdLGCsVb9jdkwt/0AJDys97c7QL67qymftHkzA=="
+          },
+          "version": "1.170.46"
+        },
+        "@types/ioredis-mock": {
+          "integrity": "sha512-dvblb9YJYPaDWkHdAFsOrS48uQbUzQtKYc/FRRoIPlpCWFVQOWoLJo6Nt6niZemoWQEFq+do6OnqXwPhKwbQqQ==",
+          "patchSha256": "9e5c9ac3e6082364a423e8f997433022986336b213b07f7ab683e0336a1eb0d0",
+          "request": "https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/types-ioredis-mock-8.2.8.tgz",
+          "upstream": {
+            "archiveRoot": "ioredis-mock",
+            "integrity": "sha512-Nxr1CXk8NtGVzWQ8WoGCOyo+HARd4CFc/Nt2+ITt3WWLNlj1InW38SzZwOJNqzA38iplrpBFp6Ny4KjPfeI+bA==",
+            "kind": "authenticated-npm-source",
+            "licensePath": "LICENSE",
+            "licenseSha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+            "request": "https://registry.npmjs.org/@types/ioredis-mock/-/ioredis-mock-8.2.8.tgz",
+            "sourceArchiveIntegrity": "sha512-Nxr1CXk8NtGVzWQ8WoGCOyo+HARd4CFc/Nt2+ITt3WWLNlj1InW38SzZwOJNqzA38iplrpBFp6Ny4KjPfeI+bA=="
+          },
+          "version": "8.2.8"
+        },
+        "ioredis-mock": {
+          "integrity": "sha512-PxNq8ZR0ERihJ8Q0zilv2scRisnrfftBD+Kwn2H8Ph3Vc39nDadJufLaGmgBghTkUoHCkONZCKsgQQo0l68a5A==",
+          "patchSha256": "d3648d6077fc2ed2ce8e9de3cca0abbe49160abf882a9ec2c4e7d6e4bdc171f6",
+          "request": "https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/ioredis-mock-8.13.1.tgz",
+          "upstream": {
+            "archiveRoot": "package",
+            "integrity": "sha512-Wsi50AU+cMiI32nAgfwpUaJVBtb4iQdVsOHl9M6R3tePCO/8vGsToCVIG82XWAxN4Se55TZoOzVseu+QngFLyw==",
+            "kind": "authenticated-npm-source",
+            "licensePath": "LICENSE",
+            "licenseSha256": "62b9f69bb4ccf131e7e4cc8ce6ec5b4acf3d9848f0ac73c3c2f285d716ff1b5c",
+            "request": "https://registry.npmjs.org/ioredis-mock/-/ioredis-mock-8.13.1.tgz",
+            "sourceArchiveIntegrity": "sha512-Wsi50AU+cMiI32nAgfwpUaJVBtb4iQdVsOHl9M6R3tePCO/8vGsToCVIG82XWAxN4Se55TZoOzVseu+QngFLyw=="
+          },
+          "version": "8.13.1"
+        },
+        "rsbuild-plugin-dts": {
+          "integrity": "sha512-iVDi8+9rd2rcU1M+VBnVeLp8xHw6dg6Lb7MNqU4AhzcxkA0qqlj9tYUOS30RPXcOPv4FOssjW0aeOZvL7LvWXA==",
+          "patchSha256": "bd0c8f1b4c4681eeb0d1ea0123c252ad41b17f01be1ca171bd8c42ca2d652e44",
+          "request": "https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rsbuild-plugin-dts-1.0.7.tgz",
+          "upstream": {
+            "archiveRoot": "package",
+            "integrity": "sha512-r9+bGoY0EmOB5Jisxd7qFQNTTcMTtB0Ke0oDZDYEEAvrpzTCvjWH2UtsscUnOwyPeUauXR2fBME+Vny8aVD66w==",
+            "kind": "authenticated-npm-source",
+            "licensePath": "LICENSE",
+            "licenseSha256": "9d26ef3ec511840e10eeaaf1e1b211e196c838823baf6bf9033761f27ab349ce",
+            "request": "https://registry.npmjs.org/rsbuild-plugin-dts/-/rsbuild-plugin-dts-1.0.7.tgz",
+            "sourceArchiveIntegrity": "sha512-r9+bGoY0EmOB5Jisxd7qFQNTTcMTtB0Ke0oDZDYEEAvrpzTCvjWH2UtsscUnOwyPeUauXR2fBME+Vny8aVD66w=="
+          },
+          "version": "1.0.7"
+        },
+        "solid-js": {
+          "integrity": "sha512-2FUA/PaO2AKrgYqS3RWJLhM3JlVwI/XnKjs6YZi9ps9vUyeoQWJilnzyesELe5bOCptSr/JpTYvCVblkLVj3tw==",
+          "patchSha256": "c439688aaacf2cddef3a254fba2c468a98b9110b9b40556bd8ba1865a23b5399",
+          "request": "https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/solid-js-2.0.0-rc.22.tgz",
+          "upstream": {
+            "archiveRoot": "package",
+            "commit": "221b5f99faf0f47dbe6d5c4c6cb77661053e44b8",
+            "integrity": "sha512-RGTA07/yyFoM0+ov1PlRPupSaCY6chQ/uFSDmlPwRewqN5TTkVsxIQqz/HJCG+UhtjsyxNoSoAQ9GLjGdlSpcQ==",
+            "kind": "git-source",
+            "licenseLocation": "source-only",
+            "licensePath": "LICENSE",
+            "licenseSha256": "59a76ed2f4a3ebe8d20a58869ef9c09420f796aa179420c8fb916f5557defc9b",
+            "repository": "solidjs/solid",
+            "request": "https://registry.npmjs.org/solid-js/-/solid-js-2.0.0-rc.22.tgz",
+            "sourceArchiveIntegrity": "sha512-/DtlvxLaZNj0HryN7zpprSgFnVwPPVyFHNF3RNKTDRbOAaDBrWXrGbcJKNvaXkPFcleOAbHpToujZcYelIYhFg=="
+          },
+          "version": "2.0.0-rc.22"
+        }
+      },
+      "producer": {
+        "repository": "ultramodernjs/ultramodern.js",
+        "repositoryId": 1151231350,
+        "runAttempt": 2,
+        "runId": 43934193068,
+        "source": "d62b29f5039311ec122012887ce6bf7c4a527d6e",
+        "tag": "support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2",
+        "workflow": ".github/workflows/support-artifacts.yml"
+      },
+      "protocol": "ultramodern.support-artifacts.v3",
+      "manifest": {
+        "request": "https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/support-artifacts.json",
+        "integrity": "sha512-oAlj047j+Gf45EAvZbcYbkI6QbBBTKTE5XA3ShJbai8/wrY5kiUDlSVm63t1rXvStf8ainRguaIdkmV5fakFXA=="
+      }
+    }
   }
 }

@@ -5,16 +5,16 @@ module.exports = function (source) {
     filename: this.resourcePath,
     configFile: false,
     babelrc: false,
+    parserOpts: { createImportExpressions: true },
     plugins: [
       () => ({
         visitor: {
-          CallExpression(path) {
+          ImportExpression(path) {
             if (
-              path.node.callee.type === 'Import' &&
-              path.node.arguments[0]?.type === 'Identifier' &&
-              path.node.arguments[0].name === 'entryUrl'
+              path.node.source.type === 'Identifier' &&
+              path.node.source.name === 'entryUrl'
             ) {
-              path.node.arguments[0].leadingComments = [
+              path.node.source.leadingComments = [
                 { type: 'CommentBlock', value: ' webpackIgnore: true ' },
               ];
               matched++;
@@ -25,6 +25,6 @@ module.exports = function (source) {
     ],
   });
   if (matched !== 1)
-    throw new Error('Solid rc13 native URL import contract changed');
+    throw new Error('Solid rc22 native URL import contract changed');
   return result.code;
 };

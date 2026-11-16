@@ -87,10 +87,7 @@ describe('compat require', () => {
   });
 });
 
-function watchEvent(
-  watcher: FSWatcher | fs.FSWatcher,
-  event: 'ready' | 'change' | 'close',
-) {
+function watchEvent(watcher: FSWatcher, event: 'ready' | 'change') {
   let cancel = () => {};
   const promise = new Promise<string | undefined>((resolve, reject) => {
     const timer = setTimeout(
@@ -115,6 +112,32 @@ function watchEvent(
     watcher.once('error', fail);
   });
   return { promise, cancel: () => cancel() };
+}
+
+// Chokidar may retire native handles before `close()` (macOS closes its
+// one-shot exact-file fallback on the first event), so closure is recorded
+// from creation and every handle must be closed once shutdown completes.
+async function allNativeWatchersClosed(closes: Promise<void>[]) {
+  let timer: NodeJS.Timeout | undefined;
+  let closed = 0;
+  try {
+    await Promise.race([
+      Promise.all(closes.map(close => close.then(() => void closed++))),
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `${closes.length - closed} of ${closes.length} native watchers stayed open`,
+              ),
+            ),
+          10000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function writeFromNode(
@@ -168,7 +191,7 @@ describe('lazy compiled watcher imports', () => {
       ),
     );
     const originalWatch = fs.watch;
-    const nativeWatchers: fs.FSWatcher[] = [];
+    const nativeClosed: Promise<void>[] = [];
     let watcher: FSWatcher | undefined;
     try {
       fs.watch = new Proxy(originalWatch, {
@@ -178,7 +201,9 @@ describe('lazy compiled watcher imports', () => {
             receiver,
             args,
           );
-          nativeWatchers.push(nativeWatcher);
+          nativeClosed.push(
+            new Promise(resolve => nativeWatcher.once('close', resolve)),
+          );
           return nativeWatcher;
         },
       });
@@ -189,22 +214,15 @@ describe('lazy compiled watcher imports', () => {
       expect(watcher).toBeInstanceOf(chokidar.FSWatcher);
       await watchEvent(watcher, 'ready').promise;
       expect(owningRequire.cache[compiledFilename]?.loaded).toBe(true);
-      expect(nativeWatchers.length).toBeGreaterThan(0);
+      expect(nativeClosed.length).toBeGreaterThan(0);
       const changed = watchEvent(watcher, 'change');
       try {
         expect(await writeFromNode(filename, changed.promise)).toBe(filename);
       } finally {
         changed.cancel();
       }
-      const nativeClosed = nativeWatchers.map(nativeWatcher =>
-        watchEvent(nativeWatcher, 'close'),
-      );
-      try {
-        await watcher.close();
-        await Promise.all(nativeClosed.map(event => event.promise));
-      } finally {
-        nativeClosed.forEach(event => event.cancel());
-      }
+      await watcher.close();
+      await allNativeWatchersClosed(nativeClosed);
       expect(watcher).toEqual(expect.objectContaining({ closed: true }));
     } finally {
       try {
@@ -239,10 +257,10 @@ const owningRequire = createRequire(${JSON.stringify(owner)});
 const directory = ${JSON.stringify(directory)};
 const initialized = [];
 const originalWatch = fs.watch;
-const nativeWatchers = [];
+const nativeClosed = [];
 fs.watch = new Proxy(originalWatch, { apply(target, receiver, args) {
   const watcher = Reflect.apply(target, receiver, args);
-  nativeWatchers.push(watcher);
+  nativeClosed.push(new Promise(resolve => watcher.once('close', resolve)));
   return watcher;
 } });
 syncBuiltinESMExports();
@@ -261,6 +279,18 @@ const wait = (watcher, event) => {
     watcher.once(event, done); watcher.once('error', fail);
   });
   return { promise, cancel: () => cancel() };
+};
+const allNativeWatchersClosed = async () => {
+  let timer;
+  let closed = 0;
+  try {
+    await Promise.race([
+      Promise.all(nativeClosed.map(close => close.then(() => { closed++; }))),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error((nativeClosed.length - closed) + ' of ' + nativeClosed.length + ' native watchers stayed open')), 10000);
+      }),
+    ]);
+  } finally { clearTimeout(timer); }
 };
 const writeFromNode = async (filename, changed) => {
   const writer = spawn(process.execPath, [
@@ -289,28 +319,25 @@ const writeFromNode = async (filename, changed) => {
   try {
     const utils = ${format === 'cjs' ? "owningRequire('@modern-js/utils')" : "await import('@modern-js/utils')"};
     assert.deepEqual(initialized, [], 'metadata import initialized Chokidar');
-    assert.equal(nativeWatchers.length, 0, 'metadata import started native watching');
+    assert.equal(nativeClosed.length, 0, 'metadata import started native watching');
     assert.ok(Array.isArray(utils.CONFIG_FILE_EXTENSIONS));
     assert.deepEqual(initialized, [], 'constant access initialized Chokidar');
-    assert.equal(nativeWatchers.length, 0, 'constant access started native watching');
+    assert.equal(nativeClosed.length, 0, 'constant access started native watching');
     const filename = path.join(directory, 'input.txt');
     fs.writeFileSync(filename, 'before');
     watcher = utils.chokidar.watch(filename, { ignoreInitial: true });
     assert.ok(watcher instanceof utils.chokidar.FSWatcher);
     await wait(watcher, 'ready').promise;
     assert.ok(initialized.length > 0, 'watching did not initialize Chokidar');
-    assert.ok(nativeWatchers.length > 0, 'watching did not call native fs.watch');
+    assert.ok(nativeClosed.length > 0, 'watching did not call native fs.watch');
     const changed = wait(watcher, 'change');
     try {
       assert.equal(await writeFromNode(filename, changed.promise), filename);
     } finally { changed.cancel(); }
-    const nativeClosed = nativeWatchers.map(nativeWatcher => wait(nativeWatcher, 'close'));
-    try {
-      await watcher.close();
-      await Promise.all(nativeClosed.map(event => event.promise));
-    } finally { nativeClosed.forEach(event => event.cancel()); }
+    await watcher.close();
+    await allNativeWatchersClosed();
     assert.equal(watcher.closed, true);
-    process.stdout.write(JSON.stringify({ format: ${JSON.stringify(format)}, changed: true, closed: watcher.closed, nativeWatchers: nativeWatchers.length }));
+    process.stdout.write(JSON.stringify({ format: ${JSON.stringify(format)}, changed: true, closed: watcher.closed, nativeWatchers: nativeClosed.length }));
   } finally {
     try { await watcher?.close(); } finally {
       fs.watch = originalWatch;

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { validateRendererRouterBindings } from '@modern-js/backend-federation-contracts';
@@ -31,6 +32,8 @@ import {
 } from '../src/ultramodern-workspace/versions';
 import { createWorkspaceValidationContract } from '../src/ultramodern-workspace/workspace-validation-contract';
 import { linkInstalledCompiler } from './helpers/workspace-kit';
+
+const require = createRequire(import.meta.url);
 
 function nativeProjection(
   renderer: 'solid' | 'octane',
@@ -1120,9 +1123,9 @@ test('React apps declare router and runtime installs within the framework compat
   const generation = getRendererGenerationProfile('react');
   const router = generation.dependencies['@tanstack/react-router'];
   const ranges = readReactFrameworkCompatibleRanges();
-  // @modern-js/plugin-tanstack depends on one exact router; the app shares
-  // that singleton anywhere on its patch line.
-  assert.ok(ranges.get('@tanstack/react-router')?.includes('~1.170.0'));
+  // The required exact peer keeps the app and framework on one router singleton.
+  assert.equal(router, '1.170.46');
+  assert.ok(ranges.get('@tanstack/react-router')?.includes('1.170.46'));
   assert.ok(ranges.get('react')?.length);
   const generated = {
     name: '@fixture/react-generated',
@@ -1132,13 +1135,13 @@ test('React apps declare router and runtime installs within the framework compat
   assert.doesNotThrow(() =>
     assertAuthoredRendererDependencyPins(generated, generation),
   );
-  // A downstream app that pins an earlier patch of the same router line and
-  // a React patch within the framework peer range keeps validating.
+  // The exact router peer and React versions within the framework peer range
+  // keep validating, including catalog-backed React DOM.
   const downstream = {
     name: '@fixture/react-downstream',
     dependencies: {
       ...generation.dependencies,
-      '@tanstack/react-router': '1.170.39',
+      '@tanstack/react-router': '1.170.46',
       react: '19.3.1',
       'react-dom': 'catalog:react',
     },
@@ -1147,7 +1150,6 @@ test('React apps declare router and runtime installs within the framework compat
       '@types/react-dom': '^19.3.0',
     },
   };
-  assert.notEqual(router, '1.170.39');
   assert.doesNotThrow(() =>
     assertAuthoredRendererDependencyPins(downstream, generation, {
       catalogs: { react: { 'react-dom': '19.3.1' } },
@@ -1157,8 +1159,11 @@ test('React apps declare router and runtime installs within the framework compat
     [
       '@tanstack/react-router',
       '1.171.0',
-      /outside the React framework's compatible range ~1\.170\.0/u,
+      /outside the React framework's compatible range 1\.170\.46/u,
     ],
+    ['@tanstack/react-router', '1.170.39', /outside the React framework/u],
+    ['@tanstack/react-router', '1.170.47', /outside the React framework/u],
+    ['@tanstack/react-router', '^1.170.46', /outside the React framework/u],
     ['@tanstack/react-router', '^1.170.39', /outside the React framework/u],
     ['react', '18.3.1', /outside the React framework's compatible range/u],
     ['react-dom', 'latest', /must be a version range of react-dom/u],
@@ -1243,11 +1248,28 @@ test('maintained Octane distribution pins match the generated requests exactly',
       );
     }
   }
-  assert.equal(generation.profile.router.coreVersion, '1.171.38');
-  assert.equal(
-    generation.dependencies[generation.profile.router.coreName],
-    'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz',
+  // The owning renderer's authenticated native descriptor is the only pin
+  // authority: every generated Octane request is its exact artifact.
+  const native: Record<string, { version: string; request: string }> =
+    require('@modern-js/renderer-octane/package.json').ultramodern
+      .nativeArtifacts.packages;
+  const pinned = [
+    generation.profile.compiler,
+    generation.profile.hydration,
+    generation.profile.router,
+    {
+      name: generation.profile.router.coreName,
+      version: generation.profile.router.coreVersion,
+    },
+  ];
+  assert.deepEqual(
+    pinned.map(({ name }) => name).sort(),
+    Object.keys(native).sort(),
   );
+  for (const { name, version } of pinned) {
+    assert.equal(version, native[name].version, name);
+    assert.equal(generation.dependencies[name], native[name].request, name);
+  }
 });
 
 test('framework router workspace requests require actual producer version evidence', () => {

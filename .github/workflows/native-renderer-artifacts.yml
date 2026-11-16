@@ -14,7 +14,7 @@ concurrency:
 jobs:
   produce:
     if: github.repository == 'ultramodernjs/ultramodern.js' && github.repository_id == '1151231350' && github.ref == 'refs/heads/main-ultramodern' && github.actor == 'BleedingDev' && github.triggering_actor == 'BleedingDev'
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
       contents: read
@@ -53,7 +53,7 @@ jobs:
 
   qualify:
     needs: produce
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
       contents: read
@@ -90,7 +90,7 @@ jobs:
 
   release:
     needs: [produce, qualify]
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write

@@ -204,15 +204,27 @@ test('compiler matrix uses four Depot builds without Intel Mac or Ubuntu 22.04',
     expression("vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'"),
   );
   const steps = producer.jobs.build.steps;
+  assert.equal(
+    steps.find(step => step.uses?.startsWith('actions/setup-node@')).with[
+      'node-version'
+    ],
+    '26.13.1',
+  );
+  assert.equal(
+    producer.jobs.aggregate.steps.find(step =>
+      step.uses?.startsWith('actions/setup-node@'),
+    ).with['node-version'],
+    '26.13.1',
+  );
   const checkout = steps.find(
     step => step.with?.repository === 'Effect-TS/tsgo',
   );
-  assert.equal(checkout.with.ref, '3cbaa7bc6f149b83d4d3c2f67ef95f8426487d8e');
+  assert.equal(checkout.with.ref, '416fdf299111341e156fc94330cd481470494ac6');
   const setup = steps.find(
     step => step.uses === './.github/actions/setup-repo',
   );
   assert.equal(setup.with.component, 'tsrs');
-  assert.equal(setup.with.version, '0.21.0-ts7.1.0-beta');
+  assert.equal(setup.with.version, '0.25.0-ts7.1.0-beta');
   const correction = steps.find(step =>
     step.name.startsWith('Verify source contract'),
   );
@@ -224,16 +236,26 @@ test('compiler matrix uses four Depot builds without Intel Mac or Ubuntu 22.04',
   assert.match(build.run, /repoctl build artifact --component tsrs/);
   assert.match(
     build.run,
-    /--version 0\.21\.0-ts7\.1\.0-beta --target "\$TARGET" --optimize none/,
+    /--version 0\.25\.0-ts7\.1\.0-beta --target "\$TARGET" --optimize none/,
   );
   const smoke = steps.find(step =>
     step.name.startsWith('Smoke the actual release'),
+  );
+  const constraints = steps.find(step =>
+    step.name.startsWith('Test retained-checker'),
+  );
+  assert.ok(steps.indexOf(build) < steps.indexOf(constraints));
+  assert.ok(steps.indexOf(constraints) < steps.indexOf(smoke));
+  assert.match(constraints.run, /fs\.constants\.COPYFILE_EXCL/);
+  assert.match(
+    constraints.run,
+    /cargo test --locked -p ets_typeparser --test ultramodern_base_constraint_history -- --exact base_constraint_history_matrix --nocapture/,
   );
   assert.equal(
     smoke.env.ARTIFACT_DIR,
     expression('steps.compiler.outputs.artifact_path'),
   );
-  assert.match(smoke.run, /Version 7\.1\.0-beta\+effect-tsgo\.0\.67\.0/);
+  assert.match(smoke.run, /Version 7\.1\.0-beta\+effect-tsgo\.0\.69\.0/);
   assert.match(smoke.run, /client\.echo/);
   assert.match(smoke.run, /377001/);
   const notices = steps.find(step =>

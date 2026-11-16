@@ -1,5 +1,6 @@
 // @effect-diagnostics asyncFunction:off strictBooleanExpressions:off
-import { defineEffectBff, OpenTelemetry } from '@modern-js/bff-effect/effect';
+import * as NodeSdk from '@effect/opentelemetry/NodeSdk';
+import { defineEffectBff } from '@modern-js/bff-effect/effect';
 import * as Effect from 'effect/Effect';
 import { HttpApiBuilder } from 'effect/http-api';
 import * as Layer from 'effect/Layer';
@@ -7,7 +8,7 @@ import { bffEffectApi } from '../shared/effect-api';
 import { bffRpcGroup } from '../shared/effect-rpc';
 
 type TraceSpanProcessor = Exclude<
-  OpenTelemetry.NodeSdk.Configuration['spanProcessor'],
+  NodeSdk.Configuration['spanProcessor'],
   ReadonlyArray<unknown> | undefined
 >;
 
@@ -132,7 +133,7 @@ const greetingsLayer = HttpApiBuilder.group(
 const layer = HttpApiBuilder.layer(bffEffectApi).pipe(
   Layer.provide(greetingsLayer),
   Layer.provideMerge(
-    OpenTelemetry.NodeSdk.layer(() => ({
+    NodeSdk.layer(() => ({
       spanProcessor: traceSpanProcessor,
       resource: {
         serviceName: 'modernjs-bff-effect-tests',

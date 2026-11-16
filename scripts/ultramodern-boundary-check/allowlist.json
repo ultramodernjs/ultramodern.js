@@ -17,6 +17,13 @@
   ],
   "bridges": [
     {
+      "file": "packages/solutions/app-tools/src/types/config/index.ts",
+      "specifier": "@modern-js/app-tools-extensions/svgr",
+      "target": "packages/solutions/app-tools-extensions/src/svgr.ts",
+      "owner": "bleedingdev",
+      "reason": "Preserve the native SVG configuration contract through fork-owned self-contained declarations without exposing SVGR's undeclared Babel type dependencies to applications."
+    },
+    {
       "file": "packages/solutions/app-tools/src/esm/register-esm.mjs",
       "specifier": "@modern-js/app-tools-extensions/config",
       "target": "packages/solutions/app-tools-extensions/src/config.ts",

@@ -41,12 +41,12 @@ jobs:
       - name: Setup mise
         uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
-          version: 2026.9.18
+          version: 2026.11.8
           cache_save: false
           install_args: node@26.13.1
 
-      - name: Install workflow parser
-        run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts --filter @scripts/prebundle
+      - name: Install the workspace used by parser and publication commands
+        run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Generate workflow parser
         run: mise exec -- pnpm --filter @scripts/prebundle start js-yaml

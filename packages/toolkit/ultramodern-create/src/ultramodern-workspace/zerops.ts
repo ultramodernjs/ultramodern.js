@@ -4,6 +4,7 @@ import {
   resolveApiProtocol,
   resolveApiStem,
 } from './descriptors';
+import { renderMiseBootstrap } from './mise-bootstrap';
 import { packageName } from './naming';
 import type { WorkspaceApp } from './types';
 import { NODE_VERSION } from './versions';
@@ -34,7 +35,8 @@ function createZeropsService(scope: string, app: WorkspaceApp) {
   const runtimeDirectory = `.zerops/runtime/${app.id}`;
   const appPackageName = packageName(scope, app.packageSuffix);
   const commands = [
-    'curl https://mise.run | sh',
+    'set -eu',
+    renderMiseBootstrap(),
     '~/.local/bin/mise install',
     '~/.local/bin/mise exec -- pnpm install --frozen-lockfile',
     `~/.local/bin/mise exec -- pnpm --filter ${quoteShellValue(appPackageName)} run build`,
@@ -53,7 +55,9 @@ function createZeropsService(scope: string, app: WorkspaceApp) {
     `        ZE_FAIL_BUILD: ${quoteYamlString('true')}`,
     '      buildCommands:',
     '        - |',
-    ...commands.map(command => `          ${command}`),
+    ...commands.flatMap(command =>
+      command.split('\n').map(line => `          ${line}`),
+    ),
     '      deployFiles:',
     `        - ${quoteYamlString(runtimeDirectory)}`,
     '    deploy:',

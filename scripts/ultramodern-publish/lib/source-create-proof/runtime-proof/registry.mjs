@@ -18,10 +18,10 @@ import {
   verifyPackageArtifactBytes,
 } from '../../prepare-bleedingdev-packages/release-artifacts.mjs';
 
-const VERDACCIO_VERSION = '6.7.4';
+const VERDACCIO_VERSION = '7.1.1';
 const VERDACCIO_SPECIFIER = `verdaccio@${VERDACCIO_VERSION}`;
 const VERDACCIO_INTEGRITY =
-  'sha512-C59DdKYtc1vayM3HiRFVRCRJMd4Hq4QCQnjTMM6CVanJvMpaqHlZ+DHE31/L8ScXkzUl1oS0HulizpxmMXW1LA==';
+  'sha512-CGqccLmg4/G76kk6BVx2epzqm0aKIBBn34FJTUHi5zuat+X484eSiJ4SpVQKNwiduE9xWx8BsddzHiiXgtFNzg==';
 const VERDACCIO_UPSTREAM = 'https://registry.npmjs.org/';
 const registryHost = '127.0.0.1';
 

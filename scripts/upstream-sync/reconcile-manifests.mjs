@@ -3,6 +3,10 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  coordinatedTransitions,
+  targets,
+} from '../ultramodern-dependencies/snapshot.mjs';
 
 const missing = Symbol('missing');
 const dependencyFields = new Set([
@@ -12,14 +16,15 @@ const dependencyFields = new Set([
   'peerDependencies',
 ]);
 const acceptedCohort = {
-  '@module-federation/enhanced': 'npm:@bleedingdev/mf-enhanced@2.9.3',
-  '@module-federation/modern-js-v3': '2.9.2',
+  '@module-federation/enhanced':
+    coordinatedTransitions['@module-federation/enhanced'].to,
+  '@module-federation/modern-js-v3':
+    coordinatedTransitions['@module-federation/modern-js-v3'].to,
   '@rsbuild/core': '2.3.2',
-  // 1.0.5 switched to typescript/sync; the accepted Effect compiler exposes
-  // unstable/sync. Keep the working declaration emitter rather than bypass it.
-  '@rslib/core': '1.0.3',
-  '@swc/core': '1.16.21',
-  '@types/node': '^26.6.5',
+  // The canonical DTS correction preserves explicit native compiler selection.
+  '@rslib/core': coordinatedTransitions['@rslib/core'].to,
+  '@swc/core': targets['@swc/core'],
+  '@types/node': `^${targets['@types/node']}`,
   autoprefixer: '10.6.2',
   'i18next-browser-languagedetector': '^8.3.0',
   postcss: '^8.5.31',

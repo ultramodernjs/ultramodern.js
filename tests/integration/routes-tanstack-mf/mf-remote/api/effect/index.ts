@@ -1,5 +1,6 @@
 // @effect-diagnostics asyncFunction:off strictBooleanExpressions:off
-import { defineEffectBff, OpenTelemetry } from '@modern-js/bff-effect/effect';
+import * as NodeSdk from '@effect/opentelemetry/NodeSdk';
+import { defineEffectBff } from '@modern-js/bff-effect/effect';
 import * as Effect from 'effect/Effect';
 import { Headers, HttpTraceContext } from 'effect/http';
 import { HttpApiBuilder } from 'effect/http-api';
@@ -8,7 +9,7 @@ import * as Option from 'effect/Option';
 import { remoteEffectApi } from '../../shared/effect/api';
 
 type TraceSpanProcessor = Exclude<
-  OpenTelemetry.NodeSdk.Configuration['spanProcessor'],
+  NodeSdk.Configuration['spanProcessor'],
   ReadonlyArray<unknown> | undefined
 >;
 
@@ -135,7 +136,7 @@ const greetingsLayer = HttpApiBuilder.group(
 const layer = HttpApiBuilder.layer(remoteEffectApi).pipe(
   Layer.provide(greetingsLayer),
   Layer.provide(
-    OpenTelemetry.NodeSdk.layer(() => ({
+    NodeSdk.layer(() => ({
       spanProcessor: traceSpanProcessor,
       resource: {
         serviceName: 'modernjs-mf-remote-tests',

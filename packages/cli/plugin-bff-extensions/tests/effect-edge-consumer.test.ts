@@ -1,11 +1,13 @@
+import * as asyncHooks from 'node:async_hooks';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import vm from 'node:vm';
 
 describe('canonical worker runtime integration', () => {
   test('worker consumer builds through canonical packages without a direct effect dependency', async () => {
-    const { createRsbuild } = await import('@rsbuild/core');
+    const { createRsbuild, rspack } = await import('@rsbuild/core');
     const appDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), 'modern-plugin-bff-effect-edge-consumer-'),
     );
@@ -107,6 +109,11 @@ export default {
           },
           tools: {
             htmlPlugin: false,
+            rspack: {
+              output: {
+                library: { type: 'self', name: 'edgeWorker' },
+              },
+            },
           },
         },
       });
@@ -138,25 +145,72 @@ export default {
         ]),
       );
 
-      const distRoot = path.join(appDir, 'dist');
-      const outputFiles = (
-        await fs.promises.readdir(distRoot, { recursive: true })
-      ).filter(file => file.endsWith('.js'));
-      const bundledSource = (
-        await Promise.all(
-          outputFiles.map(file =>
-            fs.promises.readFile(path.join(distRoot, file), 'utf8'),
-          ),
-        )
-      ).join('\n');
+      const workerSource = await fs.promises.readFile(
+        path.join(appDir, 'dist/static/js/worker.js'),
+        'utf8',
+      );
+      // Effect's crypto JSDoc names `node:crypto`; only executable code counts.
+      const { code: executableSource } = await rspack.experiments.swc.minify(
+        workerSource,
+        { compress: false, mangle: false, format: { comments: false } },
+      );
 
       // Upstream Effect's FindMyWay tries a guarded `new Function` and builds
       // params by assignment when Workers block string code generation; the
       // bff-effect codegen-blocked test proves that path.
-      expect(bundledSource).not.toContain('allowsEval');
-      expect(bundledSource).not.toMatch(/\beval\s*\(/u);
-      expect(bundledSource).not.toContain('node:crypto');
-      expect(bundledSource).not.toContain('backend-federation-security/node');
+      expect(executableSource).not.toContain('allowsEval');
+      expect(executableSource).not.toMatch(/\beval\s*\(/u);
+      expect(executableSource).not.toContain('node:crypto');
+      expect(executableSource).not.toContain(
+        'backend-federation-security/node',
+      );
+
+      // Run the worker in a realm without `require` or Node globals. Its
+      // `process` exposes only workerd's nodejs_compat `getBuiltinModule`, and
+      // records every builtin the worker asks for.
+      const requestedBuiltins: string[] = [];
+      const workerGlobal: Record<string, unknown> = {
+        AbortController,
+        AbortSignal,
+        Blob,
+        console,
+        crypto: globalThis.crypto,
+        Headers,
+        ReadableStream,
+        Request,
+        Response,
+        TextDecoder,
+        TextEncoder,
+        TransformStream,
+        URL,
+        URLSearchParams,
+        WritableStream,
+        clearTimeout,
+        queueMicrotask,
+        setTimeout,
+        structuredClone,
+        process: {
+          getBuiltinModule(id: string) {
+            requestedBuiltins.push(id);
+            return id === 'node:async_hooks' ? asyncHooks : undefined;
+          },
+        },
+      };
+      workerGlobal.self = workerGlobal;
+      const workerRealm = vm.createContext(workerGlobal);
+      vm.runInContext(workerSource, workerRealm, { filename: 'worker.js' });
+      const worker = (
+        workerRealm.edgeWorker as {
+          default: { fetch(request: Request): Promise<Response> };
+        }
+      ).default;
+      const response = await worker.fetch(
+        new Request('https://edge.test/api/readiness'),
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ ok: true });
+      expect(new Set(requestedBuiltins)).toEqual(new Set(['node:async_hooks']));
     } finally {
       await fs.promises.rm(appDir, { recursive: true, force: true });
     }

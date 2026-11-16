@@ -13,6 +13,29 @@ const require = createRequire(import.meta.url);
 type Provider = NonNullable<Parameters<typeof compile>[2]['compiler']>;
 type Compiler = Awaited<ReturnType<Provider>>;
 
+/**
+ * The provider's invocation-private adapter directories, observed through a
+ * temporary directory owned by one test. The adapter is not public API.
+ */
+async function privateTmp(appDirectory: string) {
+  const directory = path.join(appDirectory, '.tmp');
+  await fs.ensureDir(directory);
+  const variable = process.platform === 'win32' ? 'TEMP' : 'TMPDIR';
+  const previous = process.env[variable];
+  process.env[variable] = directory;
+  expect(await fs.realpath(os.tmpdir())).toBe(directory);
+  return {
+    adapters: async () =>
+      (await fs.readdir(directory))
+        .filter(name => name.startsWith('modern-server-tsrs-'))
+        .map(name => path.join(directory, name)),
+    restore: () => {
+      if (previous === undefined) delete process.env[variable];
+      else process.env[variable] = previous;
+    },
+  };
+}
+
 async function fixture() {
   const appDirectory = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), 'native-server-compiler-test-')),
@@ -100,12 +123,15 @@ async function fixture() {
 
 test('uses one app-bound Effect tsrs executable for native config, checks and real DTS output', async () => {
   const { appDirectory, tsconfigPath } = await fixture();
+  const tmp = await privateTmp(appDirectory);
   const providers: Compiler[] = [];
   const calls: string[] = [];
   const compiler: Provider = async from => {
     calls.push(from);
     const selected = await nativeServerCompiler(from);
     providers.push(selected);
+    const [adapter, ...others] = await tmp.adapters();
+    expect(others).toEqual([]);
     const expected = resolveEffectTsrsCompiler({
       from: path.join(appDirectory, 'package.json'),
     });
@@ -113,8 +139,8 @@ test('uses one app-bound Effect tsrs executable for native config, checks and re
     expect(selected.command.args).toEqual([]);
     expect(
       execFileSync(expected, ['--version'], { encoding: 'utf8' }),
-    ).toContain('+effect-tsgo.0.67.0');
-    expect(require(selected.typescriptPath).version).toBe(
+    ).toContain('+effect-tsgo.0.69.0');
+    expect(require(path.join(adapter, 'compiler.cjs')).version).toBe(
       require('tsrs/package.json').tsrs.typescriptVersion,
     );
     // Rslib calls the adapter in its isolated worker. Check that worker's
@@ -128,7 +154,7 @@ test('uses one app-bound Effect tsrs executable for native config, checks and re
           `delete process.env.TSRS_CHECKER_ASSIGNMENT;
 const executable = require(process.argv[1])();
 process.stdout.write(JSON.stringify({ executable, assignment: process.env.TSRS_CHECKER_ASSIGNMENT }));`,
-          path.join(path.dirname(selected.typescriptPath), 'getExePath.js'),
+          path.join(adapter, 'getExePath.js'),
         ],
         { encoding: 'utf8' },
       ),
@@ -198,10 +224,9 @@ process.stdout.write(JSON.stringify({ executable, assignment: process.env.TSRS_C
         file.endsWith('.resolved.json'),
       ),
     ).toEqual([]);
-    for (const selected of providers) {
-      expect(await fs.pathExists(selected.typescriptPath)).toBe(false);
-    }
+    expect(await tmp.adapters()).toEqual([]);
   } finally {
+    tmp.restore();
     for (const selected of providers) await selected.dispose?.();
     await fs.remove(appDirectory);
   }
@@ -224,6 +249,7 @@ test('rejects a configured non-Effect provider rather than silently selecting st
 
 test('preserves real TypeScript and Effect diagnostics and cleans adapters after failure', async () => {
   const { appDirectory, tsconfigPath } = await fixture();
+  const tmp = await privateTmp(appDirectory);
   const providers: Compiler[] = [];
   const compiler: Provider = async from => {
     const selected = await nativeServerCompiler(from);
@@ -258,17 +284,120 @@ test('preserves real TypeScript and Effect diagnostics and cleans adapters after
         ),
       ).rejects.toThrow(diagnostic);
     }
-    for (const selected of providers) {
-      expect(await fs.pathExists(selected.typescriptPath)).toBe(false);
-    }
+    expect(providers).toHaveLength(2);
+    expect(await tmp.adapters()).toEqual([]);
     expect(
       (await fs.readdir(path.dirname(tsconfigPath))).filter(file =>
         file.endsWith('.resolved.json'),
       ),
     ).toEqual([]);
   } finally {
+    tmp.restore();
     for (const selected of providers) await selected.dispose?.();
     await fs.remove(appDirectory);
+  }
+});
+
+test('fails on declaration-only diagnostics from the native plugin and cleans the adapter', async () => {
+  const { appDirectory, tsconfigPath } = await fixture();
+  const tmp = await privateTmp(appDirectory);
+  const disposed: string[][] = [];
+  try {
+    await fs.writeJSON(tsconfigPath, {
+      extends: './preset/base.json',
+      compilerOptions: { module: 'NodeNext' },
+      include: ['../api'],
+    });
+    await fs.writeFile(
+      path.join(appDirectory, 'api/index.ts'),
+      'export const broken: string = 42;\n',
+    );
+    await expect(
+      compile(
+        appDirectory,
+        {},
+        {
+          // A passing checker leaves the declaration plugin as the only
+          // program that reports the error.
+          compiler: async from => {
+            const selected = await nativeServerCompiler(from);
+            return {
+              ...selected,
+              command: {
+                executable: process.execPath,
+                args: ['-e', '', '--'],
+              },
+              dispose: async () => {
+                disposed.push(await tmp.adapters());
+                await selected.dispose?.();
+              },
+            };
+          },
+          sourceDirs: [path.join(appDirectory, 'api')],
+          distDir: path.join(appDirectory, 'dist'),
+          tsconfigPath,
+          throwErrorInsteadOfExit: true,
+        },
+      ),
+    ).rejects.toThrow('declaration files generation');
+    expect(disposed.map(adapters => adapters.length)).toEqual([1]);
+    expect(await tmp.adapters()).toEqual([]);
+    expect(
+      (await fs.readdir(path.dirname(tsconfigPath))).filter(file =>
+        file.endsWith('.resolved.json'),
+      ),
+    ).toEqual([]);
+  } finally {
+    tmp.restore();
+    await fs.remove(appDirectory);
+  }
+});
+
+test('sibling native providers emit real declarations with separate adapters', async () => {
+  const apps = await Promise.all([fixture(), fixture()]);
+  const tmp = await privateTmp(apps[0].appDirectory);
+  const seen = new Set<string>();
+  try {
+    await Promise.all(
+      apps.map(async ({ appDirectory, tsconfigPath }, index) => {
+        await fs.writeFile(
+          path.join(appDirectory, 'api/index.ts'),
+          `export const sibling: ${index === 0 ? 'string' : 'number'} = ${index === 0 ? "'first'" : '2'};\n`,
+        );
+        await compile(
+          appDirectory,
+          {},
+          {
+            compiler: async from => {
+              const selected = await nativeServerCompiler(from);
+              for (const adapter of await tmp.adapters()) seen.add(adapter);
+              return selected;
+            },
+            sourceDirs: [path.join(appDirectory, 'api')],
+            distDir: path.join(appDirectory, 'dist'),
+            tsconfigPath,
+            throwErrorInsteadOfExit: true,
+          },
+        );
+      }),
+    );
+    expect(seen.size).toBe(2);
+    expect(
+      await fs.readFile(
+        path.join(apps[0].appDirectory, 'dist/api/index.d.ts'),
+        'utf8',
+      ),
+    ).toContain('export declare const sibling: string;');
+    expect(
+      await fs.readFile(
+        path.join(apps[1].appDirectory, 'dist/api/index.d.ts'),
+        'utf8',
+      ),
+    ).toContain('export declare const sibling: number;');
+    expect(await tmp.adapters()).toEqual([]);
+  } finally {
+    tmp.restore();
+    await Promise.all(apps.map(({ appDirectory }) => fs.remove(appDirectory)));
   }
 });
 

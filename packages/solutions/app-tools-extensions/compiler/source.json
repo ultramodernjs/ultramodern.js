@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "distribution": "ultramodern-effect-tsrs",
   "effect": {
-    "baseVersion": "0.67.0",
-    "baseCommit": "3cbaa7bc6f149b83d4d3c2f67ef95f8426487d8e"
+    "baseVersion": "0.69.0",
+    "baseCommit": "416fdf299111341e156fc94330cd481470494ac6"
   },
   "tsrs": {
-    "version": "0.21.0-ts7.1.0-beta",
-    "sourceCommit": "38931a58019107ba31581791e26a7aa414c9e015"
+    "version": "0.25.0-ts7.1.0-beta",
+    "sourceCommit": "0f82b670e4ff861840b1315f8610816229e73e3a"
   },
   "typescript": {
     "version": "7.1.0-beta",

@@ -131,6 +131,8 @@ defineConfig({ tools: { sass: { api: 'modern', sassOptions: { style: 'compressed
 defineConfig({ tools: { sass: { api: 'legacy', sassOptions: { outputStyle: 'compressed', includePaths: ['src'] } } }, output: { svgDefaultExport: 'url' } });
 const compressed: AppUserConfig = { tools: { minifyCss: options => { options.parallel = 2; options.warningsFilter = (warning, file) => file.endsWith('.css'); return options; } }, output: { precompress: { gzip: { threshold: 1024, filename: data => String(data.filename) + '.gz', compressionOptions: { level: 6 } }, brotli: false } } };
 void compressed;
+const svgr: AppUserConfig = { tools: { svgr: { svgrOptions: { exportType: 'default', svgoConfig: { plugins: ['preset-default'] }, template: ({ componentName, jsx }, { tpl }) => tpl\`const \${componentName} = () => \${jsx};\` } } } };
+void svgr;
 `;
 try {
   discover(join(root, 'packages'));
@@ -172,6 +174,18 @@ try {
     'rxjs',
     realpathSync(join(root, 'packages/toolkit/utils/node_modules/rxjs')),
   );
+  // SVGR declaration inputs of the app-tools-extensions producer.
+  for (const name of ['@rsbuild/plugin-svgr', '@types/babel__core', 'prettier'])
+    link(
+      name,
+      realpathSync(
+        join(
+          packages.get('@modern-js/app-tools-extensions'),
+          'node_modules',
+          name,
+        ),
+      ),
+    );
   for (const kind of ['builder', 'app-tools-extensions']) {
     let emit;
     publicDeclarationsPlugin(kind).setup({
@@ -219,6 +233,7 @@ upath.win32.normalize(42);
 defineConfig({ tools: { sass: { api: 'invalid' } }, output: { svgDefaultExport: 'invalid' } });
 defineConfig({ tools: { minifyCss: { parallel: 'invalid' } } });
 const invalidCompression: AppUserConfig = { output: { precompress: { gzip: { threshold: 'invalid' } } } };
+const invalidSvgr: AppUserConfig = { tools: { svgr: { svgrOptions: { exportType: 'component' } } } };
 `,
   );
   const rejected = compile(negative);

@@ -3,25 +3,21 @@
  * UltraModern workspaces lives here. Values must stay in lockstep with the
  * checked-in templates under templates/ and template-workspace/.
  */
-export const TANSTACK_ROUTER_VERSION = '1.170.44';
-export const TANSTACK_ROUTER_CORE_VERSION = '1.171.37';
+export const TANSTACK_ROUTER_VERSION = '1.170.46';
+export const TANSTACK_ROUTER_CORE_VERSION = '1.171.39';
 export const TANSTACK_HISTORY_VERSION = '1.162.5';
-export const MODULE_FEDERATION_VERSION = '2.9.2';
+export const MODULE_FEDERATION_VERSION = '2.9.3';
 // Fork release identities advance independently of the upstream MF protocol.
-export const MODULE_FEDERATION_BRIDGE_REACT_FORK_VERSION = '2.9.3';
-export const MODULE_FEDERATION_RUNTIME_FORK_VERSION = '2.9.3';
-// The mf-modern-js-v3 sidecar is upstream 2.9.2 plus the repository patch. Its
-// fork version moves past 2.9.2 because published sidecar versions are
-// immutable: 2.9.2 carries upstream 2.9.1 bytes and 2.9.3 predates the
-// renderer hunks (router-free `/base` bridge entry). 2.9.4 also pins the
-// dts-plugin 2.9.3 cascade. Its DTS worker witness and onDevWorkerCreated
-// hunks no longer have a consumer; they drop at the next dts-plugin version.
-export const MODULE_FEDERATION_MODERN_JS_V3_FORK_VERSION = '2.9.4';
-export const ZEPHYR_RSPACK_PLUGIN_VERSION = '1.6.0';
-export const ZEPHYR_AGENT_VERSION = '1.6.0';
-export const WRANGLER_VERSION = '4.151.0';
+export const MODULE_FEDERATION_BRIDGE_REACT_FORK_VERSION = '2.9.5';
+export const MODULE_FEDERATION_RUNTIME_FORK_VERSION = '2.9.5';
+// All three aliases share the corrected upstream 2.9.3 sidecar graph. Fork
+// versions advance independently because earlier published bytes are immutable.
+export const MODULE_FEDERATION_MODERN_JS_V3_FORK_VERSION = '2.9.5';
+export const ZEPHYR_RSPACK_PLUGIN_VERSION = '1.8.0';
+export const ZEPHYR_AGENT_VERSION = '1.8.0';
+export const WRANGLER_VERSION = '4.162.0';
 export const CLOUDFLARE_COMPATIBILITY_DATE = '2026-06-02';
-export const TAILWIND_VERSION = '4.3.3';
+export const TAILWIND_VERSION = '4.3.5';
 export const RSBUILD_PLUGIN_TAILWINDCSS_VERSION = '2.0.3';
 // FORK: upstream Modern.js has no Effect lane at all. `EFFECT_VERSION` is the
 // single source of truth for the fork's lockstep Effect cohort — moving it
@@ -30,10 +26,10 @@ export const RSBUILD_PLUGIN_TAILWINDCSS_VERSION = '2.0.3';
 // Effect 4 builds router params by assignment without string code generation.
 // The cohort consumes upstream Effect without a patch or sidecar.
 // See FORK-DIVERGENCE.md, packages/toolkit/ultramodern-create.
-export const EFFECT_VERSION = '4.0.7';
-export const EFFECT_TSGO_VERSION = '0.67.0';
-export const TSRS_VERSION = '0.21.0-ts7.1.0-beta';
-// Reviewed 2026-11-04 npm release metadata. Only these exact compiler releases
+export const EFFECT_VERSION = '4.1.4';
+export const EFFECT_TSGO_VERSION = '0.69.0';
+export const TSRS_VERSION = '0.25.0-ts7.1.0-beta';
+// Reviewed 2026-11-16 npm release metadata. Only these exact compiler releases
 // and their declared platform packages bypass the normal 24h release-age gate.
 export const COMPILER_RELEASE_AGE_EXCEPTIONS = Object.freeze(
   [
@@ -56,6 +52,7 @@ export const COMPILER_RELEASE_AGE_EXCEPTIONS = Object.freeze(
       'linux-x64-gnu',
       'linux-x64-musl',
       'win32-x64',
+      'win32-arm64',
     ].map(platform => `@tsrs/${platform}@${TSRS_VERSION}`),
   ].sort(),
 );
@@ -77,30 +74,39 @@ export const COMPILER_TRUST_EXCEPTIONS = Object.freeze([
 // TypeScript revision embedded in tsrs.
 export const TYPESCRIPT_STABLE_VERSION = '7.0.2';
 export const TYPESCRIPT_VERSION = TYPESCRIPT_STABLE_VERSION;
-export const OXLINT_VERSION = '1.88.0';
-export const OXFMT_VERSION = '0.73.0';
-export const ULTRACITE_VERSION = '8.0.1';
+export const OXLINT_VERSION = '1.93.0';
+export const OXFMT_VERSION = '0.78.0';
+// Upstream artifact identity and independently versioned MIT-notice correction.
+export const ULTRACITE_VERSION = '8.2.1';
+export const ULTRACITE_FORK_VERSION = '8.2.2';
 export const LEFTHOOK_VERSION = '2.2.2';
-export const I18NEXT_VERSION = '26.4.6';
-export const MODULE_FEDERATION_NODE_VERSION = '2.7.52';
-export const MINIFLARE_VERSION = '5.20261012.0-beta';
-export const WORKERD_VERSION = '1.20261015.1';
-export const CLOUDFLARE_WORKERS_TYPES_VERSION = '5.20261015.1';
+export const I18NEXT_VERSION = '27.1.2';
+export const MODULE_FEDERATION_NODE_VERSION = '2.7.53';
+// Wrangler owns this exact Miniflare release, not the older npm latest tag.
+export const MINIFLARE_VERSION = '5.20261113.0-beta';
+// Metadata for Miniflare's exact nested dependency, not a generated direct
+// dependency or a binary override. Miniflare resolves its own workerd package.
+export const WORKERD_VERSION = '1.20261113.1';
+// Satisfies Wrangler's ^5.20261113.1 peer without replacing its runtime.
+export const CLOUDFLARE_WORKERS_TYPES_VERSION = '5.20261115.1';
 export const NODE_FETCH_VERSION = '3.3.2';
 // Platform Baseline producer pins are exact (CONTEXT.md: "pinned platform-wide";
 // baseline reclassification MV-G16-R). Composition-time singletons like React
 // never float; the cohort advances centrally as an exact bump.
 export const REACT_VERSION = '19.3.1';
 export const REACT_DOM_VERSION = '19.3.1';
-export const TYPES_NODE_VERSION = '26.6.5';
+export const TYPES_NODE_VERSION = '26.6.6';
 export const TYPES_REACT_VERSION = '19.3.0';
 export const TYPES_REACT_DOM_VERSION = '19.3.0';
-export const NODE_VERSION = '26.12.0';
-export const PNPM_VERSION = '12.11.2';
+export const NODE_VERSION = '26.13.1';
+export const PNPM_VERSION = '12.21.0';
 // Braces has no upstream depth-guard release; this reviewed sidecar
 // carries the reviewed parser and AST walker fix. Sharp uses its native fix.
 export const BRACES_FORK_VERSION = '3.0.4';
 export const SHARP_VERSION = '0.35.5';
+// Required exact peer of @modern-js/app-tools-extensions' native server
+// compiler; support metadata selects the corrected archive for this version.
+export const RSBUILD_PLUGIN_DTS_VERSION = '1.0.7';
 
 export const ULTRAMODERN_PACKAGE_PINS = {
   appDependencies: {
@@ -137,6 +143,11 @@ export const ULTRAMODERN_PACKAGE_PINS = {
     wrangler: WRANGLER_VERSION,
     'zephyr-rspack-plugin': ZEPHYR_RSPACK_PLUGIN_VERSION,
   },
+  // Declared by API apps, whose server code the native compiler emits, and
+  // directly by the workspace root that hosts the framework peer.
+  serverCompilerDevDependencies: {
+    'rsbuild-plugin-dts': RSBUILD_PLUGIN_DTS_VERSION,
+  },
   rootDevDependencies: {
     '@effect/tsgo': EFFECT_TSGO_VERSION,
     '@typescript/native': `npm:typescript@${TYPESCRIPT_VERSION}`,
@@ -146,7 +157,7 @@ export const ULTRAMODERN_PACKAGE_PINS = {
     oxlint: OXLINT_VERSION,
     oxfmt: OXFMT_VERSION,
     tsrs: TSRS_VERSION,
-    ultracite: ULTRACITE_VERSION,
+    ultracite: `npm:@bleedingdev/ultracite@${ULTRACITE_FORK_VERSION}`,
     wrangler: WRANGLER_VERSION,
     'zephyr-agent': ZEPHYR_AGENT_VERSION,
   },

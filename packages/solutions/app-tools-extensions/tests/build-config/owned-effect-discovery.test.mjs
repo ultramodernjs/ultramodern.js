@@ -19,8 +19,8 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-const effectVersion = '0.67.0';
-const tsrsVersion = '0.21.0-ts7.1.0-beta';
+const effectVersion = '0.69.0';
+const tsrsVersion = '0.25.0-ts7.1.0-beta';
 const typescriptCommit = '3e9236361fa97a9e6c685f4833ac457ae2d8c50a';
 const goodVersion = `Version 7.1.0-beta+effect-tsgo.${effectVersion} (tsrs ${tsrsVersion}, microsoft/TypeScript@${typescriptCommit.slice(0, 12)})`;
 const packageRoot = new URL('../../', import.meta.url);
@@ -192,8 +192,8 @@ test('renamed-package CJS/ESM layout and source discovery share owned selection 
     }
     for (const invalid of [
       'Version 7.1.0-beta',
-      goodVersion.replace('0.67.0', '0.66.0'),
-      goodVersion.replace('0.21.0', '0.20.0'),
+      goodVersion.replace('0.69.0', '0.66.0'),
+      goodVersion.replace('0.25.0', '0.20.0'),
       goodVersion.replace(typescriptCommit.slice(0, 12), '0'.repeat(12)),
     ]) {
       version = invalid;

@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { resolveSourceFederationDependencies } from '../../../scripts/ultramodern-renderers/native-federation-source-dependencies.mjs';
-
-const octaneVersion = '0.13.8';
-const routerVersion = '0.2.10';
+import {
+  admissionTuple,
+  nativeAdmissionPlan,
+} from '../octane-admission/native-artifact.mjs';
 
 /** Decode only server segments that Octane completed in the same document. */
 export function decodeOctaneSSRDocument(html) {
@@ -39,6 +41,42 @@ export async function linkOctaneFederationDependencies({
   const renderer = path.join(root, 'packages/runtime/renderer-octane');
   const real = (from, request) =>
     fs.realpath(path.join(from, 'node_modules', request));
+  const rendererManifest = JSON.parse(
+    await fs.readFile(path.join(renderer, 'package.json'), 'utf8'),
+  );
+  await nativeAdmissionPlan({
+    descriptor: rendererManifest.ultramodern?.nativeArtifacts,
+    workspacePath: root,
+  });
+  const { authenticateDescriptor } = await import(
+    pathToFileURL(
+      path.join(
+        root,
+        'scripts/ultramodern-renderers/native-artifacts/transport.mjs',
+      ),
+    )
+  );
+  await authenticateDescriptor(rendererManifest.ultramodern.nativeArtifacts);
+  for (const name of [
+    'octane',
+    '@octanejs/tanstack-router',
+    '@octanejs/rspack-plugin',
+    '@tanstack/router-core',
+    '@tsrx/oxc',
+  ]) {
+    const installed = JSON.parse(
+      await fs.readFile(
+        path.join(await real(renderer, name), 'package.json'),
+        'utf8',
+      ),
+    );
+    assert.equal(installed.name, name, `Source native package alias: ${name}`);
+    assert.equal(
+      installed.version,
+      admissionTuple[name],
+      `Source native cohort drift: ${name}`,
+    );
+  }
   const federation = await resolveSourceFederationDependencies(root);
   const manifest = JSON.parse(
     await fs.readFile(path.join(directory, 'package.json'), 'utf8'),
@@ -66,6 +104,7 @@ export async function linkOctaneFederationDependencies({
       '@octanejs/tanstack-router',
     ),
     '@octanejs/rspack-plugin': await real(renderer, '@octanejs/rspack-plugin'),
+    '@tanstack/router-core': await real(renderer, '@tanstack/router-core'),
     typescript: await real(appTools, 'typescript'),
     '@types/node': await real(appTools, '@types/node'),
     '@module-federation/enhanced': federation.enhanced.root,
@@ -104,12 +143,14 @@ export function createOctaneFederationFixtures({
         '@modern-js/ultramodern-app-tools': 'workspace',
         '@modern-js/renderer-octane': 'workspace',
         '@modern-js/renderer-core': 'workspace',
-        '@module-federation/enhanced': '2.9.2',
-        '@module-federation/node': '2.7.52',
-        '@tsrx/oxc': '0.20.0',
-        octane: octaneVersion,
-        '@octanejs/tanstack-router': routerVersion,
-        '@octanejs/rspack-plugin': '0.2.4',
+        '@module-federation/enhanced': '2.9.3',
+        '@module-federation/node': '2.7.53',
+        '@tsrx/oxc': admissionTuple['@tsrx/oxc'],
+        octane: admissionTuple.octane,
+        '@octanejs/tanstack-router':
+          admissionTuple['@octanejs/tanstack-router'],
+        '@octanejs/rspack-plugin': admissionTuple['@octanejs/rspack-plugin'],
+        '@tanstack/router-core': admissionTuple['@tanstack/router-core'],
       },
     });
   const tsconfig = JSON.stringify({

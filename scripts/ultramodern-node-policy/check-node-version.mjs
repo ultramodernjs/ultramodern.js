@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { pathToFileURL } from 'node:url';
 
-export const MINIMUM_NODE_VERSION = '26.12.0';
+export const MINIMUM_NODE_VERSION = '26.13.1';
 
 const parseNodeVersion = version => {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);

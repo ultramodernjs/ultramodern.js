@@ -231,7 +231,7 @@
     "test": "rstest"
   },
   "engines": {
-    "node": ">=26.12.0"
+    "node": ">=26.13.1"
   },
   "dependencies": {
     "@modern-js/create-request": "workspace:*",
@@ -241,16 +241,16 @@
     "@modern-js/runtime-utils": "workspace:*",
     "@modern-js/server-core": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@swc/helpers": "^0.5.23",
+    "@swc/helpers": "^0.5.24",
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
     "@modern-js/prod-server": "workspace:*",
     "@modern-js/rslib": "workspace:*",
     "@modern-js/types": "workspace:*",
-    "@rslib/core": "1.0.3",
+    "@rslib/core": "1.0.7",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
     "zod": "^4.6.7"
   },

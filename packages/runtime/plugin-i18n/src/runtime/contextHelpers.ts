@@ -1,6 +1,6 @@
 import { isBrowser } from '@modern-js/runtime';
 import type { I18nUrlStrategy } from '../shared/urlStrategy';
-import type { I18nInstance } from './i18n';
+import type { I18nRuntimeInstance } from './i18n';
 import type { SdkBackend } from './i18n/backend/sdk-backend';
 import { cacheUserLanguage } from './i18n/detection';
 import {
@@ -41,7 +41,7 @@ export function getPathLanguage(
 }
 
 export function cacheI18nLanguage(
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   language: string,
 ) {
   if (isBrowser()) {
@@ -51,7 +51,7 @@ export function cacheI18nLanguage(
 }
 
 export async function changeI18nInstanceLanguage(
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   language: string,
 ): Promise<void> {
   if (i18nInstance.setLang) {
@@ -62,7 +62,7 @@ export async function changeI18nInstanceLanguage(
 }
 
 interface ChangeModernI18nLanguageOptions {
-  i18nInstance: I18nInstance;
+  i18nInstance: I18nRuntimeInstance;
   updateLanguage?: (newLang: string) => void;
   localePathRedirect?: boolean;
   ignoreRedirectRoutes?: string[] | ((pathname: string) => boolean);
@@ -181,27 +181,6 @@ export async function changeModernI18nLanguage(
   }
 }
 
-export function translateI18n(
-  i18nInstance: I18nInstance,
-  key: string | string[],
-  ...args: unknown[]
-): string {
-  if (typeof i18nInstance.t !== 'function') {
-    throw new Error('i18nInstance.t required');
-  }
-
-  // Called through `.call` with the original receiver: `I18nInstance.t` is a
-  // method, and custom instances (wrappers, class-based translators) may read
-  // `this`. Extracting the function and calling it bare would silently drop the
-  // receiver — i18next's own `t` happens to be bound, which would hide it.
-  const translate = i18nInstance.t as (
-    this: I18nInstance,
-    key: string | string[],
-    ...rest: unknown[]
-  ) => string;
-  return translate.call(i18nInstance, key, ...args);
-}
-
 export function isI18nLanguageSupported(
   languages: string[] | undefined,
   lang: string,
@@ -210,7 +189,7 @@ export function isI18nLanguageSupported(
 }
 
 export function isI18nResourcesReady(
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   currentLanguage: string,
 ): boolean {
   if (!i18nInstance?.isInitialized) {

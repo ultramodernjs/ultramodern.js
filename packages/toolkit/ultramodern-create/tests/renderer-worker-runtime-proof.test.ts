@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   assertCompiledReactRuntime,
   effectiveRuntimePackage,
   workerRuntimeConfig,
 } from '../../../../scripts/ultramodern-production-readiness/renderer-worker-lifecycle-proof/runtime-contract.mjs';
 
-const redact = { package: '@tanstack/redact', version: '0.2.2' };
+const redact = { package: '@tanstack/redact', version: '0.3.2' };
 const reactDom = { package: 'react-dom', version: '19.3.1' };
 const framework = { package: '@modern-js/runtime', version: '3.8.3' };
 
@@ -19,6 +20,19 @@ test('default worker proof omits Redact configuration and compatibility explicit
 });
 
 test('default proof authenticates the pinned compiled Redact implementation', () => {
+  const tools = JSON.parse(
+    fs.readFileSync(
+      new URL(
+        '../../../solutions/ultramodern-app-tools/package.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  );
+  assert.equal(
+    tools.dependencies['@tanstack/redact'],
+    `npm:@bleedingdev/tanstack-redact@${redact.version}`,
+  );
   const evidence = assertCompiledReactRuntime([framework, redact], 'redact');
   assert.equal(evidence.runtime, 'redact');
   assert.equal(evidence.package, '@tanstack/redact');
@@ -29,7 +43,7 @@ test('default proof authenticates the pinned compiled Redact implementation', ()
 test('npm-aliased sidecar keeps authenticated physical evidence and the effective Redact identity', () => {
   const sidecar = {
     package: '@bleedingdev/tanstack-redact',
-    version: '0.2.2',
+    version: '0.3.2',
     path: '/consumer/node_modules/@tanstack/redact/dist/dom/index.js',
   };
   assert.equal(effectiveRuntimePackage(sidecar.package), '@tanstack/redact');
@@ -46,8 +60,8 @@ test('npm-aliased sidecar keeps authenticated physical evidence and the effectiv
   );
   assert.throws(
     () =>
-      assertCompiledReactRuntime([{ ...sidecar, version: '0.2.1' }], 'redact'),
-    /pinned TanStack Redact sidecar 0\.2\.2/u,
+      assertCompiledReactRuntime([{ ...sidecar, version: '0.3.1' }], 'redact'),
+    /pinned TanStack Redact sidecar 0\.3\.2/u,
   );
   // A convincing path or claimed effective identity cannot authenticate a name.
   assert.throws(
@@ -77,11 +91,11 @@ test('default proof cannot pass with React DOM, missing Redact or another Redact
     () => assertCompiledReactRuntime([redact, reactDom], 'redact'),
     /compiled native React DOM/u,
   );
-  for (const version of ['0.2.1', '0.2.3']) {
+  for (const version of ['0.2.2', '0.3.1', '0.3.3']) {
     assert.throws(
       () =>
         assertCompiledReactRuntime([redact, { ...redact, version }], 'redact'),
-      /pinned TanStack Redact sidecar 0\.2\.2/u,
+      /pinned TanStack Redact sidecar 0\.3\.2/u,
     );
   }
 });

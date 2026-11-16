@@ -39,9 +39,9 @@ test.each(['workspace', 'install'] as const)(
       strategy,
       modernPackageVersion: '3.8.3',
     } satisfies ResolvedPackageSource;
-    assert.equal(TSRS_VERSION, '0.21.0-ts7.1.0-beta');
-    assert.equal(EFFECT_TSGO_VERSION, '0.67.0');
-    assert.equal(EFFECT_VERSION, '4.0.7');
+    assert.equal(TSRS_VERSION, '0.25.0-ts7.1.0-beta');
+    assert.equal(EFFECT_TSGO_VERSION, '0.69.0');
+    assert.equal(EFFECT_VERSION, '4.1.4');
     assert.equal(TYPESCRIPT_VERSION, '7.0.2');
     for (const renderer of ['react', 'solid', 'octane', 'none'] as const) {
       const app =
@@ -116,7 +116,7 @@ test('compiler adoption preserves strict supply-chain and diagnostic policies', 
     producer.ultramodern.bootstrapReleaseAgeExclude,
     EFFECT_RUNTIME_RELEASE_AGE_EXCEPTIONS,
   );
-  assert.equal(policy.minimumReleaseAgeExclude.length, 18);
+  assert.equal(policy.minimumReleaseAgeExclude.length, 19);
   assert(
     policy.minimumReleaseAgeExclude.every(
       selector =>

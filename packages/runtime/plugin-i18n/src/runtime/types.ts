@@ -1,9 +1,9 @@
-import type { I18nInitOptions, I18nInstance } from './i18n';
+import type { I18nInitOptions, I18nRuntimeInstance } from './i18n';
 
 declare module '@modern-js/runtime' {
   interface RuntimeConfig {
     i18n?: {
-      i18nInstance?: I18nInstance;
+      i18nInstance?: I18nRuntimeInstance;
       changeLanguage?: (lang: string) => void;
       setLang?: (lang: string) => void;
       initOptions?: I18nInitOptions;
@@ -11,7 +11,7 @@ declare module '@modern-js/runtime' {
   }
 
   interface TRuntimeContext {
-    i18nInstance?: I18nInstance;
+    i18nInstance?: I18nRuntimeInstance;
     changeLanguage?: (lang: string) => Promise<void>;
   }
 }

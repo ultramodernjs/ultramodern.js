@@ -11,7 +11,7 @@ export const browserSmokeScript = path.join(
 );
 export const browserSmokePlaywrightPackage =
   process.env.ULTRAMODERN_BROWSER_SMOKE_PLAYWRIGHT_PACKAGE ??
-  'playwright@1.60.0';
+  'playwright@1.65.1';
 export const readableErpVerticalNames = [
   'inventory',
   'finance',

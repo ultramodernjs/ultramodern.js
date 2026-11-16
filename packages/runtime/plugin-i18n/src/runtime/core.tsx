@@ -6,7 +6,7 @@ import type {
   BaseLocaleDetectionOptions,
 } from '../shared/type';
 import { asI18nUrlStrategy, type I18nUrlStrategy } from '../shared/urlStrategy';
-import type { I18nInitOptions, I18nInstance } from './i18n';
+import type { I18nInitOptions, I18nRuntimeInstance } from './i18n';
 import { I18nRouterNavigationProvider } from './navigation';
 import {
   type RuntimeContextWithI18n,
@@ -30,6 +30,8 @@ export type { I18nUrlStrategy } from '../shared/urlStrategy';
 export type {
   I18nInitOptions,
   I18nInstance,
+  I18nRuntimeInstance,
+  I18nWrapperInstance,
   Resources,
   TranslateFn,
 } from './i18n/instance';
@@ -53,7 +55,7 @@ export interface I18nPluginOptions {
   entryName?: string;
   localeDetection?: BaseLocaleDetectionOptions;
   backend?: BaseBackendOptions;
-  i18nInstance?: I18nInstance;
+  i18nInstance?: I18nRuntimeInstance;
   changeLanguage?: (lang: string) => void;
   initOptions?: I18nInitOptions;
   htmlLangAttr?: boolean;
@@ -107,7 +109,7 @@ export const createI18nPlugin =
       const resolvedUrlStrategy =
         asI18nUrlStrategy(urlStrategy) ??
         resolveMappedUrlStrategy(localeDetection);
-      let latestI18nInstance: I18nInstance | undefined;
+      let latestI18nInstance: I18nRuntimeInstance | undefined;
       let I18nextProvider: React.ComponentType<any> | null;
 
       api.onBeforeRender(async (context: RuntimeContextWithI18n) => {

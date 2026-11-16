@@ -79,10 +79,23 @@ test('local source generation uses native workspace requests without copied rele
     assert.deepEqual(policy.overrides, {
       'braces@>=3.0.0 <3.0.4': 'npm:@bleedingdev/braces@3.0.4',
       'sharp@>=0.35.0 <0.35.5': '0.35.5',
+      'axios@>=1.0.0 <1.21.1': '1.21.1',
+      'brace-expansion@>=5.0.0 <5.0.13': '5.0.13',
+      'tar@>=7.0.0 <7.5.23': '7.5.23',
+      'seroval@>=1.0.0 <1.8.1': '1.8.1',
+      'seroval-plugins@>=1.0.0 <1.8.0': '1.8.0',
+      'qs@>=6.0.0 <6.17.1': '6.17.1',
+      'smol-toml@>=1.0.0 <1.9.1': '1.9.1',
+      'serialize-javascript@>=7.0.0 <7.1.4': '7.1.4',
+      'ws@>=8.0.0 <8.23.0': '8.23.0',
+      'isomorphic-ws@5.0.0>ws:peer': '*',
+      'follow-redirects@>=1.0.0 <1.16.3': '1.16.3',
+      'postcss-selector-parser@>=7.0.0 <7.2.1': '7.2.1',
+      'react-router@>=8.0.0 <8.5.1': '8.5.1',
       'undici@>=7.0.0 <7.30.1': '7.30.1',
-      'undici@>=8.0.0 <8.12.2': '8.12.2',
+      'undici@>=8.0.0 <8.12.4': '8.12.4',
       'body-parser@>=2.0.0 <2.4.0': '2.4.0',
-      'dompurify@>=3.0.0 <3.4.17': '3.4.17',
+      'dompurify@>=3.0.0 <3.4.18': '3.4.18',
     });
     assert.deepEqual(
       policy.overrides,
@@ -546,7 +559,7 @@ test('workspace validation rejects competing selectors but permits unrelated ove
     assertWorkspaceDependencyOverrides({
       overrides: {
         ...required,
-        'axios@<1.20.0': '1.20.0',
+        'unrelated-package@<1.20.0': '1.20.0',
         'braces@3>foo': '1.0.0',
         'sharp@>=0.35.0 > unrelated': '2.0.0',
       },

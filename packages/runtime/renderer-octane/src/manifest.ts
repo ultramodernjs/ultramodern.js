@@ -9,8 +9,8 @@ import {
   assertOctaneIdentity,
 } from './bootstrap';
 
-export const OCTANE_RUNTIME_VERSION = '0.13.8';
-export const OCTANE_COMPILER_VERSION = '0.2.4';
+export const OCTANE_RUNTIME_VERSION = '0.18.0';
+export const OCTANE_COMPILER_VERSION = '0.2.10';
 
 export interface OctaneCompiledSource {
   readonly resource: string;

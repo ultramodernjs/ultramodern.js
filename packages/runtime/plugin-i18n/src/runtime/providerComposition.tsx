@@ -11,13 +11,13 @@ import {
   useLanguageSync,
   useSdkResourcesLoader,
 } from './hooks';
-import type { I18nInstance } from './i18n';
+import type { I18nRuntimeInstance } from './i18n';
 import { getI18nextInstanceForProvider } from './i18n/instance';
 import type { RuntimeContextWithI18n } from './pluginSetup';
 import { useI18nRouterAdapter } from './routerAdapter';
 
 export interface I18nLanguageSynchronizationProps {
-  i18nInstance: I18nInstance | undefined;
+  i18nInstance: I18nRuntimeInstance | undefined;
   localePathRedirect: boolean;
   languages: string[];
   pathname: string | undefined;
@@ -58,7 +58,7 @@ interface I18nRootWrapperOptions {
   urlStrategy?: I18nUrlStrategy;
   NavigationProvider?: React.ComponentType<React.PropsWithChildren>;
   LanguageSynchronization?: React.ComponentType<I18nLanguageSynchronizationProps>;
-  getLatestI18nInstance: () => I18nInstance | undefined;
+  getLatestI18nInstance: () => I18nRuntimeInstance | undefined;
   getI18nextProvider: () => React.ComponentType<any> | null | undefined;
 }
 
@@ -116,18 +116,24 @@ export const createI18nRootWrapper =
         urlStrategy,
       );
 
+      // No instance means this root rendered outside the plugin's
+      // onBeforeRender lifecycle. Modern i18n context is only provided for a
+      // real instance, so `useModernI18n` reports the missing provider instead
+      // of handing out a placeholder that has no translator.
       const contextValue = useMemo(
         () =>
-          createContextValue(
-            lang,
-            i18nInstance,
-            entryName,
-            languages,
-            localePathRedirect,
-            ignoreRedirectRoutes,
-            setLang,
-            urlStrategy,
-          ),
+          i18nInstance
+            ? createContextValue(
+                lang,
+                i18nInstance,
+                entryName,
+                languages,
+                localePathRedirect,
+                ignoreRedirectRoutes,
+                setLang,
+                urlStrategy,
+              )
+            : undefined,
         [
           lang,
           i18nInstance,
@@ -174,14 +180,18 @@ export const createI18nRootWrapper =
             prevLangRef={prevLangRef}
             setLang={setLang}
           >
-            {synchronizeLanguage => (
-              <ModernI18nProvider
-                i18nextProvider={I18nextProvider}
-                value={{ ...contextValue, synchronizeLanguage }}
-              >
-                {appContent}
-              </ModernI18nProvider>
-            )}
+            {synchronizeLanguage =>
+              contextValue ? (
+                <ModernI18nProvider
+                  i18nextProvider={I18nextProvider}
+                  value={{ ...contextValue, synchronizeLanguage }}
+                >
+                  {appContent}
+                </ModernI18nProvider>
+              ) : (
+                appContent
+              )
+            }
           </LanguageSynchronization>
         </>
       );

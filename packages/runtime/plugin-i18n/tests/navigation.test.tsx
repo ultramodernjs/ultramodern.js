@@ -3,15 +3,19 @@ import {
   RuntimeContext,
 } from '@modern-js/runtime/context';
 import { applyRouterRuntimeState } from '@modern-js/runtime-extensions/router-state';
+import i18next from 'i18next';
 import type React from 'react';
-import type { ComponentType } from 'react';
-import { act } from 'react';
+import type { ComponentType, ReactNode } from 'react';
+import { act, Component, memo } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { useModernI18n } from '../src/runtime/context';
 import { createI18nPlugin } from '../src/runtime/core';
-import type { I18nInstance } from '../src/runtime/i18n';
+import type { I18nRuntimeInstance } from '../src/runtime/i18n';
+import type { TranslateFn } from '../src/runtime/i18n/instance';
 import { Link } from '../src/runtime/Link';
 import { useIntegratedRouterAdapter } from '../src/runtime/navigation';
+import { createI18nInstance, testResources } from './helpers/i18nInstance';
+import { TestI18nWrapper } from './helpers/i18nWrapper';
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -23,24 +27,6 @@ const localisedUrls = {
     cs: '/obchodni-podminky',
   },
 };
-
-function createI18nInstance(language = 'en'): I18nInstance {
-  return {
-    language,
-    isInitialized: true,
-    init: () => Promise.resolve(undefined),
-    use: () => {},
-    t: (key: string | string[]) => (Array.isArray(key) ? key[0] : key),
-    createInstance: () => createI18nInstance(language),
-    setLang: rstest.fn(async (next: string) => {
-      void next;
-      return undefined;
-    }),
-    changeLanguage: rstest.fn(async () => undefined),
-    services: {},
-    options: {},
-  };
-}
 
 /** A provider capability whose location can be republished. */
 function createMutableTanstackRouter(pathname: string) {
@@ -86,7 +72,7 @@ const TanstackLink = ({ to, children, ...props }: any) => {
  * A bare `appTools()` consumer: only `@modern-js/plugin-i18n` is registered, so
  * nothing supplies a `NavigationProvider`.
  */
-function setupBareI18nRuntime(i18nInstance: I18nInstance) {
+function setupBareI18nRuntime(i18nInstance: I18nRuntimeInstance) {
   let wrapRoot: ((App: ComponentType<any>) => ComponentType<any>) | undefined;
   let beforeRender: ((context: any) => Promise<void>) | undefined;
 
@@ -159,13 +145,19 @@ function createTanstackCsrRuntimeContextWithoutRouter() {
 async function renderBareRuntime(
   App: ComponentType<any>,
   runtimeContext: Record<string, unknown>,
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
+  // The context the plugin's `onBeforeRender` runs on; `null` renders the root
+  // without its lifecycle. A nested Module Federation root
+  // (`createNestedAppRenderer`) runs it on its own context before rendering.
+  lifecycleContext: Record<string, unknown> | null = runtimeContext,
 ) {
   const { wrapRoot, beforeRender } = setupBareI18nRuntime(i18nInstance);
   // The runtime resolves the active instance in `onBeforeRender`; skipping it
   // leaves the provider without the language-synchronisation seam, which is
   // exactly the wiring these cases are about.
-  await beforeRender(runtimeContext);
+  if (lifecycleContext) {
+    await beforeRender(lifecycleContext);
+  }
   const Wrapped = wrapRoot(App);
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -399,5 +391,144 @@ describe('bare plugin-i18n navigation adapter', () => {
       rendered.container.querySelector('[data-testid="language"]')?.textContent,
     ).toBe('cs');
     expect(i18nInstance.setLang).toHaveBeenCalledWith('cs');
+  });
+});
+
+class ErrorBoundary extends Component<
+  { children: ReactNode },
+  { message?: string }
+> {
+  state: { message?: string } = {};
+
+  static getDerivedStateFromError(error: Error) {
+    return { message: error.message };
+  }
+
+  render() {
+    return this.state.message ?? this.props.children;
+  }
+}
+
+describe('provider readiness across the runtime lifecycle', () => {
+  let rendered: { container: HTMLElement; root: Root } | undefined;
+
+  afterEach(() => {
+    cleanup(rendered);
+    rendered = undefined;
+    rstest.restoreAllMocks();
+  });
+
+  // Memoised on `t` alone: it re-renders on a language switch only if `t`
+  // changes identity with the language.
+  const GreetingLabel = memo(({ translate }: { translate: TranslateFn }) => (
+    <p data-testid="greeting">{translate('greeting')}</p>
+  ));
+  const Greeting = () => <GreetingLabel translate={useModernI18n().t} />;
+
+  test('translates through the real instance and follows a language change', async () => {
+    const router = createMutableTanstackRouter('/en/products/shoe');
+    const i18nInstance = i18next.createInstance();
+    i18nInstance.init({
+      lng: 'en',
+      fallbackLng: 'en',
+      resources: testResources,
+      initAsync: false,
+    });
+
+    rendered = await renderBareRuntime(
+      Greeting,
+      createTanstackRuntimeContext(router),
+      i18nInstance,
+    );
+    const greeting = () =>
+      rendered?.container.querySelector('[data-testid="greeting"]')
+        ?.textContent;
+    expect(greeting()).toBe('Hello');
+
+    await act(async () => {
+      router.publishPathname('/cs/produkty/bota');
+    });
+
+    expect(i18nInstance.language).toBe('cs');
+    expect(greeting()).toBe('Ahoj');
+  });
+
+  test('a nested root uses the instance its own lifecycle set up', async () => {
+    const router = createMutableTanstackRouter('/cs/products/shoe');
+    // A nested Module Federation root renders under a runtime context its
+    // lifecycle did not write to, so the provider reads the plugin's instance.
+    const renderContext = createTanstackRuntimeContext(router);
+
+    rendered = await renderBareRuntime(
+      Greeting,
+      renderContext,
+      createI18nInstance('cs'),
+      createTanstackRuntimeContext(router),
+    );
+
+    expect(renderContext.i18nInstance).toBeUndefined();
+    expect(rendered.container.textContent).toBe('Ahoj');
+  });
+
+  test('a root rendered outside its lifecycle renders and reports the missing provider', async () => {
+    const router = createMutableTanstackRouter('/en/products/shoe');
+    const App = () => (
+      <>
+        <h1>remote shell</h1>
+        <ErrorBoundary>
+          <Greeting />
+        </ErrorBoundary>
+      </>
+    );
+    rstest.spyOn(console, 'error').mockImplementation(() => {});
+
+    rendered = await renderBareRuntime(
+      App,
+      createTanstackRuntimeContext(router),
+      createI18nInstance('en'),
+      null,
+    );
+
+    expect(rendered.container.querySelector('h1')?.textContent).toBe(
+      'remote shell',
+    );
+    expect(rendered.container.textContent).toContain(
+      'useModernI18n must be used within ModernI18nProvider',
+    );
+  });
+
+  test('a custom wrapper keeps its own translate API, receiver and language reactivity', async () => {
+    const router = createMutableTanstackRouter('/en/products/shoe');
+    const wrapper = new TestI18nWrapper();
+    let observed: I18nRuntimeInstance | undefined;
+    const App = () => {
+      const { i18nInstance, t } = useModernI18n();
+      observed = i18nInstance;
+      return (
+        <p data-testid="greeting">{`${i18nInstance.t('greeting')}|${t('greeting')}`}</p>
+      );
+    };
+    expect(wrapper.t('greeting')).toBe('greeting');
+
+    rendered = await renderBareRuntime(
+      App,
+      createTanstackRuntimeContext(router),
+      wrapper,
+    );
+    const greeting = () =>
+      rendered?.container.querySelector('[data-testid="greeting"]')
+        ?.textContent;
+
+    expect(observed).toBe(wrapper);
+    // Both go through the wrapper's own `t`, which reads `this`; the native
+    // instance alone would render `Hello`.
+    expect(greeting()).toBe('«Hello»|«Hello»');
+
+    await act(async () => {
+      router.publishPathname('/cs/produkty/bota');
+    });
+
+    expect(wrapper.i18nInstance.instance.language).toBe('cs');
+    expect(greeting()).toBe('«Ahoj»|«Ahoj»');
   });
 });

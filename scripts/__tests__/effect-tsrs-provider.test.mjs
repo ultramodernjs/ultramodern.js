@@ -8,9 +8,9 @@ const source = readFileSync(
   new URL('../tsrs-dts/compiler.cjs', import.meta.url),
   'utf8',
 );
-const tsrsVersion = '0.21.0-ts7.1.0-beta';
+const tsrsVersion = '0.25.0-ts7.1.0-beta';
 const typescriptCommit = '3e9236361fa97a9e6c685f4833ac457ae2d8c50a';
-const effectVersion = '0.67.0';
+const effectVersion = '0.69.0';
 const tsrsPath = '/fixture/node_modules/tsrs/package.json';
 const effectPath = '/fixture/node_modules/@effect/tsgo/package.json';
 const nativeRoot = '/fixture/node_modules/@effect/tsgo-darwin-arm64';
@@ -29,6 +29,7 @@ function loadProvider(
         '@tsrs/darwin-arm64': tsrsVersion,
         '@tsrs/darwin-x64': tsrsVersion,
         '@tsrs/win32-x64': tsrsVersion,
+        '@tsrs/win32-arm64': tsrsVersion,
         '@tsrs/linux-x64-gnu': tsrsVersion,
         '@tsrs/linux-arm64-gnu': tsrsVersion,
         '@tsrs/linux-x64-musl': tsrsVersion,
@@ -45,7 +46,7 @@ function loadProvider(
       components: {
         tsrs: {
           [tsrsVersion]: {
-            gitHead: 'd197eeea709616d61930c2bd5eac048471e404b8',
+            gitHead: '0f82b670e4ff861840b1315f8610816229e73e3a',
             typescript: { version: '7.1.0-beta', gitHead: typescriptCommit },
           },
         },
@@ -136,10 +137,7 @@ test('root provider selects the read-only metadata-bound Effect tsrs artifact', 
   assert.equal(provider.getCompilerPolicy('darwin', 'x64').backend, 'tsrs');
   assert.equal(provider.getCompilerPolicy('linux', 'x64').backend, 'tsrs');
   assert.equal(provider.getCompilerPolicy('linux', 'arm64').backend, 'tsrs');
-  assert.equal(
-    provider.getCompilerPolicy('win32', 'arm64').backend,
-    'effect-go',
-  );
+  assert.equal(provider.getCompilerPolicy('win32', 'arm64').backend, 'tsrs');
 });
 
 test('an undeclared tsrs host selects Effect-Go', () => {
@@ -175,11 +173,11 @@ test('an explicit compiler remains selected on an unsupported replacement host',
   assert.equal(provider.warnings.length, 0);
 });
 
-test('a new provider version requires a reviewed capability contract', () => {
+test('the previous provider cannot reuse the newly reviewed capability contract', () => {
   assert.throws(
     () =>
       loadProvider(documents => {
-        documents[effectPath].version = '0.60.0';
+        documents[effectPath].version = '0.67.0';
       }),
     /Unreviewed Effect tsrs capability contract/,
   );

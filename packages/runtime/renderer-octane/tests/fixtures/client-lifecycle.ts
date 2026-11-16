@@ -39,102 +39,40 @@ function container() {
   return element;
 }
 
-// A native streamed authority is permanently retired for its Document. A new
-// server response therefore needs a real new browser Document and Window.
-function installHydrationBrowser() {
-  const browser = new window.Window();
-  const originals = new Map<string, PropertyDescriptor | undefined>();
-  const restore = () => {
-    for (const [key, descriptor] of originals) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
-    }
-    browser.close();
-  };
-  try {
-    for (const key of [
-      'window',
-      'document',
-      'Document',
-      'DocumentFragment',
-      'Node',
-      'NodeFilter',
-      'Element',
-      'HTMLElement',
-      'HTMLTemplateElement',
-      'Text',
-      'Comment',
-      'Event',
-      'CustomEvent',
-      'MouseEvent',
-      'InputEvent',
-      'MutationObserver',
-    ]) {
-      originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-      Object.defineProperty(globalThis, key, {
-        configurable: true,
-        writable: true,
-        value: key === 'window' ? browser : Reflect.get(browser, key),
-      });
-    }
-    for (const key of [
-      'getComputedStyle',
-      'requestAnimationFrame',
-      'cancelAnimationFrame',
-    ] as const) {
-      originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-      Object.defineProperty(globalThis, key, {
-        configurable: true,
-        writable: true,
-        value: browser[key].bind(browser),
-      });
-    }
-    for (const key of [
-      '__octaneStreamedSignalSelections',
-      '__octaneStreamedRenderer',
-      '__octaneEarlySignalControls',
-      '__octanePublishSignalControl',
-      '$OCTRC',
-      '$OCTRH',
-      '$OCTRX',
-    ]) {
-      originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-      Object.defineProperty(globalThis, key, {
-        configurable: true,
-        get: () => Reflect.get(browser, key),
-        set: value => {
-          Reflect.set(browser, key, value);
-        },
-      });
-    }
-    return restore;
-  } catch (error) {
-    restore();
-    throw error;
-  }
-}
-
-async function assertRetiredHydrationReleasesRoot(
+// Octane's final bridge disposal restores the document's untouched pre-module
+// mailbox. A released hydration can therefore hydrate the same server response
+// again, and the released root also accepts a client mount.
+async function assertReleasedHydrationRestartsDocument(
   element: HTMLElement,
   documentId: string,
 ) {
+  const serverNode = element.querySelector('section');
+  assert.ok(serverNode);
   let imports = 0;
-  await assert.rejects(
-    hydrateOctaneApplication({
-      container: element,
-      identity,
-      nativeHydrationBuildId,
-      documentIdentity: identity,
-      documentNativeHydrationBuildId: nativeHydrationBuildId,
-      documentId,
-      load: async () => {
-        imports++;
-        return { default: HydrationApplication };
-      },
-    }),
-    /streamed signal hydration owner is already installed/,
-  );
-  assert.equal(imports, 0);
+  const restarted = await hydrateOctaneApplication({
+    container: element,
+    identity,
+    nativeHydrationBuildId,
+    documentIdentity: identity,
+    documentNativeHydrationBuildId: nativeHydrationBuildId,
+    documentId,
+    load: async () => {
+      imports++;
+      return { default: HydrationApplication };
+    },
+  });
+  try {
+    flush();
+    assert.equal(imports, 1);
+    assert.equal(
+      element.querySelector('section'),
+      serverNode,
+      'The restarted hydration must adopt the server-rendered node.',
+    );
+    assert.equal(element.textContent, 'Native hydration');
+  } finally {
+    restarted.dispose();
+  }
   const handle = await mountOctaneApplication({
     container: element,
     identity,
@@ -196,8 +134,7 @@ async function assertStartupRejectedBeforeImport(
 }
 
 async function assertPendingImportCancellation(hydrating: boolean) {
-  let restoreBrowser = hydrating ? installHydrationBrowser() : () => {};
-  let element = container();
+  const element = container();
   const controller = new AbortController();
   const reason = new Error('Pending native application canceled');
   let resolveImport!: (application: OctaneApplicationModule) => void;
@@ -235,11 +172,7 @@ async function assertPendingImportCancellation(hydrating: boolean) {
     await rejected;
     assert.equal(importResolved, false);
     if (hydrating) {
-      await assertRetiredHydrationReleasesRoot(element, documentId);
-      element.remove();
-      restoreBrowser();
-      restoreBrowser = installHydrationBrowser();
-      element = container();
+      await assertReleasedHydrationRestartsDocument(element, documentId);
       prepareHydrationRoot(element);
     }
 
@@ -339,7 +272,6 @@ async function assertPendingImportCancellation(hydrating: boolean) {
       replacement?.dispose();
     } finally {
       element.remove();
-      restoreBrowser();
     }
   }
 }
@@ -967,8 +899,7 @@ export async function assertNativeCompilationMismatchBeforeImport() {
 
 export async function assertHydrationImportFailuresReleaseOwnership() {
   for (const synchronous of [true, false]) {
-    let restoreBrowser = installHydrationBrowser();
-    let element = container();
+    const element = container();
     const importFailure = new Error('Hydration application import failed');
     let recovered: OctaneApplicationHandle | undefined;
     try {
@@ -992,17 +923,15 @@ export async function assertHydrationImportFailuresReleaseOwnership() {
         error => error === importFailure,
       );
 
-      await assertRetiredHydrationReleasesRoot(element, options.documentId);
-      element.remove();
-      restoreBrowser();
-      restoreBrowser = installHydrationBrowser();
-      element = container();
+      await assertReleasedHydrationRestartsDocument(
+        element,
+        options.documentId,
+      );
       prepareHydrationRoot(element);
       const existingNode = element.querySelector('section');
       assert.ok(existingNode);
       recovered = await hydrateOctaneApplication({
         ...options,
-        container: element,
         load: async () => ({ default: HydrationApplication }),
       });
       flush();
@@ -1013,7 +942,6 @@ export async function assertHydrationImportFailuresReleaseOwnership() {
         recovered?.dispose();
       } finally {
         element.remove();
-        restoreBrowser();
       }
     }
   }
@@ -1092,8 +1020,7 @@ export async function assertHydrationFailuresReleaseNativeRoot() {
 }
 
 export async function assertHydrationIdentityAndBootstrap() {
-  let restoreBrowser = installHydrationBrowser();
-  let element = container();
+  const element = container();
   let imports = 0;
   let handle: OctaneApplicationHandle | undefined;
   try {
@@ -1154,11 +1081,7 @@ export async function assertHydrationIdentityAndBootstrap() {
     controller.abort(reason);
     await rejected;
     assert.equal(imports, 1);
-    await assertRetiredHydrationReleasesRoot(element, 'native-document');
-    element.remove();
-    restoreBrowser();
-    restoreBrowser = installHydrationBrowser();
-    element = container();
+    await assertReleasedHydrationRestartsDocument(element, 'native-document');
     prepareHydrationRoot(element);
     existingNode = element.querySelector('section');
     handle = await hydrateOctaneApplication({
@@ -1216,7 +1139,6 @@ export async function assertHydrationIdentityAndBootstrap() {
       handle?.dispose();
     } finally {
       element.remove();
-      restoreBrowser();
     }
   }
 }

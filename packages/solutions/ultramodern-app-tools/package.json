@@ -159,7 +159,7 @@
     "verify:deploy-output": "node ./tests/deploy-output/verify-public-surface.mjs"
   },
   "engines": {
-    "node": ">=26.12.0"
+    "node": ">=26.13.1"
   },
   "dependencies": {
     "@modern-js/app-tools": "workspace:*",
@@ -178,10 +178,7 @@
     "@modern-js/types": "workspace:*",
     "@modern-js/utils": "workspace:*",
     "@rsbuild/core": "2.3.2",
-    "@types/babel__core": "^7.20.5",
-    "prettier": "~3.9.10",
-    "@tanstack/redact": "npm:@bleedingdev/tanstack-redact@0.2.2",
-    "rsbuild-redact-plugin": "0.1.0",
+    "@tanstack/redact": "npm:@bleedingdev/tanstack-redact@0.3.2",
     "react": "^19.3.1"
   },
   "devDependencies": {
@@ -192,20 +189,20 @@
     "@modern-js/rslib": "workspace:*",
     "@modern-js/server": "workspace:*",
     "@modern-js/tsconfig": "workspace:*",
-    "@rslib/core": "1.0.3",
+    "@rslib/core": "1.0.7",
     "@scripts/rstest-config": "workspace:*",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
     "@modern-js/runtime": "workspace:*",
     "@modern-js/i18n-integration": "workspace:*",
     "@modern-js/runtime-renderer-extensions": "workspace:*",
-    "@solidjs/compiler": "2.0.0-rc.15",
-    "@octanejs/rspack-plugin": "https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz",
-    "octane": "https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz",
+    "@solidjs/compiler": "2.0.0-rc.22",
+    "@octanejs/rspack-plugin": "https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-rspack-plugin-0.2.10.tgz",
+    "octane": "https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz",
     "@modern-js/renderer-solid": "workspace:*",
     "@modern-js/renderer-octane": "workspace:*",
     "@rsbuild/plugin-svgr": "2.0.5",
-    "@tsrx/oxc": "0.20.0"
+    "@tsrx/oxc": "0.24.0"
   },
   "sideEffects": false,
   "publishConfig": {
@@ -283,6 +280,82 @@
     },
     "@rsbuild/plugin-svgr": {
       "optional": true
+    }
+  },
+  "ultramodern": {
+    "nativeArtifacts": {
+      "packages": {
+        "@octanejs/rspack-plugin": {
+          "integrity": "sha512-xXUksloBK6lTMdmkZ7jsujFNPT3Vt29lvRnPkdvkPN8aNAtKqoNpoQxDJw5Jo2IO0A7/OE6dUfzNaz1B1Oy7DQ==",
+          "patchSha256": "930795abefa05ae08954654b99b4f5a1442f50d89aa58900c164a0200cb7e3f0",
+          "request": "https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-rspack-plugin-0.2.10.tgz",
+          "upstream": {
+            "commit": "4c35afcdca0f4889921612fc462e6aabe507d78d",
+            "integrity": "sha512-J/yQ1vJBnNTpcTmOZWDaKucHXiK5bRnaFMqEwerzdeEi2GHihGvUTjTiYRwl2TCMva2Sd+ItSxUv+jRqSDMgyA==",
+            "licenseSha256": "4b83c082bc5305628aceda4130f495f30a6b992389b8d19229d508d38bc09a36",
+            "repository": "octanejs/octane",
+            "request": "https://registry.npmjs.org/@octanejs/rspack-plugin/-/rspack-plugin-0.2.10.tgz",
+            "sourceArchiveIntegrity": "sha512-LyipVNIG/Wz8BOF2B8yxHf4xyeyh4IKyXFcg+XZnYdBEaXa57jwdqM1lI9UdX16jVC2fCNImvwj9EGw71jDn+A=="
+          },
+          "version": "0.2.10"
+        },
+        "@octanejs/tanstack-router": {
+          "integrity": "sha512-uNGEXIgreF0QFFDycQ39cx+CkSzDI0t5eys/sfZfKRnZY2S+KQdmcCvUJywuuKBo4CqRqQxl2M8gepKjy1Ky4A==",
+          "patchSha256": "df6732ebcfc0af7cf274187c44596ac519abbc383ce30a796205b55c561bf688",
+          "request": "https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-tanstack-router-0.3.4.tgz",
+          "upstream": {
+            "commit": "4c35afcdca0f4889921612fc462e6aabe507d78d",
+            "integrity": "sha512-IuPkdjVHxwbpMyrsmY789XxV/A3Ozqn0bbgp0MT/MaSKVm003Hr7TJ50OmG9fekJHYCpEgq31iUGrD9SZ70j2w==",
+            "licenseSha256": "4b83c082bc5305628aceda4130f495f30a6b992389b8d19229d508d38bc09a36",
+            "repository": "octanejs/octane",
+            "request": "https://registry.npmjs.org/@octanejs/tanstack-router/-/tanstack-router-0.3.4.tgz",
+            "sourceArchiveIntegrity": "sha512-LyipVNIG/Wz8BOF2B8yxHf4xyeyh4IKyXFcg+XZnYdBEaXa57jwdqM1lI9UdX16jVC2fCNImvwj9EGw71jDn+A=="
+          },
+          "version": "0.3.4"
+        },
+        "@tanstack/router-core": {
+          "integrity": "sha512-771YrGPEoDTYz2g/eROmQhQtWgDNUAGUk0NKP2EcBP8JWypOb4k7eudK1YnavdL81YZ6yEY85yqy696rKUcBcA==",
+          "patchSha256": "546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8",
+          "request": "https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz",
+          "upstream": {
+            "commit": "6b9fe6d29552270836c511bc9b343d73541f4424",
+            "integrity": "sha512-qUhoJ0meuSUqGYQbHbcJYdASr06YtK+bulbj6vtrhKYFkLgkSsZ6tXmMyym7sFxiSJSPYgasgozrL01LyyR/6A==",
+            "licenseSha256": "a405ee70c632bb938acb7ac5f210e814409b3760ea9d2329d8ed8ffcfd11a0e7",
+            "repository": "TanStack/router",
+            "request": "https://registry.npmjs.org/@tanstack/router-core/-/router-core-1.171.39.tgz",
+            "sourceArchiveIntegrity": "sha512-2kt6Ugd5Dbc8kNtlUk6R7xo3u+kqgO/N+4VH30wUUvs3p4mpQwj0AhYJXMv/zqZ3wNZAuYzwEA+GmNz5yNQMmA=="
+          },
+          "version": "1.171.39"
+        },
+        "octane": {
+          "integrity": "sha512-4f1nn3MSOKVP70oW9go5WL7OAgieRvjzDaYzyzB/1ttymu/934jMW+Su0iemVIBE0lqU6zWnSoY9j1LWF/NO7A==",
+          "patchSha256": "529e0cbb9dd695c7569ae9d64b04ee0ba9685402823faa230c339d582d811f74",
+          "request": "https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz",
+          "upstream": {
+            "commit": "4c35afcdca0f4889921612fc462e6aabe507d78d",
+            "integrity": "sha512-nMuONCV3pMMJhWjlXmC08Dn+i/bXju1micX/kKyAxY1b+dGK0zvCY6dCuMn791pyQfgXBs0jQ2X8apPysVrOhQ==",
+            "licenseSha256": "fe9a7b24f2d1540df1a4d273ba9b4b081844ecd1142839def5b7f242a13203b8",
+            "repository": "octanejs/octane",
+            "request": "https://registry.npmjs.org/octane/-/octane-0.18.0.tgz",
+            "sourceArchiveIntegrity": "sha512-LyipVNIG/Wz8BOF2B8yxHf4xyeyh4IKyXFcg+XZnYdBEaXa57jwdqM1lI9UdX16jVC2fCNImvwj9EGw71jDn+A=="
+          },
+          "version": "0.18.0"
+        }
+      },
+      "producer": {
+        "repository": "ultramodernjs/ultramodern.js",
+        "repositoryId": 1151231350,
+        "runAttempt": 1,
+        "runId": 43904193604,
+        "source": "48b9eef7067dbe35a1d905508b23deeec0f4535d",
+        "tag": "native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1",
+        "workflow": ".github/workflows/native-renderer-artifacts.yml"
+      },
+      "protocol": "ultramodern.native-artifacts.v1",
+      "manifest": {
+        "request": "https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/native-artifacts.json",
+        "integrity": "sha512-n/2t732tW1MKRbGOD6IyTTlCuEVHOWI0YWk8BJqXPKGeuwSrvc471fwKfIYpOlsQKl1SgNb3dLRwIrvdwrwDsQ=="
+      }
     }
   }
 }

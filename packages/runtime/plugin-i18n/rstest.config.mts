@@ -39,6 +39,8 @@ export default {
         'tests/reactI18nextRegistration.test.ts',
         'tests/federatedI18nBoundaryResolver.test.tsx',
         'tests/detection.test.ts',
+        'tests/typeContracts.test.ts',
+        'tests/i18nWrapper.test.ts',
       ],
       extends: commonConfig,
     }),

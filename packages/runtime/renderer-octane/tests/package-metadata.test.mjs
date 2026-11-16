@@ -2,23 +2,23 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'node:test';
 import { satisfies } from 'semver';
-import { rewritePackageJson } from '../../../../scripts/ultramodern-publish/lib/prepare-bleedingdev-packages/rewrite.mjs';
+import {
+  collectModernPackages,
+  rewritePackageJson,
+} from '../../../../scripts/ultramodern-publish/lib/prepare-bleedingdev-packages/rewrite.mjs';
+import {
+  cohort,
+  descriptorFor,
+  validateDescriptor,
+} from '../../../../scripts/ultramodern-renderers/native-artifacts/protocol.mjs';
+import { nativeFederationArtifacts } from '../../../../scripts/ultramodern-renderers/native-federation-inputs.mjs';
 
 const packageRoot = new URL('../', import.meta.url);
 const manifest = JSON.parse(
   fs.readFileSync(new URL('package.json', packageRoot), 'utf8'),
 );
-const acceptedNativeArtifacts = {
-  octane:
-    'https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz',
-  '@octanejs/tanstack-router':
-    'https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz',
-  '@octanejs/rspack-plugin':
-    'https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz',
-  '@tanstack/router-core':
-    'https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz',
-};
-const nativeArtifactPeers = Object.keys(acceptedNativeArtifacts);
+const nativeArtifacts = manifest.ultramodern.nativeArtifacts;
+const nativeArtifactPeers = Object.keys(cohort);
 const compilerPeers = ['@rsbuild/core', '@tsrx/oxc'];
 const frameworkPeer = '@modern-js/i18n-runtime-extensions';
 const supportedPeers = [
@@ -29,37 +29,35 @@ const supportedPeers = [
 ];
 
 test('the published SDK preserves application peers, accepted artifacts and framework aliases without exotic runtime subdependencies', () => {
+  const options = {
+    scope: 'bleedingdev',
+    prefix: 'modern-js-',
+    version: '3.9.0-ultramodern.0',
+    dependencyVersion: '3.9.0-ultramodern.0',
+    homepage: 'https://github.com/BleedingDev/ultramodern.js',
+    bugsUrl: 'https://github.com/BleedingDev/ultramodern.js/issues',
+    repositoryUrl: 'https://github.com/BleedingDev/ultramodern.js.git',
+  };
   const published = structuredClone(manifest);
+  // The release publishes every public workspace framework package.
   rewritePackageJson(
     published,
     manifest.name,
-    {
-      scope: 'bleedingdev',
-      prefix: 'modern-js-',
-      version: '3.9.0-ultramodern.0',
-      dependencyVersion: '3.9.0-ultramodern.0',
-      homepage: 'https://github.com/BleedingDev/ultramodern.js',
-      bugsUrl: 'https://github.com/BleedingDev/ultramodern.js/issues',
-      repositoryUrl: 'https://github.com/BleedingDev/ultramodern.js.git',
-    },
-    new Set([
-      manifest.name,
-      '@modern-js/renderer-core',
-      '@modern-js/tsconfig',
-      frameworkPeer,
-    ]),
+    options,
+    collectModernPackages(options).sourceNames,
   );
   assert.equal(published.name, '@bleedingdev/modern-js-renderer-octane');
+  const alias = name =>
+    `npm:@bleedingdev/modern-js-${name.slice('@modern-js/'.length)}@3.9.0-ultramodern.0`;
+  for (const block of ['dependencies', 'devDependencies'])
+    for (const [name, request] of Object.entries(manifest[block]))
+      if (name.startsWith('@modern-js/') && request.startsWith('workspace:'))
+        assert.equal(published[block][name], alias(name), name);
   assert.equal(
     published.dependencies['@modern-js/renderer-core'],
-    'npm:@bleedingdev/modern-js-renderer-core@3.9.0-ultramodern.0',
+    alias('@modern-js/renderer-core'),
   );
-  for (const name of ['@modern-js/tsconfig', frameworkPeer]) {
-    assert.equal(
-      published.devDependencies[name],
-      `npm:@bleedingdev/modern-js-${name.slice('@modern-js/'.length)}@3.9.0-ultramodern.0`,
-    );
-  }
+  assert.equal(published.devDependencies[frameworkPeer], alias(frameworkPeer));
   assert.deepEqual(
     Object.keys(published.peerDependencies).sort(),
     supportedPeers.toSorted(),
@@ -78,10 +76,19 @@ test('the published SDK preserves application peers, accepted artifacts and fram
     assert.equal(manifest.peerDependenciesMeta?.[name]?.optional, optional);
     assert.equal(published.peerDependenciesMeta?.[name]?.optional, optional);
   }
+  assert.deepEqual(published.ultramodern.nativeArtifacts, nativeArtifacts);
+  // Consumers read the packed renderer's typed descriptor, never a flat map.
+  const consumed = nativeFederationArtifacts({
+    sourceName: manifest.name,
+    targetName: published.name,
+    packageJson: published,
+  });
   assert.deepEqual(
-    published.ultramodern.nativeArtifacts,
-    manifest.ultramodern.nativeArtifacts,
+    Object.keys(consumed).sort(),
+    nativeArtifactPeers.toSorted(),
   );
+  for (const [name, artifact] of Object.entries(consumed))
+    assert.equal(artifact.request, nativeArtifacts.packages[name].request);
   for (const dependencies of [
     published.dependencies,
     published.optionalDependencies,
@@ -92,22 +99,26 @@ test('the published SDK preserves application peers, accepted artifacts and fram
   }
 });
 
-test('SDK development retains the immutable native artifacts matching its installed peer versions', () => {
-  for (const name of nativeArtifactPeers) {
-    const version = manifest.peerDependencies[name];
-    const artifact = manifest.ultramodern.nativeArtifacts[name];
-    assert.equal(manifest.devDependencies[name], acceptedNativeArtifacts[name]);
-    assert.equal(artifact.request, acceptedNativeArtifacts[name]);
-    assert.equal(artifact.version, version);
-    assert.match(artifact.integrity, /^sha512-[A-Za-z0-9+/]{86}==$/u);
-    const nativeManifest = JSON.parse(
+test('SDK development installs the authenticated native producer cohort it publishes', () => {
+  validateDescriptor(nativeArtifacts);
+  // The manifest pin is the integrity of the producer's canonical manifest.
+  const { protocol, producer, packages } = nativeArtifacts;
+  assert.deepEqual(
+    descriptorFor({ protocol, producer, packages }),
+    nativeArtifacts,
+  );
+  for (const [name, version] of Object.entries(cohort)) {
+    const artifact = nativeArtifacts.packages[name];
+    assert.equal(manifest.devDependencies[name], artifact.request);
+    assert.equal(manifest.peerDependencies[name], version);
+    const installed = JSON.parse(
       fs.readFileSync(
         new URL(`node_modules/${name}/package.json`, packageRoot),
         'utf8',
       ),
     );
-    assert.equal(nativeManifest.name, name);
-    assert.equal(nativeManifest.version, version);
+    assert.equal(installed.name, name);
+    assert.equal(installed.version, version);
   }
 });
 

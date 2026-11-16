@@ -9,11 +9,7 @@ import {
   assertPackedRegistrySidecars,
   bleedingdevOverrides,
 } from './generatedWorkspaceDependencies';
-import {
-  bleedingdevEdges,
-  packTestSidecars,
-  runPnpmAsync,
-} from './runWithPrerequisites.mjs';
+import { packTestSidecars, runPnpmAsync } from './runWithPrerequisites.mjs';
 
 const recipes: Array<{ fork: { name: string; version: string } }> = JSON.parse(
   fs.readFileSync(
@@ -147,16 +143,18 @@ test('the harness packs exactly the sidecars the release publishes', async () =>
   }
 }, 300_000);
 
-test('npm aliases onto @bleedingdev resolve to packed tarballs by alias key', () => {
-  const edges = bleedingdevEdges({
+test('@bleedingdev edges resolve to packed tarballs scoped to their exact packed parent', () => {
+  const parent = {
+    name: '@modern-js/runtime',
+    version: '3.8.2-ultramodern.1',
     dependencies: {
       '@module-federation/runtime': 'npm:@bleedingdev/mf-runtime@2.9.1',
       react: '19.2.0',
     },
     devDependencies: { '@bleedingdev/ipx': '3.2.2' },
-  });
+  };
   expect(
-    bleedingdevOverrides(edges, {
+    bleedingdevOverrides(parent, {
       '@bleedingdev/mf-runtime': {
         tarball: '/packed/mf-runtime.tgz',
         version: '2.9.1',
@@ -169,23 +167,26 @@ test('npm aliases onto @bleedingdev resolve to packed tarballs by alias key', ()
       },
     }),
   ).toEqual({
-    '@module-federation/runtime@npm:@bleedingdev/mf-runtime@2.9.1':
+    '@modern-js/runtime@3.8.2-ultramodern.1>@module-federation/runtime':
       'file:/packed/mf-runtime.tgz',
-    '@bleedingdev/ipx@3.2.2': 'file:/packed/ipx.tgz',
+    '@modern-js/runtime@3.8.2-ultramodern.1>@bleedingdev/ipx':
+      'file:/packed/ipx.tgz',
   });
 });
 
 test('an unpacked @bleedingdev dependency names the supply manifest to fix', () => {
-  const edges = bleedingdevEdges({
+  const parent = {
+    name: '@modern-js/app-tools',
+    version: '3.8.2',
     dependencies: {
       '@module-federation/node': 'npm:@bleedingdev/mf-node@2.7.51',
     },
-  });
-  expect(() => bleedingdevOverrides(edges, {})).toThrow(
+  };
+  expect(() => bleedingdevOverrides(parent, {})).toThrow(
     'Add it to scripts/ultramodern-supply/sidecars.json / staged cohort',
   );
   expect(() =>
-    bleedingdevOverrides(edges, {
+    bleedingdevOverrides(parent, {
       '@bleedingdev/mf-node': {
         tarball: '/packed/mf-node.tgz',
         version: '2.7.50',

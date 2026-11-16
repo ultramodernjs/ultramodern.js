@@ -4,7 +4,7 @@ import { mergeBackendOptions } from './backend';
 import { HttpBackendWithSave, useI18nextBackend } from './backend/middleware';
 import { SdkBackend } from './backend/sdk-backend';
 import { cacheUserLanguage, mergeDetectionOptions } from './detection';
-import type { I18nInitOptions, I18nInstance } from './instance';
+import type { I18nInitOptions, I18nRuntimeInstance } from './instance';
 import {
   getActualI18nextInstance,
   isI18nInstance,
@@ -20,9 +20,11 @@ type MergedBackendOptions = NonNullable<I18nInitOptions['backend']> & {
   backendOptions?: unknown;
 };
 
-export function assertI18nInstance(obj: unknown): asserts obj is I18nInstance {
+export function assertI18nInstance(
+  obj: unknown,
+): asserts obj is I18nRuntimeInstance {
   if (!isI18nInstance(obj)) {
-    throw new Error('Object does not implement I18nInstance interface');
+    throw new Error('Object does not implement I18nRuntimeInstance interface');
   }
 }
 
@@ -37,7 +39,7 @@ export const buildInitOptions = async (
   mergedBackend: MergedBackendOptions | undefined,
   userInitOptions?: I18nInitOptions,
   useSuspense?: boolean,
-  i18nInstance?: I18nInstance,
+  i18nInstance?: I18nRuntimeInstance,
 ): Promise<I18nInitOptions> => {
   const defaultUseSuspense =
     useSuspense !== undefined
@@ -137,7 +139,7 @@ export const buildInitOptions = async (
  * Ensure i18n instance language matches the final detected language
  */
 export const ensureLanguageMatch = async (
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   finalLanguage: string,
 ): Promise<void> => {
   if (i18nInstance.language !== finalLanguage) {
@@ -154,7 +156,7 @@ export const ensureLanguageMatch = async (
  * @param options - Optional configuration
  */
 export const changeI18nLanguage = async (
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   newLang: string,
   options?: {
     detectionOptions?: I18nInitOptions['detection'];
@@ -184,7 +186,7 @@ export const changeI18nLanguage = async (
  * Initialize i18n instance if not already initialized
  */
 export const initializeI18nInstance = async (
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   finalLanguage: string,
   fallbackLanguage: string,
   languages: string[],
@@ -257,8 +259,10 @@ export const initializeI18nInstance = async (
 /**
  * Type guard to check if i18n instance has options property
  */
-function hasOptions(instance: I18nInstance): instance is I18nInstance & {
-  options: NonNullable<I18nInstance['options']>;
+function hasOptions(
+  instance: I18nRuntimeInstance,
+): instance is I18nRuntimeInstance & {
+  options: NonNullable<I18nRuntimeInstance['options']>;
 } {
   return instance.options !== undefined && instance.options !== null;
 }
@@ -267,7 +271,7 @@ function hasOptions(instance: I18nInstance): instance is I18nInstance & {
  * Setup cloned instance for SSR with backend support
  */
 export const setupClonedInstance = async (
-  i18nInstance: I18nInstance,
+  i18nInstance: I18nRuntimeInstance,
   finalLanguage: string,
   fallbackLanguage: string,
   languages: string[],

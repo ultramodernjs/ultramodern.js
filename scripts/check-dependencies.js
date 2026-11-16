@@ -1,12 +1,4 @@
-// The published generator selects the Module Federation sidecar alias; the
-// monorepo resolves the same patched upstream through .pnpmfile.cjs.
-const ignoreDeps = [
-  'fs-extra',
-  'tailwindcss',
-  '@module-federation/modern-js-v3',
-  // MCP SDK requires zod 4, while existing BFF APIs still use zod 3.
-  'zod',
-];
+const ignoreDeps = ['fs-extra', 'tailwindcss'];
 
 const {
   assertRendererRouterCore,
@@ -20,10 +12,7 @@ async function main() {
   assertRendererRouterCore(workspace.getDependency('@tanstack/router-core'));
 
   // Use the workspace-pinned version to avoid unexpected breaking changes from @latest.
-  const command = `pnpm exec check-dependency-version-consistency . ${[
-    ...ignoreDeps,
-    '@tanstack/router-core',
-  ]
+  const command = `pnpm exec check-dependency-version-consistency . ${ignoreDeps
     .map(dep => `--ignore-dep "${dep}"`)
     .join(' ')} --ignore-package-pattern "^@examples/"`;
 

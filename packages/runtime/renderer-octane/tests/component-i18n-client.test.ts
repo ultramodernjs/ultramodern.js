@@ -1,3 +1,4 @@
+import { createNativeI18nInstance } from '@modern-js/i18n-runtime-extensions/native';
 import { RENDERER_BOOTSTRAP_ID } from '@modern-js/renderer-core/document';
 import type { RendererIdentity } from '@modern-js/renderer-core/identity';
 import { expect, rstest, test } from '@rstest/core';
@@ -15,10 +16,16 @@ test('a component-only CSR document starts with the handed-off instance and chan
     buildId: 'component-build',
   };
   const resources = { translation: { greeting: 'Ahoj' } };
+  const translator = createNativeI18nInstance({
+    lng: 'cs',
+    resources: { cs: resources, en: { translation: { greeting: 'Hello' } } },
+  });
   const listeners = new Set<(language: string) => void>();
   const instance: I18nInstanceLike = {
     language: 'cs',
-    t: () => (instance.language === 'cs' ? 'Ahoj' : 'Hello'),
+    get t() {
+      return translator.getFixedT(instance.language);
+    },
     changeLanguage: async language => {
       if (!language) return;
       instance.language = language;
@@ -85,6 +92,9 @@ test('a component-only CSR document starts with the handed-off instance and chan
     expect(root.textContent).toBe('cs: Ahoj');
     expect(create).toHaveBeenCalledExactlyOnceWith('cs', resources);
     expect(view?.instance).toBe(instance);
+    expect(view?.t('missing-key', 'Hello {{name}}', { name: 'Ada' })).toBe(
+      'Hello Ada',
+    );
     expect(listeners.size).toBe(1);
     await view?.changeLanguage('en');
     for (

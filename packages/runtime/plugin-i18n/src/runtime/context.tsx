@@ -7,10 +7,9 @@ import {
   getPathLanguage,
   isI18nLanguageSupported,
   isI18nResourcesReady,
-  translateI18n,
 } from './contextHelpers';
-import type { I18nInstance } from './i18n';
-import type { Resources } from './i18n/instance';
+import type { I18nRuntimeInstance } from './i18n';
+import { getActualI18nextInstance, type Resources } from './i18n/instance';
 
 import { useI18nRouterAdapter } from './routerAdapter';
 import {
@@ -18,11 +17,11 @@ import {
   ReactI18nextProviderContext,
 } from './sharedContexts';
 
-export { getActualI18nextInstance } from './i18n/instance';
+export { getActualI18nextInstance };
 
 export interface ModernI18nContextValue {
   language: string;
-  i18nInstance: I18nInstance;
+  i18nInstance: I18nRuntimeInstance;
   // Plugin configuration for useModernI18n hook
   entryName?: string;
   languages?: string[];
@@ -88,11 +87,15 @@ export const FederatedI18nBoundary: FC<FederatedI18nBoundaryProps> = props => {
 };
 
 export interface UseModernI18nReturn<
-  TInstance extends I18nInstance = I18nInstance,
+  TInstance extends I18nRuntimeInstance = I18nRuntimeInstance,
 > {
   language: string;
   changeLanguage: (newLang: string) => Promise<void>;
-  t: (key: string | string[], ...args: any[]) => string;
+  /**
+   * The configured instance's own `t`, bound to it: i18next's `t` for an
+   * i18next instance, the wrapper's translate API for a wrapper.
+   */
+  t: OmitThisParameter<TInstance['t']>;
   i18nInstance: TInstance;
   supportedLanguages: string[];
   urlStrategy?: I18nUrlStrategy;
@@ -111,18 +114,18 @@ export interface UseModernI18nReturn<
  * - List of supported languages
  * - Helper function to check if language is supported
  *
- * @typeParam TInstance - The concrete shape of the i18n instance held by the
- * provider (e.g. i18next's `i18n`, or a wrapper type). Constrained to
- * `I18nInstance`, so a nonsense argument is rejected; within that constraint it
- * is still a caller assertion — the provider stores the base type and the
- * narrowing is not verified at runtime. Pass it only when you know which
- * instance the provider was given.
- * @param options - Optional configuration to override context settings
+ * Without a type argument, `i18nInstance` and `t` are typed for whichever
+ * instance the provider holds (`I18nRuntimeInstance`). The type argument
+ * (e.g. `useModernI18n<I18nInstance>()` for i18next itself, or a wrapper
+ * type) is a caller assertion that the overload records; it is not verified
+ * at runtime. Pass it only when you know which instance the provider was given.
  * @returns Object containing i18n functionality and utilities
  */
-export const useModernI18n = <
-  TInstance extends I18nInstance = I18nInstance,
->(): UseModernI18nReturn<TInstance> => {
+export function useModernI18n(): UseModernI18nReturn;
+export function useModernI18n<
+  TInstance extends I18nRuntimeInstance,
+>(): UseModernI18nReturn<TInstance>;
+export function useModernI18n(): UseModernI18nReturn {
   const context = useContext(ModernI18nContext);
   if (!context) {
     throw new Error('useModernI18n must be used within ModernI18nProvider');
@@ -190,9 +193,11 @@ export const useModernI18n = <
     ],
   );
 
-  const t = useCallback(
-    (key: string | string[], ...args: any[]) =>
-      translateI18n(i18nInstance, key, ...args),
+  // The configured instance's own `t`, bound so a destructured `t` keeps its
+  // receiver: a wrapper's translate API stays in charge of its output. A new
+  // function per language lets memoized consumers re-render on switch.
+  const t = useMemo(
+    () => i18nInstance.t.bind(i18nInstance),
     [currentLanguage, i18nInstance],
   );
 
@@ -213,12 +218,10 @@ export const useModernI18n = <
     language: currentLanguage,
     changeLanguage,
     t,
-    // The provider stores the instance as the base `I18nInstance`; the caller
-    // narrows to the concrete instance type via the TInstance type argument.
-    i18nInstance: i18nInstance as TInstance,
+    i18nInstance,
     supportedLanguages: languages || [],
     urlStrategy,
     isLanguageSupported,
     isResourcesReady,
   };
-};
+}

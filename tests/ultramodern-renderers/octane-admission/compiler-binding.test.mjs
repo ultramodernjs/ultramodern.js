@@ -33,6 +33,8 @@ function emitManifest(versions, validateManifest) {
     errors: [],
     hash,
     modules: [],
+    // Ordinary application control: no Module Federation container entries.
+    entries: new Map(),
     entrypoints: new Map([['main', { chunks: [chunk] }]]),
     getAsset(file) {
       return {

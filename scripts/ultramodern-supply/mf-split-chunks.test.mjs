@@ -11,7 +11,7 @@ import vm from 'node:vm';
 
 const patch = fs.readFileSync(
   new URL(
-    '../../patches/@module-federation__modern-js-v3@2.9.2.patch',
+    '../../patches/@module-federation__modern-js-v3@2.9.3.patch',
     import.meta.url,
   ),
   'utf8',

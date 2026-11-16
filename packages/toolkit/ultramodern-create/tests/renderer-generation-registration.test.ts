@@ -27,7 +27,7 @@ const paper = rstest.hoisted(() => {
     renderer: 'octane',
     status: 'preview',
     protocolVersion: 1,
-    minimumNode: '26.12.0',
+    minimumNode: '26.13.1',
     hmr: {
       editedBoundary: 'may-reset',
       unaffectedComponents: 'preserved',
@@ -218,7 +218,7 @@ test('a foreign renderer adapter uses the public SDK resolver and common writer'
       manifest.scripts.typecheck,
       'paper-check --project tsconfig.json',
     );
-    assert.equal(manifest.engines.node, '>=26.12.0');
+    assert.equal(manifest.engines.node, '>=26.13.1');
     assert.equal(tsconfig.compilerOptions.jsx, 'preserve');
     assert.equal(tsconfig.compilerOptions.jsxImportSource, 'paper-runtime');
     assert.deepEqual(tsconfig.compilerOptions.types, []);

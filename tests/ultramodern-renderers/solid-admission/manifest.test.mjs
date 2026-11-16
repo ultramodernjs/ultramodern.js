@@ -14,7 +14,7 @@ function currentManifest() {
   return {
     schemaVersion: 1,
     renderer: 'solid',
-    compilerVersion: '2.0.0-rc.15',
+    compilerVersion: '2.0.0-rc.22',
     rendererIdentity: { ...identity },
     modules: {
       _base: '/',
@@ -67,7 +67,7 @@ test('rejects a missing module manifest before renderer lookup', () => {
 
 test('rejects a manifest produced by another compiler ABI', () => {
   const manifest = currentManifest();
-  manifest.compilerVersion = '2.0.0-rc.6';
+  manifest.compilerVersion = '2.0.0-rc.15';
   assert.throws(
     () => validateSolidModuleManifest(manifest, identity),
     /compiler ABI mismatch/,
