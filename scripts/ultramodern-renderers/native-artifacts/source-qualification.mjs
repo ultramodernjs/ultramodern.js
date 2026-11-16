@@ -252,11 +252,26 @@ function tree(root) {
     .filter(file => fs.lstatSync(path.join(root, file)).isFile())
     .sort();
 }
+/**
+ * Exact byte equality with a bounded report. assert.deepEqual renders a diff
+ * whose cost grows superlinearly with Buffer size, so a mismatch in a
+ * multi-MiB patch or emitted file exhausts the runner instead of failing.
+ */
+export function assertSameBytes(actual, expected, label) {
+  if (actual.equals(expected)) return;
+  let offset = 0;
+  while (actual[offset] === expected[offset]) offset++;
+  assert.fail(
+    `${label}: bytes differ from offset ${offset}; actual ${actual.length} bytes ` +
+      `sha256 ${sha256(actual)}, expected ${expected.length} bytes ` +
+      `sha256 ${sha256(expected)}`,
+  );
+}
 export function assertSameLayout(actual, expected) {
   const files = tree(actual);
   assert.deepEqual(files, tree(expected), 'Qualified npm file layout differs');
   for (const file of files) {
-    assert.deepEqual(
+    assertSameBytes(
       fs.readFileSync(path.join(actual, file)),
       fs.readFileSync(path.join(expected, file)),
       `Qualified npm bytes differ: ${file}`,
@@ -640,91 +655,125 @@ export async function qualifyAdapterSource({
   );
 }
 
-/** Adapter to the owning runtime build. A failed query/HMR gate propagates;
- * reconstruction or a current unqualified patch can never produce this receipt. */
-async function qualifyRuntimePackageSource(
-  { name, item, workDirectory, packedDirectory },
-  { qualifier, execute = execFileSync, pnpmBinary } = {},
-) {
+export const runtimePairNames = Object.freeze([
+  'octane',
+  '@octanejs/rspack-plugin',
+]);
+function assertRuntimeIdentity(name, item) {
   assertOwningLicense(name, item.upstream.licenseSha256);
   const upstream = octaneInputs.find(input => input.name === name);
   assert.equal(
     item.upstream.request,
     upstream.url,
-    'Runtime recipe has another package identity',
+    `${name}: runtime recipe has another package identity`,
   );
   assert.equal(
     item.upstream.integrity,
     upstream.integrity,
-    'Runtime recipe has another upstream archive',
+    `${name}: runtime recipe has another upstream archive`,
   );
   assert.equal(item.upstream.repository, 'octanejs/octane');
   assert.equal(
     item.upstream.commit,
     octaneSource.commit,
-    'Runtime recipe has another owning source',
+    `${name}: runtime recipe has another owning source`,
   );
   assert.equal(
     item.upstream.sourceArchiveIntegrity,
     runtimeSourceIntegrity,
-    'Runtime recipe has another owning source archive',
+    `${name}: runtime recipe has another owning source archive`,
   );
   const expectedPatch = fs.readFileSync(item.patchPath);
   assert.equal(
     sha256(expectedPatch),
     item.patchSha256,
-    'Runtime recipe patch digest mismatch',
+    `${name}: runtime recipe patch digest mismatch`,
+  );
+  return { upstream, expectedPatch };
+}
+
+/** Adapter to the one owning runtime build, which qualifies octane and its
+ * Rspack plugin together. Every package receipt is checked against its own
+ * recipe. A failed query/HMR gate propagates; reconstruction or a current
+ * unqualified patch can never produce this receipt. */
+export async function qualifyRuntimePairSource(
+  { items, workDirectory, packedDirectory },
+  { qualifier = runOwningRuntime, execute = execFileSync, pnpmBinary } = {},
+) {
+  exactKeys(items, runtimePairNames, 'runtime owning pair recipe');
+  const identities = Object.fromEntries(
+    runtimePairNames.map(name => [
+      name,
+      assertRuntimeIdentity(name, items[name]),
+    ]),
   );
   return ownedQualification(
     workDirectory,
     'runtime',
     async ({ root, run, disk, register, pnpmBinary }) => {
-      const evidence = await qualifier({
+      const receipts = await qualifier({
         work: path.join(root, 'owning-build'),
-        expectedPatch,
+        expectedPatches: Object.fromEntries(
+          runtimePairNames.map(name => [name, identities[name].expectedPatch]),
+        ),
         writePatch: false,
-        packageName: name,
         runner: { run, disk, register },
         pnpm: pnpmBinary,
       });
-      exactKeys(
-        evidence,
-        ['sourceArchiveBytes', 'builtPatchBytes', 'licenseBytes'],
-        'runtime owning byte receipt',
-      );
-      for (const bytes of Object.values(evidence))
-        assert(
-          Buffer.isBuffer(bytes),
-          'Owning runtime must return actual bytes',
+      exactKeys(receipts, runtimePairNames, 'runtime owning pair receipt');
+      for (const name of runtimePairNames) {
+        exactKeys(
+          receipts[name],
+          ['sourceArchiveBytes', 'builtPatchBytes', 'licenseBytes'],
+          `${name}: runtime owning byte receipt`,
         );
-      assert.equal(
-        integrity(evidence.sourceArchiveBytes),
-        item.upstream.sourceArchiveIntegrity,
-      );
-      assert.deepEqual(
-        evidence.builtPatchBytes,
-        expectedPatch,
-        'Runtime owning build differs from recipe patch',
-      );
-      assertOwningLicense(name, sha256(evidence.licenseBytes));
-      if (packedDirectory) {
-        // The owning qualifier already ran source/build/packed gates. Bind the
-        // transported layout as well, without replacing those gates by unpacking.
-        const actual = path.join(root, 'transported');
-        const original = path.join(root, 'upstream');
-        const bytes = await readBytes(item.upstream.request);
-        assert.equal(integrity(bytes), item.upstream.integrity);
-        unpackNpm(bytes, original);
-        applyExactPatch(evidence.builtPatchBytes, original);
-        unpackNpm(
-          fs.readFileSync(
-            path.join(packedDirectory, assetFilename(name, upstream.version)),
-          ),
-          actual,
-        );
-        assertSameLayout(actual, original);
+        for (const bytes of Object.values(receipts[name]))
+          assert(
+            Buffer.isBuffer(bytes),
+            `${name}: owning runtime must return actual bytes`,
+          );
       }
-      return evidence;
+      // Each gate covers both packages before the next, so a foreign or
+      // swapped patch is reported as such, ahead of any license/source gate.
+      for (const name of runtimePairNames)
+        assertSameBytes(
+          receipts[name].builtPatchBytes,
+          identities[name].expectedPatch,
+          `${name}: runtime owning build differs from recipe patch`,
+        );
+      for (const name of runtimePairNames)
+        assertOwningLicense(name, sha256(receipts[name].licenseBytes));
+      for (const name of runtimePairNames)
+        assert.equal(
+          integrity(receipts[name].sourceArchiveBytes),
+          items[name].upstream.sourceArchiveIntegrity,
+          `${name}: owning runtime source archive`,
+        );
+      if (packedDirectory)
+        for (const name of runtimePairNames) {
+          // The owning qualifier already ran source/build/packed gates. Bind
+          // each transported layout as well, without replacing those gates.
+          const item = items[name];
+          const work = path.join(root, 'transported', name);
+          const actual = path.join(work, 'actual');
+          const original = path.join(work, 'upstream');
+          fs.mkdirSync(work, { recursive: true });
+          const bytes = await readBytes(item.upstream.request);
+          assert.equal(integrity(bytes), item.upstream.integrity);
+          unpackNpm(bytes, original);
+          applyExactPatch(receipts[name].builtPatchBytes, original);
+          unpackNpm(
+            fs.readFileSync(
+              path.join(
+                packedDirectory,
+                assetFilename(name, identities[name].upstream.version),
+              ),
+            ),
+            actual,
+          );
+          assertSameLayout(actual, original);
+        }
+      return receipts;
     },
     { owner: 'runtime', execute, ...(pnpmBinary ? { pnpmBinary } : {}) },
   );
@@ -739,21 +788,7 @@ async function runOwningRuntime(options) {
     runtimeSourceIntegrity,
     'Owning qualifier source archive changed',
   );
-  return options.packageName === 'octane'
-    ? owner.qualifyRuntime(options)
-    : owner.qualifyRspack(options);
-}
-export function qualifyRuntimeSource(options, dependencies = {}) {
-  return qualifyRuntimePackageSource(
-    { ...options, name: 'octane' },
-    { qualifier: runOwningRuntime, ...dependencies },
-  );
-}
-export function qualifyRspackSource(options, dependencies = {}) {
-  return qualifyRuntimePackageSource(
-    { ...options, name: '@octanejs/rspack-plugin' },
-    { qualifier: runOwningRuntime, ...dependencies },
-  );
+  return owner.qualifyRuntimePair(options);
 }
 
 // Parent-authenticated 53f0 handoff. Updating a worker output does not update

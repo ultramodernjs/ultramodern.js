@@ -22,8 +22,7 @@ import {
   qualificationToolchains,
   qualifyAdapterSource,
   qualifyRouterSource,
-  qualifyRspackSource,
-  qualifyRuntimeSource,
+  qualifyRuntimePairSource,
   runtimeHandoffFiles,
   unpackNpm,
   verifyRuntimeHandoff,
@@ -358,33 +357,35 @@ test('each package authenticates its own license rather than source-root equalit
 
 function runtimeControl(t) {
   const directory = root(t);
-  const patchPath = path.join(directory, 'unit-unqualified.patch');
-  const patch = Buffer.from(
-    'fabricated protocol control, never a production patch',
+  const patches = {};
+  const items = Object.fromEntries(
+    Object.entries(runtimeRecipes().packages).map(([name, item]) => {
+      const patch = Buffer.from(
+        `fabricated ${name} protocol control, never a production patch`,
+      );
+      const patchPath = path.join(
+        directory,
+        `unit-${name.replace(/\W/gu, '_')}.patch`,
+      );
+      fs.writeFileSync(patchPath, patch);
+      patches[name] = patch;
+      return [
+        name,
+        { ...structuredClone(item), patchPath, patchSha256: sha256(patch) },
+      ];
+    }),
   );
-  fs.writeFileSync(patchPath, patch);
-  const adapter = completedRecipes().packages['@octanejs/tanstack-router'];
-  const item = {
-    ...adapter,
-    patchPath,
-    patchSha256: sha256(patch),
-    upstream: {
-      ...adapter.upstream,
-      request: 'https://registry.npmjs.org/octane/-/octane-0.18.0.tgz',
-      integrity:
-        'sha512-nMuONCV3pMMJhWjlXmC08Dn+i/bXju1micX/kKyAxY1b+dGK0zvCY6dCuMn791pyQfgXBs0jQ2X8apPysVrOhQ==',
-      licenseSha256: owningLicenses.octane,
-    },
-  };
-  return { directory, item, patch };
+  return { directory, items, patches, controls: fs.readdirSync(directory) };
 }
+const pairNames = ['octane', '@octanejs/rspack-plugin'];
+const otherPair = name => pairNames.find(other => other !== name);
 
-test('runtime adapter checks pnpm 12 before calling the owning runtime qualifier', async t => {
+test('runtime pair adapter checks pnpm 12 before calling the owning runtime qualifier', async t => {
   const f = runtimeControl(t);
   let calls = 0;
   await assert.rejects(
-    qualifyRuntimeSource(
-      { item: f.item, workDirectory: f.directory },
+    qualifyRuntimePairSource(
+      { items: f.items, workDirectory: f.directory },
       {
         execute: () => '11.21.0\n',
         qualifier: async () => {
@@ -399,25 +400,32 @@ test('runtime adapter checks pnpm 12 before calling the owning runtime qualifier
 });
 
 for (const gate of ['real query regression', 'HMR 12 failures'])
-  test(`runtime adapter preserves owning ${gate} failure; no receipt or patch acceptance`, async t => {
+  test(`runtime pair adapter runs one owning build for both packages and preserves its ${gate} failure`, async t => {
     const f = runtimeControl(t);
     const failure = new Error(gate);
     let calls = 0;
     await assert.rejects(
-      qualifyRuntimeSource(
-        { item: f.item, workDirectory: f.directory },
+      qualifyRuntimePairSource(
+        { items: f.items, workDirectory: f.directory },
         {
           pnpmBinary: '/unit/pnpm-12.21.0',
           execute: () => '12.21.0\n',
           qualifier: async options => {
             calls++;
+            assert.deepEqual(Object.keys(options).sort(), [
+              'expectedPatches',
+              'pnpm',
+              'runner',
+              'work',
+              'writePatch',
+            ]);
             assert.equal(options.writePatch, false);
-            assert.deepEqual(options.expectedPatch, f.patch);
+            assert.deepEqual(options.expectedPatches, f.patches);
             assert.equal(options.pnpm, '/unit/pnpm-12.21.0');
             assert.equal(typeof options.runner.run, 'function');
             assert.equal(typeof options.runner.disk, 'function');
             assert.equal(typeof options.runner.register, 'function');
-            assert(options.work.startsWith(f.directory));
+            assert(options.work.startsWith(fs.realpathSync(f.directory)));
             throw failure;
           },
         },
@@ -425,36 +433,152 @@ for (const gate of ['real query regression', 'HMR 12 failures'])
       error => error === failure,
     );
     assert.equal(calls, 1);
-    assert.deepEqual(fs.readdirSync(f.directory), ['unit-unqualified.patch']);
+    assert.deepEqual(fs.readdirSync(f.directory), f.controls);
   });
 
-for (const kind of ['license', 'request', 'archive', 'source', 'patch'])
-  test(`runtime adapter rejects swapped ${kind} before toolchain or build execution`, async t => {
-    const f = runtimeControl(t);
-    if (kind === 'license')
-      f.item.upstream.licenseSha256 = owningLicenses['@octanejs/rspack-plugin'];
-    if (kind === 'request')
-      f.item.upstream.request =
-        completedRecipes().packages[
-          '@octanejs/tanstack-router'
-        ].upstream.request;
-    if (kind === 'archive')
-      f.item.upstream.integrity =
-        completedRecipes().packages[
-          '@octanejs/tanstack-router'
-        ].upstream.integrity;
-    if (kind === 'source') f.item.upstream.commit = 'f'.repeat(40);
-    if (kind === 'patch') f.item.patchSha256 = 'f'.repeat(64);
+for (const name of pairNames)
+  for (const kind of [
+    'license',
+    'request',
+    'archive',
+    'source',
+    'source archive',
+    'patch',
+  ])
+    test(`runtime pair adapter rejects ${name} with a swapped ${kind} before toolchain or build execution`, async t => {
+      const f = runtimeControl(t);
+      const item = f.items[name];
+      const other = f.items[otherPair(name)];
+      if (kind === 'license')
+        item.upstream.licenseSha256 = other.upstream.licenseSha256;
+      if (kind === 'request') item.upstream.request = other.upstream.request;
+      if (kind === 'archive')
+        item.upstream.integrity = other.upstream.integrity;
+      if (kind === 'source') item.upstream.commit = 'f'.repeat(40);
+      if (kind === 'source archive')
+        item.upstream.sourceArchiveIntegrity =
+          'sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
+      if (kind === 'patch') item.patchSha256 = other.patchSha256;
+      await assert.rejects(
+        qualifyRuntimePairSource(
+          { items: f.items, workDirectory: f.directory },
+          {
+            execute: () => assert.fail('must reject before toolchain'),
+            qualifier: () => assert.fail('must reject before owning build'),
+          },
+        ),
+        error =>
+          error.message.includes(name) &&
+          !error.message.includes('must reject'),
+      );
+      assert.deepEqual(fs.readdirSync(f.directory), f.controls);
+    });
+
+test('runtime pair adapter accepts exactly the closed octane/Rspack pair recipe', async t => {
+  const f = runtimeControl(t);
+  const adapter = completedRecipes().packages['@octanejs/tanstack-router'];
+  for (const items of [
+    { octane: f.items.octane },
+    { ...f.items, '@octanejs/tanstack-router': adapter },
+  ])
     await assert.rejects(
-      qualifyRuntimeSource(
-        { item: f.item, workDirectory: f.directory },
+      qualifyRuntimePairSource(
+        { items, workDirectory: f.directory },
         {
           execute: () => assert.fail('must reject before toolchain'),
           qualifier: () => assert.fail('must reject before owning build'),
         },
       ),
+      /runtime owning pair recipe/u,
     );
+});
+
+test('runtime pair receipt checks each package’s own bytes from the single owning invocation', async t => {
+  const f = runtimeControl(t);
+  // Fabricated bytes are protocol controls; none of them can satisfy the
+  // authenticated source archive gate, so no case below can be accepted.
+  const receipt = name => ({
+    sourceArchiveBytes: Buffer.from('fabricated source archive control'),
+    builtPatchBytes: f.patches[name],
+    licenseBytes: Buffer.from('fabricated license control'),
   });
+  const pair = () =>
+    Object.fromEntries(pairNames.map(name => [name, receipt(name)]));
+  const cases = [
+    [
+      'swapped patches',
+      () => {
+        const value = pair();
+        value.octane.builtPatchBytes = f.patches['@octanejs/rspack-plugin'];
+        value['@octanejs/rspack-plugin'].builtPatchBytes = f.patches.octane;
+        return value;
+      },
+      /octane: runtime owning build differs from recipe patch/u,
+    ],
+    [
+      'foreign Rspack patch',
+      () => {
+        const value = pair();
+        value['@octanejs/rspack-plugin'].builtPatchBytes = f.patches.octane;
+        return value;
+      },
+      /@octanejs\/rspack-plugin: runtime owning build differs from recipe patch/u,
+    ],
+    [
+      'only one package',
+      () => ({ octane: receipt('octane') }),
+      /runtime owning pair receipt/u,
+    ],
+    [
+      'an extra package',
+      () => ({ ...pair(), '@octanejs/tanstack-router': receipt('octane') }),
+      /runtime owning pair receipt/u,
+    ],
+    [
+      'an extra receipt field',
+      () => {
+        const value = pair();
+        value.octane.packedBytes = Buffer.from('unreviewed');
+        return value;
+      },
+      /octane: runtime owning byte receipt/u,
+    ],
+    [
+      'non-byte evidence',
+      () => {
+        const value = pair();
+        value['@octanejs/rspack-plugin'].licenseBytes = 'license';
+        return value;
+      },
+      /rspack-plugin: owning runtime must return actual bytes/u,
+    ],
+    [
+      'another license',
+      () => pair(),
+      /octane: recipe differs from its owning package license/u,
+    ],
+  ];
+  for (const [label, value, expected] of cases) {
+    let calls = 0;
+    await assert.rejects(
+      qualifyRuntimePairSource(
+        { items: f.items, workDirectory: f.directory },
+        {
+          pnpmBinary: '/unit/pnpm-12.21.0',
+          execute: () => '12.21.0\n',
+          qualifier: async () => {
+            calls++;
+            return value();
+          },
+        },
+      ),
+      expected,
+      label,
+    );
+    assert.equal(calls, 1, label);
+    assert.deepEqual(fs.readdirSync(f.directory), f.controls, label);
+  }
+});
 
 test('closed pair composition authenticates per-package licenses before any qualifier runs', async t => {
   const f = runtimeControl(t);
@@ -464,18 +588,7 @@ test('closed pair composition authenticates per-package licenses before any qual
   const completed = completedRecipes();
   let calls = 0;
   const runtime = {
-    packages: {
-      octane: f.item,
-      '@octanejs/rspack-plugin': {
-        ...f.item,
-        upstream: {
-          ...f.item.upstream,
-          request: input.url,
-          integrity: input.integrity,
-          licenseSha256: owningLicenses[input.name],
-        },
-      },
-    },
+    packages: f.items,
     async qualifySource() {
       calls++;
     },
@@ -516,22 +629,6 @@ test('closed pair composition authenticates per-package licenses before any qual
     assert.throws(() => composeRecipe({ completed, runtime: altered }));
     assert.equal(calls, 0);
   }
-});
-
-test('runtime adapter rejects another source archive before toolchain and owning build', async t => {
-  const f = runtimeControl(t);
-  f.item.upstream.sourceArchiveIntegrity =
-    'sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
-  await assert.rejects(
-    qualifyRuntimeSource(
-      { item: f.item, workDirectory: f.directory },
-      {
-        execute: () => assert.fail('must not inspect toolchain'),
-        qualifier: () => assert.fail('must not run build'),
-      },
-    ),
-    /another owning source archive/u,
-  );
 });
 
 test('router and adapter reject another package license before creating a build workspace', async t => {
@@ -604,51 +701,33 @@ for (const relative of Object.keys(runtimeHandoffFiles))
     );
   });
 
-test('production pair calls each owning source/packed adapter with its own recipe and exact archive directory', async t => {
+test('production pair runs one owning invocation for both packages with the exact archive directory', async t => {
   const directory = handedOffTree(t);
   const calls = [];
-  // Fabricated receipt objects exercise call routing only. They never qualify production bytes.
-  const runtimeReceipt = { unitOnly: 'runtime' };
-  const rspackReceipt = { unitOnly: 'rspack' };
-  const runtimeQualifier = async options => {
-    calls.push(['runtime', options]);
-    return runtimeReceipt;
-  };
-  const rspackQualifier = async options => {
-    calls.push(['rspack', options]);
-    return rspackReceipt;
-  };
+  // A fabricated receipt object exercises call routing only. It never qualifies production bytes.
+  const receipt = { unitOnly: 'pair' };
   const pair = runtimeRecipes(
     { root: directory },
-    { runtimeQualifier, rspackQualifier },
+    {
+      pairQualifier: async options => {
+        calls.push(options);
+        return receipt;
+      },
+    },
   );
-  const source = await pair.qualifySource({ workDirectory: directory });
-  assert.deepEqual(source, {
-    octane: runtimeReceipt,
-    '@octanejs/rspack-plugin': rspackReceipt,
-  });
-  assert.deepEqual(
-    calls.map(([name]) => name),
-    ['runtime', 'rspack'],
-  );
-  assert.equal(calls[0][1].item, pair.packages.octane);
-  assert.equal(calls[1][1].item, pair.packages['@octanejs/rspack-plugin']);
-  assert(calls.every(([, options]) => options.packedDirectory === undefined));
+  assert.equal(await pair.qualifySource({ workDirectory: directory }), receipt);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].items, pair.packages);
+  assert.equal(calls[0].workDirectory, directory);
+  assert.equal(calls[0].packedDirectory, undefined);
   calls.length = 0;
   await pair.qualifyPacked({
     workDirectory: directory,
     directory: '/unit/exact-verified-archives',
   });
-  assert.deepEqual(
-    calls.map(([name]) => name),
-    ['runtime', 'rspack'],
-  );
-  assert(
-    calls.every(
-      ([, options]) =>
-        options.packedDirectory === '/unit/exact-verified-archives',
-    ),
-  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].items, pair.packages);
+  assert.equal(calls[0].packedDirectory, '/unit/exact-verified-archives');
   fs.appendFileSync(
     path.join(directory, 'patches/octane@0.18.0.patch'),
     'post-recipe drift',
@@ -664,14 +743,14 @@ test('production pair calls each owning source/packed adapter with its own recip
 test('production pair never turns an owning classification/load failure into a source receipt', async t => {
   const directory = handedOffTree(t);
   const failure = new Error('Selected load failures remain unclassified');
+  let calls = 0;
   const pair = runtimeRecipes(
     { root: directory },
     {
-      runtimeQualifier: async () => {
+      pairQualifier: async () => {
+        calls++;
         throw failure;
       },
-      rspackQualifier: () =>
-        assert.fail('do not continue after failed owning qualification'),
     },
   );
   await assert.rejects(
@@ -685,58 +764,7 @@ test('production pair never turns an owning classification/load failure into a s
     }),
     error => error === failure,
   );
-});
-
-test('Rspack adapter selects its own identity, license, expected patch and pnpm 12 without bypassing owner gates', async t => {
-  const directory = root(t);
-  const item = runtimeRecipes().packages['@octanejs/rspack-plugin'];
-  const failure = new Error('Owning Rspack selected-load gate failed');
-  let called = false;
-  await assert.rejects(
-    qualifyRspackSource(
-      { item, workDirectory: directory },
-      {
-        pnpmBinary: '/unit/pnpm-12.21.0',
-        execute: () => '12.21.0\n',
-        qualifier: async options => {
-          called = true;
-          assert.equal(options.packageName, '@octanejs/rspack-plugin');
-          assert.equal(options.writePatch, false);
-          assert.deepEqual(
-            options.expectedPatch,
-            fs.readFileSync(item.patchPath),
-          );
-          assert.equal(options.pnpm, '/unit/pnpm-12.21.0');
-          throw failure;
-        },
-      },
-    ),
-    error => error === failure,
-  );
-  assert(called);
-  await assert.rejects(
-    qualifyRspackSource(
-      { item, workDirectory: directory },
-      {
-        execute: () => '11.21.0\n',
-        qualifier: () =>
-          assert.fail('must reject wrong owning pnpm before build'),
-      },
-    ),
-    /runtime: Native owning build needs pnpm 12.21.0/u,
-  );
-  const swapped = structuredClone(item);
-  swapped.upstream.licenseSha256 = owningLicenses.octane;
-  await assert.rejects(
-    qualifyRspackSource(
-      { item: swapped, workDirectory: directory },
-      {
-        execute: () =>
-          assert.fail('reject wrong package license before toolchain'),
-      },
-    ),
-    /rspack-plugin: recipe differs/u,
-  );
+  assert.equal(calls, 2);
 });
 
 test('owning installs normalize clone-or-copy once and renew replaced dependency output identities', async t => {

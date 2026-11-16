@@ -14,6 +14,19 @@ export const sourceIntegrity =
   'sha512-LyipVNIG/Wz8BOF2B8yxHf4xyeyh4IKyXFcg+XZnYdBEaXa57jwdqM1lI9UdX16jVC2fCNImvwj9EGw71jDn+A==';
 export const runtimePatchPath = 'patches/octane@0.18.0.patch';
 export const rspackPatchPath = 'patches/@octanejs__rspack-plugin@0.2.10.patch';
+/** The one owning build emits both halves; each keeps its own canonical identity. */
+export const runtimePair = Object.freeze({
+  octane: Object.freeze({
+    patchPath: runtimePatchPath,
+    licenseSha256:
+      'fe9a7b24f2d1540df1a4d273ba9b4b081844ecd1142839def5b7f242a13203b8',
+  }),
+  '@octanejs/rspack-plugin': Object.freeze({
+    patchPath: rspackPatchPath,
+    licenseSha256:
+      '4b83c082bc5305628aceda4130f495f30a6b992389b8d19229d508d38bc09a36',
+  }),
+});
 export const hydrationParitySlices = Object.freeze([
   'automatic-signal-stream',
   'early-control-handoff',
@@ -60,6 +73,22 @@ const digest = (algorithm, bytes) =>
   createHash(algorithm).update(bytes).digest('hex');
 const integrity = bytes =>
   `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
+
+/**
+ * Exact byte equality with a bounded report. assert.deepEqual renders a diff
+ * whose cost grows superlinearly with Buffer size, so a mismatch in a
+ * multi-MiB patch or emitted file exhausts the runner instead of failing.
+ */
+export function assertSameBytes(actual, expected, label) {
+  if (actual.equals(expected)) return;
+  let offset = 0;
+  while (actual[offset] === expected[offset]) offset++;
+  assert.fail(
+    `${label}: bytes differ from offset ${offset}; actual ${actual.length} bytes ` +
+      `sha256 ${digest('sha256', actual)}, expected ${expected.length} bytes ` +
+      `sha256 ${digest('sha256', expected)}`,
+  );
+}
 
 function disk(directory) {
   const { bavail, bsize } = fs.statfsSync(directory);
@@ -401,23 +430,65 @@ export function qualifyPackedApi(root, modules, runtimePackage, execute = run) {
 }
 
 /**
- * Native-producer hook. The caller supplies an operation-owned empty directory.
- * Returns authenticated input and actual built patch/license bytes only after
- * source tests, the owning build, packed tests, and exact reconstruction pass.
+ * Names the current phase and the last started command, so an actual failure
+ * (including a signal-terminated child) reports where it happened. Never
+ * changes the thrown error or retries.
  */
-export async function qualifyRuntime({
+export function phaseTracker(write = line => process.stderr.write(line)) {
+  let current;
+  let started;
+  let command;
+  const seconds = () => ((Date.now() - started) / 1000).toFixed(1);
+  return {
+    enter(name) {
+      if (current)
+        write(`[octane-runtime] ${current}: passed in ${seconds()}s\n`);
+      current = name;
+      started = Date.now();
+      command = undefined;
+      write(`[octane-runtime] ${name}: started\n`);
+    },
+    trace(execute) {
+      return (file, args, cwd, ...rest) => {
+        command = `${[file, ...args].join(' ')} (cwd ${cwd})`;
+        return execute(file, args, cwd, ...rest);
+      };
+    },
+    finish() {
+      write(`[octane-runtime] ${current}: passed in ${seconds()}s\n`);
+    },
+    fail(error) {
+      write(
+        `[octane-runtime] ${current}: FAILED after ${seconds()}s; ` +
+          `last command: ${command ?? 'none'}; exit ${error?.status ?? 'none'}; ` +
+          `signal ${error?.signal ?? 'none'}; ${String(error?.message).split('\n')[0]}\n`,
+      );
+    },
+  };
+}
+
+/**
+ * Native-producer hook. The caller supplies an operation-owned empty directory.
+ * One owning build qualifies both halves of the runtime pair. Returns one
+ * receipt per package (authenticated source archive, actual built patch and
+ * license bytes) only after source tests, the owning build, packed tests, and
+ * exact reconstruction of both packages pass.
+ */
+export async function qualifyRuntimePair({
   work,
-  expectedPatch,
+  expectedPatches,
   writePatch = false,
   runner = {},
   pnpm = process.env.PNPM_BINARY ?? 'pnpm',
   storeDirectory = path.join(process.env.HOME, '.local/share/pnpm/store'),
-  packageName = 'octane',
+  phases = phaseTracker(),
 }) {
-  assert(
-    ['octane', '@octanejs/rspack-plugin'].includes(packageName),
-    'Unknown owning package',
-  );
+  if (expectedPatches !== undefined)
+    assert.deepEqual(
+      Object.keys(expectedPatches).sort(),
+      Object.keys(runtimePair).sort(),
+      'Expected patches must name exactly the owning runtime pair',
+    );
   assert(
     path.isAbsolute(work),
     'An absolute operation-owned directory is required',
@@ -430,7 +501,7 @@ export async function qualifyRuntime({
   );
   const owner = `octane-runtime-${process.pid}`;
   const registered = [];
-  const execute = runner.run ?? run;
+  const execute = phases.trace(runner.run ?? run);
   const checkDisk = runner.disk ?? (() => disk(work));
   const register = (directory, kind) => {
     fs.mkdirSync(directory, { recursive: true });
@@ -455,6 +526,7 @@ export async function qualifyRuntime({
     registered.push(directory);
   };
   try {
+    phases.enter('authenticate inputs');
     checkDisk();
     const sourceArchiveBytes = await download(source.url, sourceIntegrity);
     assert.equal(digest('sha256', sourceArchiveBytes), source.sha256);
@@ -473,6 +545,7 @@ export async function qualifyRuntime({
       rspackUpstream,
       execute,
     );
+    phases.enter('apply source corrections');
     for (const name of [
       'runtime-source.patch',
       'typescript-compat/typescript-source.patch',
@@ -491,6 +564,7 @@ export async function qualifyRuntime({
         path.join(deps, name),
       );
     fs.writeFileSync(path.join(deps, 'pnpm-workspace.yaml'), 'packages: []\n');
+    phases.enter('install owning dependencies');
     checkDisk();
     register(path.join(deps, 'node_modules'), 'dependencies');
     assert.equal(
@@ -527,6 +601,7 @@ export async function qualifyRuntime({
     const baseline = path.join(work, 'baseline');
     extract(sourceArchiveBytes, baseline, execute);
     fs.symlinkSync(modules, path.join(baseline, 'node_modules'));
+    phases.enter('source hydration suites');
     const fullSourceEvidence = qualifyAllHydration({
       baselineRoot: baseline,
       composedRoot: root,
@@ -535,7 +610,9 @@ export async function qualifyRuntime({
       execute,
       qualifyTree: qualifyRuntimeTree,
     });
+    phases.enter('source Rspack suites');
     qualifyRspackTree(root, modules, execute);
+    phases.enter('source checks and typecheck');
     execute(
       process.execPath,
       ['scripts/error-codes/generate.mjs', '--check'],
@@ -553,6 +630,7 @@ export async function qualifyRuntime({
       ],
       root,
     );
+    phases.enter('owning build and reconstruction');
     checkDisk();
     register(path.join(pkg, 'dist'), 'build');
     execute(process.execPath, ['packages/octane/scripts/build.mjs'], root);
@@ -576,12 +654,13 @@ export async function qualifyRuntime({
     applyExact(reconstructed, patchFile, execute);
     assert.deepEqual(files(reconstructed), files(built));
     for (const name of files(built))
-      assert.deepEqual(
+      assertSameBytes(
         fs.readFileSync(path.join(reconstructed, name)),
         fs.readFileSync(path.join(built, name)),
-        name,
+        `octane reconstruction: ${name}`,
       );
     fs.symlinkSync(modules, path.join(reconstructed, 'node_modules'));
+    phases.enter('packed hydration suites');
     qualifyAllHydration({
       baselineRoot: baseline,
       composedRoot: root,
@@ -592,6 +671,7 @@ export async function qualifyRuntime({
       qualifyTree: qualifyRuntimeTree,
       sourceEvidence: fullSourceEvidence,
     });
+    phases.enter('packed Rspack and API suites');
     const rspackReconstructed = path.join(work, 'rspack-reconstructed');
     fs.cpSync(rspackUpstream, rspackReconstructed, { recursive: true });
     const rspackPatchFile = path.join(work, 'rspack.patch');
@@ -599,10 +679,10 @@ export async function qualifyRuntime({
     applyExact(rspackReconstructed, rspackPatchFile, execute);
     assert.deepEqual(files(rspackReconstructed), files(rspackBuilt));
     for (const name of files(rspackBuilt))
-      assert.deepEqual(
+      assertSameBytes(
         fs.readFileSync(path.join(rspackReconstructed, name)),
         fs.readFileSync(path.join(rspackBuilt, name)),
-        name,
+        `Rspack reconstruction: ${name}`,
       );
     qualifyPackedRspack(
       root,
@@ -612,39 +692,51 @@ export async function qualifyRuntime({
       execute,
     );
     qualifyPackedApi(root, modules, reconstructed, execute);
-    const selectedPatch =
-      packageName === 'octane' ? builtPatchBytes : rspackPatchBytes;
-    if (expectedPatch) assert.deepEqual(selectedPatch, expectedPatch);
+    phases.enter('pair receipt');
+    const receipts = {
+      octane: {
+        sourceArchiveBytes,
+        builtPatchBytes,
+        licenseBytes: fs.readFileSync(path.join(pkg, 'LICENSE')),
+      },
+      '@octanejs/rspack-plugin': {
+        sourceArchiveBytes,
+        builtPatchBytes: rspackPatchBytes,
+        licenseBytes: fs.readFileSync(
+          path.join(root, 'packages/rspack-plugin-octane/LICENSE'),
+        ),
+      },
+    };
+    for (const [name, receipt] of Object.entries(receipts)) {
+      if (expectedPatches)
+        assertSameBytes(
+          receipt.builtPatchBytes,
+          expectedPatches[name],
+          `${name}: owning build differs from expected patch`,
+        );
+      assert.equal(
+        digest('sha256', receipt.licenseBytes),
+        runtimePair[name].licenseSha256,
+        `${name}: owning license differs`,
+      );
+    }
     // Canonical artifacts and producer bytes remain unavailable until every
     // source and packed gate for both halves of this owning build has passed.
-    for (const [filename, bytes] of [
-      [runtimePatchPath, builtPatchBytes],
-      [rspackPatchPath, rspackPatchBytes],
-    ]) {
-      const canonical = path.join(repository, filename);
-      if (writePatch) fs.writeFileSync(canonical, bytes);
+    for (const [name, receipt] of Object.entries(receipts)) {
+      const canonical = path.join(repository, runtimePair[name].patchPath);
+      if (writePatch) fs.writeFileSync(canonical, receipt.builtPatchBytes);
       else
-        assert.deepEqual(
-          bytes,
+        assertSameBytes(
+          receipt.builtPatchBytes,
           fs.readFileSync(canonical),
-          `Canonical patch drift: ${filename}`,
+          `Canonical patch drift: ${runtimePair[name].patchPath}`,
         );
     }
-    const licenseBytes = fs.readFileSync(
-      path.join(
-        packageName === 'octane'
-          ? pkg
-          : path.join(root, 'packages/rspack-plugin-octane'),
-        'LICENSE',
-      ),
-    );
-    assert.equal(
-      digest('sha256', licenseBytes),
-      packageName === 'octane'
-        ? 'fe9a7b24f2d1540df1a4d273ba9b4b081844ecd1142839def5b7f242a13203b8'
-        : '4b83c082bc5305628aceda4130f495f30a6b992389b8d19229d508d38bc09a36',
-    );
-    return { sourceArchiveBytes, builtPatchBytes: selectedPatch, licenseBytes };
+    phases.finish();
+    return receipts;
+  } catch (error) {
+    phases.fail(error);
+    throw error;
   } finally {
     for (const directory of registered.reverse())
       execute(
@@ -656,12 +748,6 @@ export async function qualifyRuntime({
   }
 }
 
-export const qualifyRspack = options =>
-  qualifyRuntime({
-    ...options,
-    packageName: '@octanejs/rspack-plugin',
-  });
-
 if (
   process.argv[1] &&
   pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url
@@ -670,7 +756,7 @@ if (
     process.env.OWNED_TEMP_DIR,
     'Run via owned-temp-dir --need-gib 20 --run octane-runtime -- node <this-file>',
   );
-  const receipt = await qualifyRuntime({
+  const receipts = await qualifyRuntimePair({
     work: path.join(
       fs.realpathSync(process.env.OWNED_TEMP_DIR),
       'qualification',
@@ -679,7 +765,14 @@ if (
   });
   console.log({
     sourceIntegrity,
-    patchSha256: digest('sha256', receipt.builtPatchBytes),
-    licenseSha256: digest('sha256', receipt.licenseBytes),
+    ...Object.fromEntries(
+      Object.entries(receipts).map(([name, receipt]) => [
+        name,
+        {
+          patchSha256: digest('sha256', receipt.builtPatchBytes),
+          licenseSha256: digest('sha256', receipt.licenseBytes),
+        },
+      ]),
+    ),
   });
 }
