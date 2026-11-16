@@ -104,6 +104,9 @@ export const PNPM_VERSION = '12.21.0';
 // carries the reviewed parser and AST walker fix. Sharp uses its native fix.
 export const BRACES_FORK_VERSION = '3.0.4';
 export const SHARP_VERSION = '0.35.5';
+// Required exact peer of @modern-js/app-tools-extensions' native server
+// compiler; support metadata selects the corrected archive for this version.
+export const RSBUILD_PLUGIN_DTS_VERSION = '1.0.7';
 
 export const ULTRAMODERN_PACKAGE_PINS = {
   appDependencies: {
@@ -139,6 +142,11 @@ export const ULTRAMODERN_PACKAGE_PINS = {
     typescript: TYPESCRIPT_VERSION,
     wrangler: WRANGLER_VERSION,
     'zephyr-rspack-plugin': ZEPHYR_RSPACK_PLUGIN_VERSION,
+  },
+  // Declared by API apps, whose server code the native compiler emits, and
+  // directly by the workspace root that hosts the framework peer.
+  serverCompilerDevDependencies: {
+    'rsbuild-plugin-dts': RSBUILD_PLUGIN_DTS_VERSION,
   },
   rootDevDependencies: {
     '@effect/tsgo': EFFECT_TSGO_VERSION,

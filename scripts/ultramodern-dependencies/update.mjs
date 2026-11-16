@@ -21,6 +21,7 @@ import {
   rslibPatchSha256,
   satisfiedExceptions,
   sourceRevision,
+  supportBaselineRevision,
   targets,
   traceConsolidation,
 } from './snapshot.mjs';
@@ -173,13 +174,39 @@ export function planManifestUpdate({
   current,
   sourceRevision: revision,
   artifactAuthority,
+  supportBaseline,
 }) {
   assert.equal(revision, sourceRevision, 'unreviewed snapshot source revision');
+  if (supportBaseline !== undefined)
+    assert.equal(
+      supportBaseline.revision,
+      supportBaselineRevision,
+      'unreviewed support baseline revision',
+    );
   const artifacts = admittedArtifacts(artifactAuthority);
-  const admittedPin = name =>
-    Object.entries(artifacts).find(([kind]) =>
-      artifactOwners[kind]?.[file]?.includes(name),
-    )?.[1].packages[name];
+  const ownerKind = name =>
+    Object.keys(artifactOwners).find(kind =>
+      artifactOwners[kind][file]?.includes(name),
+    );
+  const admittedPin = name => artifacts[ownerKind(name)]?.packages[name];
+  // The reviewed baseline proves only the exact support-owned selections of
+  // its own accepted descriptor; any other baseline content is ignored.
+  const priorSupport = artifactOwners.supportArtifacts[file]
+    ? supportBaseline?.manifest?.ultramodern?.supportArtifacts
+    : undefined;
+  const priorPin = (field, name) => {
+    const pin = priorSupport?.packages?.[name];
+    if (
+      !pin ||
+      field === 'optionalDependencies' ||
+      ownerKind(name) !== 'supportArtifacts'
+    )
+      return undefined;
+    const value = supportBaseline.manifest[field]?.[name];
+    return value === (field === 'peerDependencies' ? pin.version : pin.request)
+      ? value
+      : undefined;
+  };
   assert(
     allowedPath(file) && !file.split('/').includes('..'),
     'path outside manifest allowlist',
@@ -214,7 +241,10 @@ export function planManifestUpdate({
         current.peerDependencies?.[name] === version &&
         (current.devDependencies?.[name] === version ||
           (admittedPin(name) &&
-            current.devDependencies?.[name] === admittedPin(name).request)),
+            current.devDependencies?.[name] === admittedPin(name).request) ||
+          (priorPin('devDependencies', name) !== undefined &&
+            current.devDependencies?.[name] ===
+              priorPin('devDependencies', name))),
     );
     assert(
       (original || migrated) &&
@@ -270,7 +300,10 @@ export function planManifestUpdate({
       current.peerDependencies?.[name] === version &&
       (current.devDependencies?.[name] === version ||
         (admittedPin(name) &&
-          current.devDependencies?.[name] === admittedPin(name).request));
+          current.devDependencies?.[name] === admittedPin(name).request) ||
+        (priorPin('devDependencies', name) !== undefined &&
+          current.devDependencies?.[name] ===
+            priorPin('devDependencies', name)));
     assert(
       (original || migrated) &&
         !Object.hasOwn(current.peerDependenciesMeta ?? {}, name),
@@ -453,6 +486,7 @@ export function planManifestUpdate({
           reason: 'exact reviewed dependency addition',
         };
       const artifact = admittedPin(name);
+      const prior = excludedFixture(file) ? undefined : priorPin(field, name);
       if (artifact && !excludedFixture(file)) {
         assert(
           field !== 'optionalDependencies',
@@ -463,7 +497,8 @@ export function planManifestUpdate({
         assert(
           actual[name] === value ||
             actual[name] === edge.to ||
-            actual[name] === to,
+            actual[name] === to ||
+            (prior !== undefined && actual[name] === prior),
           `${file}: unexpected old artifact edge ${field}.${name}: ${actual[name]}`,
         );
         if (
@@ -487,7 +522,18 @@ export function planManifestUpdate({
           reason:
             'authenticated hosted bytes match reviewed canonical correction',
         };
-      }
+      } else if (
+        prior !== undefined &&
+        actual[name] === prior &&
+        actual[name] !== value
+      )
+        // Without a newer admission the reviewed baseline selection stays.
+        edge = {
+          ...edge,
+          to: prior,
+          status: 'current',
+          reason: 'reviewed baseline support artifact selection',
+        };
       assert(
         artifact ||
           actual[name] === value ||
@@ -504,12 +550,21 @@ export function planManifestUpdate({
   for (const kind of ['nativeArtifacts', 'supportArtifacts']) {
     const before = expected.ultramodern?.[kind];
     const actual = current.ultramodern?.[kind];
-    const selected =
-      artifacts[kind] && artifactOwners[kind][file] ? artifacts[kind] : before;
+    const admitted =
+      artifacts[kind] && artifactOwners[kind][file]
+        ? artifacts[kind]
+        : undefined;
+    const verified = [
+      before,
+      ...(kind === 'supportArtifacts' && priorSupport ? [priorSupport] : []),
+      ...(admitted ? [admitted] : []),
+    ];
     assert(
-      isDeepStrictEqual(actual, before) || isDeepStrictEqual(actual, selected),
+      verified.some(value => isDeepStrictEqual(actual, value)),
       `${file}: unverified ${kind} metadata`,
     );
+    // Without a newer admission, a verified state is left unchanged.
+    const selected = admitted ?? actual;
     if (!isDeepStrictEqual(actual, selected)) {
       (manifest.ultramodern ??= {})[kind] = structuredClone(selected);
       changes.push({
@@ -577,6 +632,12 @@ export function runUpdater({ root, write = false, artifactAuthority }) {
       maxBuffer: 16 * 1024 * 1024,
     });
   git('merge-base', '--is-ancestor', sourceRevision, 'HEAD');
+  git('merge-base', '--is-ancestor', supportBaselineRevision, 'HEAD');
+  const baselineFiles = new Set(
+    git('ls-tree', '-r', '--name-only', supportBaselineRevision)
+      .trim()
+      .split('\n'),
+  );
   const files = git('ls-tree', '-r', '--name-only', sourceRevision)
     .trim()
     .split('\n')
@@ -596,6 +657,12 @@ export function runUpdater({ root, write = false, artifactAuthority }) {
       current: JSON.parse(text),
       sourceRevision,
       artifactAuthority,
+      supportBaseline: {
+        revision: supportBaselineRevision,
+        manifest: baselineFiles.has(file)
+          ? JSON.parse(git('show', `${supportBaselineRevision}:${file}`))
+          : undefined,
+      },
     });
     return { file, absolute, text, ...result };
   });

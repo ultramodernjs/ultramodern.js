@@ -6,6 +6,13 @@ export const queriedAt = {
 export const rslibPatchSha256 =
   'bd0c8f1b4c4681eeb0d1ea0123c252ad41b17f01be1ca171bd8c42ca2d652e44';
 
+// Immutable reviewed commit carrying the accepted support-v2 activation
+// (producer source 48b9eef7, run 43912289696 attempt 1). Its manifests are a
+// baseline only for support-owned metadata and the exact support edges that
+// select that descriptor; they grant no other edge or URL authority.
+export const supportBaselineRevision =
+  'c4a6393979e763cf94cdcd18337e5047a8577d63';
+
 // Owning source and actual packed runtime/type qualification establish this
 // consolidation. Corrected OTel distribution and release acceptance stay separate.
 export const traceConsolidation = Object.freeze({
@@ -92,6 +99,8 @@ const reviewedTransition = (commit, path, field, name, from, to) =>
 const cohortCommit = 'efa682f9254ef4b8b4beb9a0612df8b161d47bbf';
 const solidDeclarationsCommit = 'a08a714015d1a8403e6b328049317027c19674a9';
 const svgrDeclarationsCommit = '7c27dc97387bbac67c051c9865bce114d04779b8';
+const declarationPluginSupportCommit =
+  'ca40fbecaff494fe71a9960960ff84f394a4933f';
 const appTools = 'packages/solutions/app-tools/package.json';
 const ultramodernAppTools =
   'packages/solutions/ultramodern-app-tools/package.json';
@@ -155,6 +164,19 @@ export const reviewedTransitions = Object.freeze([
       name,
       null,
       to,
+    ),
+  ),
+  // The native server compiler imports the support-corrected declaration
+  // plugin from its host. The repository installs the raw exact version,
+  // corrected by the root patch; publication hosts select the archive.
+  ...['peerDependencies', 'devDependencies'].map(field =>
+    reviewedTransition(
+      declarationPluginSupportCommit,
+      appToolsExtensions,
+      field,
+      'rsbuild-plugin-dts',
+      null,
+      '1.0.7',
     ),
   ),
 ]);
@@ -487,6 +509,8 @@ export const artifactOwners = Object.freeze({
     // The generator declares no support input itself; it reads this metadata
     // from its own manifest and emits the admitted requests into generated apps.
     'packages/toolkit/ultramodern-create/package.json': [],
+    // Framework peer owner: commits to the descriptor, keeps raw exact inputs.
+    'packages/solutions/app-tools-extensions/package.json': [],
   }),
 });
 

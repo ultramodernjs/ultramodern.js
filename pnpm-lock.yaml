@@ -268,8 +268,8 @@ importers:
         specifier: workspace:*
         version: link:packages/toolkit/ultramodern-create
       '@rstest/core':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@scripts/build':
         specifier: workspace:*
         version: link:scripts/build
@@ -1049,7 +1049,7 @@ importers:
         version: link:../../solutions/app-tools
       '@rstest/adapter-rsbuild':
         specifier: ^0.12.6
-        version: 0.12.6(@rsbuild/core@2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0))(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))
+        version: 0.12.6(@rsbuild/core@2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0))(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))
     devDependencies:
       '@modern-js/rslib':
         specifier: workspace:*
@@ -1067,8 +1067,8 @@ importers:
         specifier: 1.0.7
         version: 1.0.7(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(typescript@7.0.2)
       '@rstest/core':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
@@ -1328,8 +1328,8 @@ importers:
         version: 1.16.22(@swc/helpers@0.5.24)
     devDependencies:
       '@effect/opentelemetry':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/app-tools':
         specifier: workspace:*
         version: link:../../solutions/app-tools
@@ -1413,8 +1413,8 @@ importers:
         version: 0.28.2
     devDependencies:
       '@effect/opentelemetry':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/plugin':
         specifier: workspace:*
         version: link:../../toolkit/plugin
@@ -1827,8 +1827,8 @@ importers:
         specifier: 1.0.7
         version: 1.0.7(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(typescript@7.0.2)
       '@rstest/core':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
@@ -2158,8 +2158,8 @@ importers:
         specifier: 1.162.5
         version: 1.162.5
       '@tanstack/react-router':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/tanstack-react-router-1.170.46.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@tanstack/router-core':
         specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz
         version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz
@@ -2406,7 +2406,7 @@ importers:
         version: 2.0.0-rc.22
       '@solidjs/web':
         specifier: 2.0.0-rc.22
-        version: 2.0.0-rc.22(solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz)
+        version: 2.0.0-rc.22(solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/solid-js-2.0.0-rc.22.tgz)
       '@tanstack/history':
         specifier: 1.162.5
         version: 1.162.5
@@ -2442,8 +2442,8 @@ importers:
         specifier: ^26.6.6
         version: 26.6.6
       solid-js:
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/solid-js-2.0.0-rc.22.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/solid-js-2.0.0-rc.22.tgz
 
   packages/runtime/runtime-extensions:
     dependencies:
@@ -2592,8 +2592,8 @@ importers:
         version: 1.45.0
     devDependencies:
       '@effect/opentelemetry':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/rslib':
         specifier: workspace:*
         version: link:../../../scripts/rslib
@@ -3396,8 +3396,8 @@ importers:
         specifier: 1.0.7
         version: 1.0.7(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(typescript@7.0.2)
       '@rstest/core':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
@@ -3596,8 +3596,8 @@ importers:
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
       '@types/ioredis-mock':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/types-ioredis-mock-8.2.8.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2))
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
@@ -3608,8 +3608,8 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0(supports-color@10.2.2)
       ioredis-mock:
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/ioredis-mock-8.13.1.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/ioredis-mock-8.13.1.tgz(@types/ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2)))(ioredis@6.0.0(supports-color@10.2.2))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/ioredis-mock-8.13.1.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/ioredis-mock-8.13.1.tgz(@types/ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2)))(ioredis@6.0.0(supports-color@10.2.2))
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -3694,8 +3694,8 @@ importers:
         specifier: 1.0.7
         version: 1.0.7(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(typescript@7.0.2)
       '@rstest/core':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
@@ -4316,8 +4316,8 @@ importers:
         specifier: workspace:*
         version: link:../packages/toolkit/utils
       '@rstest/core':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../scripts/rstest-config
@@ -4580,8 +4580,8 @@ importers:
   tests/integration/bff-cross-project/bff-api-app:
     dependencies:
       '@effect/opentelemetry':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -4772,8 +4772,8 @@ importers:
   tests/integration/bff-effect:
     dependencies:
       '@effect/opentelemetry':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../packages/server/bff-effect
@@ -5631,8 +5631,8 @@ importers:
   tests/integration/i18n/routes-localised-urls:
     dependencies:
       '@effect/opentelemetry':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -6112,10 +6112,10 @@ importers:
         version: 2.0.0-rc.22
       '@solidjs/web':
         specifier: 2.0.0-rc.22
-        version: 2.0.0-rc.22(solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz)
+        version: 2.0.0-rc.22(solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/solid-js-2.0.0-rc.22.tgz)
       solid-js:
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/solid-js-2.0.0-rc.22.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/solid-js-2.0.0-rc.22.tgz
     devDependencies:
       '@modern-js/ultramodern-app-tools':
         specifier: workspace:*
@@ -6269,8 +6269,8 @@ importers:
   tests/integration/routes-tanstack-mf/mf-host:
     dependencies:
       '@effect/opentelemetry':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -6296,8 +6296,8 @@ importers:
         specifier: npm:@bleedingdev/mf-runtime@2.9.5
         version: '@bleedingdev/mf-runtime@2.9.5'
       '@tanstack/react-router':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/tanstack-react-router-1.170.46.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 4.1.4
         version: 4.1.4
@@ -6336,8 +6336,8 @@ importers:
   tests/integration/routes-tanstack-mf/mf-remote:
     dependencies:
       '@effect/opentelemetry':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -6357,8 +6357,8 @@ importers:
         specifier: npm:@bleedingdev/mf-runtime@2.9.5
         version: '@bleedingdev/mf-runtime@2.9.5'
       '@tanstack/react-router':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/tanstack-react-router-1.170.46.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 4.1.4
         version: 4.1.4
@@ -6391,8 +6391,8 @@ importers:
   tests/integration/routes-tanstack-mf/mf-remote-2:
     dependencies:
       '@effect/opentelemetry':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -6412,8 +6412,8 @@ importers:
         specifier: npm:@bleedingdev/mf-runtime@2.9.5
         version: '@bleedingdev/mf-runtime@2.9.5'
       '@tanstack/react-router':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/tanstack-react-router-1.170.46.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 4.1.4
         version: 4.1.4
@@ -6701,8 +6701,8 @@ importers:
         specifier: workspace:*
         version: link:../../../../packages/cli/plugin-bff
       '@rstest/core':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@testing-library/jest-dom':
         specifier: ^7.0.1
         version: 7.0.1(@testing-library/dom@10.4.2)(vitest@5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
@@ -6745,13 +6745,13 @@ importers:
         version: link:../../../../packages/solutions/app-tools
       '@rstest/browser':
         specifier: 0.12.6
-        version: 0.12.6(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(bufferutil@4.1.0)(playwright@1.65.1)(utf-8-validate@5.0.10)
+        version: 0.12.6(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(bufferutil@4.1.0)(playwright@1.65.1)(utf-8-validate@5.0.10)
       '@rstest/browser-react':
         specifier: 0.12.6
-        version: 0.12.6(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.12.6(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@rstest/core':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
@@ -7618,8 +7618,8 @@ importers:
   tests/integration/superapp-portfolio:
     dependencies:
       '@effect/opentelemetry':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../packages/server/bff-effect
@@ -8884,8 +8884,8 @@ packages:
     peerDependencies:
       postcss: ^8.4
 
-  '@effect/opentelemetry@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz':
-    resolution: {integrity: sha512-PR6ZoYhufvmTJCTRgtEDhlJimW9sm9sPv2Fw42nLAzPJRK1v8KnfkCQVR5GocrwdR39JzS45pygUKdY/gfy5Aw==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz}
+  '@effect/opentelemetry@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz':
+    resolution: {integrity: sha512-PR6ZoYhufvmTJCTRgtEDhlJimW9sm9sPv2Fw42nLAzPJRK1v8KnfkCQVR5GocrwdR39JzS45pygUKdY/gfy5Aw==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz}
     version: 4.1.4
     engines: {node: '>=22.19.0'}
     peerDependencies:
@@ -11896,8 +11896,8 @@ packages:
       playwright:
         optional: true
 
-  '@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz':
-    resolution: {integrity: sha512-eNAi0XHVaK4xszz622KgNCem2JMBLEyET6owEqzqeTIFlfoNH0ENpkAx+FYWklykfTG0bA22IHYGPPgzkuhdGA==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz}
+  '@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz':
+    resolution: {integrity: sha512-eNAi0XHVaK4xszz622KgNCem2JMBLEyET6owEqzqeTIFlfoNH0ENpkAx+FYWklykfTG0bA22IHYGPPgzkuhdGA==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz}
     version: 0.12.6
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
@@ -12484,8 +12484,8 @@ packages:
     resolution: {integrity: sha512-w1+YvwmTkwt5n8yUqEH3IWZ9DsmorCZW/EQ3KYHnqEgIkOZpH54NvW6/Epq3Dzb8H0ifIeYX8PExvrNLIH5FIA==}
     engines: {node: '>=20.19'}
 
-  '@tanstack/react-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz':
-    resolution: {integrity: sha512-BsG4WmzfgPUgboR/IdQBGkvQauDMAAXUcorqritojyWv8tjIZaJh1aLvDOZ8ryLUsd4ZEQlEoTpMLFm9lkVyrg==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz}
+  '@tanstack/react-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/tanstack-react-router-1.170.46.tgz':
+    resolution: {integrity: sha512-BsG4WmzfgPUgboR/IdQBGkvQauDMAAXUcorqritojyWv8tjIZaJh1aLvDOZ8ryLUsd4ZEQlEoTpMLFm9lkVyrg==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/tanstack-react-router-1.170.46.tgz}
     version: 1.170.46
     engines: {node: '>=20.19'}
     peerDependencies:
@@ -12886,8 +12886,8 @@ packages:
   '@types/invariant@2.2.37':
     resolution: {integrity: sha512-IwpIMieE55oGWiXkQPSBY1nw1nFs6bsKXTFskNY8sdS17K24vyEBRQZEwlRS7ZmXCWnJcQtbxWzly+cODWGs2A==}
 
-  '@types/ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz':
-    resolution: {integrity: sha512-dvblb9YJYPaDWkHdAFsOrS48uQbUzQtKYc/FRRoIPlpCWFVQOWoLJo6Nt6niZemoWQEFq+do6OnqXwPhKwbQqQ==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz}
+  '@types/ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/types-ioredis-mock-8.2.8.tgz':
+    resolution: {integrity: sha512-dvblb9YJYPaDWkHdAFsOrS48uQbUzQtKYc/FRRoIPlpCWFVQOWoLJo6Nt6niZemoWQEFq+do6OnqXwPhKwbQqQ==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/types-ioredis-mock-8.2.8.tgz}
     version: 8.2.8
     peerDependencies:
       ioredis: ^5 || ^6.0.0
@@ -15602,8 +15602,8 @@ packages:
   invariant@2.2.4:
     resolution: {integrity: sha512-phJfQVBuaJM5raOpJjSfkiD6BpbCE4Ns//LaXl6wGYtUBY83nWS6Rf9tXm2e8VaK60JEjYldbPif/A2B1C2gNA==}
 
-  ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/ioredis-mock-8.13.1.tgz:
-    resolution: {integrity: sha512-PxNq8ZR0ERihJ8Q0zilv2scRisnrfftBD+Kwn2H8Ph3Vc39nDadJufLaGmgBghTkUoHCkONZCKsgQQo0l68a5A==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/ioredis-mock-8.13.1.tgz}
+  ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/ioredis-mock-8.13.1.tgz:
+    resolution: {integrity: sha512-PxNq8ZR0ERihJ8Q0zilv2scRisnrfftBD+Kwn2H8Ph3Vc39nDadJufLaGmgBghTkUoHCkONZCKsgQQo0l68a5A==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/ioredis-mock-8.13.1.tgz}
     version: 8.13.1
     engines: {node: '>=12.22'}
     peerDependencies:
@@ -18499,8 +18499,8 @@ packages:
     resolution: {integrity: sha512-oZ7iUCxph8WYRHHcjBEc9unw3adt5CmSNlppj/5Q4k2RIrhl8Z5yY2Xr4j9zj0+wzVZ0bxmYoGSzKJnRl6A4yg==}
     engines: {node: '>=10.2.0'}
 
-  solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz:
-    resolution: {integrity: sha512-2FUA/PaO2AKrgYqS3RWJLhM3JlVwI/XnKjs6YZi9ps9vUyeoQWJilnzyesELe5bOCptSr/JpTYvCVblkLVj3tw==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz}
+  solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/solid-js-2.0.0-rc.22.tgz:
+    resolution: {integrity: sha512-2FUA/PaO2AKrgYqS3RWJLhM3JlVwI/XnKjs6YZi9ps9vUyeoQWJilnzyesELe5bOCptSr/JpTYvCVblkLVj3tw==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/solid-js-2.0.0-rc.22.tgz}
     version: 2.0.0-rc.22
     engines: {node: '>=22.12.0'}
 
@@ -20812,7 +20812,7 @@ snapshots:
     dependencies:
       postcss: 8.5.33
 
-  '@effect/opentelemetry@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)':
+  '@effect/opentelemetry@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/effect-opentelemetry-4.1.4.tgz(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)':
     dependencies:
       '@opentelemetry/semantic-conventions': 1.45.0
       effect: 4.1.4
@@ -23626,21 +23626,21 @@ snapshots:
       - core-js
       - supports-color
 
-  '@rstest/adapter-rsbuild@0.12.6(@rsbuild/core@2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0))(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))':
+  '@rstest/adapter-rsbuild@0.12.6(@rsbuild/core@2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0))(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))':
     dependencies:
       '@rsbuild/core': 2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)
-      '@rstest/core': https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+      '@rstest/core': https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
 
-  '@rstest/browser-react@0.12.6(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@rstest/browser-react@0.12.6(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
-      '@rstest/core': https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+      '@rstest/core': https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
 
-  '@rstest/browser@0.12.6(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(bufferutil@4.1.0)(playwright@1.65.1)(utf-8-validate@5.0.10)':
+  '@rstest/browser@0.12.6(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(bufferutil@4.1.0)(playwright@1.65.1)(utf-8-validate@5.0.10)':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
-      '@rstest/core': https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+      '@rstest/core': https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       convert-source-map: 2.0.0
       open-editor: 6.0.0
       pathe: 2.0.3
@@ -23654,7 +23654,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))':
+  '@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))':
     dependencies:
       '@rsbuild/core': 2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)
       '@types/chai': 5.2.3
@@ -23790,11 +23790,11 @@ snapshots:
 
   '@solidjs/signals@2.0.0-rc.22': {}
 
-  '@solidjs/web@2.0.0-rc.22(solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz)':
+  '@solidjs/web@2.0.0-rc.22(solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/solid-js-2.0.0-rc.22.tgz)':
     dependencies:
       seroval: 1.8.1
       seroval-plugins: 1.8.0(seroval@1.8.1)
-      solid-js: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz
+      solid-js: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/solid-js-2.0.0-rc.22.tgz
 
   '@speed-highlight/core@1.2.24': {}
 
@@ -24170,7 +24170,7 @@ snapshots:
 
   '@tanstack/history@1.162.5': {}
 
-  '@tanstack/react-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@tanstack/react-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
       '@tanstack/history': 1.162.5
       '@tanstack/react-store': 0.11.2(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -24596,7 +24596,7 @@ snapshots:
 
   '@types/invariant@2.2.37': {}
 
-  '@types/ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2))':
+  '@types/ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2))':
     dependencies:
       ioredis: 6.0.0(supports-color@10.2.2)
 
@@ -27553,11 +27553,11 @@ snapshots:
     dependencies:
       loose-envify: 1.4.0
 
-  ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/ioredis-mock-8.13.1.tgz(@types/ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2)))(ioredis@6.0.0(supports-color@10.2.2)):
+  ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/ioredis-mock-8.13.1.tgz(@types/ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2)))(ioredis@6.0.0(supports-color@10.2.2)):
     dependencies:
       '@ioredis/as-callback': 3.0.0
       '@ioredis/commands': 1.11.0
-      '@types/ioredis-mock': https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2))
+      '@types/ioredis-mock': https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2))
       fengari: 0.1.5
       fengari-interop: 0.1.4(fengari@0.1.5)
       ioredis: 6.0.0(supports-color@10.2.2)
@@ -30970,7 +30970,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz:
+  solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-d62b29f5039311ec122012887ce6bf7c4a527d6e-43934193068-2/solid-js-2.0.0-rc.22.tgz:
     dependencies:
       '@solidjs/signals': 2.0.0-rc.22
       csstype: 3.2.3

@@ -166,6 +166,9 @@ function appDevDependencies(
         ? { '@modern-js/app-tools': frameworkRequest(packageSource) }
         : {}),
       ...selectedAlways,
+      ...(appHasApi(app)
+        ? ULTRAMODERN_PACKAGE_PINS.serverCompilerDevDependencies
+        : {}),
       ...generationProfile?.devDependencies,
       ...(enableTailwind
         ? {
@@ -253,6 +256,10 @@ export function createRootPackageJson(
         typescript: ULTRAMODERN_PACKAGE_PINS.appDevDependencies.typescript,
         [ULTRAMODERN_CREATE_PACKAGE]: frameworkRequest(packageSource),
         '@modern-js/ultramodern-app-tools': frameworkRequest(packageSource),
+        ...selectSupportRequests(
+          ULTRAMODERN_PACKAGE_PINS.serverCompilerDevDependencies,
+          packageSource.supportArtifacts,
+        ),
         ...Object.fromEntries(
           apps
             .flatMap(app =>
@@ -374,7 +381,10 @@ export function createRootPackageJson(
       [ULTRAMODERN_CREATE_PACKAGE]: frameworkRequest(packageSource),
       '@modern-js/plugin-bff': frameworkRequest(packageSource),
       ...selectSupportRequests(
-        ULTRAMODERN_PACKAGE_PINS.bffEffectDependencies,
+        {
+          ...ULTRAMODERN_PACKAGE_PINS.bffEffectDependencies,
+          ...ULTRAMODERN_PACKAGE_PINS.serverCompilerDevDependencies,
+        },
         packageSource.supportArtifacts,
       ),
       ...(packageSource.supportArtifacts

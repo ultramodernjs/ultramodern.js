@@ -1,10 +1,186 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import test from 'node:test';
-import { sourceRevision, targets } from './snapshot.mjs';
+import {
+  artifactOwners,
+  sourceRevision,
+  supportBaselineRevision,
+  targets,
+} from './snapshot.mjs';
 import { planManifestUpdate, runUpdater } from './update.mjs';
 
 const plan = (expected, current = expected, path = 'package.json') =>
   planManifestUpdate({ path, expected, current, sourceRevision });
+const showAt = (revision, file) =>
+  JSON.parse(
+    execFileSync('git', ['show', `${revision}:${file}`], {
+      cwd: new URL('../../', import.meta.url),
+      encoding: 'utf8',
+    }),
+  );
+
+test('only the reviewed support baseline keeps its exact owned selections', () => {
+  const file = 'packages/server/bff-effect/package.json';
+  const expected = showAt(sourceRevision, file);
+  const accepted = showAt(supportBaselineRevision, file);
+  const prior = accepted.ultramodern.supportArtifacts;
+  const request = prior.packages['@effect/opentelemetry'].request;
+  assert.equal(accepted.devDependencies['@effect/opentelemetry'], request);
+  const invoke = ({
+    path = file,
+    current = accepted,
+    supportBaseline = {
+      revision: supportBaselineRevision,
+      manifest: accepted,
+    },
+  } = {}) =>
+    planManifestUpdate({
+      path,
+      expected,
+      current,
+      sourceRevision,
+      supportBaseline,
+    });
+  // Without the baseline the accepted descriptor is unverifiable.
+  assert.throws(
+    () =>
+      planManifestUpdate({
+        path: file,
+        expected,
+        current: accepted,
+        sourceRevision,
+      }),
+    /unexpected old edge|unverified supportArtifacts/,
+  );
+  const kept = invoke();
+  assert.deepEqual(kept.manifest, accepted);
+  assert.equal(kept.changes.length, 0);
+  assert.deepEqual(
+    kept.edges.find(edge => edge.name === '@effect/opentelemetry'),
+    {
+      path: file,
+      field: 'devDependencies',
+      name: '@effect/opentelemetry',
+      from: expected.devDependencies['@effect/opentelemetry'],
+      target: targets['@effect/opentelemetry'],
+      to: request,
+      status: 'current',
+      reason: 'reviewed baseline support artifact selection',
+    },
+  );
+  const forgedUrl = structuredClone(accepted);
+  forgedUrl.devDependencies['@effect/opentelemetry'] = request.replace(
+    /-\d+\/(?=[^/]+$)/u,
+    '-9/',
+  );
+  assert.notEqual(forgedUrl.devDependencies['@effect/opentelemetry'], request);
+  assert.throws(
+    () => invoke({ current: forgedUrl }),
+    /unexpected old edge devDependencies.@effect\/opentelemetry/,
+  );
+  const forgedMetadata = structuredClone(accepted);
+  forgedMetadata.ultramodern.supportArtifacts.producer.runAttempt = 2;
+  assert.throws(
+    () => invoke({ current: forgedMetadata }),
+    /unverified supportArtifacts metadata/,
+  );
+  assert.throws(
+    () =>
+      invoke({
+        supportBaseline: { revision: 'f'.repeat(40), manifest: accepted },
+      }),
+    /unreviewed support baseline revision/,
+  );
+  // A baseline selection that differs from its own descriptor grants nothing.
+  const inconsistent = structuredClone(accepted);
+  inconsistent.devDependencies['@effect/opentelemetry'] =
+    forgedUrl.devDependencies['@effect/opentelemetry'];
+  assert.throws(
+    () =>
+      invoke({
+        current: inconsistent,
+        supportBaseline: {
+          revision: supportBaselineRevision,
+          manifest: inconsistent,
+        },
+      }),
+    /unexpected old edge/,
+  );
+  // Unowned manifests and unowned edges never inherit baseline authority.
+  const unowned = 'examples/unrelated/package.json';
+  assert.equal(artifactOwners.supportArtifacts[unowned], undefined);
+  assert.throws(
+    () =>
+      planManifestUpdate({
+        path: unowned,
+        expected: { dependencies: { '@effect/opentelemetry': '4.1.4' } },
+        current: {
+          dependencies: { '@effect/opentelemetry': request },
+          ultramodern: { supportArtifacts: prior },
+        },
+        sourceRevision,
+        supportBaseline: {
+          revision: supportBaselineRevision,
+          manifest: {
+            dependencies: { '@effect/opentelemetry': request },
+            ultramodern: { supportArtifacts: prior },
+          },
+        },
+      }),
+    /unexpected old edge|unverified supportArtifacts/,
+  );
+  const otherEdge = structuredClone(accepted);
+  otherEdge.devDependencies.effect = request;
+  assert.throws(
+    () =>
+      invoke({
+        current: otherEdge,
+        supportBaseline: {
+          revision: supportBaselineRevision,
+          manifest: otherEdge,
+        },
+      }),
+    /unexpected old edge devDependencies.effect/,
+  );
+});
+
+test('framework declaration plugin peer and development input stay raw exact', () => {
+  const file = 'packages/solutions/app-tools-extensions/package.json';
+  const input = {
+    peerDependencies: { '@rsbuild/core': '2.3.2' },
+    devDependencies: { '@rsbuild/core': '2.3.2' },
+  };
+  const added = {
+    peerDependencies: {
+      ...input.peerDependencies,
+      'rsbuild-plugin-dts': '1.0.7',
+    },
+    devDependencies: {
+      ...input.devDependencies,
+      'rsbuild-plugin-dts': '1.0.7',
+    },
+  };
+  const result = plan(input, added, file);
+  assert.deepEqual(result.manifest, added);
+  assert.equal(result.changes.length, 0);
+  for (const [field, wrong] of [
+    ['peerDependencies', '^1.0.7'],
+    ['devDependencies', '1.0.6'],
+  ]) {
+    const current = structuredClone(added);
+    current[field]['rsbuild-plugin-dts'] = wrong;
+    assert.throws(() => plan(input, current, file), /unreviewed transition/);
+  }
+  assert.throws(
+    () =>
+      plan(
+        input,
+        { ...added, dependencies: { 'rsbuild-plugin-dts': '1.0.7' } },
+        file,
+      ),
+    /edge names changed/,
+  );
+});
 
 test('accepts only exact reviewed post-source edge additions and moves', () => {
   const solid = 'packages/runtime/renderer-solid/package.json';
@@ -1024,6 +1200,65 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     }
   }
   assert(reviewedEdges > 50);
+  // Prior accepted v2 manifests move to the newly admitted v3 descriptor only
+  // through the reviewed baseline commit's exact owned support selections.
+  const supportOnly = await admitArtifactDescriptors({
+    ...options,
+    nativeDescriptor: undefined,
+  });
+  const supportV3 = descriptors.supportArtifacts;
+  let migratedEdges = 0;
+  let migratedFiles = 0;
+  for (const [file, names] of Object.entries(artifactOwners.supportArtifacts)) {
+    if (artifactOwners.nativeArtifacts[file]) continue;
+    const baseline = JSON.parse(
+      execFileSync(
+        'git',
+        ['-C', root, 'show', `${supportBaselineRevision}:${file}`],
+        { encoding: 'utf8' },
+      ),
+    );
+    const prior = baseline.ultramodern?.supportArtifacts;
+    if (!prior) continue;
+    assert.equal(prior.protocol, 'ultramodern.support-artifacts.v2');
+    const expected = JSON.parse(
+      execFileSync('git', ['-C', root, 'show', `${sourceRevision}:${file}`], {
+        encoding: 'utf8',
+      }),
+    );
+    const invoke = (current, supportBaseline) =>
+      planManifestUpdate({
+        path: file,
+        expected,
+        current,
+        sourceRevision,
+        artifactAuthority: supportOnly,
+        supportBaseline,
+      });
+    const bound = { revision: supportBaselineRevision, manifest: baseline };
+    // Fails without the reviewed baseline: v2 is not v3 authority.
+    assert.throws(() => invoke(baseline), /unexpected old|unverified|tuple/);
+    const result = invoke(baseline, bound);
+    assert.deepEqual(result.manifest.ultramodern.supportArtifacts, supportV3);
+    for (const name of names)
+      for (const field of ['dependencies', 'devDependencies']) {
+        const value = baseline[field]?.[name];
+        if (value === undefined) continue;
+        assert.equal(value, prior.packages[name].request, `${file}:${name}`);
+        assert.equal(
+          result.manifest[field][name],
+          supportV3.packages[name].request,
+        );
+        migratedEdges++;
+        const forged = structuredClone(baseline);
+        forged[field][name] = value.replace(/-\d+\/(?=[^/]+$)/u, '-9/');
+        assert.notEqual(forged[field][name], value);
+        assert.throws(() => invoke(forged, bound), /unexpected old|tuple/);
+      }
+    assert.equal(invoke(result.manifest, bound).changes.length, 0);
+    migratedFiles++;
+  }
+  assert(migratedFiles > 15 && migratedEdges > 20);
   // The batch reviews current source selections as well as manifest edges.
   // Stage the admitted synthetic descriptor and matching source URL selections,
   // then exercise the transition from the original dependency edges. These

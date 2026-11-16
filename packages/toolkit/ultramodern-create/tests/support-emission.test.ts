@@ -148,6 +148,17 @@ test.each(['react', 'solid'] as const)(
           supportArtifacts.packages['@effect/opentelemetry'].request,
         );
     }
+    // The root directly hosts app-tools-extensions' required declaration
+    // plugin peer; a UI-only shell does not run the native server compiler.
+    const emitted = JSON.parse(JSON.stringify({ root, importer }));
+    assert.equal(
+      emitted.root.devDependencies['rsbuild-plugin-dts'],
+      supportArtifacts.packages['rsbuild-plugin-dts'].request,
+    );
+    assert.equal(
+      emitted.importer.devDependencies['rsbuild-plugin-dts'],
+      undefined,
+    );
     assert.deepEqual(source.supportArtifacts, supportArtifacts);
     const directory = fs.mkdtempSync(
       path.join(os.tmpdir(), 'support-emission-'),
@@ -166,6 +177,56 @@ test.each(['react', 'solid'] as const)(
     }
   },
 );
+
+test('API apps and roots emit the admitted declaration plugin archive', () => {
+  const supportArtifacts = parseSupportArtifacts(descriptor());
+  const request = supportArtifacts.packages['rsbuild-plugin-dts'].request;
+  for (const preset of ['full-stack', 'api-only'] as const) {
+    const app = createVerticalDescriptor('orders', 4101, { preset });
+    for (const strategy of ['workspace', 'install'] as const) {
+      const source: ResolvedPackageSource = {
+        strategy,
+        modernPackageVersion: 'workspace:*',
+        supportArtifacts,
+      };
+      const manifest = JSON.parse(
+        JSON.stringify(createAppPackage('support-proof', app, source, false)),
+      );
+      assert.equal(manifest.devDependencies['rsbuild-plugin-dts'], request);
+      assert.equal(manifest.dependencies['rsbuild-plugin-dts'], undefined);
+      assert.deepEqual(readSupportArtifacts(manifest), supportArtifacts);
+      const root = JSON.parse(
+        JSON.stringify(
+          createRootPackageJson('support-proof', source, [app], undefined),
+        ),
+      );
+      assert.equal(root.devDependencies['rsbuild-plugin-dts'], request);
+      // The emitted manifests remain valid support selections.
+      assert.doesNotThrow(() =>
+        selectSupportRequests(root.devDependencies, supportArtifacts),
+      );
+    }
+  }
+  const raw = JSON.parse(
+    JSON.stringify(
+      createAppPackage(
+        'support-proof',
+        createVerticalDescriptor('orders', 4101, { preset: 'api-only' }),
+        { strategy: 'workspace', modernPackageVersion: 'workspace:*' },
+        false,
+      ),
+    ),
+  );
+  assert.equal(raw.devDependencies['rsbuild-plugin-dts'], '1.0.7');
+  assert.throws(
+    () =>
+      selectSupportRequests(
+        { 'rsbuild-plugin-dts': '1.0.6' },
+        supportArtifacts,
+      ),
+    /differs from support descriptor/,
+  );
+});
 
 test('shipped generator selects its admitted OTel correction for an Effect BFF', () => {
   // Reads the generator's own checked-in manifest, as generation does.
@@ -194,7 +255,14 @@ test('closed support inputs reject missing, mismatched and inactive authority', 
   for (const mutate of [
     value => delete value.packages['solid-js'],
     value => delete value.packages['@tanstack/react-router'],
+    value => delete value.packages['rsbuild-plugin-dts'],
     value => (value.protocol = 'ultramodern.support-artifacts.v1'),
+    value => (value.protocol = 'ultramodern.support-artifacts.v2'),
+    value => (value.packages['rsbuild-plugin-dts'].version = '1.0.6'),
+    value =>
+      (value.packages['rsbuild-plugin-dts'].request = value.packages[
+        'rsbuild-plugin-dts'
+      ].request.replace('support-artifacts-', 'native-renderers-')),
     value => (value.packages['solid-js'].version = '2.0.0-rc.21'),
     value =>
       (value.packages['solid-js'].request = 'https://example.com/solid.tgz'),

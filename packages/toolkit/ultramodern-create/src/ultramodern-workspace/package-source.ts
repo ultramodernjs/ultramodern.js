@@ -20,10 +20,11 @@ const supportVersions = {
   'ioredis-mock': '8.13.1',
   '@types/ioredis-mock': '8.2.8',
   '@tanstack/react-router': '1.170.46',
+  'rsbuild-plugin-dts': '1.0.7',
 } as const;
 
 export type SupportArtifacts = JsonObject & {
-  protocol: 'ultramodern.support-artifacts.v2';
+  protocol: 'ultramodern.support-artifacts.v3';
   producer: JsonObject & {
     repository: 'ultramodernjs/ultramodern.js';
     repositoryId: 1151231350;
@@ -64,7 +65,7 @@ function exactKeys(value: unknown, keys: string[]) {
 export function parseSupportArtifacts(value: unknown): SupportArtifacts {
   exactKeys(value, ['protocol', 'producer', 'manifest', 'packages']);
   object(value);
-  assert.equal(value.protocol, 'ultramodern.support-artifacts.v2');
+  assert.equal(value.protocol, 'ultramodern.support-artifacts.v3');
   const producer = value.producer;
   exactKeys(producer, [
     'repository',

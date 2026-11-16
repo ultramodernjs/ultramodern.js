@@ -123,6 +123,7 @@ function reviewedSourcePins(read) {
     PNPM_VERSION: toolchain.pnpm,
     BRACES_FORK_VERSION: supplementalSourcePins['@bleedingdev/braces'],
     SHARP_VERSION: supplementalSourcePins.sharp,
+    RSBUILD_PLUGIN_DTS_VERSION: targets['rsbuild-plugin-dts'],
   };
   const comparisonDependencies = JSON.parse(
     read(`${octane}typescript-compat/latest-build-package.json`),
@@ -300,6 +301,12 @@ function reviewedSourcePins(read) {
       pnpmManager(toolchain.pnpm),
     ],
     'scripts/ultramodern-renderers/solid-corrections/qualify.mjs': [
+      pnpmManager(toolchain.pnpm),
+    ],
+    // Support run 43934193068 attempt 2 qualified the corrected plugin with
+    // the framework toolchain.
+    'scripts/ultramodern-support-artifacts/dts-plugin.mjs': [
+      `rsbuild-plugin-dts@${targets['rsbuild-plugin-dts']}`,
       pnpmManager(toolchain.pnpm),
     ],
     // Comment text only: patch provenance and a lockfile suffix example.
