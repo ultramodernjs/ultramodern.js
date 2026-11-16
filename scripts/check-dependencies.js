@@ -1,11 +1,4 @@
-const ignoreDeps = [
-  'fs-extra',
-  'tailwindcss',
-  // plugin-tanstack requires the corrected 1.170.46 binding; the MF tanstack
-  // integration apps stay on the locked 1.170.44 React binding until the
-  // support-artifact React router lane is activated.
-  '@tanstack/react-router',
-];
+const ignoreDeps = ['fs-extra', 'tailwindcss'];
 
 const {
   assertRendererRouterCore,

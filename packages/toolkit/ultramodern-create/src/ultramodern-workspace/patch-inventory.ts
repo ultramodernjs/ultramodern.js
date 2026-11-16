@@ -44,10 +44,20 @@ export default [
     version: '1.171.37',
     path: 'patches/@tanstack__router-core@1.171.37.patch',
     sha256: '6ffa70914ed338f3cb56d3cd1f526e35286e09f287ecf48ee6dbc1aa18305458',
+    repository: false,
+    workspace: null,
+    reason:
+      'Historical localized-mask correction for router-core 1.171.37. The repository now qualifies 1.171.39 with the complete owning correction, so this selector is not projected into repository patchedDependencies. Generated workspaces remain patch-free.',
+  },
+  {
+    packageName: '@tanstack/router-core',
+    version: '1.171.39',
+    path: 'patches/@tanstack__router-core@1.171.39.patch',
+    sha256: '546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8',
     repository: true,
     workspace: null,
     reason:
-      'Let native localized masks inherit the canonical resolved search without rerunning middleware or validation, preserving current location caching and SSR rewrite behavior, public types and emitted CJS/ESM source maps. Applies only to Modern router-core 1.171.37 during local qualification. Generated workspaces remain patch-free; retire when their mature accepted router sidecar or upstream release supplies the same runtime and declaration contract.',
+      'Use the source-qualified router-core 1.171.39 correction for repository integration tests, including localized-mask search inheritance, loader lifecycle, SSR rewrites and public declarations. These exact canonical bytes also feed the native artifact producer. Generated workspaces remain patch-free and require the authenticated corrected archive.',
   },
   {
     packageName: 'ultracite',
