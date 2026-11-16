@@ -60,25 +60,10 @@ jobs:
         uses: ./.github/actions/windows-dependencies
 
       - name: Install Dependencies
-        env:
-          SNAPSHOT_HIT: ${{ steps.dependencies.outputs.cache-hit }}
-        run: |
-          if ($env:SNAPSHOT_HIT -eq 'true') {
-            pnpm run prepare
-          } else {
-            pnpm install --frozen-lockfile
-          }
-
-      # Exercise a real 2 GB installation on a snapshot miss, before trusting
-      # this transport on main. Only one lane needs the archive round trip.
-      - name: Verify full Windows dependency snapshot transport
-        if: matrix.lane == '1/4' && steps.dependencies.outputs.cache-hit != 'true'
-        run: |
-          node scripts/ci/windows-dependency-snapshot.mjs snapshot
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node scripts/ci/windows-dependency-snapshot.mjs verify-transport
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm run prepare
+        # A fresh checkout changes patch mtimes even on an exact snapshot hit.
+        # Let pnpm revalidate its installed state and run genuine lifecycle
+        # hooks; a script-only prepare cannot establish that state.
+        run: pnpm install --frozen-lockfile
 
       - name: Restore prepared build outputs
         id: build-cache

@@ -1,5 +1,5 @@
 name: Restore Windows dependencies
-description: Restore regular installed files and rebuild native junctions; install only on an exact snapshot miss
+description: Restore regular installed files, rebuild native junctions and restore pnpm verification before frozen install
 outputs:
   cache-hit:
     description: True only when the exact installed-file snapshot was restored
@@ -46,5 +46,4 @@ runs:
           pnpm-store-${{ runner.os }}-
 
     - name: Restore pnpm lockfile verification
-      if: steps.snapshot.outputs.cache-hit != 'true'
       uses: ./.github/actions/restore-pnpm-verification
