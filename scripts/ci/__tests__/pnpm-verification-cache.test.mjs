@@ -34,6 +34,27 @@ const identify = (overrides = {}, contents = files) =>
     ...overrides,
   });
 
+test('both security workflows verify the workspace before running parser commands', () => {
+  for (const file of [
+    '.github/workflows/workflow-security.yml',
+    '.depot/workflows/workflow-security.yml',
+  ]) {
+    const workflow = readFileSync(
+      new URL(`../../../${file}`, import.meta.url),
+      'utf8',
+    );
+    const install = workflow.match(
+      /^\s+run: (mise exec -- pnpm install[^\n]*)$/mu,
+    );
+    assert.ok(install, `${file}: missing pnpm workspace installation`);
+    assert.equal(
+      install[1],
+      'mise exec -- pnpm install --frozen-lockfile --ignore-scripts',
+      `${file}: filtered installation cannot verify subsequent workspace commands`,
+    );
+  }
+});
+
 test('identity restores only pnpm verification and ignores runner-specific cache location', () => {
   const result = identify();
   assert.equal(result.path, '/runner/pnpm-cache/lockfile-verified.jsonl');

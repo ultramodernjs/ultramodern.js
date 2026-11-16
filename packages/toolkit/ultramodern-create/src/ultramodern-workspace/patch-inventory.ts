@@ -60,6 +60,16 @@ export default [
       'Use the source-qualified router-core 1.171.39 correction for repository integration tests, including localized-mask search inheritance, loader lifecycle, SSR rewrites and public declarations. These exact canonical bytes also feed the native artifact producer. Generated workspaces remain patch-free and require the authenticated corrected archive.',
   },
   {
+    packageName: '@effect/opentelemetry',
+    version: '4.1.4',
+    path: 'patches/@effect__opentelemetry@4.1.4.patch',
+    sha256: '41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804',
+    repository: true,
+    workspace: null,
+    reason:
+      'Use the exact reviewed support-producer correction for repository Effect telemetry tests: bind NodeSdk, WebSdk and declarations to the current sdk-trace and sdk-logs owning APIs. Generated workspaces remain patch-free and require the authenticated corrected support archive.',
+  },
+  {
     packageName: 'solid-js',
     version: '2.0.0-rc.22',
     path: 'patches/solid-js@2.0.0-rc.22.patch',

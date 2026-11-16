@@ -218,6 +218,7 @@ overrides:
 pnpmfileChecksum: sha256-e7fv4++EEy5D/4pBzV1yGYuIWnXfQwaMHH7OMxyEZx4=
 
 patchedDependencies:
+  '@effect/opentelemetry@4.1.4': 41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804
   '@module-federation/sdk@2.9.3': fb4b0dfd33a0588ad3821f1d56e2316044ae0b721c515a69080d7d9d9de72e3e
   '@tanstack/router-core@1.171.39': 546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8
   braces@3.0.3: e14af28f138a243a283deed5e9f26275891ad6eedc02e964d8ec7ae7efc6783a
@@ -1330,7 +1331,7 @@ importers:
     devDependencies:
       '@effect/opentelemetry':
         specifier: 4.1.4
-        version: 4.1.4(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/app-tools':
         specifier: workspace:*
         version: link:../../solutions/app-tools
@@ -1415,7 +1416,7 @@ importers:
     devDependencies:
       '@effect/opentelemetry':
         specifier: 4.1.4
-        version: 4.1.4(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/plugin':
         specifier: workspace:*
         version: link:../../toolkit/plugin
@@ -2594,7 +2595,7 @@ importers:
     devDependencies:
       '@effect/opentelemetry':
         specifier: 4.1.4
-        version: 4.1.4(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/rslib':
         specifier: workspace:*
         version: link:../../../scripts/rslib
@@ -4582,7 +4583,7 @@ importers:
     dependencies:
       '@effect/opentelemetry':
         specifier: 4.1.4
-        version: 4.1.4(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -4774,7 +4775,7 @@ importers:
     dependencies:
       '@effect/opentelemetry':
         specifier: 4.1.4
-        version: 4.1.4(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../packages/server/bff-effect
@@ -5633,7 +5634,7 @@ importers:
     dependencies:
       '@effect/opentelemetry':
         specifier: 4.1.4
-        version: 4.1.4(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -6271,7 +6272,7 @@ importers:
     dependencies:
       '@effect/opentelemetry':
         specifier: 4.1.4
-        version: 4.1.4(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -6338,7 +6339,7 @@ importers:
     dependencies:
       '@effect/opentelemetry':
         specifier: 4.1.4
-        version: 4.1.4(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -6393,7 +6394,7 @@ importers:
     dependencies:
       '@effect/opentelemetry':
         specifier: 4.1.4
-        version: 4.1.4(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -7620,7 +7621,7 @@ importers:
     dependencies:
       '@effect/opentelemetry':
         specifier: 4.1.4
-        version: 4.1.4(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../packages/server/bff-effect
@@ -20814,7 +20815,7 @@ snapshots:
     dependencies:
       postcss: 8.5.33
 
-  '@effect/opentelemetry@4.1.4(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)':
+  '@effect/opentelemetry@4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)':
     dependencies:
       '@opentelemetry/semantic-conventions': 1.45.0
       effect: 4.1.4

@@ -68,6 +68,7 @@ allowBuilds:
 patchedDependencies:
   'rsbuild-plugin-dts@1.0.7': patches/rsbuild-plugin-dts@1.0.7.patch
   '@tanstack/router-core@1.171.39': patches/@tanstack__router-core@1.171.39.patch
+  '@effect/opentelemetry@4.1.4': patches/@effect__opentelemetry@4.1.4.patch
   'solid-js@2.0.0-rc.22': patches/solid-js@2.0.0-rc.22.patch
   'braces@3.0.3': patches/braces@3.0.3.patch
   '@module-federation/sdk@2.9.3': patches/@module-federation__sdk@2.9.3.patch

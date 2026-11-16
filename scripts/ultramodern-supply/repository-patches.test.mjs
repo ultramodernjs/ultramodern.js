@@ -10,6 +10,30 @@ const read = file => fs.readFileSync(new URL(file, root));
 const recipes = JSON.parse(read('scripts/ultramodern-supply/sidecars.json'));
 const workspace = parse(read('pnpm-workspace.yaml').toString());
 
+test('repository Effect telemetry uses the exact reviewed support-producer correction', () => {
+  const support = JSON.parse(
+    read('scripts/ultramodern-support-artifacts/inputs.json'),
+  )['@effect/opentelemetry'];
+  const patch = inventory.find(
+    item =>
+      item.packageName === '@effect/opentelemetry' &&
+      item.version === support.version,
+  );
+  assert.ok(patch);
+  assert.equal(patch.repository, true);
+  assert.equal(patch.workspace, null);
+  assert.equal(
+    workspace.patchedDependencies[`@effect/opentelemetry@${support.version}`],
+    patch.path,
+  );
+  assert.equal(patch.path, support.patchPath);
+  assert.equal(patch.sha256, support.patchSha256);
+  assert.equal(
+    createHash('sha256').update(read(patch.path)).digest('hex'),
+    patch.sha256,
+  );
+});
+
 test('repository Solid declarations use the exact reviewed support-producer correction', () => {
   const support = JSON.parse(
     read('scripts/ultramodern-support-artifacts/inputs.json'),
