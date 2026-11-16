@@ -49,6 +49,21 @@ const excludedFixture = file =>
 function replacement({ file, field, name, value }) {
   const edge = { name, from: value, target: targets[name] ?? null };
   if (
+    /^tests\/integration\/routes-tanstack-mf\/(?:mf-host|mf-remote|mf-remote-2)\/package\.json$/.test(
+      file,
+    ) &&
+    field === 'dependencies' &&
+    name === '@tanstack/react-router' &&
+    value === '1.170.44'
+  )
+    return {
+      ...edge,
+      status: 'update',
+      to: '1.170.46',
+      reason:
+        'reviewed repository fixture with canonical router-core correction; hosted adoption pending',
+    };
+  if (
     file === 'packages/toolkit/runtime-utils/package.json' &&
     field === 'devDependencies' &&
     ['ioredis-mock', '@types/ioredis-mock'].includes(name) &&

@@ -175,6 +175,31 @@ test('retains unresolved TanStack artifacts but advances qualified OXC', () => {
   );
 });
 
+test('recognizes the exact reviewed MF fixture transition without admitting arbitrary routers', () => {
+  const input = { dependencies: { '@tanstack/react-router': '1.170.44' } };
+  for (const name of ['mf-host', 'mf-remote', 'mf-remote-2']) {
+    const file = `tests/integration/routes-tanstack-mf/${name}/package.json`;
+    const result = plan(input, input, file);
+    assert.equal(
+      result.manifest.dependencies['@tanstack/react-router'],
+      '1.170.46',
+    );
+    assert.equal(plan(input, result.manifest, file).changes.length, 0);
+    assert.equal(result.manifest.ultramodern, undefined);
+    for (const version of ['1.170.45', '1.170.47', '^1.170.46'])
+      assert.throws(
+        () =>
+          plan(
+            input,
+            { dependencies: { '@tanstack/react-router': version } },
+            file,
+          ),
+        /unexpected old edge/u,
+      );
+  }
+  assert.deepEqual(plan(input).manifest, input);
+});
+
 test('advances qualified Rslib without treating arbitrary new versions as accepted', () => {
   const input = { devDependencies: { '@rslib/core': '1.0.3' } };
   const result = plan(input);
