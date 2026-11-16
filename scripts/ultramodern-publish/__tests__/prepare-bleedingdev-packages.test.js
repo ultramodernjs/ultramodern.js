@@ -556,26 +556,35 @@ test('orderPublishItems publishes hard dependencies before consumers', async () 
   }
 });
 
-test('verifyRegistryTarball rejects missing, unpinned, and byte-mismatched registry bodies', async () => {
+test('verifyRegistryTarball answers an unpinned, forbidden or mismatched body without waiting', async () => {
   const { verifyRegistryTarball } = await import(
     '../prepare-bleedingdev-packages.mjs'
+  );
+  const { createRegistryPropagationDeadline } = await import(
+    '../lib/prepare-bleedingdev-packages/registry-propagation.mjs'
   );
   const fixture = await createArtifactFixture();
   const artifact = fixture.releaseArtifacts.packages[0];
   const bytes = fs.readFileSync(artifact.artifactPath);
   const tampered = Buffer.from(bytes);
   tampered[0] ^= 0xff;
+  // Every case below is decisive on its first read. The deadline is deliberately
+  // unexpired, so reaching the wait at all is the failure.
+  const liveDeadline = () =>
+    createRegistryPropagationDeadline({ now: () => 0 });
+  const neverWaits = async () => {
+    throw new Error('a decisive registry answer must never be retried');
+  };
 
   try {
+    // The wait belongs to the publish set, so there is no per-call window left
+    // to fall back on when a caller forgets to pass the set's deadline.
     await assert.rejects(
       () =>
-        verifyRegistryTarball(
-          artifact,
-          registryDistFor(artifact),
-          async () => ({ ok: false, status: 404 }),
-          async () => {},
-        ),
-      /returned HTTP 404/,
+        verifyRegistryTarball(artifact, registryDistFor(artifact), {
+          fetchImpl: async () => tarballResponse(bytes),
+        }),
+      /requires the publish set's propagation deadline/,
     );
     await assert.rejects(
       () =>
@@ -587,82 +596,163 @@ test('verifyRegistryTarball rejects missing, unpinned, and byte-mismatched regis
               artifact.artifactPath,
             )}`,
           },
-          async () => {
-            throw new Error('must not fetch an unpinned registry URL');
+          {
+            deadline: liveDeadline(),
+            fetchImpl: async () => {
+              throw new Error('must not fetch an unpinned registry URL');
+            },
+            wait: neverWaits,
           },
         ),
       /not the pinned npm endpoint/,
     );
     await assert.rejects(
       () =>
-        verifyRegistryTarball(
-          artifact,
-          registryDistFor(artifact),
-          async () => tarballResponse(tampered),
-          async () => {
-            throw new Error('a byte mismatch must not be retried');
-          },
-        ),
+        verifyRegistryTarball(artifact, registryDistFor(artifact), {
+          deadline: liveDeadline(),
+          fetchImpl: async () => tarballResponse(tampered),
+          wait: neverWaits,
+        }),
       /Registry tarball byte mismatch.*sha256.*shasum.*integrity/,
     );
+    // 403 is an answer about this artifact, not a propagation state.
+    let forbiddenRequests = 0;
+    await assert.rejects(
+      () =>
+        verifyRegistryTarball(artifact, registryDistFor(artifact), {
+          deadline: liveDeadline(),
+          fetchImpl: async () => {
+            forbiddenRequests += 1;
+            return { ok: false, status: 403 };
+          },
+          wait: neverWaits,
+        }),
+      /returned HTTP 403/,
+    );
+    assert.equal(forbiddenRequests, 1);
   } finally {
     removeDir(fixture.root);
   }
 });
 
-test('verifyRegistryTarball waits for a listed tarball that npm has not served yet', async () => {
+test('one propagation deadline bounds the tarball wait of a whole publish set', async () => {
   const { verifyRegistryTarball } = await import(
     '../prepare-bleedingdev-packages.mjs'
+  );
+  const {
+    createRegistryPropagationDeadline,
+    registryPropagationBudgetMs,
+    registryPropagationDelaysMs,
+  } = await import(
+    '../lib/prepare-bleedingdev-packages/registry-propagation.mjs'
   );
   const fixture = await createArtifactFixture();
   const artifact = fixture.releaseArtifacts.packages[0];
   const bytes = fs.readFileSync(artifact.artifactPath);
   try {
-    const statuses = [404, 503, 429];
+    let clockMs = 0;
     const waits = [];
+    const wait = async ms => {
+      waits.push(ms);
+      clockMs += ms;
+    };
+    const deadline = createRegistryPropagationDeadline({ now: () => clockMs });
+
+    // npm lists a version before it serves the tarball; run 43780469169
+    // measured 402.9s of that lag, far past the removed 8 x 15s window.
+    const statuses = [404, 503, 429];
     const verified = await verifyRegistryTarball(
       artifact,
       registryDistFor(artifact),
-      async () => {
-        const status = statuses.shift();
-        return status ? { ok: false, status } : tarballResponse(bytes);
+      {
+        deadline,
+        fetchImpl: async () => {
+          const status = statuses.shift();
+          return status ? { ok: false, status } : tarballResponse(bytes);
+        },
+        wait,
       },
-      async delay => waits.push(delay),
     );
     assert.equal(verified.integrity, artifact.integrity);
-    assert.deepEqual(waits, [15_000, 15_000, 15_000]);
+    assert.deepEqual(waits, registryPropagationDelaysMs.slice(0, 3));
 
+    // The next member of the same set spends what is left of the one budget,
+    // never a fresh window of its own.
     let requests = 0;
     await assert.rejects(
       () =>
-        verifyRegistryTarball(
-          artifact,
-          registryDistFor(artifact),
-          async () => {
+        verifyRegistryTarball(artifact, registryDistFor(artifact), {
+          deadline,
+          fetchImpl: async () => {
             requests += 1;
             return { ok: false, status: 404 };
           },
-          async () => {},
-        ),
+          wait,
+        }),
       /returned HTTP 404/,
     );
-    assert.equal(requests, 8);
+    assert.equal(
+      waits.reduce((total, ms) => total + ms, 0),
+      registryPropagationBudgetMs,
+      'the whole set waits at most one propagation budget',
+    );
+    assert.equal(clockMs, registryPropagationBudgetMs);
+    assert.ok(
+      requests > 8,
+      `a single member read the tarball ${requests} times; the removed per-call window stopped at 8`,
+    );
 
-    requests = 0;
+    // A third member inherits the spent deadline and fails on its first read,
+    // so 50 cohort members cannot multiply the window.
+    let lateRequests = 0;
     await assert.rejects(
       () =>
-        verifyRegistryTarball(
-          artifact,
-          registryDistFor(artifact),
-          async () => {
-            requests += 1;
-            return { ok: false, status: 403 };
+        verifyRegistryTarball(artifact, registryDistFor(artifact), {
+          deadline,
+          fetchImpl: async () => {
+            lateRequests += 1;
+            return { ok: false, status: 404 };
           },
-          async () => {},
-        ),
-      /returned HTTP 403/,
+          wait: async () => {
+            throw new Error('a spent set deadline must not wait again');
+          },
+        }),
+      /returned HTTP 404/,
     );
-    assert.equal(requests, 1);
+    assert.equal(lateRequests, 1);
+  } finally {
+    removeDir(fixture.root);
+  }
+});
+
+test('the published cohort verifies every member against one shared deadline', async () => {
+  const { validateRegistryCohort } = await import(
+    '../prepare-bleedingdev-packages.mjs'
+  );
+  const fixture = await createArtifactFixture();
+  try {
+    const deadlines = [];
+    await validateRegistryCohort(
+      fixture.releaseArtifacts.manifest,
+      { dryRun: false, publishConcurrency: 8, tag: 'latest' },
+      {
+        verifyRegistryDistTag: async () => {},
+        verifyRegistryPackage: async (_item, _expectation, options) => {
+          deadlines.push(options?.deadline);
+        },
+      },
+    );
+    assert.equal(
+      deadlines.length,
+      fixture.releaseArtifacts.manifest.packages.length,
+    );
+    assert.ok(deadlines.length > 1);
+    assert.equal(typeof deadlines[0]?.remainingMs, 'function');
+    assert.equal(
+      new Set(deadlines).size,
+      1,
+      'the cohort is one publish set and waits on one deadline',
+    );
   } finally {
     removeDir(fixture.root);
   }
@@ -1206,10 +1296,11 @@ test('registry entrypoints fetch source state and accept an already coherent pub
         verifyRegistryProvenance: async () => {
           provenanceChecks += 1;
         },
-        verifyRegistryTarball: (item, metadata) =>
-          api.verifyRegistryTarball(item, metadata, async () =>
-            tarballResponse(bytes),
-          ),
+        verifyRegistryTarball: (item, metadata, options) =>
+          api.verifyRegistryTarball(item, metadata, {
+            ...options,
+            fetchImpl: async () => tarballResponse(bytes),
+          }),
       },
     );
     assert.equal(verified, dist);

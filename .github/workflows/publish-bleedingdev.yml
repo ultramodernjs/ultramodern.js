@@ -104,7 +104,7 @@ concurrency:
 jobs:
   publish-security:
     name: Validate publish security
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 20
     if: >-
       github.actor == 'BleedingDev' &&
@@ -211,7 +211,7 @@ jobs:
   # source is authorized by the original producer's receipt instead.
   qualify-source-compute:
     name: Test the release source and publication tooling
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 90
     needs: effect-compiler-payload
     if: >-
@@ -281,22 +281,19 @@ jobs:
           trap 'rm -rf -- "$compiler_contracts"' EXIT
           OWNED_TEMP_DIR="$compiler_contracts" node scripts/ultramodern-publish/test-effect-compiler-contracts.mjs
 
+      # Lint is the only gate here that is not already proven on the bytes this
+      # dispatch publishes: lint-Linux.yml runs on pull_request, merge_group and
+      # workflow_dispatch only, so the merge or rebase commit that actually
+      # lands on main-ultramodern is never linted by it.
+      #
+      # test:publish-tooling used to run here as well. It is covered on the
+      # release commit itself: workflow-security.yml triggers on
+      # `push: branches: [main-ultramodern]` with no path filter and runs the
+      # identical `mise exec -- pnpm run test:publish-tooling` in its 'Run
+      # release publication tooling tests' step, so every commit this workflow
+      # can publish from has already executed that suite.
       - name: Qualify the release publication tooling
-        run: |
-          mise exec -- pnpm lint
-          # test:publish-tooling tests the publication scripts with dependencies
-          # installed, so it cannot show that the bare-checkout jobs can load
-          # them; the workflow validator walks each bare job's static import
-          # closure for that. It runs BEFORE any package is built, so it must
-          # stay the pre-build subset: scripts/__tests__ (public declarations,
-          # tsgo invocation) needs built @modern-js/utils output and belongs to
-          # test:scripts:after-build below.
-          #
-          # Release jobs use fixed CLI entrypoints covered by this suite.
-          # The workflow validator rejects inline Node programs.
-          #
-          # Built-package image staging runs in the disjoint after-build suite.
-          mise exec -- pnpm run test:publish-tooling
+        run: mise exec -- pnpm lint
 
       # The source suites below are
       # skipped in the recovery lane: that dispatch publishes the recovered
@@ -401,7 +398,7 @@ jobs:
   # skipped check cannot authorize a recovery or reach either publish job.
   qualify-source:
     name: Confirm qualified source and integration
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 10
     needs:
       - integration
@@ -490,7 +487,7 @@ jobs:
 
   prepare-release:
     name: Build the immutable @bleedingdev release bundle
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 90
     needs: effect-compiler-payload
     if: >-
@@ -706,7 +703,7 @@ jobs:
   # prepare-release uploads it and gates the expensive clean-room acceptance.
   reconcile-sidecars:
     name: Reconcile the staged sidecars with the registry
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 15
     if: >-
       inputs.mode == 'cohort' &&
@@ -780,7 +777,7 @@ jobs:
 
   validate-release:
     name: Validate accepted @bleedingdev tarballs without publish authority
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 45
     if: >-
       always() && cancelled() == false &&
@@ -906,7 +903,7 @@ jobs:
   # framework cohort, issues a cohort receipt, or invokes Tractor.
   prepare-sidecars:
     name: Prepare the immutable sidecar bundle
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 30
     if: >-
       inputs.mode == 'sidecars' &&
@@ -952,7 +949,7 @@ jobs:
 
   qualify-sidecars:
     name: Qualify the exact sidecar bundle
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 30
     needs:
       - publish-security
@@ -1547,7 +1544,7 @@ jobs:
 
   record-publish-outcome:
     name: Record the authenticated publish outcome
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 20
     outputs:
       artifact_name: ${{ steps.publish-outcome.outputs.artifact_name }}
@@ -1736,7 +1733,7 @@ jobs:
 
   publish-change-record:
     name: Publish the cohort change record
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 15
     # The only job that may write to the repository, and it runs strictly after
     # the publish outcome is recorded.

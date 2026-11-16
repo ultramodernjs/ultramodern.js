@@ -8,6 +8,7 @@ import {
   transientNpmPublishErrorPatterns,
 } from './constants.mjs';
 import { sleep } from './commands.mjs';
+import { registryPropagationDelaysMs } from './registry-propagation.mjs';
 import validationKit from '../../../lib/validation-kit.js';
 const { assertNonEmptyString, isPlainObject } = validationKit;
 const execFileAsync = promisify(execFile);
@@ -363,33 +364,58 @@ function pinnedRegistryTarballUrl(item, value) {
   return url.href;
 }
 
-const registryTarballAttempts = 8;
-const registryTarballRetryDelayMs = 15_000;
 const registryTarballStatusPattern = /registry tarball \S+ returned HTTP (\d{3})$/u;
 
-// npm can list a freshly published version before its tarball is served. A
-// missing, throttled or failing tarball response is retried for about two
-// minutes; a byte mismatch never is.
+// The only tarball states npm reaches on its own: the version is listed but its
+// tarball is not served yet (404), the read is throttled (429), the origin is
+// failing (5xx), or the request never completed. A byte mismatch, an unpinned
+// URL and every other status (403 included) are decisive answers about the
+// published artifact and never wait.
+function isTransientRegistryTarballError(error) {
+  const message = error instanceof Error ? error.message : '';
+  if (/ registry tarball request failed: /u.test(message)) {
+    return true;
+  }
+  const status = Number(registryTarballStatusPattern.exec(message)?.[1]);
+  return status === 404 || status === 429 || status >= 500;
+}
+
+// npm can list a freshly published version before its tarball is served, by
+// minutes (402.9s and 331.4s measured in run 43780469169). The wait therefore
+// runs until the publish set's shared propagation deadline expires, never for a
+// fresh window per package: see createRegistryPropagationDeadline. The caller
+// owns the deadline, so 50 cohort members at concurrency 8 and the sequential
+// sidecar loop together add at most one propagation window of wall clock.
 async function verifyRegistryTarball(
   item,
   dist,
-  fetchImpl = globalThis.fetch,
-  wait = sleep,
+  { deadline, fetchImpl = globalThis.fetch, wait = sleep } = {},
 ) {
+  if (typeof deadline?.remainingMs !== 'function') {
+    throw new Error(
+      `Registry tarball verification for ${item?.targetName ?? '<unknown>'}@${
+        item?.version ?? '<unknown>'
+      } requires the publish set's propagation deadline`,
+    );
+  }
   for (let attempt = 1; ; attempt += 1) {
     try {
       return await verifyRegistryTarballOnce(item, dist, fetchImpl);
     } catch (error) {
-      const status = Number(
-        registryTarballStatusPattern.exec(
-          error instanceof Error ? error.message : '',
-        )?.[1],
-      );
-      const transient =
-        status === 404 || status === 429 || status >= 500 ||
-        (error instanceof Error && / registry tarball request failed: /u.test(error.message));
-      if (attempt >= registryTarballAttempts || !transient) throw error;
-      await wait(registryTarballRetryDelayMs);
+      if (!isTransientRegistryTarballError(error)) {
+        throw error;
+      }
+      // Consulted only once a wait is genuinely needed, which is where the
+      // set's budget starts.
+      const remainingMs = deadline.remainingMs();
+      if (remainingMs <= 0) {
+        throw error;
+      }
+      // Front-loaded like the packument schedule, so a tarball that is already
+      // served is accepted in seconds; the deadline, not this index, ends the
+      // wait, and the last delay repeats until it does.
+      const index = Math.min(attempt, registryPropagationDelaysMs.length) - 1;
+      await wait(Math.min(registryPropagationDelaysMs[index], remainingMs));
     }
   }
 }

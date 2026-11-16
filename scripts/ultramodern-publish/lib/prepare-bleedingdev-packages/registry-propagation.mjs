@@ -21,6 +21,56 @@ const registryPropagationDelaysMs = Object.freeze([
   ...Array.from({ length: 24 }, () => 20000),
 ]);
 
+// The schedule above expressed as a single wall-clock budget, so one publish
+// set (one preflight phase, one publish loop, one post-publish cohort
+// verification, one sidecar lane) can share it as one absolute deadline.
+//
+// A per-call window cannot express this: verifyRegistryTarball is reached 50
+// times at concurrency 8 from validateRegistryCohort and once per sidecar from
+// the sequential sidecar loop, so a per-call propagation window multiplies into
+// the job timeout. The measured failure is the other direction: an 8 x 15s
+// (~2 min) per-call window gave up on @bleedingdev/mf-dts-plugin@2.9.5 in run
+// 43804632305 and cost 11.4 min of wall clock, while run 43780469169 measured
+// real propagation of 402.9s and 331.4s. One shared deadline waits as long as
+// npm actually needs and still bounds the set's extra wall clock to one window.
+const registryPropagationBudgetMs = registryPropagationDelaysMs.reduce(
+  (total, delay) => total + delay,
+  0,
+);
+
+/**
+ * One absolute deadline for a whole publish set. `remainingMs()` is what is
+ * left of the budget for every waiter sharing it; once it is <= 0 the next
+ * transient registry state is reported as the failure it is.
+ *
+ * The budget runs from the first `remainingMs()` call - the first moment the
+ * set actually has to wait - not from construction. The set that owns the
+ * deadline is created before its registry reads (a publish loop can take ten
+ * minutes before a single read needs to wait), and a deadline anchored to
+ * construction would hand that set a window npm has already consumed.
+ */
+function createRegistryPropagationDeadline({
+  budgetMs = registryPropagationBudgetMs,
+  now = Date.now,
+} = {}) {
+  if (!Number.isFinite(budgetMs) || budgetMs <= 0) {
+    throw new Error(
+      `A registry propagation budget must be a positive number of milliseconds, received ${String(budgetMs)}`,
+    );
+  }
+  if (typeof now !== 'function') {
+    throw new Error('A registry propagation deadline requires a clock');
+  }
+  let expiresAtMs;
+  return Object.freeze({
+    budgetMs,
+    remainingMs: () => {
+      expiresAtMs ??= now() + budgetMs;
+      return expiresAtMs - now();
+    },
+  });
+}
+
 /**
  * Poll the registry until `probe` reports a settled state.
  *
@@ -61,4 +111,9 @@ async function pollRegistryPropagation(
   return { attempts, detail, firstDetail, settled: false };
 }
 
-export { pollRegistryPropagation, registryPropagationDelaysMs };
+export {
+  createRegistryPropagationDeadline,
+  pollRegistryPropagation,
+  registryPropagationBudgetMs,
+  registryPropagationDelaysMs,
+};

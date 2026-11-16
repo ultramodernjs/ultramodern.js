@@ -507,6 +507,118 @@ test('a sidecar that never propagates fails after the whole shared schedule', as
   assert.deepEqual(waits, [...registryPropagationDelaysMs]);
 });
 
+// A registry tarball item whose identity is the real digest of `bytes`, so the
+// byte checks below are the production ones.
+const registryTarballItem = (
+  bytes,
+  { name = '@bleedingdev/mf-dts-plugin', version = '2.9.5' } = {},
+) => ({
+  integrity: `sha512-${crypto.createHash('sha512').update(bytes).digest('base64')}`,
+  sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+  shasum: crypto.createHash('sha1').update(bytes).digest('hex'),
+  size: bytes.length,
+  targetName: name,
+  version,
+});
+
+const registryTarballDist = item => ({
+  integrity: item.integrity,
+  shasum: item.shasum,
+  tarball: `https://registry.npmjs.org/${item.targetName}/-/${item.targetName.slice(
+    item.targetName.lastIndexOf('/') + 1,
+  )}-${item.version}.tgz`,
+});
+
+const tarballResponse = bytes => ({
+  arrayBuffer: async () =>
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  ok: true,
+  status: 200,
+});
+
+// Run 43804632305 published 11 sidecars and then failed on a 404 for
+// @bleedingdev/mf-dts-plugin@2.9.5's own tarball, because the per-call window
+// was ~2 min and npm's measured lag is 402.9s (run 43780469169). The lane now
+// waits on the set's deadline instead, and still answers immediately whenever
+// the registry says something decisive about the bytes.
+test('the sidecar set waits out npm within one shared deadline, and byte answers stay terminal', async () => {
+  const { verifyRegistryTarball } = await import(
+    '../lib/prepare-bleedingdev-packages/registry-read.mjs'
+  );
+  const {
+    createRegistryPropagationDeadline,
+    registryPropagationBudgetMs,
+    registryPropagationDelaysMs,
+  } = await import(
+    '../lib/prepare-bleedingdev-packages/registry-propagation.mjs'
+  );
+  const bytes = Buffer.from('published-sidecar-tarball');
+  const item = registryTarballItem(bytes);
+  const dist = registryTarballDist(item);
+  let clockMs = 0;
+  const waits = [];
+  const wait = async ms => {
+    waits.push(ms);
+    clockMs += ms;
+  };
+  const deadline = createRegistryPropagationDeadline({ now: () => clockMs });
+
+  let reads = 0;
+  const verified = await verifyRegistryTarball(item, dist, {
+    deadline,
+    fetchImpl: async () =>
+      ++reads <= 20 ? { ok: false, status: 404 } : tarballResponse(bytes),
+    wait,
+  });
+  assert.equal(verified.integrity, item.integrity);
+  assert.deepEqual(waits, registryPropagationDelaysMs.slice(0, 20));
+  assert.ok(
+    clockMs > 120_000,
+    `the lane waited ${clockMs}ms; the removed per-call window was 120000ms`,
+  );
+
+  // Every later sidecar of the same set shares what is left of the one budget.
+  await assert.rejects(
+    verifyRegistryTarball(item, dist, {
+      deadline,
+      fetchImpl: async () => ({ ok: false, status: 404 }),
+      wait,
+    }),
+    /registry tarball \S+ returned HTTP 404/u,
+  );
+  assert.equal(
+    waits.reduce((total, ms) => total + ms, 0),
+    registryPropagationBudgetMs,
+    'the whole sidecar set waits at most one propagation budget',
+  );
+
+  const liveDeadline = createRegistryPropagationDeadline({ now: () => 0 });
+  const neverWaits = async () => {
+    throw new Error('a decisive registry answer must never be retried');
+  };
+  await assert.rejects(
+    verifyRegistryTarball(item, dist, {
+      deadline: liveDeadline,
+      fetchImpl: async () => tarballResponse(Buffer.from('different bytes')),
+      wait: neverWaits,
+    }),
+    /Registry tarball byte mismatch/u,
+  );
+  let forbiddenReads = 0;
+  await assert.rejects(
+    verifyRegistryTarball(item, dist, {
+      deadline: liveDeadline,
+      fetchImpl: async () => {
+        forbiddenReads += 1;
+        return { ok: false, status: 403 };
+      },
+      wait: neverWaits,
+    }),
+    /returned HTTP 403/u,
+  );
+  assert.equal(forbiddenReads, 1);
+});
+
 const withTrustedPublishEnv = t => {
   const trustedEnv = {
     GITHUB_ACTIONS: 'true',
@@ -641,6 +753,38 @@ test('sidecars publish in alias order while their propagation waits overlap', as
     [...verified].sort(),
     sidecars.map(sidecar => sidecar.name).sort(),
     'the lane resolves only after every published sidecar verified',
+  );
+});
+
+test('every published sidecar verifies its tarball against the lane deadline', async t => {
+  const { publishSidecars } = await importCli();
+  withTrustedPublishEnv(t);
+  const first = namedSidecar('@bleedingdev/ipx-first');
+  const second = namedSidecar('@bleedingdev/ipx-second');
+  const sidecars = [first, second];
+  const byName = new Map(sidecars.map(sidecar => [sidecar.name, sidecar]));
+  const publishedNames = new Set();
+  const deadlines = [];
+  const dependencies = sidecarLaneDependencies({
+    sidecars,
+    readPackument: async name =>
+      publishedNames.has(name)
+        ? publishedPackumentFor(byName.get(name))
+        : priorReleaseOnly(byName.get(name)),
+    onPublish: name => publishedNames.add(name),
+  });
+  dependencies.verifyFreshTarball = async (item, _dist, options) => {
+    assert.equal(item.targetName, item.name);
+    deadlines.push(options?.deadline);
+  };
+  await publishSidecars(publishOptions, dependencies);
+
+  assert.equal(deadlines.length, sidecars.length);
+  assert.equal(typeof deadlines[0]?.remainingMs, 'function');
+  assert.equal(
+    new Set(deadlines).size,
+    1,
+    'the sidecar lane is one publish set and waits on one deadline',
   );
 });
 
