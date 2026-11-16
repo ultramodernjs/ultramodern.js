@@ -348,6 +348,92 @@ export async function packedMfCohortProbeMain(sdkProbe) {
       );
     }
   }
+  // Keep manifest generation at its enabled default. The injection-only fixture
+  // above intentionally disables it and cannot qualify package self-identity.
+  {
+    const from = createRequire(
+      path.join(roots.get('enhanced'), 'package.json'),
+    );
+    const webpack = from('webpack');
+    const Plugin = installedRequire(
+      '@bleedingdev/mf-enhanced',
+    ).ModuleFederationPlugin;
+    // Exercise the actual emitted lookup against both exact supported names,
+    // and reject unrelated names without changing installed package bytes.
+    const implementation = fs.readFileSync(
+      path.join(
+        roots.get('enhanced'),
+        'dist/src/lib/container/ModuleFederationPlugin.js',
+      ),
+      'utf8',
+    );
+    const lookup = implementation.match(
+      /function getEnhancedPackageVersion\(\) \{[\s\S]*?\n\}/u,
+    );
+    assert.ok(lookup, 'Packed enhanced must retain its owning version lookup');
+    for (const [name, version, accepted] of [
+      ['@module-federation/enhanced', '2.9.3', true],
+      ['@bleedingdev/mf-enhanced', '2.9.5', true],
+      ['@bleedingdev/unrelated-enhanced', '9.9.9', false],
+      ['@bleedingdev/mf-enhanced', '', false],
+    ]) {
+      const fixture = fs.mkdtempSync(path.join(root, 'self-identity-'));
+      fs.writeFileSync(
+        path.join(fixture, 'package.json'),
+        JSON.stringify({ name, version }),
+      );
+      const resolveVersion = () =>
+        vm.runInNewContext(`(${lookup[0]})()`, {
+          __dirname: fixture,
+          node_fs: { default: fs },
+          node_path: { default: path },
+        });
+      if (accepted) assert.equal(resolveVersion(), version);
+      else assert.throws(resolveVersion, /Unable to resolve/u);
+    }
+    const entry = path.join(root, 'manifest-compat-entry.js');
+    const outputPath = path.join(root, 'manifest-enabled-enhanced');
+    fs.writeFileSync(entry, 'export const identity = "manifest-default";\n');
+    const compiler = webpack({
+      mode: 'none',
+      context: root,
+      entry: { main: entry },
+      output: { path: outputPath, publicPath: 'auto' },
+      plugins: [
+        new Plugin({
+          name: 'manifest_enabled_enhanced',
+          filename: 'remoteEntry.js',
+          exposes: { './identity': './manifest-compat-entry.js' },
+          dts: false,
+        }),
+      ],
+    });
+    try {
+      const stats = await new Promise((resolve, reject) =>
+        compiler.run((error, result) =>
+          error ? reject(error) : resolve(result),
+        ),
+      );
+      assert.equal(
+        stats.hasErrors(),
+        false,
+        stats.toString({ all: false, errors: true }),
+      );
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(outputPath, 'mf-manifest.json'), 'utf8'),
+      );
+      assert.equal(manifest.metaData.pluginVersion, '2.9.5');
+      assert.equal(manifest.name, 'manifest_enabled_enhanced');
+      assert.ok(
+        manifest.exposes.some(exposed => exposed.name === 'identity'),
+        'Default manifest must retain the actual exposed module',
+      );
+    } finally {
+      await new Promise((resolve, reject) =>
+        compiler.close(error => (error ? reject(error) : resolve())),
+      );
+    }
+  }
   const node = installedRequire('@bleedingdev/mf-node');
   assert.equal(typeof node.NodeFederationPlugin, 'function');
   const chunkRuntime = installedRequire(
