@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -294,6 +295,69 @@ test('npm layout reconstruction preserves identity and actual compiler/map/licen
       'upstream license',
     );
     assert.deepEqual(packagePatch(upstream, reconstructed), patch);
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test('canonical package patch bytes do not depend on the user Git configuration', () => {
+  assert(process.env.OWNED_TEMP_DIR, 'Run tests inside owned-temp-dir');
+  const work = fs.mkdtempSync(
+    path.join(process.env.OWNED_TEMP_DIR, 'patch-config-'),
+  );
+  try {
+    const original = path.join(work, 'original');
+    const built = path.join(work, 'built');
+    fs.mkdirSync(original);
+    fs.mkdirSync(built);
+    fs.writeFileSync(
+      path.join(original, 'index.js'),
+      '3\n2\n3\n0\n2\n2\n1\n1\n3\n0\n2\n1\n0\n0\n1\n4\n1\n0\n1\n4\n',
+    );
+    fs.writeFileSync(
+      path.join(built, 'index.js'),
+      '1\n2\n3\n4\n3\n3\n4\n3\n3\n0\n4\n3\n1\n1\n3\n4\n0\n0\n1\n1\n',
+    );
+    const rawDiff = algorithm =>
+      spawnSync(
+        'git',
+        [
+          'diff',
+          '--no-index',
+          `--diff-algorithm=${algorithm}`,
+          original,
+          built,
+        ],
+        { encoding: 'utf8' },
+      ).stdout;
+    assert.notEqual(rawDiff('myers'), rawDiff('histogram'));
+    const generate = (name, config) => {
+      const home = path.join(work, name);
+      fs.mkdirSync(home);
+      fs.writeFileSync(path.join(home, '.gitconfig'), config);
+      return execFileSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `import { packagePatch } from ${JSON.stringify(new URL('./qualify-runtime.mjs', import.meta.url).href)};
+           process.stdout.write(packagePatch(${JSON.stringify(original)}, ${JSON.stringify(built)}));`,
+        ],
+        { env: { ...process.env, HOME: home, XDG_CONFIG_HOME: home } },
+      );
+    };
+    const canonical = generate('clean', '');
+    const workstation = generate(
+      'workstation',
+      '[diff]\nalgorithm = histogram\n',
+    );
+    const foreign = generate(
+      'foreign',
+      '[diff]\nalgorithm = myers\ncontext = 0\nnoprefix = true\nindentHeuristic = false\n',
+    );
+    assertSameBytes(canonical, workstation, 'clean vs workstation');
+    assertSameBytes(canonical, foreign, 'clean vs foreign configuration');
+    assert(canonical.toString().startsWith('diff --git a/index.js b/index.js'));
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
