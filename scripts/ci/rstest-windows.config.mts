@@ -30,7 +30,6 @@ export default async () => {
       modelledSeconds: Number(
         windowsLaneSeconds(root, baseline, lane).toFixed(1),
       ),
-      testFileWorkers: 1,
     }),
   );
   return config;

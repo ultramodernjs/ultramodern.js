@@ -49,12 +49,27 @@ test('default-branch caches seed the two actual compiler variants before integra
     cache.jobs['effect-compiler-payload'].if,
     "github.ref == 'refs/heads/main-ultramodern' || github.event_name == 'workflow_dispatch'",
   );
-  assert.equal(cache.jobs.seed.needs, 'effect-compiler-payload');
+  assert.equal(cache.jobs.seed.needs, undefined);
+  assert.equal(cache.jobs['seed-integration'].needs, 'effect-compiler-payload');
   assert.equal(
     cache.jobs.seed.if,
     "github.ref == 'refs/heads/main-ultramodern' || github.event_name == 'workflow_dispatch'",
   );
-  const entries = cache.jobs.seed.strategy.matrix.include;
+  const entries = [
+    ...cache.jobs.seed.strategy.matrix.include,
+    ...cache.jobs['seed-integration'].strategy.matrix.include,
+  ];
+  assert.ok(
+    cache.jobs.seed.strategy.matrix.include.every(
+      entry => !entry.compiler_payload,
+    ),
+  );
+  assert.ok(
+    cache.jobs['seed-integration'].strategy.matrix.include.every(
+      entry => entry.compiler_payload,
+    ),
+  );
+  assert.deepEqual(cache.jobs['seed-integration'].steps, cache.jobs.seed.steps);
   assert.equal(
     entries.filter(entry => entry.compiler_payload === false).length,
     3,
@@ -93,6 +108,31 @@ test('default-branch caches seed the two actual compiler variants before integra
         .MODERN_TEST_PACKAGE_MANIFEST,
       expression('steps.build-cache.outputs.package-manifest'),
     );
+});
+
+test('ordinary cache writers are independent of compiler allocation and Windows seeds restore installed files', () => {
+  const seed = cache.jobs.seed;
+  assert.equal(seed.needs, undefined);
+  assert.equal(cache.jobs['seed-integration'].needs, 'effect-compiler-payload');
+  const steps = seed.steps;
+  const restore = steps.findIndex(
+    step => step.name === 'Rebuild native Windows dependency links',
+  );
+  const install = steps.findIndex(step => step.name === 'Install Dependencies');
+  assert.ok(restore >= 0 && restore < install);
+  assert.equal(
+    steps.find(step => step.id === 'windows-snapshot').if,
+    "runner.os == 'Windows'",
+  );
+  assert.equal(
+    steps[restore].if,
+    "runner.os == 'Windows' && steps.windows-snapshot.outputs.cache-hit == 'true'",
+  );
+  assert.equal(
+    steps[restore].run,
+    'node scripts/ci/windows-dependency-snapshot.mjs restore',
+  );
+  assert.ok(!steps.some(step => step.run?.includes('verify-transport')));
 });
 
 function assertHandoff(job, before, conditional = false) {
@@ -685,4 +725,37 @@ test('native and release qualification run isolated fake contracts before native
           .includes(name),
       );
   }
+});
+
+test('only a direct PR native qualification cancels its superseded head', () => {
+  const workflow = {
+    jobs: { cancel: { if: native.concurrency['cancel-in-progress'] } },
+  };
+  const github = {
+    repository: 'ultramodernjs/ultramodern.js',
+    ref: 'refs/pull/312/merge',
+    event_name: 'pull_request',
+    workflow_ref:
+      'ultramodernjs/ultramodern.js/.github/workflows/native-compatibility.yml@refs/pull/312/merge',
+  };
+  const evaluates = values =>
+    evaluateJobSchedule({
+      workflow,
+      jobId: 'cancel',
+      context: { github: { ...github, ...values } },
+    });
+  assert.equal(evaluates({}), true);
+  for (const event_name of [
+    'merge_group',
+    'workflow_dispatch',
+    'workflow_call',
+  ])
+    assert.equal(evaluates({ event_name }), false, event_name);
+  assert.equal(
+    evaluates({
+      workflow_ref:
+        'ultramodernjs/ultramodern.js/.github/workflows/publish-bleedingdev.yml@refs/pull/312/merge',
+    }),
+    false,
+  );
 });

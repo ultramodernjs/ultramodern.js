@@ -83,6 +83,7 @@ jobs:
             suite: framework
             framework_suite: core
             shard: 3/6
+            fresh_consumers: true
           - platform: Windows
             runner: depot-windows-2025-16
             suite: framework
@@ -93,6 +94,7 @@ jobs:
             suite: framework
             framework_suite: core
             shard: 1/6
+            fresh_consumers: true
           - platform: Windows
             runner: depot-windows-2025-16
             suite: framework
@@ -226,6 +228,10 @@ jobs:
         id: dependencies
         if: runner.os == 'Windows'
         uses: ./.github/actions/windows-dependencies
+        with:
+          # The measured upstream/fork native consumers install fresh packages
+          # on core 1/6 and 3/6. Other core lanes use the installed snapshot.
+          store-required: ${{ startsWith(matrix.suite, 'framework-generator-') || matrix.fresh_consumers == true }}
 
       - name: Install Dependencies
         shell: bash
@@ -258,16 +264,19 @@ jobs:
       # reads the playwright the frozen install resolved for these runtimes,
       # and that version keys the browser cache.
       - name: Resolve Playwright runtime
+        if: startsWith(matrix.suite, 'framework-generator-') == false
         id: browser-runtime
         run: node scripts/lib/browser-provisioning.js --resolve --runtime tests --runtime tests/integration/rstest/basic-app-rstest-browser
 
       - name: Restore Playwright browser cache
+        if: startsWith(matrix.suite, 'framework-generator-') == false
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.browser-runtime.outputs.cache_path }}
           key: ${{ steps.browser-runtime.outputs.cache_key }}
 
       - name: Install Playwright browsers
+        if: startsWith(matrix.suite, 'framework-generator-') == false
         run: >-
           node scripts/lib/browser-provisioning.js --install --runtime tests --runtime tests/integration/rstest/basic-app-rstest-browser
           --version ${{ steps.browser-runtime.outputs.version }}

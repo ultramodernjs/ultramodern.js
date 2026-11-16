@@ -5,15 +5,10 @@
 
 name: Check Dependency Version Consistency
 
+# Provider comparisons are explicit runs. Required GitHub Actions workflows
+# already execute these suites on Depot; automatic mirrors duplicate that work.
 on:
-  push:
-    branches:
-      - main
-      - main-ultramodern
-  pull_request:
-    branches:
-      - main
-      - main-ultramodern
+  workflow_dispatch:
 
 permissions:
   contents: read

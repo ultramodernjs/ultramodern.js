@@ -5,16 +5,9 @@
 
 name: Native Compatibility
 
+# Provider comparisons are explicit runs. Required GitHub Actions workflows
+# already execute these suites on Depot; automatic mirrors duplicate that work.
 on:
-  # Required compatibility checks must report for every pull request and
-  # merge-queue entry, including changes outside framework package paths.
-  pull_request:
-    branches: [main, main-ultramodern]
-
-  merge_group:
-
-  workflow_call:
-
   workflow_dispatch:
 
 permissions:

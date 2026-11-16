@@ -8,10 +8,11 @@ export const generatorFiles = [
   'packages/toolkit/ultramodern-create/tests/workspace-integration.test.ts',
 ];
 
-// The unchanged warm PR (43925304889) spent up to 293 s provisioning ten
-// Windows VMs. Four cost-balanced ordinary lanes use two workers on 16 cores;
-// the two isolated generator files retain one worker. Coverage stays disjoint.
-export const windowsOrdinaryLanes = ['1/4', '2/4', '3/4', '4/4'];
+// Keep eight ordinary file workers, but place four on each measured 16-core,
+// 64-GB runner instead of occupying four VMs with two workers each. Together
+// with the two isolated generators this leaves two more VM slots for the
+// integration lanes. The cost assignment and complete coverage stay unchanged.
+export const windowsOrdinaryLanes = ['1/2', '2/2'];
 export const windowsGeneratorLanes = ['generator-shell', 'generator-workspace'];
 export const windowsLanes = [...windowsOrdinaryLanes, ...windowsGeneratorLanes];
 

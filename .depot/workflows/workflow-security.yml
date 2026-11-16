@@ -5,13 +5,9 @@
 
 name: Workflow Security
 
+# Provider comparisons are explicit runs. Required GitHub Actions workflows
+# already execute these suites on Depot; automatic mirrors duplicate that work.
 on:
-  # No path filter: bare-checkout jobs load a static import closure that can
-  # reach any tracked file, so any change can break it.
-  pull_request:
-  push:
-    branches:
-      - main-ultramodern
   workflow_dispatch:
 
 permissions:

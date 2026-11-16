@@ -2,14 +2,25 @@ import { defineConfig } from '@rstest/core';
 
 const generatorFiles = {
   'generator-workspace':
-    'integration/create-ultramodern-workspace/tests/index.test.ts',
-  'generator-bff': 'integration/create-bff-runtime/tests/index.test.ts',
+    'integration/create-ultramodern-workspace/tests/*.test.ts',
+  'generator-bff': 'integration/create-bff-runtime/tests/*.test.ts',
 } as const;
 
 function resolveFrameworkFiles() {
   const suite = process.env.MODERN_TEST_FRAMEWORK_SUITE ?? 'full';
   const include = ['integration/**/*.(spec|test).[jt]s?(x)'];
-  const exclude = ['integration/rstest/**'];
+  // Linux owns fresh generated-workspace installs and app runtime semantics.
+  // Windows retains packed-CLI generation, all core framework builds and
+  // the real bff-effect runtime fixture.
+  const exclude = [
+    'integration/rstest/**',
+    ...(process.platform === 'win32'
+      ? [
+          'integration/create-bff-runtime/tests/runtime.test.ts',
+          'integration/create-ultramodern-workspace/tests/runtime.test.ts',
+        ]
+      : []),
+  ];
 
   if (suite === 'full') return { include, exclude };
   if (suite === 'core') {

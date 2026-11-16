@@ -10,12 +10,9 @@ concurrency:
   group: test-builder-e2e-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
+# Provider comparisons are explicit runs. Required GitHub Actions workflows
+# already execute these suites on Depot; automatic mirrors duplicate that work.
 on:
-  pull_request:
-    branches: [main, main-ultramodern]
-
-  merge_group:
-
   workflow_dispatch:
 
 permissions:
