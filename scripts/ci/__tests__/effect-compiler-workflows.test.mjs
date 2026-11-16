@@ -415,7 +415,15 @@ test('a verified full restore skips the build matrix and the aggregate job', () 
     ) < resolveSteps.indexOf(smoke),
     'the smoke must run after the stager repaired the executable mode',
   );
-  assert.match(smoke.run, /Version 7\.1\.0-beta\+effect-tsgo\.0\.67\.0/);
+  const version = `Version ${compilerSource.typescript.version}+effect-tsgo.${compilerSource.effect.baseVersion} (tsrs ${compilerSource.tsrs.version}, microsoft/TypeScript@${compilerSource.typescript.sourceCommit.slice(0, 12)})`;
+  for (const command of [
+    smoke.run,
+    step('build', 'Smoke the actual release binary').run,
+  ])
+    assert.ok(
+      command.includes(`assert.equal(version.stdout.trim(), '${version}');`),
+      'fresh and cached compiler smokes must require the committed source identity',
+    );
   assert.match(smoke.run, /lib\.d\.ts/);
 });
 

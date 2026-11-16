@@ -174,7 +174,7 @@ jobs:
           assert.ok(fs.readdirSync(directory).filter(name => name.endsWith('.d.ts')).length > 10);
           const version = run(['--version']);
           assert.equal(version.status, 0, version.stderr);
-          assert.equal(version.stdout.trim(), 'Version 7.1.0-beta+effect-tsgo.0.67.0 (tsrs 0.21.0-ts7.1.0-beta, microsoft/TypeScript@3e9236361fa9)');
+          assert.equal(version.stdout.trim(), 'Version 7.1.0-beta+effect-tsgo.0.69.0 (tsrs 0.25.0-ts7.1.0-beta, microsoft/TypeScript@3e9236361fa9)');
           const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-smoke-'));
           try {
             const config = { compilerOptions: { strict: true, target: 'ESNext', module: 'NodeNext', noEmit: true, skipLibCheck: true, types: [] }, files: ['index.ts'] };
