@@ -130,6 +130,12 @@ export function assertSidecarProfileRecipes(name, recipes) {
         recipe.upstream.version !== (id === 'mf-node' ? '2.7.53' : '2.9.3'))
     )
       throw new Error(`Closed mf-cohort upstream drift: ${id}`);
+    if (
+      name === 'mf-cohort' &&
+      id === 'mf-enhanced' &&
+      recipe.manifestChanges.peerDependencies?.webpack !== '^5.112.2'
+    )
+      throw new Error('Closed mf-cohort Webpack support drift: mf-enhanced');
     byFork.set(recipe.upstream.name, recipe);
   }
   if (name !== 'mf-cohort') return;

@@ -20,6 +20,11 @@ test('closed MF cohort covers all 14 exact corrected identities and singleton pr
   } = await import('../sidecar-profiles.mjs');
   const { readSidecarBundleInputs } = await import('../sidecar-bundle.mjs');
   const profile = sidecarProfile('mf-cohort');
+  assert.deepEqual(
+    recipes().find(recipe => recipe.id === 'mf-enhanced').manifestChanges
+      .peerDependencies,
+    { webpack: '^5.112.2' },
+  );
   assert.deepEqual(profile.qualificationDependencies, { webpack: '5.112.2' });
   assert.equal(profile.recipeIds.length, 14);
   assert.equal(new Set(profile.recipeIds).size, 14);
@@ -54,6 +59,12 @@ test('closed MF cohort covers all 14 exact corrected identities and singleton pr
       list.find(
         recipe => recipe.id === 'mf-runtime',
       ).manifestChanges.dependencies['@module-federation/sdk'] = '2.9.3';
+      return list;
+    },
+    list => {
+      list.find(
+        recipe => recipe.id === 'mf-enhanced',
+      ).manifestChanges.peerDependencies = { webpack: '^5.0.0' };
       return list;
     },
   ])

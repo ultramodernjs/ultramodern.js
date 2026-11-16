@@ -39,6 +39,9 @@ export async function packedMfCohortProbeMain(sdkProbe) {
       fs.readFileSync(path.join(directory, 'package.json'), 'utf8'),
     );
     assert.equal(manifest.name, name);
+    if (suffix === 'enhanced') {
+      assert.equal(manifest.peerDependencies.webpack, '^5.112.2');
+    }
     assert.equal(
       manifest.version,
       suffix === 'node' ? '2.7.54' : '2.9.5',
