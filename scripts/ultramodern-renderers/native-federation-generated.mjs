@@ -7,10 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { decodeOctaneSSRDocument } from '../../tests/ultramodern-renderers/octane-federation/fixtures.mjs';
 import { createSSRMarkerProxy } from '../../tests/ultramodern-renderers/octane-federation/marker-proxy.mjs';
+import { leasePort } from '../ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 import {
   launchServer,
   ready,
-  reservePort,
 } from '../ultramodern-production-readiness/renderer-mf-lifecycle-proof/runtime.mjs';
 import {
   installedBin,
@@ -516,6 +516,11 @@ async function proveGeneratedTopology(context, renderer, signal) {
     apiProtocol: 'rest',
   });
   const snapshot = snapshotSources(workspaceRoot);
+  // Both ports are baked into their app's build, so they are taken now and
+  // stay bound through generation, install and build. Each lease is released in
+  // the statement before the server that binds it starts.
+  const hostLease = await leasePort();
+  const remoteLease = await leasePort();
   const plan = planGeneratedNativeFederation({
     workspaceRoot,
     topology: readJson(
@@ -524,8 +529,8 @@ async function proveGeneratedTopology(context, renderer, signal) {
     workspaceResult,
     verticalResult,
     renderer,
-    hostPort: await reservePort(),
-    remotePort: await reservePort(),
+    hostPort: hostLease.port,
+    remotePort: remoteLease.port,
   });
   await installPackedNativeFederationDependencies({
     directory: workspaceRoot,
@@ -568,7 +573,8 @@ async function proveGeneratedTopology(context, renderer, signal) {
       { PORT: new URL(plan.remoteOrigin).port },
     );
     validateGeneratedBuild(plan.remoteRoot, renderer);
-    const launch = (appRoot, origin, name) => {
+    const launch = async (appRoot, origin, name, lease) => {
+      await lease.release();
       const server = launchServer(process.execPath, installedBin(appRoot), {
         cwd: appRoot,
         env: { ...env, PORT: new URL(origin).port },
@@ -582,7 +588,12 @@ async function proveGeneratedTopology(context, renderer, signal) {
       );
       return server;
     };
-    const remote = launch(plan.remoteRoot, plan.remoteOrigin, 'remote');
+    const remote = await launch(
+      plan.remoteRoot,
+      plan.remoteOrigin,
+      'remote',
+      remoteLease,
+    );
     await ready(remote, `${plan.remoteOrigin}/mf-manifest.json`, signal);
     await command(
       process.execPath,
@@ -592,7 +603,12 @@ async function proveGeneratedTopology(context, renderer, signal) {
       { PORT: new URL(plan.hostOrigin).port },
     );
     validateGeneratedBuild(plan.hostRoot, renderer);
-    const host = launch(plan.hostRoot, plan.hostOrigin, 'host');
+    const host = await launch(
+      plan.hostRoot,
+      plan.hostOrigin,
+      'host',
+      hostLease,
+    );
     await ready(host, `${plan.hostOrigin}/remotes`, signal);
     for (const route of ['/remotes', plan.routePath]) {
       const html = await (
@@ -611,6 +627,7 @@ async function proveGeneratedTopology(context, renderer, signal) {
   } catch (error) {
     failure = error;
   } finally {
+    await Promise.allSettled([hostLease.release(), remoteLease.release()]);
     for (const server of servers.reverse()) {
       try {
         await server.stop();

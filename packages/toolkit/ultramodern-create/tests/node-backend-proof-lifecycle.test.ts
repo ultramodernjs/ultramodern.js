@@ -2,31 +2,16 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
-import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createMicroVerticalReleaseEnvelope } from '@modern-js/app-tools-extensions/release-envelope';
+import { leasePort } from '../../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 import { reactReleaseUi } from '../../../solutions/app-tools-extensions/tests/renderer-release-fixture';
 import {
   createRpcClientFile,
   createRpcContractFile,
 } from '../src/ultramodern-workspace/api/rpc';
-
-const reservePort = async () => {
-  const server = net.createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
-  const address = server.address();
-  assert.ok(address && typeof address === 'object');
-  const port = address.port;
-  await new Promise<void>((resolve, reject) =>
-    server.close(error => (error ? reject(error) : resolve())),
-  );
-  return port;
-};
 
 test('Node proof consumes the real API-only envelope and rejects changed artifacts', async () => {
   const workspaceRoot = fs.mkdtempSync(
@@ -557,7 +542,8 @@ test('Node backend proof owns the runtime lifecycle for built MicroVerticals', a
     path.join(os.tmpdir(), 'node-backend-proof-lifecycle-'),
   );
   const appDirectory = path.join(workspaceRoot, 'verticals/catalog/.output');
-  const port = await reservePort();
+  const lease = await leasePort();
+  const { port } = lease;
   fs.mkdirSync(appDirectory, { recursive: true });
   fs.writeFileSync(
     path.join(appDirectory, 'index.js'),
@@ -606,6 +592,8 @@ test('Node backend proof owns the runtime lifecycle for built MicroVerticals', a
         }),
       /ULTRAMODERN_NODE_PROOF_SERVER_MODE/u,
     );
+    // Unbind in the statement before the runtime that binds this port starts.
+    await lease.release();
     const runtime = await proofModule.startNodeRuntime!(
       {
         id: 'catalog',

@@ -171,6 +171,76 @@ async function until(app: DevApp, marker: string) {
   }
 }
 
+/**
+ * Wait until the served federation manifest carries a client compilation later
+ * than `previous`, and answer with that compilation's hash and manifest.
+ *
+ * An aggregate compile's done callback fires before its manifest is published,
+ * so everything derived from the compilation hash - the entry revision header,
+ * the federation publicPath, an asset href - can still be the previous
+ * compile's for a moment. The identity under test is "the compilation this
+ * edit produced"; "anything other than the previous value" is not an identity,
+ * and asserting it is what made these expectations flap.
+ */
+async function untilCompilationAfter(
+  app: { clientCompilationHashes(): string[] },
+  manifestUrl: URL,
+  previous: string,
+) {
+  const deadline = Date.now() + 90_000;
+  for (;;) {
+    const manifest = await (await fetch(manifestUrl)).json();
+    const hashes = app.clientCompilationHashes();
+    const published: unknown = manifest.compilationHash;
+    if (
+      typeof published === 'string' &&
+      hashes.indexOf(published) > hashes.indexOf(previous)
+    )
+      return { hash: published, manifest };
+    if (Date.now() > deadline)
+      throw new Error(
+        `No client compilation after ${previous} was published: served ${String(
+          published,
+        )}, completed ${hashes.join(', ')}`,
+      );
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+}
+
+/**
+ * `until` returns as soon as the server bundle renders the marker, which can
+ * precede the publication of the client compile the same edit triggered. Wait
+ * for the published snapshot to carry that compile - and, when `after` is
+ * given, a compile strictly later than it in the compiler's completion order -
+ * so the snapshot's assets are that compilation's assets.
+ */
+async function untilHydratedBy(
+  app: DevApp & { clientCompilationHashes?(): string[] },
+  marker: string,
+  after?: string,
+) {
+  const deadline = Date.now() + 90_000;
+  for (;;) {
+    const published = await until(app, marker);
+    const client = published.manifest.devCompilation.compilationHashes.client;
+    const hashes = app.clientCompilationHashes?.() ?? [];
+    if (
+      published.snapshot.hydrationBuildId === client &&
+      (after === undefined || hashes.indexOf(client) > hashes.indexOf(after))
+    )
+      return { ...published, clientCompilationHash: client };
+    if (Date.now() > deadline)
+      throw new Error(
+        `The published snapshot for ${marker} never reached a client compilation${
+          after ? ` after ${after}` : ''
+        }: snapshot ${String(
+          published.snapshot.hydrationBuildId,
+        )}, manifest ${client}, completed ${hashes.join(', ')}`,
+      );
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+}
+
 function view(marker: string) {
   return `import './style.css';\nexport default function App() { return <main data-native-wave="${marker}">${marker}</main>; }\n`;
 }
@@ -1095,23 +1165,33 @@ describe('native development', () => {
       NATIVE_FEDERATION_DEV_REVISION_HEADER,
     );
     const firstBrowserEntry = await (await fetch(browserEntryUrl)).text();
+    const firstCompilationHash = JSON.parse(firstManifest).compilationHash;
     const completed = Promise.withResolvers<void>();
     app.afterNextAggregateCompile(() => completed.resolve());
     app.editRemoteLazy('REMOTE_LAZY_SECOND');
     await completed.promise;
+    // Key the wait on the compilation the edit produced. Reading the revision
+    // header right after the done callback can still answer from the previous
+    // publication, which is what `.not.toBe(revision)` used to flap on.
+    const published = await untilCompilationAfter(
+      app,
+      manifestUrl,
+      firstCompilationHash,
+    );
     const latest = await fetch(entryUrl, { method: 'HEAD' });
     const latestRevision = latest.headers.get(
       NATIVE_FEDERATION_DEV_REVISION_HEADER,
     );
     expect(latestRevision).toMatch(/^[a-f0-9]{64}$/u);
-    expect(latestRevision).not.toBe(revision);
     expect(
       (await fetch(entryUrl)).headers.get(
         NATIVE_FEDERATION_DEV_REVISION_HEADER,
       ),
     ).toBe(latestRevision);
     const nextManifest = await fetch(manifestUrl);
-    expect(await nextManifest.text()).not.toBe(firstManifest);
+    const nextManifestBody = await nextManifest.text();
+    expect(JSON.parse(nextManifestBody).compilationHash).toBe(published.hash);
+    expect(nextManifestBody).not.toBe(firstManifest);
     expect(nextManifest.headers.get('Link')).not.toBe(link);
     const retainedManifest = await fetch(immutableManifestUrl);
     expect(await retainedManifest.text()).toBe(firstManifest);
@@ -1232,9 +1312,19 @@ describe('native development', () => {
       app.afterNextAggregateCompile(() => completed.resolve());
       app.editRemoteLazy('REMOTE_LAZY_AFTER_HOT_APPLY');
       await completed.promise;
-      const nextManifest = await (await fetch(manifestUrl)).json();
-      nextPublicPath = nextManifest.metaData.publicPath;
-      expect(nextPublicPath).not.toBe(initialPublicPath);
+      // Key the wait on the compilation the edit produced: the aggregate's
+      // done callback can precede its publication, and the publicPath is the
+      // compilation's own directory, so name that directory rather than
+      // asserting it is merely not the previous one.
+      const published = await untilCompilationAfter(
+        app,
+        manifestUrl,
+        initialManifest.compilationHash,
+      );
+      nextPublicPath = published.manifest.metaData.publicPath;
+      expect(nextPublicPath).toBe(
+        new URL(`../${published.hash}/`, initialPublicPath).href,
+      );
       expect(await widget.hotUpdate()).not.toBeNull();
       // A watcher may report one edit more than once (seen on Windows), so a
       // client-only recompile can follow it. Apply every finished update; the
@@ -1412,12 +1502,17 @@ describe('native development', () => {
       holdPublication = false;
       resumePublication.resolve();
       app.editRemoteLazy('REMOTE_LAZY_PUBLISHED');
-      for (;;) {
-        const manifest = await (await fetch(manifestUrl)).json();
-        nextPublicPath = manifest.metaData.publicPath;
-        if (nextPublicPath !== initialPublicPath) break;
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
+      // Wait for a published compilation later than the initial one by hash,
+      // and name its directory, instead of waiting for "not the old path".
+      const republished = await untilCompilationAfter(
+        app,
+        manifestUrl,
+        initialManifest.compilationHash,
+      );
+      nextPublicPath = republished.manifest.metaData.publicPath;
+      expect(nextPublicPath).toBe(
+        new URL(`../${republished.hash}/`, initialPublicPath).href,
+      );
       // An extra watcher rebuild may retire A's live delta, but not its graph.
       const completed = Promise.withResolvers<void>();
       app.afterNextAggregateCompile(() => completed.resolve());
@@ -1654,12 +1749,10 @@ describe('native development', () => {
     'imports the newest %s server bundle after every compile',
     async (_format, module) => {
       const app = await replacementApp(module);
-      const first = await until(app, 'first:replacement-compiler');
+      const first = await untilHydratedBy(app, 'first:replacement-compiler');
       expect(first.manifest.entries).toEqual(app.session.identities);
       expect(first.manifest.buildId).toBe(app.session.buildId);
-      expect(first.snapshot.hydrationBuildId).toBe(
-        first.manifest.devCompilation.compilationHashes.client,
-      );
+      expect(first.snapshot.hydrationBuildId).toBe(first.clientCompilationHash);
       const script = first.snapshot.assets.find(
         asset => asset.kind === 'script' && /\/main\./u.test(asset.href),
       );
@@ -1669,16 +1762,31 @@ describe('native development', () => {
       );
 
       app.edit('second');
-      const second = await until(app, 'second:replacement-compiler');
+      // Wait for the published snapshot to carry the client compilation this
+      // edit triggered. `until` can return while the previous compilation is
+      // still the published one, which is exactly when the snapshot's main
+      // script is still the first compile's asset.
+      const second = await untilHydratedBy(
+        app,
+        'second:replacement-compiler',
+        first.clientCompilationHash,
+      );
       expect(second.manifest.devCompilation.generation).toBeGreaterThan(
         first.manifest.devCompilation.generation,
       );
       expect(second.manifest.buildId).toBe(first.manifest.buildId);
-      expect(
-        second.snapshot.assets.find(
-          asset => asset.kind === 'script' && /\/main\./u.test(asset.href),
-        )?.href,
-      ).not.toBe(script.href);
+      expect(second.snapshot.hydrationBuildId).toBe(
+        second.clientCompilationHash,
+      );
+      // The published snapshot is now that later compilation's, so its main
+      // script is that compilation's asset rather than a value this comparison
+      // has to race the publication for.
+      const secondScript = second.snapshot.assets.find(
+        asset => asset.kind === 'script' && /\/main\./u.test(asset.href),
+      );
+      if (!secondScript)
+        throw new Error('The second compile emitted no script');
+      expect(secondScript.href).not.toBe(script.href);
       // Pages opened before the edit still load their own scripts.
       const retained = await fetch(new URL(script.href, app.address));
       expect(retained.status).toBe(200);
@@ -1800,7 +1908,13 @@ describe('native development', () => {
       expect(first.manifest.entries).toEqual(app.session.identities);
       expect(first.snapshot.manifest.rendererIdentity).toEqual(app.identity);
       app.edit(`${renderer}-second`);
-      const second = await until(app, `${renderer}-second`);
+      // Octane's snapshot must be its own client compilation; the server
+      // bundle can render the edit before that compile is published, so this
+      // is a wait on the identity rather than one sample of it.
+      const second =
+        renderer === 'octane'
+          ? await untilHydratedBy(app, `${renderer}-second`)
+          : await until(app, `${renderer}-second`);
       expect(second.manifest.devCompilation.generation).toBeGreaterThan(
         first.manifest.devCompilation.generation,
       );

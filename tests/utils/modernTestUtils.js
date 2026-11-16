@@ -5,6 +5,9 @@ const net = require('node:net');
 const os = require('node:os');
 const spawn = require('cross-spawn');
 const treeKill = require('tree-kill');
+const {
+  leasePort,
+} = require('../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs');
 const { launchOptions } = require('./launchOptions');
 
 const kRepoRoot = path.join(__dirname, '../..');
@@ -20,16 +23,6 @@ const kWorkspaceSearchRoots = [
 const kPortAllocatorLockPollInterval = 200;
 const kPortAllocatorLockStaleAge = 10 * 60 * 1000;
 const kGlobPatternCharacters = ['*', '?', '[', '{'];
-const kTestPortAllocatorKey = `${kTestsRoot}#test-port-allocator`;
-const kTestPortStatePath = path.join(
-  os.tmpdir(),
-  `modernjs-test-port-${crypto
-    .createHash('sha1')
-    .update(kRepoRoot)
-    .digest('hex')}.json`,
-);
-const kTestPortRangeStart = 20_000;
-const kTestPortRangeEnd = 59_999;
 
 function resolvePortAllocatorLockDir(packageDir) {
   const digest = crypto
@@ -800,69 +793,19 @@ async function killApp(instance) {
   await waitForLinuxProcessTree(processes);
 }
 
-async function reservePort() {
-  const releaseLock = await acquirePortAllocatorLock(kTestPortAllocatorKey);
-
-  try {
-    let nextPort = kTestPortRangeStart;
-    try {
-      const state = JSON.parse(
-        await fs.promises.readFile(kTestPortStatePath, 'utf8'),
-      );
-      if (
-        Number.isInteger(state.nextPort) &&
-        state.nextPort >= kTestPortRangeStart &&
-        state.nextPort <= kTestPortRangeEnd
-      ) {
-        nextPort = state.nextPort;
-      }
-    } catch {}
-
-    const rangeSize = kTestPortRangeEnd - kTestPortRangeStart + 1;
-    for (let attempt = 0; attempt < rangeSize; attempt += 1) {
-      const port = nextPort;
-      nextPort = port === kTestPortRangeEnd ? kTestPortRangeStart : port + 1;
-
-      const available = await new Promise((resolve, reject) => {
-        const server = net.createServer();
-        server.unref();
-        server.once('error', error => {
-          if (error?.code === 'EADDRINUSE') {
-            resolve(false);
-          } else {
-            reject(error);
-          }
-        });
-        server.listen(port, '127.0.0.1', () => {
-          server.close(error => {
-            if (error) {
-              reject(error);
-            } else {
-              resolve(true);
-            }
-          });
-        });
-      });
-
-      if (!available) {
-        continue;
-      }
-
-      await fs.promises.writeFile(
-        kTestPortStatePath,
-        `${JSON.stringify({ nextPort })}\n`,
-      );
-      return port;
-    }
-
-    throw new Error('Failed to reserve a unique test port');
-  } finally {
-    await releaseLock();
-  }
-}
-
+/**
+ * The port number alone, with its socket already closed.
+ *
+ * A port whose socket is closed can be reissued to a sibling before the caller
+ * binds it, which is the `listen EADDRINUSE` that cost whole check cycles.
+ * Callers that own the process binding the port should take `leasePort()`
+ * instead - it is re-exported here - and release it in the statement before
+ * that process starts.
+ */
 async function getPort() {
-  return reservePort();
+  const lease = await leasePort();
+  await lease.release();
+  return lease.port;
 }
 
 function sleep(t) {
@@ -962,6 +905,7 @@ module.exports = {
   launchApp,
   killApp,
   getPort,
+  leasePort,
   sleep,
   runContinuousTask,
   launchOptions,

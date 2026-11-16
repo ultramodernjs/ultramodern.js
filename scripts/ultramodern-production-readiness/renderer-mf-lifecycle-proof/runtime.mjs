@@ -2,23 +2,9 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
-import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { retireOwnedProcessGroup } from '../react-rsc-worker-proof/runtime.mjs';
 import { assertRequestHtml, sha256 } from './contract.mjs';
-
-export async function reservePort() {
-  const server = net.createServer();
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
-  const port = server.address().port;
-  await new Promise((resolve, reject) =>
-    server.close(error => (error ? reject(error) : resolve())),
-  );
-  return port;
-}
 
 export async function waitFor(
   predicate,

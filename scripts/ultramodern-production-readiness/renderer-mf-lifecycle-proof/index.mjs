@@ -30,12 +30,12 @@ import {
   writeJson,
 } from './contract.mjs';
 import { materializeFixture } from './fixtures.mjs';
+import { leasePorts } from './port-lease.mjs';
 import {
   launchServer,
   overlapAndAbortProof,
   ready,
   recoveryTimeoutProof,
-  reservePort,
   startControlServer,
   waitFor,
 } from './runtime.mjs';
@@ -117,6 +117,7 @@ export async function runProof(provided) {
   let control;
   let browser;
   let failure;
+  let releasePortLeases;
   const receipt = {
     schema: 'bleedingdev.ultramodern.renderer-mf-lifecycle-proof',
     schemaVersion: 1,
@@ -231,15 +232,18 @@ export async function runProof(provided) {
       'MODERNJS_DEPLOY',
     ])
       delete env[name];
-    const ports = Object.fromEntries(
-      await Promise.all(
-        ['host', 'healthy', 'fragile'].map(async role => [
-          role,
-          await reservePort(),
-        ]),
-      ),
+    // The fixture bakes each role's origin into its build, so all three ports
+    // stay bound from here. Every role releases its own lease in the statement
+    // before the server that binds it starts.
+    const roles = ['host', 'healthy', 'fragile'];
+    const portLease = await leasePorts(roles.length);
+    const leases = Object.fromEntries(
+      roles.map((role, index) => [role, portLease.leases[index]]),
     );
-    assert.equal(new Set(Object.values(ports)).size, 3);
+    releasePortLeases = () => portLease.release();
+    const ports = Object.fromEntries(
+      roles.map((role, index) => [role, portLease.ports[index]]),
+    );
     const origins = Object.fromEntries(
       Object.entries(ports).map(([role, port]) => [
         role,
@@ -360,6 +364,7 @@ export async function runProof(provided) {
       );
       receipt.builds[role] = JSON.parse(fs.readFileSync(outputFile, 'utf8'));
       if (role !== 'host') {
+        await leases[role].release();
         const handle = launchServer(options.qualifiedNode, cli[role], {
           cwd: root,
           env: { ...env, NODE_ENV: 'production', PORT: String(ports[role]) },
@@ -414,6 +419,9 @@ export async function runProof(provided) {
       headless: true,
     });
     const startHost = async label => {
+      // Idempotent: the host restarts on the same built origin, and only the
+      // first start has a lease left to give up.
+      await leases.host.release();
       const handle = launchServer(options.qualifiedNode, cli.host, {
         cwd: fixture.roots.host,
         env: { ...env, NODE_ENV: 'production', PORT: String(ports.host) },
@@ -493,6 +501,7 @@ export async function runProof(provided) {
       browser?.close(),
       control?.close(),
       registry?.stop(),
+      releasePortLeases?.(),
     ]);
     receipt.cleanup = cleanup.map(result =>
       result.status === 'fulfilled'

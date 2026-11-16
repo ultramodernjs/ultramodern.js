@@ -15,7 +15,7 @@ import {
   readWorkerFixturePlan,
   runWorkerFixtureProof,
 } from '../../tests/ultramodern-renderers/octane-federation-workers/proof.mjs';
-import { reservePort } from '../ultramodern-production-readiness/renderer-mf-lifecycle-proof/runtime.mjs';
+import { leasePorts } from '../ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 import {
   nativeFederationPackageRequests,
   nativeStartArchiveRequests,
@@ -322,12 +322,10 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
     consumerRoot: generatorConsumerRoot,
   });
   const dependencies = generatedWorkerDependencies(context);
-  const ports = [];
-  while (ports.length < 3) {
-    const port = await reservePort();
-    if (!ports.includes(port)) ports.push(port);
-  }
-  const origins = ports.map(port => `http://127.0.0.1:${port}`);
+  // The three origins are compiled into the Worker bundles, so the ports stay
+  // bound from here until the statement before the proof binds them.
+  const portLease = await leasePorts(3);
+  const origins = portLease.ports.map(port => `http://127.0.0.1:${port}`);
   const binding = (remote, index) => ({
     binding: `VERTICAL_REMOTE_${index ? 'B' : 'A'}_WORKER`,
     service: `proof-${remote.id}`,
@@ -582,6 +580,7 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
       browserExecutable: context.browserExecutable,
     }),
   );
+  await portLease.release();
   const proof = await runWorkerFixtureProof(readWorkerFixturePlan(planPath), {
     signal,
   });

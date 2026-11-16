@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Three-app Octane Module Federation proof, built from workspace source.
 //
-//   /Users/satan/bin/owned-temp-dir --run octane-federation-proof -- \
+//   owned-temp-dir --run octane-federation-proof -- \
 //     node tests/ultramodern-renderers/octane-federation/proof.mjs
 //
 // Builds a remote Octane app exposing ./Widget, a server-rendering Octane host
@@ -25,6 +25,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { resolveDiskGuardian } from '../../../scripts/ultramodern-production-readiness/renderer-worker-lifecycle-proof/support.mjs';
 import {
   createOctaneFederationFixtures,
   decodeOctaneSSRDocument,
@@ -64,20 +65,26 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'])
     cancellation.abort(new Error(`Received ${signal}`)),
   );
 
+// On a runner there is no guardian: the job's own directory lease owns this
+// tree, and the proof's subject is Octane federation, not disk accounting.
+// A configured guardian that cannot run still fails this proof loudly.
+const guardian = resolveDiskGuardian();
+
 async function registerArtifact(directory, kind) {
   await fs.mkdir(directory, { recursive: true });
-  await execute('/Users/satan/bin/disk-guardian-artifacts', [
-    'register',
-    directory,
-    '--owner',
-    owner,
-    '--owner-pid',
-    String(process.pid),
-    '--kind',
-    kind,
-    '--grace-hours',
-    '24',
-  ]);
+  if (guardian)
+    await execute(guardian, [
+      'register',
+      directory,
+      '--owner',
+      owner,
+      '--owner-pid',
+      String(process.pid),
+      '--kind',
+      kind,
+      '--grace-hours',
+      '24',
+    ]);
   artifacts.add(directory);
 }
 
@@ -1060,15 +1067,12 @@ try {
       )
     )
       (results.retainedArtifacts ??= []).push(directory);
-    else
-      await execute('/Users/satan/bin/disk-guardian-artifacts', [
-        'release',
-        directory,
-        '--owner',
-        owner,
-      ]).catch(error => {
-        (results.cleanupErrors ??= []).push(String(error));
-      });
+    else if (guardian)
+      await execute(guardian, ['release', directory, '--owner', owner]).catch(
+        error => {
+          (results.cleanupErrors ??= []).push(String(error));
+        },
+      );
   if (results.cleanupErrors?.length) {
     results.verdict = 'FAIL';
     process.exitCode = 1;
