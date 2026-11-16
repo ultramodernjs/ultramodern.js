@@ -67,11 +67,11 @@ than GitHub-hosted compute, and `SELF_LINUX_LABELS` and
 `scripts/ci/__tests__/depot-runner-policy.test.mjs` fails on a GitHub-hosted
 label anywhere in a `runs-on` expression.
 
-The Effect compiler's three Rust builds name 16-core labels directly
-(`depot-ubuntu-24.04-16`, `depot-ubuntu-24.04-arm-16`, `depot-windows-2025-16`):
-cargo builds crates in parallel and those jobs are the long pole of every
-caller's cold path. The labels are literal, not variables, because the cache key
-and the shipped glibc baseline must not move when a variable does.
+The Effect compiler's Linux builds name their labels directly rather than
+reading `DEPOT_LINUX_RUNNER`, because the cache key and the shipped glibc
+baseline must not move when a repository variable does. Sixteen cores were
+measured and rejected: the build does not parallelise past 8, so run
+43876712655 was slower than run 43873444661 on every target.
 
 Two jobs, `publish` and `publish-sidecars`, always use GitHub's `ubuntu-24.04`.
 [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) requires
