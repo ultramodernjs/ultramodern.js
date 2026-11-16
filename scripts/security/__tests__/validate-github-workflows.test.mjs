@@ -253,6 +253,51 @@ const assertPublishMutationRejected = (label, mutate, pattern) => {
   );
 };
 
+test('source-cohort reuse is rejected before compiler and integration work starts', () => {
+  const workflow = readPublishWorkflow();
+  const early = workflow.jobs['publish-security'].steps.find(step =>
+    step.run?.includes('workflow.mjs reject-published-source'),
+  );
+  assert.ok(early, 'source-cohort guard must run in publish-security');
+  assert.equal(
+    early.if,
+    "inputs.mode == 'cohort' && inputs.recovery_run_id == ''",
+  );
+  assert.equal(early['continue-on-error'], undefined);
+  assert.equal(early.env.PUBLISH_VERSION, githubExpression('inputs.version'));
+  assert.deepEqual(
+    workflow.jobs['effect-compiler-payload'].needs,
+    'publish-security',
+  );
+  assert.ok(
+    workflow.jobs['prepare-release'].steps.some(step =>
+      step.run?.includes('workflow.mjs reject-published-source'),
+    ),
+    'keep the bundle-time recheck too',
+  );
+});
+
+for (const mutation of ['removed', 'ignored', 'wrong mode', 'wrong version'])
+  test(`release validator rejects ${mutation} early source-cohort guard`, () => {
+    assertPublishMutationRejected(
+      mutation,
+      workflow => {
+        const steps = workflow.jobs['publish-security'].steps;
+        const index = steps.findIndex(step =>
+          step.run?.includes('workflow.mjs reject-published-source'),
+        );
+        assert.ok(index >= 0);
+        if (mutation === 'removed') steps.splice(index, 1);
+        else if (mutation === 'ignored')
+          steps[index]['continue-on-error'] = true;
+        else if (mutation === 'wrong mode')
+          steps[index].if = "inputs.mode == 'sidecars'";
+        else steps[index].env.PUBLISH_VERSION = '3.11.3-ultramodern.4';
+      },
+      /publish-security must reject an already published source cohort/,
+    );
+  });
+
 const workflowRunCheckoutWorkflow = ({
   branchPolicy = '    branches:\n      - main-ultramodern\n',
   ref = githubExpression('github.event.workflow_run.head_sha'),

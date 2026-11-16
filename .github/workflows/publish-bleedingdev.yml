@@ -159,6 +159,14 @@ jobs:
             [[ "$RECOVERY_QUALIFICATION_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
           fi
 
+      # Reject a duplicate source before starting the compiler matrix and
+      # integration suites. Keep the bundle-time check to catch later changes.
+      - name: Reject an already published source cohort before builds
+        if: inputs.mode == 'cohort' && inputs.recovery_run_id == ''
+        env:
+          PUBLISH_VERSION: ${{ inputs.version }}
+        run: node scripts/ultramodern-publish/workflow.mjs reject-published-source
+
       # A cohort requires every recipe name. A recovery dispatch instead checks
       # the recovered bundle through reconcile-sidecars.
       - name: Check every sidecar name exists on npm

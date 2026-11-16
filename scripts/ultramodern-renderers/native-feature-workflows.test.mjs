@@ -13,6 +13,33 @@ const readWorkflow = name =>
     ),
   );
 
+test('failed Tractor acceptance preserves bounded compiler inputs without claiming acceptance', () => {
+  const steps = readWorkflow('ultramodern-tractor-downstream').jobs[
+    'tractor-downstream'
+  ].steps;
+  const run = steps.findIndex(step => step.id === 'tractor-acceptance');
+  const preserve = steps.findIndex(
+    step => step.name === 'Preserve failed Tractor compiler inputs',
+  );
+  assert.ok(run >= 0 && preserve > run);
+  assert.equal(steps[run]['continue-on-error'], undefined);
+  assert.equal(
+    steps[preserve].if,
+    "failure() && steps.tractor-acceptance.outcome == 'failure'",
+  );
+  assert.match(steps[preserve].with.name, /^tractor-compiler-failure-run-/u);
+  assert.equal(steps[preserve].with['include-hidden-files'], true);
+  assert.equal(steps[preserve].with['retention-days'], 3);
+  assert.match(
+    steps[preserve].with.path,
+    /shared-contracts\/src\/\*\*\/\*\.ts/u,
+  );
+  assert.match(steps[preserve].with.path, /\.cache\/tsgo\/\*\*\/\*\.d\.ts/u);
+  assert.match(steps[preserve].with.path, /verticals\/\*\/\.modern-js\/tsgo/u);
+  assert.doesNotMatch(steps[preserve].with.path, /\.env|tractor\/\*\*/u);
+  assert.ok(!steps[preserve].with.name.includes('acceptance-'));
+});
+
 for (const mode of ['source', 'published'])
   for (const failure of ['none', 'stage', 'proof'])
     test(`${mode} feature command preserves ${failure} result and retires only staged native archives`, t => {
