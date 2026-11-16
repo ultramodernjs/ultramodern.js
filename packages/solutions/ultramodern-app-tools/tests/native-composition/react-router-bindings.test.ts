@@ -11,16 +11,16 @@ const tanstack = '@modern-js/plugin-tanstack';
 const reactRouter = {
   framework: 'react-router',
   name: 'react-router',
-  version: '7.18.4',
+  version: '8.5.1',
   coreName: 'react-router',
-  coreVersion: '7.18.4',
+  coreVersion: '8.5.1',
 };
 const tanstackRouter = {
   framework: 'tanstack',
   name: '@tanstack/react-router',
-  version: '1.170.44',
+  version: '1.170.46',
   coreName: '@tanstack/router-core',
-  coreVersion: '1.171.37',
+  coreVersion: '1.171.39',
 };
 type RouterEntrypoint = Entrypoint & {
   __modernRoutesOwner?: string;
@@ -258,7 +258,7 @@ describe('React router owner bindings', () => {
       install(
         install(app, '@modern-js/runtime', '3.9.0'),
         'react-router',
-        '7.18.4',
+        '8.5.1',
       );
       const bindings = resolveReactRouterBindings({
         entrypoints: [entry('main')],

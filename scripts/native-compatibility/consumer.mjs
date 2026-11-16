@@ -6,7 +6,9 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generatorTestTempParent } from '../../tests/utils/generatorTestTemp.mjs';
+import { bleedingdevEdges } from '../../tests/utils/runWithPrerequisites.mjs';
 import { parsePnpmLockfile } from '../lib/parse-pnpm-lockfile.mjs';
+import { inspectNpmTarball } from '../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const fixtureRoot = path.join(
@@ -132,24 +134,29 @@ export function packedOverrides(manifest) {
     ...manifest.packages,
     ...manifest.sidecars,
   })) {
+    const bytes = fs.readFileSync(packed.tarball);
     assert.equal(
-      createHash('sha256')
-        .update(fs.readFileSync(packed.tarball))
-        .digest('hex'),
+      createHash('sha256').update(bytes).digest('hex'),
       packed.integrity,
       `Packed prerequisite changed after preparation: ${name}`,
     );
     if (name.startsWith('@modern-js/'))
       overrides[name] = `file:${packed.tarball}`;
-  }
-  for (const edge of manifest.edges ?? []) {
-    const packed = manifest.sidecars?.[edge.target];
-    assert.equal(
-      packed?.version,
-      edge.version,
-      `Missing packed sidecar: ${edge.target}@${edge.version}`,
-    );
-    overrides[`${edge.name}@${edge.spec}`] = `file:${packed.tarball}`;
+    // pnpm selectors cannot name an `npm:` alias spec, and an unscoped alias
+    // name would capture every edge of that name. The exact packed parent
+    // scopes each override to the edge these authenticated bytes declare.
+    const parent = JSON.parse(inspectNpmTarball(bytes).packageJsonBytes);
+    assert.equal(parent.name, name, `Packed identity: ${packed.tarball}`);
+    for (const edge of bleedingdevEdges(parent)) {
+      const sidecar = manifest.sidecars?.[edge.target];
+      assert.equal(
+        sidecar?.version,
+        edge.version,
+        `Missing packed sidecar: ${edge.target}@${edge.version}`,
+      );
+      overrides[`${parent.name}@${parent.version}>${edge.name}`] =
+        `file:${sidecar.tarball}`;
+    }
   }
   for (const name of Object.keys(upstreamPackages)) {
     assert.ok(overrides[name], `Missing packed native prerequisite: ${name}`);

@@ -46,7 +46,7 @@ describe('project tooling', () => {
           }
         : {}),
     });
-    expect(pkg.engines.node).toBe('^22.18.0 || >=24.3.0');
+    expect(pkg.engines.node).toBe('>=26.13.1');
     expect('rstack' in pkg.devDependencies).toBe(standalone);
     expect(pkg.devDependencies['@biomejs/biome']).toBeUndefined();
     expect(fs.existsSync(path.join(projectDir, 'rstack.config.mts'))).toBe(

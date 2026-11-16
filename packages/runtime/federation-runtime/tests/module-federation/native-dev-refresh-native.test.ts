@@ -244,7 +244,7 @@ test('refreshing a native remote preserves Octane server hook providers retained
     ],
   });
   try {
-    expect(host.version).toBe('2.9.2');
+    expect(host.version).toBe('2.9.3');
     const first = await host.loadRemote('store/Widget');
     const retainedRenderer = first.server;
     expect(retainedRenderer.version).toBe(version);

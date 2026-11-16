@@ -163,8 +163,8 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
         expect(bindings.imports).not.toHaveProperty(name);
         expect(bindings.versions).not.toHaveProperty(name);
       }
-      expect(bindings.versions['solid-js']).toBe('2.0.0-rc.15');
-      expect(bindings.versions['@solidjs/web']).toBe('2.0.0-rc.15');
+      expect(bindings.versions['solid-js']).toBe('2.0.0-rc.22');
+      expect(bindings.versions['@solidjs/web']).toBe('2.0.0-rc.22');
       expect(bindings.aliases['@solidjs/web$']).toBe(
         bindings.imports['@solidjs/web'],
       );
@@ -181,7 +181,7 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
       const installed = versions(renderer);
       const runtime = renderer === 'solid' ? 'solid-js' : 'octane';
       expect(installed[runtime]).toBe(
-        renderer === 'solid' ? '2.0.0-rc.15' : '0.13.8',
+        renderer === 'solid' ? '2.0.0-rc.22' : '0.13.8',
       );
       expect(installed['@modern-js/renderer-core/']).toMatch(/^\d+\.\d+\.\d+/u);
       expect(() => resolveNativeSharedVersions(renderer, os.tmpdir())).toThrow(
@@ -321,7 +321,7 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
     expect(installed.octane).toBe('0.13.8');
     expect(installed['@tanstack/router-core']).toBe('1.171.38');
     expect(installed['@tanstack/history']).toBe('1.162.5');
-    expect(installed.seroval).toBe('1.6.9');
+    expect(installed.seroval).toBe('1.8.1');
     const bindings = resolveNativeSharedBindings('octane', root, 'server');
     const selected = fs.realpathSync(
       path.resolve(

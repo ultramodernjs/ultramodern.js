@@ -266,8 +266,8 @@ describe('renderer authority at the actual native MF publication boundary', () =
       );
       const redact = (request: string) => ({
         import: frameworkRequire.resolve(request),
-        version: '0.2.2',
-        requiredVersion: '0.2.2',
+        version: '0.3.2',
+        requiredVersion: '0.3.2',
         strictVersion: true,
         singleton: true,
       });

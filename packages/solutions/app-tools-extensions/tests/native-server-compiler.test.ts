@@ -113,7 +113,7 @@ test('uses one app-bound Effect tsrs executable for native config, checks and re
     expect(selected.command.args).toEqual([]);
     expect(
       execFileSync(expected, ['--version'], { encoding: 'utf8' }),
-    ).toContain('+effect-tsgo.0.67.0');
+    ).toContain('+effect-tsgo.0.69.0');
     expect(require(selected.typescriptPath).version).toBe(
       require('tsrs/package.json').tsrs.typescriptVersion,
     );
