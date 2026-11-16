@@ -70,6 +70,16 @@ export default [
       'Use the exact reviewed support-producer correction for repository Effect telemetry tests: bind NodeSdk, WebSdk and declarations to the current sdk-trace and sdk-logs owning APIs. Generated workspaces remain patch-free and require the authenticated corrected support archive.',
   },
   {
+    packageName: '@svgr/babel-plugin-transform-svg-component',
+    version: '8.0.0',
+    path: 'patches/@svgr__babel-plugin-transform-svg-component@8.0.0.patch',
+    sha256: 'c2d9f4f67f22c7a4cbfb9dc08b9fd3a0036c661566a313b5e4726e43d659e9d2',
+    repository: true,
+    workspace: null,
+    reason:
+      'Derive tpl from template.smart.ast on the declared Babel core peer, exactly as SVGR constructs it at runtime, instead of importing an undeclared private Babel template type. Repository qualification covers Babel 8 coexistence; published consumers require the corrected authenticated sidecar closure, not this repository-only patch. Generated workspaces remain patch-free.',
+  },
+  {
     packageName: 'solid-js',
     version: '2.0.0-rc.22',
     path: 'patches/solid-js@2.0.0-rc.22.patch',

@@ -10,6 +10,27 @@ const read = file => fs.readFileSync(new URL(file, root));
 const recipes = JSON.parse(read('scripts/ultramodern-supply/sidecars.json'));
 const workspace = parse(read('pnpm-workspace.yaml').toString());
 
+test('repository SVGR declarations derive the actual template type from their declared peer', () => {
+  const patch = inventory.find(
+    item =>
+      item.packageName === '@svgr/babel-plugin-transform-svg-component' &&
+      item.version === '8.0.0',
+  );
+  assert.ok(patch);
+  assert.equal(patch.repository, true);
+  assert.equal(patch.workspace, null);
+  assert.equal(
+    workspace.patchedDependencies[
+      '@svgr/babel-plugin-transform-svg-component@8.0.0'
+    ],
+    patch.path,
+  );
+  assert.equal(
+    createHash('sha256').update(read(patch.path)).digest('hex'),
+    patch.sha256,
+  );
+});
+
 test('repository Effect telemetry uses the exact reviewed support-producer correction', () => {
   const support = JSON.parse(
     read('scripts/ultramodern-support-artifacts/inputs.json'),

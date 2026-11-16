@@ -220,6 +220,7 @@ pnpmfileChecksum: sha256-e7fv4++EEy5D/4pBzV1yGYuIWnXfQwaMHH7OMxyEZx4=
 patchedDependencies:
   '@effect/opentelemetry@4.1.4': 41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804
   '@module-federation/sdk@2.9.3': fb4b0dfd33a0588ad3821f1d56e2316044ae0b721c515a69080d7d9d9de72e3e
+  '@svgr/babel-plugin-transform-svg-component@8.0.0': c2d9f4f67f22c7a4cbfb9dc08b9fd3a0036c661566a313b5e4726e43d659e9d2
   '@tanstack/router-core@1.171.39': 546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8
   braces@3.0.3: e14af28f138a243a283deed5e9f26275891ad6eedc02e964d8ec7ae7efc6783a
   rsbuild-plugin-dts@1.0.7: bd0c8f1b4c4681eeb0d1ea0123c252ad41b17f01be1ca171bd8c42ca2d652e44
@@ -23870,7 +23871,7 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
 
-  '@svgr/babel-plugin-transform-svg-component@8.0.0(@babel/core@7.29.7(supports-color@10.2.2))':
+  '@svgr/babel-plugin-transform-svg-component@8.0.0(patch_hash=c2d9f4f67f22c7a4cbfb9dc08b9fd3a0036c661566a313b5e4726e43d659e9d2)(@babel/core@7.29.7(supports-color@10.2.2))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
 
@@ -23884,7 +23885,7 @@ snapshots:
       '@svgr/babel-plugin-svg-dynamic-title': 8.0.0(@babel/core@7.29.7(supports-color@10.2.2))
       '@svgr/babel-plugin-svg-em-dimensions': 8.0.0(@babel/core@7.29.7(supports-color@10.2.2))
       '@svgr/babel-plugin-transform-react-native-svg': 8.1.0(@babel/core@7.29.7(supports-color@10.2.2))
-      '@svgr/babel-plugin-transform-svg-component': 8.0.0(@babel/core@7.29.7(supports-color@10.2.2))
+      '@svgr/babel-plugin-transform-svg-component': 8.0.0(patch_hash=c2d9f4f67f22c7a4cbfb9dc08b9fd3a0036c661566a313b5e4726e43d659e9d2)(@babel/core@7.29.7(supports-color@10.2.2))
 
   '@svgr/core@8.1.0(supports-color@10.2.2)(typescript@7.0.2)':
     dependencies:
