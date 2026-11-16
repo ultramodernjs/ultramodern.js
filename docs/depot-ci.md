@@ -11,7 +11,6 @@ tests, integration tests, builder tests, lint, type checks, dependency checks,
 native compatibility checks, workflow security, and cache seeds. They use
 `depot-ubuntu-24.04-8`. Integration keeps all six core shards, both generator
 suites, the adapter suite, and the utility suite.
-The separate `ci-benchmark.yml` workflow runs only when requested for a comparison.
 
 Connect the repository with the Depot Code Access GitHub App. Depot offers a
 [seven-day trial without a credit card](https://depot.dev/docs/ci/overview).
@@ -62,14 +61,23 @@ Set these GitHub repository variables:
 
 GitHub workflows select these runners for builds, tests, docs, cache seeds, and
 release preparation. Depot CI workflows use their fixed Linux runner directly.
-Without these variables, GitHub workflows use GitHub-hosted runners.
-The existing `SELF_LINUX_LABELS` and `BLEEDINGDEV_ACCEPT_RUNNER_LABELS` overrides
-still work when `DEPOT_LINUX_RUNNER` is unset.
+Every fallback is a Depot label too, so an unset variable selects Depot rather
+than GitHub-hosted compute, and `SELF_LINUX_LABELS` and
+`BLEEDINGDEV_ACCEPT_RUNNER_LABELS` no longer select anything.
+`scripts/ci/__tests__/depot-runner-policy.test.mjs` fails on a GitHub-hosted
+label anywhere in a `runs-on` expression.
 
-Two jobs, `publish` and `publish-sidecars`, always use GitHub's `ubuntu-24.04`.
-[npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) requires
-GitHub-hosted runners. The boundary check for external pull requests also stays
-on GitHub-hosted compute, selected by the trusted base workflow.
+The Effect compiler's Linux builds name their labels directly rather than
+reading `DEPOT_LINUX_RUNNER`, because the cache key and the shipped glibc
+baseline must not move when a repository variable does. Sixteen cores were
+measured and rejected: the build does not parallelise past 8, so run
+43876712655 was slower than run 43873444661 on every target.
+
+Two jobs, `publish` and `publish-sidecars`, still use GitHub's `ubuntu-24.04`.
+[npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) explicitly
+rejects self-hosted runners, including Depot. These are an unmet all-Depot
+requirement, not an approved exception; changing labels would break release
+publication. No token fallback or provenance relaxation is implemented.
 
 Release dispatches require both the actor and the triggering actor to be the
 maintainer `BleedingDev`, including after organization ownership changes.
@@ -88,7 +96,20 @@ names because npm organizations cannot be renamed.
 
 Run **Workflow Security**, Linux, Windows, macOS, and integration tests after
 activation. Run **CI Cache** on `main-ultramodern` to seed the new runner caches.
-Delete the three runner variables to return to GitHub-hosted compute.
+Deleting the three runner variables keeps the explicit Depot defaults.
+
+CI Cache seeds ordinary unit-test prerequisites on all three platforms and
+corrected-compiler integration prerequisites on Linux and Windows. Prepared
+build keys validate the compiler's actual file inventory and source identity,
+not its per-run producer metadata. Snapshots never replace the caller's staged
+compiler payload or current-run receipt. Cached package archives are test
+prerequisites, not release bundles.
+
+The read-only boundary guard needs an Actions event policy scoped to
+`.github/workflows/boundary-anti-patterns.yml`, allowing its existing
+`pull_request_target`, `push`, and `workflow_dispatch` events. This lets the
+trusted-base guard run during GitHub's public-repository event protection
+rollout without changing branch rules or token permissions.
 
 ## Compare CI times
 
@@ -110,10 +131,21 @@ above. Trial availability does not establish that sponsored billing is disabled.
    build caches. Call this "project-cache cold": provider image caches may remain
    warm. For warm runs, seed both providers at the frozen commit and verify hits
    in the logs for every cache used, including prepared-build validation. A fast
-   run alone does not prove a hit. The current cache seed writes only from
-   `main-ultramodern`; use it when that branch contains the frozen commit, without
-   pretending a feature branch is the default branch. Use `mixed` or `unknown`
-   when evidence is missing.
+   run alone does not prove a hit. Which ref may write an entry differs by
+   cache, and the difference is deliberate: `ci-cache.yml`'s `seed` leg writes
+   only from `main-ultramodern`, because every key it owns already exists there
+   and a branch copy would park a duplicate ~1 GB per branch. The Effect
+   compiler payload also writes from a
+   branch ref, because a branch is where a new cache lever is introduced and
+   GitHub lets a run read only its own ref and the default branch — a lever
+   gated on the default branch alone cannot be measured until after it merges.
+   It never writes from a `pull_request` or `merge_group` ref, whose refs
+   are discarded after the run. A branch-ref warm run therefore models a
+   post-merge pull request faithfully, because in both cases the consuming run
+   restores the same key from a ref it is allowed to read; it is not the same
+   thing as pretending a feature branch is the default branch, and a
+   measurement that needs the default branch's own entries still waits for the
+   merge. Use `mixed` or `unknown` when evidence is missing.
 3. Collect at least five successful pairs per workload and cache condition.
    Alternate launch order between GitHub first and Depot first, keeping each pair
    close together. Avoid overlapping runs that the workflow's concurrency rule
@@ -138,14 +170,15 @@ above. Trial availability does not establish that sponsored billing is disabled.
    `cold`, `warm`, `mixed`, or `unknown`. The collector preserves run and job links,
    timestamps, runner labels, conclusions, and missing-evidence issues.
 
-The manual `ci-benchmark.yml` workflows on both providers run matching type-check
-and Linux unit/build-consumer jobs with fresh project caches. They disable cache
-restores, prepared-build restores, and Nx task caches, and isolate the pnpm store,
-mise data, and browser downloads per job. They export `pnpm_config_store_dir`
-so package-consumer installs in temporary projects also use the fresh job store.
-Provider image and OS package caches remain outside
-this control. GitHub must register the workflow on the default branch before
-manual dispatch. These workflows establish cold samples; they do not establish
+The provider comparison below was taken by hand with matching type-check and
+Linux unit/build-consumer jobs on fresh project caches: cache restores,
+prepared-build restores and Nx task caches disabled, and the pnpm store, mise
+data and browser downloads isolated per job, with `pnpm_config_store_dir`
+exported so package-consumer installs in temporary projects also use the fresh
+job store. Provider image and OS package caches remain outside this control.
+The dedicated `ci-benchmark.yml` workflows that once held this recipe are
+deleted: they were registered but never ran once, so they produced no signal.
+These samples are cold; they do not establish
 warm-cache results.
 
 Set `collectEvidence: true` in each sample to extract checkout and runner proof
@@ -199,8 +232,8 @@ not measure completion of every repository check or money spent.
 
 The committed benchmark commands matched after accounting for the runner label.
 The comparison branch reused GitHub's registered `ut-Linux.yml` filename for
-manual dispatch; the native Depot request selected the committed
-`.depot/workflows/ci-benchmark.yml` without inline content or job overrides.
+manual dispatch; the native Depot request selected a committed benchmark
+workflow without inline content or job overrides.
 Every job's logs verified the actual checkout, repository ID `1151231350`,
 Node 26.10.0, pnpm 12.8.1, and matching lockfile/mise input hashes. Depot reported
 EPYC 9R45 CPUs; GitHub reported several CPU models.

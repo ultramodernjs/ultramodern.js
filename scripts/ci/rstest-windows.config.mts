@@ -3,6 +3,7 @@ import {
   assertWindowsCoverage,
   loadWindowsUnitInputs,
   selectWindowsUnitFiles,
+  windowsLaneSeconds,
   windowsUnitConfig,
 } from './windows-unit-selection.mjs';
 
@@ -11,28 +12,24 @@ export default async () => {
   const { base, loadConfig, createRstest } = await loadWindowsUnitInputs(root);
   const original = await createRstest({ cwd: root, config: base });
   const baseline = await original.listTests({ filesOnly: true });
-  const group = process.env.WINDOWS_UNIT_GROUP;
+  const lane = process.env.WINDOWS_UNIT_LANE;
   const config = await windowsUnitConfig(
     root,
     base,
     loadConfig,
-    group,
+    lane,
     baseline,
   );
   const selected = await createRstest({ cwd: root, config });
   const files = await selected.listTests({ filesOnly: true });
-  assertWindowsCoverage(
-    selectWindowsUnitFiles(
-      root,
-      baseline,
-      group === 'generators' ? group : '1/4',
-    ),
-    [files],
-  );
+  assertWindowsCoverage(selectWindowsUnitFiles(root, baseline, lane), [files]);
   console.log(
     JSON.stringify({
-      windowsUnitGroup: group,
+      windowsUnitLane: lane,
       projectFileIdentities: files.length,
+      modelledSeconds: Number(
+        windowsLaneSeconds(root, baseline, lane).toFixed(1),
+      ),
       testFileWorkers: 1,
     }),
   );

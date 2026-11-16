@@ -74,10 +74,9 @@ test('retains every referenced extension and no unrelated files', t => {
   assert.throws(() => retainFeatureEvidence(receiptPath), /EEXIST/u);
 });
 
-for (const [workflow, job] of [
-  ['ultramodern-release-acceptance', 'accept-release'],
-  ['publish-bleedingdev', 'accept-published'],
-])
+// Only the published lane retains: the source lane emits rows, uploads its
+// whole fixed logs root, and `seal` re-digests that evidence in place.
+for (const [workflow, job] of [['publish-bleedingdev', 'accept-published']])
   test(`${workflow} upload includes every real retained file under the renderer logs root`, t => {
     const { workRoot, receiptPath } = fixture(t);
     const result = retainFeatureEvidence(receiptPath);

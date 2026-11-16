@@ -8,7 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { confinedPath } from '../../../scripts/lib/file-evidence.mjs';
-import { reservePort } from '../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/runtime.mjs';
+import { leasePorts } from '../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
+import { resolveDiskGuardian } from '../../../scripts/ultramodern-production-readiness/renderer-worker-lifecycle-proof/support.mjs';
 import {
   installedBin,
   runPackedNativeFederationCommand as runWitnessedCommand,
@@ -419,11 +420,13 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
     !fs.existsSync(dependencyRoot),
     "Never reuse another operation's dependency tree.",
   );
-  const ports = [];
-  while (ports.length < 3) {
-    const port = await reservePort();
-    if (!ports.includes(port)) ports.push(port);
-  }
+  // Each port is compiled into its app's Worker bundle, so the three ports are
+  // taken here and held through generation, install and source preparation.
+  // Every app releases its own lease in the statement before the first command
+  // that receives its PORT; for a baked origin this narrows the bind window
+  // rather than removing it, because the child cannot choose its own port.
+  const portLease = await leasePorts(3);
+  const ports = portLease.ports;
   const origins = ports.map(port => `http://127.0.0.1:${port}`);
   const generationBuildMarker = createHash('sha256')
     .update(JSON.stringify(requests))
@@ -599,14 +602,18 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
     );
   };
   const registrations = [];
+  // On a runner there is no guardian: the job's own directory lease owns this
+  // tree. A configured guardian that cannot run still fails this proof loudly.
+  const guardian = resolveDiskGuardian();
   const artifactOwner = `source-worker-${process.pid}`;
   const artifact = async (directory, kind) => {
     fs.mkdirSync(directory, { recursive: true });
+    if (!guardian) return;
     // Registration can succeed before its command wrapper fails or is aborted.
     // Retire every attempted lease under this operation's exact owner.
     const index = registrations.push(directory) - 1;
     await run(
-      '/Users/satan/bin/disk-guardian-artifacts',
+      guardian,
       [
         'register',
         directory,
@@ -750,8 +757,11 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
       ),
       wranglerPath: path.join(workspaceRoot, app.path, '.output/wrangler.json'),
     }));
-    for (const application of applications.toReversed()) {
+    for (const [index, application] of [
+      ...applications.entries(),
+    ].toReversed()) {
       const label = application.remote ?? 'host';
+      await portLease.leases[index].release();
       const env = { ...environment, PORT: new URL(application.origin).port };
       for (const [operation, args] of [
         ['build', ['build']],
@@ -804,6 +814,7 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
   } catch (error) {
     failure = error;
   } finally {
+    await portLease.release().catch(error => cleanupErrors.push(error));
     for (const close of closeServers.reverse()) {
       try {
         await close();
@@ -815,7 +826,7 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
       try {
         // owned-temp-dir owns final deletion of this operation's entire tree.
         await run(
-          '/Users/satan/bin/disk-guardian-artifacts',
+          guardian,
           ['release', directory, '--owner', artifactOwner],
           workRoot,
           `release-${index}`,

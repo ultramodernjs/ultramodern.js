@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { inspectOwnedProcessGroup } from '../../../scripts/ultramodern-production-readiness/react-rsc-worker-proof/runtime.mjs';
+import { resolveDiskGuardian } from '../../../scripts/ultramodern-production-readiness/renderer-worker-lifecycle-proof/support.mjs';
 import { createDevArtifactOwnership } from './artifact-ownership.mjs';
 import {
   installBrowserErrorDiagnosticsViaCDP,
@@ -80,9 +81,14 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'])
     cancellation.abort(new Error(`Received ${signal}`)),
   );
 
+const guardian = resolveDiskGuardian();
 const guardianCommand = (args, signal) => {
   signal?.throwIfAborted();
-  return execute('/Users/satan/bin/disk-guardian-artifacts', args, {
+  assert.ok(
+    guardian,
+    'Local artifact ownership needs a configured disk guardian; set DISK_GUARDIAN_ARTIFACTS or install disk-guardian-artifacts.',
+  );
+  return execute(guardian, args, {
     timeout: 10_000,
     maxBuffer: 1024 * 1024,
     signal,

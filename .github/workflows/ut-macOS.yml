@@ -9,20 +9,11 @@ on:
   # Triggers the workflow on pull request events but only for the main branch
   pull_request:
     branches: [main, main-ultramodern]
-    types: [opened, synchronize, reopened, labeled, unlabeled]
 
   merge_group:
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-    inputs:
-      runner_backend:
-        description: macOS runner backend for this manual run
-        type: choice
-        default: configured
-        options:
-          - configured
-          - github-hosted
 
 permissions:
   contents: read
@@ -30,17 +21,10 @@ permissions:
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   ut-mac-shards:
-    # The type of runner that the job will run on
-    # Keep the configured pool by default. A PR-scoped label runs the same
-    # required check on GitHub-hosted macOS when the configured pool is blocked.
-    # A workflow_dispatch alone does not replace the PR-associated check suite.
-    runs-on: >-
-      ${{ (github.event_name == 'workflow_dispatch' &&
-           inputs.runner_backend == 'github-hosted' ||
-           github.event_name == 'pull_request' &&
-           contains(github.event.pull_request.labels.*.name, 'ci:github-hosted-macos')) &&
-          'macos-26' ||
-          vars.DEPOT_MACOS_RUNNER || 'macos-26' }}
+    # Every job of this repository runs on Depot, so there is no GitHub-hosted
+    # macOS escape: a blocked Depot macOS pool blocks this required check
+    # instead of silently moving it to different hardware.
+    runs-on: ${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}
     strategy:
       fail-fast: false
       matrix:
@@ -117,7 +101,7 @@ jobs:
   ut-mac:
     if: ${{ always() }}
     needs: ut-mac-shards
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 5
     steps:
       - name: Verify all unit test shards passed

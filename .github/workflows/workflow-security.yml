@@ -18,7 +18,7 @@ defaults:
 
 jobs:
   workflow-security:
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 20
     steps:
       - name: Harden Runner

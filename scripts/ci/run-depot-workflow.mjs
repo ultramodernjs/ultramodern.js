@@ -17,20 +17,9 @@ const requiredJobs = new Map([
   // JobStatus.jobDisplayName is the resolved YAML `name:`. Matrix jobKey
   // suffixes are unspecified, so use the explicit matrix job names.
   [
-    'ci-benchmark',
-    {
-      count: 2,
-      keys: [],
-      names: [
-        'ci-benchmark (type-check)',
-        'ci-benchmark (unit-build-consumers)',
-      ],
-    },
-  ],
-  [
     'integration-test',
     {
-      count: 13,
+      count: 10,
       keys: [],
       names: [
         ...Array.from(
@@ -41,10 +30,6 @@ const requiredJobs = new Map([
         'integration-Linux (framework-generator-bff)',
         'integration-Linux (rstest-adapter)',
         'integration-Linux (utils)',
-        ...Array.from(
-          { length: 3 },
-          (_, index) => `integration-Linux (framework ${index + 1}/3)`,
-        ),
       ],
     },
   ],

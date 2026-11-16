@@ -3,9 +3,13 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { EventEmitter, once } from 'node:events';
 import http from 'node:http';
+import net from 'node:net';
 import test from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { reservePort } from '../renderer-mf-lifecycle-proof/runtime.mjs';
+import {
+  leasePort,
+  leasePorts,
+} from '../renderer-mf-lifecycle-proof/port-lease.mjs';
 import {
   assertNativeSsrHtml,
   browserProof,
@@ -948,12 +952,96 @@ async function openResponse(t, url, { body, ...options } = {}) {
   return { request, response: await response };
 }
 
+const bindLoopback = port =>
+  new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', reject);
+    server.listen(port, '127.0.0.1', () => resolve(server));
+  });
+
+test('concurrent port leases never carry one port and stay bound until released', async t => {
+  const sets = await Promise.all([leasePorts(8), leasePorts(8), leasePorts(8)]);
+  t.after(() => Promise.all(sets.map(set => set.release())));
+  const ports = sets.flatMap(set => set.ports);
+  assert.equal(new Set(ports).size, ports.length);
+  // A held lease is a real bound socket, so the kernel cannot offer its port
+  // to anyone else - which is exactly what the released-then-bind shape could.
+  for (const port of ports)
+    await assert.rejects(bindLoopback(port), { code: 'EADDRINUSE' });
+  for (const set of sets) {
+    assert.equal(set.bound, true);
+    await set.release();
+    assert.equal(set.bound, false);
+  }
+});
+
+test('a port lease is never released before its child binds', async t => {
+  const lease = await leasePort();
+  t.after(() => lease.release());
+  const child = spawn(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `
+import net from 'node:net';
+const port = Number(process.argv[1]);
+process.stdin.once('data', () => {
+  const server = net.createServer();
+  server.once('error', error => {
+    process.stdout.write(JSON.stringify({ bound: false, code: error.code }) + '\\n');
+    process.exitCode = 1;
+  });
+  server.listen(port, '127.0.0.1', () => {
+    process.stdout.write(JSON.stringify({ bound: true, port: server.address().port }) + '\\n');
+    server.close();
+  });
+});
+process.stdout.write('ready\\n');
+`,
+      String(lease.port),
+    ],
+    { stdio: ['pipe', 'pipe', 'inherit'] },
+  );
+  t.after(() => {
+    if (child.exitCode === null && child.signalCode === null)
+      child.kill('SIGKILL');
+  });
+  const lines = (async function* read() {
+    let buffered = '';
+    for await (const chunk of child.stdout) {
+      buffered += chunk;
+      while (buffered.includes('\n')) {
+        const end = buffered.indexOf('\n');
+        yield buffered.slice(0, end);
+        buffered = buffered.slice(end + 1);
+      }
+    }
+  })();
+  assert.equal((await lines.next()).value, 'ready');
+  // The child is up and waiting. While the lease is held nobody can take the
+  // port, and only the release lets the child's bind succeed - which is the
+  // ordering the released-then-bind shape could not guarantee.
+  assert.equal(lease.bound, true);
+  await assert.rejects(bindLoopback(lease.port), { code: 'EADDRINUSE' });
+  await lease.release();
+  child.stdin.end('bind\n');
+  assert.deepEqual(JSON.parse((await lines.next()).value), {
+    bound: true,
+    port: lease.port,
+  });
+});
+
 test('HTTP bridge uses the compiled origin port and releases it after native forwarding', {
   timeout: 5000,
 }, async t => {
-  const port = await reservePort();
+  const lease = await leasePort();
+  t.after(() => lease.release());
+  const { port } = lease;
   const nativeSnapshot = '{"native":"opaque snapshot bytes"}';
   let dispatchCalls = 0;
+  await lease.release();
   const bridge = await startBridge(
     {
       dispatchFetch(url, options) {

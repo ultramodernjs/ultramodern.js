@@ -3,8 +3,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import { once } from 'node:events';
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
+import { leasePort } from '../../../../ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 import { createAcceptancePackageManagerEnv } from '../../../../ultramodern-production-readiness/published-create-proof/process.mjs';
 import { createProcessEnv } from '../../../../ultramodern-production-readiness/published-create-proof/constants.mjs';
 import { readStagedSidecars } from '../../../publish-sidecars.mjs';
@@ -138,25 +138,6 @@ function assertVerdaccioDistributionIntegrity(runImpl = runChecked, env) {
     integrity === VERDACCIO_INTEGRITY,
     `Verdaccio ${VERDACCIO_VERSION} integrity mismatch: expected ${VERDACCIO_INTEGRITY}, found ${integrity}`,
   );
-}
-
-function reservePort(host = registryHost) {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.once('error', reject);
-    server.listen(0, host, () => {
-      const address = server.address();
-      const port = typeof address === 'object' && address ? address.port : 0;
-      server.close(error => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(port);
-      });
-    });
-  });
 }
 
 async function waitForRegistry(registryUrl, fetchImpl = fetch, signal) {
@@ -422,7 +403,7 @@ async function startEphemeralRegistry({
   fetchImpl = fetch,
   runImpl = runChecked,
   spawnImpl = spawn,
-  reservePortImpl = reservePort,
+  leasePortImpl = leasePort,
   publishReleaseTarballsImpl = publishReleaseTarballs,
   publishStagedSidecarsImpl = publishStagedSidecars,
 }) {
@@ -433,7 +414,11 @@ async function startEphemeralRegistry({
           storeDir,
         });
   assertVerdaccioDistributionIntegrity(runImpl, packageManagerEnv);
-  const port = await reservePortImpl(registryHost);
+  // Verdaccio's port is written into its config and its consumers' .npmrc
+  // before the child starts, so the lease stays bound across that staging and
+  // is given up in the statement before the child binds it.
+  const portLease = await leasePortImpl(registryHost);
+  const { port } = portLease;
   const configPath = path.join(rootDir, 'verdaccio.yaml');
   const storageDir = path.join(rootDir, 'storage');
   const htpasswdPath = path.join(rootDir, 'htpasswd');
@@ -458,6 +443,7 @@ async function startEphemeralRegistry({
   const registryUrl = `http://${registryHost}:${port}/`;
   let child;
   const startChild = async () => {
+    await portLease.release();
     const startedChild = spawnImpl('pnpm', verdaccioDlxArgs(configPath, port), {
       cwd: rootDir,
       env: createProcessEnv(packageManagerEnv ?? {}),
@@ -548,6 +534,7 @@ async function startEphemeralRegistry({
     console.log(`[registry] seed end (${Date.now() - seedStartedAt}ms)`);
     return registry;
   } catch (error) {
+    await portLease.release();
     if (child) await stopChild(child);
     throw error;
   }
@@ -560,7 +547,6 @@ export {
   publishReleaseTarballs,
   publishStagedSidecars,
   readRegistryDistFromPackument,
-  reservePort,
   runChecked,
   startEphemeralRegistry,
   VERDACCIO_INTEGRITY,

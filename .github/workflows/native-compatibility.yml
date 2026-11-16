@@ -23,7 +23,7 @@ jobs:
   native-framework-contracts:
     needs: effect-compiler-payload
     name: Native framework contracts
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 90
 
     steps:
@@ -123,7 +123,7 @@ jobs:
   pack-candidate:
     needs: effect-compiler-payload
     name: Pack the consumer candidate
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 90
     outputs:
       producer_artifact_identity: ${{ steps.identity.outputs.artifact_identity }}
@@ -199,28 +199,15 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
-  packed-erp:
-    needs: pack-candidate
-    uses: ./.github/workflows/ultramodern-release-acceptance.yml
-    with:
-      required_renderer_features: true
-      producer_artifact_identity: ${{ needs.pack-candidate.outputs.producer_artifact_identity }}
-      producer_run_attempt: ${{ needs.pack-candidate.outputs.producer_run_attempt }}
-      producer_run_identity: ${{ needs.pack-candidate.outputs.producer_run_identity }}
-      release_source_commit: ${{ needs.pack-candidate.outputs.release_source_commit }}
-
-  packed-tractor:
-    needs: pack-candidate
-    uses: ./.github/workflows/ultramodern-tractor-downstream.yml
-    with:
-      mode: source
-      release_bundle_artifact: bleedingdev-release-bundle-${{ needs.pack-candidate.outputs.producer_artifact_identity }}
-
+  # The clean-room ERP-10 acceptance and the Tractor rehearsal do not run on
+  # pull requests. publish-bleedingdev.yml calls the identical reusable
+  # workflows (accept-release, tractor-downstream) on the real bundle before
+  # any package reaches npm, so every release still passes both gates.
   native-compatibility:
     name: native-compatibility
     if: always()
-    needs: [native-framework-contracts, pack-candidate, packed-erp, packed-tractor]
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+    needs: [native-framework-contracts, pack-candidate]
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 5
     steps:
       - name: Require every consumer contract
@@ -229,7 +216,7 @@ jobs:
         run: |
           node --input-type=module -e '
             const results = JSON.parse(process.env.RESULTS);
-            for (const name of ["native-framework-contracts", "pack-candidate", "packed-erp", "packed-tractor"]) {
+            for (const name of ["native-framework-contracts", "pack-candidate"]) {
               if (results[name]?.result !== "success") {
                 console.error(name + ": " + (results[name]?.result ?? "missing"));
                 process.exitCode = 1;

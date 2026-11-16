@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
 
     steps:
       - name: Checkout
@@ -45,7 +45,7 @@ jobs:
         run: mise exec -- pnpm run check-overrides
 
   advisories:
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
 
     steps:
       - name: Checkout

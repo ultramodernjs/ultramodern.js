@@ -27,10 +27,26 @@ function assertRunner(value, label, { npmOidc = false } = {}) {
     );
     return;
   }
+  // Every runner this repository selects is a Depot label. A `depot-` label
+  // anywhere in the expression used to be enough, which silently permitted
+  // `vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04'` and the fork-isolation
+  // `&& 'ubuntu-latest' ||` prefixes, so every literal in the expression is
+  // checked instead: an unreachable GitHub-hosted fallback is still a job that
+  // can land on different hardware.
   assert.match(
     value,
     /depot-|vars\.DEPOT_/u,
-    `${label}: use Depot; preserve only explicit fork-isolation or benchmark exceptions`,
+    `${label}: use Depot; every runner label in this repository is a Depot label`,
+  );
+  const hosted = [
+    ...value.matchAll(
+      /(?<![\w-])(?:ubuntu|macos|windows)-(?:latest|\d[\w.-]*)/giu,
+    ),
+  ].map(([literal]) => literal);
+  assert.deepEqual(
+    hosted,
+    [],
+    `${label}: ${hosted.join(', ')} is a GitHub-hosted label; use a Depot label, including in every fallback`,
   );
 }
 
@@ -126,11 +142,24 @@ test('runner exceptions admit only the exact reviewed jobs and runner', () => {
 test('runner policy rejects the old compiler and acceptance defaults', () => {
   for (const runner of ['ubuntu-24.04', 'macos-26-intel', 'windows-latest'])
     assert.throws(() => assertRunner(runner, 'regression'), /use Depot/u);
-  assert.doesNotThrow(() => assertRunner('depot-ubuntu-22.04-arm-8', 'arm64'));
-  assert.doesNotThrow(() =>
-    assertRunner(
-      "${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}",
-      'owned',
-    ),
-  );
+  // A GitHub-hosted fallback behind a Depot variable is the pattern that
+  // survived the first sweep, so it is a named negative control.
+  for (const runner of [
+    "${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}",
+    "${{ vars.DEPOT_MACOS_RUNNER || 'macos-26' }}",
+    '${{ vars.DEPOT_LINUX_RUNNER || fromJSON(vars.SELF_LINUX_LABELS || \'"ubuntu-latest"\') }}',
+    "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}",
+  ])
+    assert.throws(
+      () => assertRunner(runner, 'regression'),
+      /GitHub-hosted label/u,
+      runner,
+    );
+  assert.doesNotThrow(() => assertRunner('depot-ubuntu-24.04-arm-8', 'arm64'));
+  for (const runner of [
+    "${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}",
+    "${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}",
+    "${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}",
+  ])
+    assert.doesNotThrow(() => assertRunner(runner, 'owned'), runner);
 });

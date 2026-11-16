@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
-import { reservePort } from '../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/runtime.mjs';
+import { leasePorts } from '../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 import { readInstalledPackageFiles } from '../../../scripts/ultramodern-renderers/installed-cohort.mjs';
 import {
   readWorkerFederationProvider,
@@ -1436,10 +1436,12 @@ test('later Worker lookup failure retires earlier bridges and the runtime', asyn
 
 test('Worker bridges use the reserved compiled origins and forward native bytes unchanged', async t => {
   const { applications } = fixtures(t);
-  const bridgePorts = {};
-  for (const name of ['host', 'remote-a', 'remote-b']) {
-    bridgePorts[name] = await reservePort();
-  }
+  const names = ['host', 'remote-a', 'remote-b'];
+  const portLease = await leasePorts(names.length);
+  t.after(() => portLease.release());
+  const bridgePorts = Object.fromEntries(
+    names.map((name, index) => [name, portLease.ports[index]]),
+  );
   const requests = [];
   let disposals = 0;
   class Runtime {
@@ -1462,6 +1464,7 @@ test('Worker bridges use the reserved compiled origins and forward native bytes 
       disposals++;
     }
   }
+  await portLease.release();
   const instance = await startWorkerFederationRuntime({
     applications,
     provider: provider(Runtime),

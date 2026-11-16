@@ -5,6 +5,9 @@ const net = require('node:net');
 const os = require('node:os');
 const spawn = require('cross-spawn');
 const treeKill = require('tree-kill');
+const {
+  leasePort,
+} = require('../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs');
 const { launchOptions } = require('./launchOptions');
 
 const kRepoRoot = path.join(__dirname, '../..');
@@ -800,7 +803,10 @@ async function killApp(instance) {
   await waitForLinuxProcessTree(processes);
 }
 
-async function reservePort() {
+// Callers that cannot hold a socket still need the cross-process monotonic
+// allocator: released ephemeral ports can be issued to a sibling immediately.
+// Lease-aware callers use leasePort instead and hold the socket until spawn.
+async function getPort() {
   const releaseLock = await acquirePortAllocatorLock(kTestPortAllocatorKey);
 
   try {
@@ -859,10 +865,6 @@ async function reservePort() {
   } finally {
     await releaseLock();
   }
-}
-
-async function getPort() {
-  return reservePort();
 }
 
 function sleep(t) {
@@ -962,6 +964,7 @@ module.exports = {
   launchApp,
   killApp,
   getPort,
+  leasePort,
   sleep,
   runContinuousTask,
   launchOptions,

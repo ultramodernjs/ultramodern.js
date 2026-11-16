@@ -13,7 +13,7 @@ permissions:
 jobs:
   retirable-sidecars:
     name: Retirable sidecar recipes
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || fromJSON(vars.SELF_LINUX_LABELS || '"ubuntu-latest"') }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 15
     steps:
       - name: Harden Runner
