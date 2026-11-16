@@ -112,10 +112,18 @@ export function verifyRelease({
   assert.equal(release.target_commitish, producer.source);
   assert.equal(release.draft, draft);
   assert.equal(release.prerelease, false);
-  assert.equal(
-    release.html_url,
-    `https://github.com/${repository}/releases/tag/${producer.tag}`,
-  );
+  const releasePrefix = `https://github.com/${repository}/releases/tag/`;
+  let urlTag = producer.tag;
+  if (draft && release.html_url !== `${releasePrefix}${producer.tag}`) {
+    assert(Number.isSafeInteger(release.id) && release.id > 0);
+    assert.equal(typeof release.html_url, 'string');
+    assert(release.html_url.startsWith(releasePrefix));
+    urlTag = release.html_url.slice(releasePrefix.length);
+    // GitHub assigns this placeholder before publishing creates the real tag.
+    // The reviewed tag/source/body and all archive identities still bind below.
+    assert.match(urlTag, /^untagged-[a-f0-9]{20}$/u);
+  }
+  assert.equal(release.html_url, `${releasePrefix}${urlTag}`);
   assert.equal(release.body, releaseBody({ protocol, descriptor }));
   const expected = new Map([
     [manifestFilename, descriptor.manifest.integrity],
@@ -133,9 +141,13 @@ export function verifyRelease({
     );
     seen.add(asset.name);
     assert.equal(asset.state, 'uploaded');
-    assert.equal(
-      asset.browser_download_url,
-      `https://github.com/${repository}/releases/download/${producer.tag}/${asset.name}`,
+    assert(
+      [producer.tag, urlTag].some(
+        tag =>
+          asset.browser_download_url ===
+          `https://github.com/${repository}/releases/download/${tag}/${asset.name}`,
+      ),
+      'Release asset URL must use the exact tag or its draft placeholder',
     );
     // GitHub's SHA256 is verified separately against downloaded bytes. It is not SHA512.
     assert.match(asset.digest, /^sha256:[a-f0-9]{64}$/u);

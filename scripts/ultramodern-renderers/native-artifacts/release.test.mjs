@@ -6,14 +6,32 @@ import { publishRelease } from './release.mjs';
 
 function service(
   f,
-  { existing = false, draft = false, bareTag = false, partial = false } = {},
+  {
+    existing = false,
+    draft = false,
+    bareTag = false,
+    partial = false,
+    untaggedDraft = false,
+  } = {},
 ) {
+  const draftTag = 'untagged-9931cd253409dc75b459';
+  const draftUrl = `https://github.com/${f.producer.repository}/releases/tag/${draftTag}`;
+  const useDraftUrls = release => {
+    if (!untaggedDraft || !release.draft) return;
+    release.html_url = draftUrl;
+    for (const asset of release.assets)
+      asset.browser_download_url = asset.browser_download_url.replace(
+        `/download/${f.producer.tag}/`,
+        `/download/${draftTag}/`,
+      );
+  };
   f.evidence.run.status = 'in_progress';
   f.evidence.run.conclusion = null;
   let release = existing ? structuredClone(f.evidence.release) : null;
   if (release) {
     release.draft = draft;
     if (partial) release.assets = release.assets.slice(0, 2);
+    useDraftUrls(release);
   }
   let ref = (existing && !draft) || bareTag ? f.evidence.ref : null;
   const calls = [];
@@ -33,6 +51,7 @@ function service(
     if (method === 'POST') {
       assert.equal(release, null);
       release = { ...structuredClone(f.evidence.release), ...body, assets: [] };
+      useDraftUrls(release);
       return release;
     }
     if (method === 'UPLOAD') {
@@ -49,6 +68,7 @@ function service(
         browser_download_url: releaseUrl(f.producer, name),
       };
       release.assets.push(asset);
+      useDraftUrls(release);
       return asset;
     }
     if (method === 'PATCH') {
@@ -58,6 +78,9 @@ function service(
         'All assets attached before publication',
       );
       release = { ...release, ...body };
+      release.html_url = f.evidence.release.html_url;
+      for (const asset of release.assets)
+        asset.browser_download_url = releaseUrl(f.producer, asset.name);
       ref = f.evidence.ref;
       return release;
     }
@@ -76,6 +99,13 @@ for (const [label, options] of Object.entries({
   partialDraft: { existing: true, draft: true, partial: true },
   completeDraft: { existing: true, draft: true },
   published: { existing: true },
+  freshUntaggedDraft: { untaggedDraft: true },
+  resumedUntaggedDraft: {
+    existing: true,
+    draft: true,
+    partial: true,
+    untaggedDraft: true,
+  },
 }))
   test(`release transport ${label}: draft → verify bytes → publish, never clobber`, async () => {
     const f = fixture();
@@ -92,6 +122,27 @@ for (const [label, options] of Object.entries({
         1,
       );
   });
+test('published release cannot retain draft placeholder URLs', async () => {
+  const f = fixture();
+  const remote = service(f, { existing: true });
+  remote.release.html_url = `https://github.com/${f.producer.repository}/releases/tag/untagged-9931cd253409dc75b459`;
+  await assert.rejects(publishRelease({ ...f, api: remote.api }));
+  assert(remote.calls.every(call => call.method === 'GET'));
+});
+test('draft placeholder URLs must remain in the exact repository', async () => {
+  const f = fixture();
+  const remote = service(f, {
+    existing: true,
+    draft: true,
+    untaggedDraft: true,
+  });
+  remote.release.html_url = remote.release.html_url.replace(
+    'github.com/',
+    'github.com/foreign/',
+  );
+  await assert.rejects(publishRelease({ ...f, api: remote.api }));
+  assert(remote.calls.every(call => call.method === 'GET'));
+});
 test('refuses a bare existing tag without writing', async () => {
   const f = fixture();
   const remote = service(f, { bareTag: true });
