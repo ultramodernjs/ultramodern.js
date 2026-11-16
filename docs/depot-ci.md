@@ -98,6 +98,19 @@ Run **Workflow Security**, Linux, Windows, macOS, and integration tests after
 activation. Run **CI Cache** on `main-ultramodern` to seed the new runner caches.
 Deleting the three runner variables keeps the explicit Depot defaults.
 
+CI Cache seeds ordinary unit-test prerequisites on all three platforms and
+corrected-compiler integration prerequisites on Linux and Windows. Prepared
+build keys validate the compiler's actual file inventory and source identity,
+not its per-run producer metadata. Snapshots never replace the caller's staged
+compiler payload or current-run receipt. Cached package archives are test
+prerequisites, not release bundles.
+
+The read-only boundary guard needs an Actions event policy scoped to
+`.github/workflows/boundary-anti-patterns.yml`, allowing its existing
+`pull_request_target`, `push`, and `workflow_dispatch` events. This lets the
+trusted-base guard run during GitHub's public-repository event protection
+rollout without changing branch rules or token permissions.
+
 ## Compare CI times
 
 The first paired Linux comparison is recorded below; warm-cache measurements

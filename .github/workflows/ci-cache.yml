@@ -22,9 +22,15 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  effect-compiler-payload:
+    if: github.ref == 'refs/heads/main-ultramodern'
+    uses: ./.github/workflows/effect-compiler-payload.yml
+
   seed:
+    needs: effect-compiler-payload
     # workflow_dispatch accepts any ref; a seed there would park branch-scoped
     # entries again.
     if: github.ref == 'refs/heads/main-ultramodern'
@@ -33,8 +39,18 @@ jobs:
       matrix:
         include:
           - runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+            compiler_payload: false
           - runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+            compiler_payload: false
           - runner: ${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}
+            compiler_payload: false
+          # Integration uses corrected compiler bytes; units retain their
+          # existing compiler selection. No integration cache for macOS:
+          # there is no macOS integration consumer.
+          - runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+            compiler_payload: true
+          - runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+            compiler_payload: true
 
     runs-on: ${{ matrix.runner }}
 
@@ -54,6 +70,7 @@ jobs:
         with:
           version: 2026.9.18
           install: true
+          cache_save: ${{ matrix.compiler_payload == false }}
 
       - name: Setup Node.js 26.12.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -83,14 +100,14 @@ jobs:
       # pnpm writes this result only after its own policy verification passes.
       # Keep the writer on the trusted default branch; PR jobs restore only.
       - name: Validate pnpm verification seed
-        if: steps.pnpm-verification.outputs.cache-hit != 'true'
+        if: matrix.compiler_payload == false && steps.pnpm-verification.outputs.cache-hit != 'true'
         run: |
           pnpm_version="$(pnpm --version)"
           cache_directory="$(pnpm cache path)"
           node scripts/ci/pnpm-verification-cache.mjs seed "$pnpm_version" "$cache_directory"
 
       - name: Save pnpm verification
-        if: steps.pnpm-verification.outputs.cache-hit != 'true'
+        if: matrix.compiler_payload == false && steps.pnpm-verification.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.pnpm-verification.outputs.path }}
@@ -99,7 +116,7 @@ jobs:
       # Saved right after install, not in a post step, so a later failure
       # cannot skip the save.
       - name: Save pnpm store cache
-        if: steps.pnpm-cache.outputs.cache-hit != 'true'
+        if: matrix.compiler_payload == false && steps.pnpm-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
@@ -125,11 +142,22 @@ jobs:
           --version ${{ steps.browser-runtime.outputs.version }}
 
       - name: Save Playwright browser cache
-        if: steps.browser-cache.outputs.cache-hit != 'true'
+        if: matrix.compiler_payload == false && steps.browser-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.browser-runtime.outputs.cache_path }}
           key: ${{ steps.browser-runtime.outputs.cache_key }}
+
+      - name: Download corrected Effect compiler payload
+        if: matrix.compiler_payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: effect-compiler-payload-${{ github.sha }}
+          path: .modern/effect-compiler-input
+
+      - name: Validate and restage corrected Effect compiler payload
+        if: matrix.compiler_payload
+        run: node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-input --complete-manifest
 
       # Nx 23's local database is machine-specific. Transfer validated build
       # outputs with exact source/toolchain identity instead of its local DB.

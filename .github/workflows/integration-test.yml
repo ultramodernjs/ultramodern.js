@@ -240,9 +240,14 @@ jobs:
       - name: Validate and restage corrected Effect compiler payload
         run: node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-input --complete-manifest
 
-      # Prepared caches predate the corrected compiler identity. Rebuild until
-      # their cache/manifest owner includes the complete payload fingerprint.
+      # The key validates the complete corrected compiler inventory but omits
+      # per-run receipt metadata. Snapshots never replace the staged payload.
+      - name: Restore prepared build outputs
+        id: build-cache
+        uses: ./.github/actions/restore-build-cache
+
       - name: Prepare
+        if: steps.build-cache.outputs.cache-hit != 'true'
         run: pnpm run prepare-build
 
       # scripts/lib/browser-provisioning.js is the one browser provisioner: it
@@ -265,18 +270,24 @@ jobs:
 
       - name: Test - Framework
         if: matrix.suite == 'framework'
+        env:
+          MODERN_TEST_PACKAGE_MANIFEST: ${{ steps.build-cache.outputs.package-manifest }}
         run: >-
           pnpm --filter tests run test:framework:prepared --shard ${{ matrix.shard }}
           --reporters default --reporters blob
 
       - name: Test - Framework workspace generator
         if: matrix.suite == 'framework-generator-workspace'
+        env:
+          MODERN_TEST_PACKAGE_MANIFEST: ${{ steps.build-cache.outputs.package-manifest }}
         run: >-
           pnpm --filter tests run test:framework:prepared
           --reporters default --reporters blob
 
       - name: Test - Framework BFF generator
         if: matrix.suite == 'framework-generator-bff'
+        env:
+          MODERN_TEST_PACKAGE_MANIFEST: ${{ steps.build-cache.outputs.package-manifest }}
         run: >-
           pnpm --filter tests run test:framework:prepared
           --reporters default --reporters blob

@@ -198,7 +198,7 @@ test(`${seedWorkflow} restores each key before saving it only on a miss`, () => 
     assert.ok(restore?.step.id, `${at} saves a key no earlier step restores`);
     assert.equal(
       save.step.if,
-      `steps.${restore.step.id}.outputs.cache-hit != 'true'`,
+      `${restore.step.id === 'build-cache' ? '' : 'matrix.compiler_payload == false && '}steps.${restore.step.id}.outputs.cache-hit != 'true'`,
       `${at} must save only when ${restore.step.id} missed`,
     );
   }

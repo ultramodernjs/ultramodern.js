@@ -16,6 +16,7 @@ const producer = read('effect-compiler-payload');
 const integration = read('integration-test');
 const native = read('native-compatibility');
 const publish = read('publish-bleedingdev');
+const cache = read('ci-cache');
 const expression = value => ['$' + '{{', value, '}}'].join(' ');
 const producerPath = './.github/workflows/effect-compiler-payload.yml';
 const compilerSource = JSON.parse(
@@ -40,6 +41,59 @@ const step = (jobId, matcher) =>
   );
 const stage =
   'node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-input --complete-manifest';
+
+test('default-branch caches seed the two actual compiler variants before integration reuses them', () => {
+  assert.equal(cache.permissions.actions, 'read');
+  assert.equal(cache.jobs['effect-compiler-payload'].uses, producerPath);
+  assert.equal(
+    cache.jobs['effect-compiler-payload'].if,
+    "github.ref == 'refs/heads/main-ultramodern'",
+  );
+  assert.equal(cache.jobs.seed.needs, 'effect-compiler-payload');
+  assert.equal(
+    cache.jobs.seed.if,
+    "github.ref == 'refs/heads/main-ultramodern'",
+  );
+  const entries = cache.jobs.seed.strategy.matrix.include;
+  assert.equal(
+    entries.filter(entry => entry.compiler_payload === false).length,
+    3,
+  );
+  assert.equal(
+    entries.filter(entry => entry.compiler_payload === true).length,
+    2,
+  );
+  assert.ok(
+    entries
+      .filter(entry => entry.compiler_payload)
+      .every(entry => !entry.runner.includes('MACOS')),
+  );
+  const steps = cache.jobs.seed.steps;
+  const staged = steps.findIndex(step => step.run === stage);
+  const identified = steps.findIndex(step => step.id === 'build-cache-key');
+  assert.ok(staged >= 0 && staged < identified);
+  assert.equal(steps[staged].if, 'matrix.compiler_payload');
+
+  const consumer = integration.jobs.integration.steps;
+  const restore = consumer.findIndex(step => step.id === 'build-cache');
+  const staging = consumer.findIndex(step => step.run === stage);
+  const prepare = consumer.findIndex(step => step.name === 'Prepare');
+  assert.ok(staging < restore && restore < prepare);
+  assert.equal(
+    consumer[prepare].if,
+    "steps.build-cache.outputs.cache-hit != 'true'",
+  );
+  for (const name of [
+    'Test - Framework',
+    'Test - Framework workspace generator',
+    'Test - Framework BFF generator',
+  ])
+    assert.equal(
+      consumer.find(step => step.name === name).env
+        .MODERN_TEST_PACKAGE_MANIFEST,
+      expression('steps.build-cache.outputs.package-manifest'),
+    );
+});
 
 function assertHandoff(job, before, conditional = false) {
   const download = job.steps.findIndex(
@@ -476,12 +530,6 @@ test('every fresh build stages the complete payload before selecting a compiler'
   }
   assert.equal(native.jobs['effect-compiler-payload'].uses, producerPath);
   assertHandoff(integration.jobs.integration, 'Prepare');
-  assert.equal(
-    integration.jobs.integration.steps.some(
-      step => step.uses === './.github/actions/restore-build-cache',
-    ),
-    false,
-  );
   for (const [id, build] of [
     ['qualify-source-compute', 'Qualify release source'],
     ['prepare-release', 'Build Packages'],

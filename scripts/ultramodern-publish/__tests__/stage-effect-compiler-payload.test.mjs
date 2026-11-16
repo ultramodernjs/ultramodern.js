@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import {
+  buildInputs,
+  restoreBuild,
+  snapshotBuild,
+} from '../../ci/prepared-build-cache.mjs';
 import {
   assertCachedSourceIdentity,
   assertReleaseCompilerPayload,
@@ -81,6 +87,78 @@ function matrix(root) {
   }
   return input;
 }
+
+test('prepared builds bind verified compiler bytes but never restore another run receipt', t => {
+  const root = fixture(t);
+  const packageRoot = path.join(
+    root,
+    'packages/solutions/app-tools-extensions',
+  );
+  const compiler = path.join(packageRoot, 'compiler');
+  fs.mkdirSync(compiler, { recursive: true });
+  for (const filename of [
+    'resolve.cjs',
+    'resolve.d.cts',
+    'source.json',
+    'constraint.patch',
+  ])
+    fs.copyFileSync(
+      new URL(
+        `../../../packages/solutions/app-tools-extensions/compiler/${filename}`,
+        import.meta.url,
+      ),
+      path.join(compiler, filename),
+    );
+  execFileSync('git', ['init', '--quiet'], { cwd: root });
+  execFileSync('git', ['add', 'packages'], { cwd: root });
+  const inputs = () => buildInputs(root, { CI: 'true' }, { pnpm: '12.11.2' });
+  const ordinary = inputs().key;
+  const payload = path.join(compiler, 'payload');
+  stagePayload({ input: matrix(root), output: payload, env });
+  const baseline = inputs();
+  assert.notEqual(baseline.key, ordinary);
+  const receiptPath = path.join(payload, 'manifest.json');
+  const receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
+  receipt.producer.runId = '5678';
+  receipt.producer.sourceCommit = 'b'.repeat(40);
+  fs.writeFileSync(receiptPath, JSON.stringify(receipt));
+  assert.equal(
+    inputs().key,
+    baseline.key,
+    'run metadata is not compiler identity',
+  );
+
+  const output = path.join(packageRoot, 'dist/index.js');
+  fs.mkdirSync(path.dirname(output), { recursive: true });
+  fs.writeFileSync(output, 'compiled with the verified corrected compiler');
+  const snapshot = snapshotBuild(root, baseline);
+  assert.ok(
+    Object.keys(snapshot.outputs).every(
+      file => !file.includes('/compiler/payload/'),
+    ),
+  );
+  fs.unlinkSync(output);
+  restoreBuild(root, baseline.key);
+  assert.equal(
+    JSON.parse(fs.readFileSync(receiptPath, 'utf8')).producer.runId,
+    '5678',
+    'the current run receipt must survive restoring prepared outputs',
+  );
+  const target = receipt.targets['linux-x64'];
+  const executable = target.files.find(file => file.path === target.executable);
+  const binary = path.join(payload, executable.path);
+  fs.appendFileSync(binary, 'changed compiler bytes');
+  assert.throws(inputs, /size or SHA-256 mismatch/u);
+  const bytes = fs.readFileSync(binary);
+  executable.size = bytes.length;
+  executable.sha256 = hash(bytes);
+  fs.writeFileSync(receiptPath, JSON.stringify(receipt));
+  assert.notEqual(
+    inputs().key,
+    baseline.key,
+    'another compiler cannot reuse the build',
+  );
+});
 
 test('producer identity requires authenticated repository, source, run and attempt', () => {
   assert.equal(producerIdentity(env).sourceCommit, env.GITHUB_SHA);
