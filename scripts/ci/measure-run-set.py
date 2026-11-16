@@ -84,9 +84,12 @@ def history(repo, count):
 
 
 def measure(repo, sha, event, attempt):
-    runs = api(
-        f"repos/{repo}/actions/runs?head_sha={sha}&event={event}&per_page=100"
-    )["workflow_runs"]
+    events = {event, "pull_request_target"} if event == "pull_request" else {event}
+    runs = [
+        run for run in api(
+            f"repos/{repo}/actions/runs?head_sha={sha}&per_page=100"
+        )["workflow_runs"] if run["event"] in events
+    ]
     if not runs:
         raise SystemExit("No matching workflow runs")
     if attempt and any(run["run_attempt"] != attempt for run in runs):
