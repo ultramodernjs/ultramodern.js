@@ -171,7 +171,6 @@ test('compiler matrix uses four Depot builds without Intel Mac or Ubuntu 22.04',
       `effect-compiler-target-${expression('matrix.target')}-${expression('github.sha')}`,
     ],
   );
-  const upload = uploads.at(-1);
   const aggregate = producer.jobs.aggregate;
   assert.deepEqual([...aggregate.needs].sort(), ['build', 'resolve']);
   const download = aggregate.steps.find(step =>

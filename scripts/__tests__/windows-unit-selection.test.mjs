@@ -327,7 +327,9 @@ test('no workflow caches a resolved node_modules tree', () => {
   ];
   for (const file of files) {
     const content = readRepoText(file);
-    const paths = [...content.matchAll(/^\s*path: \|\n(?<list>(?:[^\S\n]*\S+\n)+)/gmu)]
+    const paths = [
+      ...content.matchAll(/^\s*path: \|\n(?<list>(?:[^\S\n]*\S+\n)+)/gmu),
+    ]
       .flatMap(match => match.groups.list.trim().split('\n'))
       .map(line => line.trim());
     const trees = paths.filter(line => line.endsWith('node_modules'));
