@@ -336,10 +336,16 @@ describe('React router owner bindings', () => {
       ),
     );
     expect(runtime.dependencies['react-router']).toBe(reactRouter.version);
-    expect(provider.dependencies['@tanstack/react-router']).toBe(
+    expect(provider.peerDependencies['@tanstack/react-router']).toBe(
       tanstackRouter.version,
     );
-    expect(provider.dependencies['@tanstack/router-core']).toBe(
+    expect(provider.peerDependencies['@tanstack/router-core']).toBe(
+      tanstackRouter.coreVersion,
+    );
+    expect(provider.devDependencies['@tanstack/react-router']).toBe(
+      tanstackRouter.version,
+    );
+    expect(provider.devDependencies['@tanstack/router-core']).toBe(
       tanstackRouter.coreVersion,
     );
   });
