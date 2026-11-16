@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import semver from 'semver';
+import { parse as parseYaml } from 'yaml';
 import { packFiles } from '../ultramodern-artifacts/reconstruct.mjs';
 import { readBytes } from '../ultramodern-artifacts/transport.mjs';
 import {
@@ -69,7 +70,38 @@ function owningManifest(entry, expectedName) {
   }
 }
 // Resolution only: no require(), import(), lifecycle scripts, or package execution.
-function resolvePackage(owner, name, specifier = name) {
+function dependencyName(owner, name, catalogs) {
+  let request = [...directBlocks, 'peerDependencies']
+    .map(block => owner.manifest[block]?.[name])
+    .find(value => typeof value === 'string');
+  if (request?.startsWith('catalog:')) {
+    let directory = owner.directory;
+    let filename = path.join(directory, 'pnpm-workspace.yaml');
+    while (!fs.existsSync(filename)) {
+      const parent = path.dirname(directory);
+      assert(parent !== directory, `No pnpm workspace for ${name}`);
+      directory = parent;
+      filename = path.join(directory, 'pnpm-workspace.yaml');
+    }
+    if (!catalogs.has(filename)) {
+      const bytes = fs.readFileSync(filename);
+      catalogs.set(filename, { bytes, policy: parseYaml(bytes.toString()) });
+    }
+    const { policy } = catalogs.get(filename);
+    const catalogName = request.slice('catalog:'.length);
+    const catalog = catalogName
+      ? policy?.catalogs?.[catalogName]
+      : policy?.catalog;
+    request = catalog?.[name];
+    assert(
+      typeof request === 'string' && !request.startsWith('catalog:'),
+      `pnpm catalog ${catalogName || 'default'} omits ${name}`,
+    );
+  }
+  const alias = /^npm:((?:@[^/]+\/)?[^@]+)@/u.exec(request ?? '');
+  return alias?.[1] ?? name;
+}
+function resolvePackage(owner, name, specifier, catalogs) {
   const require = createRequire(owner.filename);
   let entry;
   try {
@@ -85,13 +117,9 @@ function resolvePackage(owner, name, specifier = name) {
       throw error;
     }
   }
-  const request = [...directBlocks, 'peerDependencies']
-    .map(block => owner.manifest[block]?.[name])
-    .find(value => typeof value === 'string');
-  const alias = /^npm:((?:@[^/]+\/)?[^@]+)@/u.exec(request ?? '');
-  return owningManifest(entry, alias?.[1] ?? name);
+  return owningManifest(entry, dependencyName(owner, name, catalogs));
 }
-function resolveDependency(owner, name) {
+function resolveDependency(owner, name, catalogs) {
   assert.match(
     name,
     /^(?:@[\w.-]+\/)?[\w.-]+$/u,
@@ -118,7 +146,7 @@ function resolveDependency(owner, name) {
     return null;
   }
   try {
-    return resolvePackage(owner, name);
+    return resolvePackage(owner, name, name, catalogs);
   } catch (error) {
     assert(
       ['ERR_PACKAGE_PATH_NOT_EXPORTED', 'MODULE_NOT_FOUND'].includes(
@@ -126,11 +154,10 @@ function resolveDependency(owner, name) {
       ),
       error.message,
     );
-    const request = [...directBlocks, 'peerDependencies']
-      .map(block => owner.manifest[block]?.[name])
-      .find(value => typeof value === 'string');
-    const alias = /^npm:((?:@[^/]+\/)?[^@]+)@/u.exec(request ?? '');
-    const resolved = owningManifest(candidate, alias?.[1] ?? name);
+    const resolved = owningManifest(
+      candidate,
+      dependencyName(owner, name, catalogs),
+    );
     return { ...resolved, entry: null };
   }
 }
@@ -261,8 +288,12 @@ export async function verifySupportConsumer({
   const seen = new Map();
   const owners = [];
   const resolutions = [];
+  const catalogs = new Map();
   const selectedRoots = new Map(
-    selectedNames.map(name => [name, resolvePackage(consumer, name)]),
+    selectedNames.map(name => [
+      name,
+      resolvePackage(consumer, name, name, catalogs),
+    ]),
   );
   while (queue.length) {
     signal?.throwIfAborted();
@@ -357,10 +388,11 @@ export async function verifySupportConsumer({
                 `${name}: upstream ${block} range does not admit selected support version`,
               );
             }
-            if (optionalUpstream && !resolveDependency(owner, name)) continue;
+            if (optionalUpstream && !resolveDependency(owner, name, catalogs))
+              continue;
           }
           for (const specifier of publicSpecifiers(name)) {
-            const resolved = resolvePackage(owner, name, specifier);
+            const resolved = resolvePackage(owner, name, specifier, catalogs);
             assert.equal(
               resolved.manifest.version,
               protocol.cohort[name],
@@ -403,7 +435,7 @@ export async function verifySupportConsumer({
       blocks.flatMap(block => Object.keys(owner.manifest[block] ?? {})),
     )) {
       if (names.includes(name)) continue;
-      const resolved = resolveDependency(owner, name);
+      const resolved = resolveDependency(owner, name, catalogs);
       if (resolved) {
         assert(
           !names.includes(resolved.manifest.name),
@@ -447,12 +479,18 @@ export async function verifySupportConsumer({
       fs.readFileSync(owner.filename).equals(owner.bytes),
       `Installed owner manifest changed during verification: ${owner.filename}`,
     );
+  for (const [filename, { bytes }] of catalogs)
+    assert(
+      fs.readFileSync(filename).equals(bytes),
+      `Installed workspace catalog changed during verification: ${filename}`,
+    );
   for (const resolution of resolutions) {
     const owner = manifestAt(resolution.owner);
     const current = resolvePackage(
       owner,
       resolution.name,
       resolution.specifier,
+      catalogs,
     );
     assert.equal(
       current.directory,

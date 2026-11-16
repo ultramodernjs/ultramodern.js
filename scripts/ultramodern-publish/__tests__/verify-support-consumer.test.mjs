@@ -556,6 +556,80 @@ test('follows public framework aliases and import-only intermediates, not depend
   const receipt = await verifySupportConsumer(f);
   assert(receipt.owners.some(owner => owner.directory === renderer));
 });
+for (const [request, catalog] of [
+  ['catalog:', 'catalog'],
+  ['catalog:ultramodern', 'catalogs:\n  ultramodern'],
+]) {
+  test(`resolves renamed installed framework owners through ${request}`, async () => {
+    const f = fixture();
+    const target = '@bleedingdev/modern-js-app-tools';
+    const renderer = f.framework(
+      target,
+      {
+        'solid-js': p.cohort['solid-js'],
+      },
+      request === 'catalog:ultramodern'
+        ? { exports: { '.': { import: './entry.cjs' } } }
+        : {},
+    );
+    delete f.rootManifest.dependencies[target];
+    f.rootManifest.dependencies['@modern-js/app-tools'] = request;
+    fs.mkdirSync(path.join(f.root, 'node_modules/@modern-js'), {
+      recursive: true,
+    });
+    fs.symlinkSync(
+      renderer,
+      path.join(f.root, 'node_modules/@modern-js/app-tools'),
+    );
+    const workspaceFile = path.join(f.root, 'pnpm-workspace.yaml');
+    const indent = request === 'catalog:' ? '  ' : '    ';
+    fs.writeFileSync(
+      workspaceFile,
+      `${catalog}:\n${indent}'@modern-js/app-tools': npm:${target}@1.0.0\n`,
+    );
+    f.save();
+    const receipt = await verifySupportConsumer(f);
+    assert(receipt.owners.some(owner => owner.directory === renderer));
+    fs.writeFileSync(
+      workspaceFile,
+      `${catalog}:\n${indent}'@modern-js/app-tools': npm:@unreviewed/other@1.0.0\n`,
+    );
+    await assert.rejects(verifySupportConsumer(f), /Wrong owning manifest/);
+    fs.writeFileSync(workspaceFile, `${catalog}: {}\n`);
+    await assert.rejects(
+      verifySupportConsumer(f),
+      /catalog .* omits @modern-js\/app-tools/u,
+    );
+  });
+}
+test('catalog resolution cannot replace exact direct support authority', async () => {
+  const f = fixture();
+  f.rootManifest.devDependencies['solid-js'] = 'catalog:';
+  f.save();
+  fs.writeFileSync(
+    path.join(f.root, 'pnpm-workspace.yaml'),
+    `catalog:\n  solid-js: ${f.descriptor.packages['solid-js'].request}\n`,
+  );
+  await assert.rejects(
+    verifySupportConsumer(f),
+    /differs from support request/,
+  );
+});
+test('workspace catalog changes during transport invalidate the receipt', async () => {
+  const f = fixture();
+  const target = '@synthetic/renderer';
+  f.framework(target, { 'solid-js': p.cohort['solid-js'] });
+  f.rootManifest.dependencies[target] = 'catalog:';
+  f.save();
+  const workspaceFile = path.join(f.root, 'pnpm-workspace.yaml');
+  fs.writeFileSync(workspaceFile, `catalog:\n  '${target}': 1.0.0\n`);
+  const transport = f.fetchArtifact;
+  f.fetchArtifact = async (...args) => {
+    fs.appendFileSync(workspaceFile, '# changed after resolution\n');
+    return transport(...args);
+  };
+  await assert.rejects(verifySupportConsumer(f), /workspace catalog changed/);
+});
 test('pnpm-like symlinks resolve to one physical support tree from real owner locations', async () => {
   const f = fixture();
   const linked = path.join(f.root, 'node_modules/solid-js');
