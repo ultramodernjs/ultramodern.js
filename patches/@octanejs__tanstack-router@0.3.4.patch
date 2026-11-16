@@ -1,0 +1,884 @@
+diff --git a/package.json b/package.json
+index 7a55a2a418..fd0c274465 100644
+--- a/package.json
++++ b/package.json
+@@ -80,9 +80,9 @@
+     "./package.json": "./package.json"
+   },
+   "dependencies": {
+-    "@tanstack/history": "1.162.4",
+-    "@tanstack/router-core": "1.171.34",
+-    "@tanstack/store": "^0.9.3",
++    "@tanstack/history": "1.162.5",
++    "@tanstack/router-core": "1.171.39",
++    "@tanstack/store": "0.11.2",
+     "isbot": "^5.1.22"
+   },
+   "peerDependencies": {
+@@ -106,4 +106,4 @@
+   "scripts": {
+     "test": "vitest run"
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/src/index.ts b/src/index.ts
+index 4e3875de61..b6266688f0 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -183,3 +183,5 @@ export type {
+ 	ValidateUseParamsOptions,
+ 	ValidateUseSearchOptions,
+ } from './typePrimitives';
++
++export * from './ssr/routerRenderSnapshot';
+diff --git a/src/ssr/routerRenderSnapshot.ts b/src/ssr/routerRenderSnapshot.ts
+new file mode 100644
+index 0000000000..06f3e192e1
+--- /dev/null
++++ b/src/ssr/routerRenderSnapshot.ts
+@@ -0,0 +1,834 @@
++import { parseHref } from '@tanstack/history';
++import type { AnyRoute, AnyRouteMatch, AnyRouter } from '@tanstack/router-core';
++import { defaultParseSearch, defaultStringifySearch } from '@tanstack/router-core';
++import { createMemoryHistory } from '../history';
++import { createRootRoute, createRoute } from '../route';
++import { createRouter, Router } from '../router';
++
++export type RouterRenderJson =
++	null | boolean | number | string | readonly RouterRenderJson[] | RouterRenderJsonRecord;
++export interface RouterRenderJsonRecord {
++	readonly [key: string]: RouterRenderJson;
++}
++export interface RouterRenderProfileId {
++	readonly key: string;
++	readonly version: string;
++}
++export interface RouterRenderRoute {
++	readonly routeId: string;
++	readonly parentRouteId: string | null;
++	readonly path?: string;
++	readonly pathlessId?: string;
++	readonly ultramodernRouteId?: string;
++}
++export type RouterRenderPathCharacter = NonNullable<
++	AnyRouter['options']['pathParamsAllowedCharacters']
++>[number];
++export interface RouterRenderRouting {
++	readonly origin: string;
++	readonly basepath: string;
++	readonly publicHref: string;
++	/** The native unmasked URL before any profile-owned input rewrite. */
++	readonly unmaskedHref?: string;
++	readonly userState: RouterRenderJsonRecord;
++	readonly caseSensitive: boolean;
++	readonly trailingSlash: 'always' | 'never' | 'preserve';
++	readonly pathParamsAllowedCharacters: readonly RouterRenderPathCharacter[];
++}
++export interface RouterRenderMatch {
++	readonly id: string;
++	readonly routeId: string;
++	readonly params: RouterRenderJsonRecord;
++	readonly search: RouterRenderJsonRecord;
++	readonly loaderData?: RouterRenderJson;
++}
++export interface RouterRenderSnapshot {
++	readonly version: 1;
++	readonly profile: RouterRenderProfileId;
++	readonly routes: readonly RouterRenderRoute[];
++	readonly routing: RouterRenderRouting;
++	readonly matches: readonly RouterRenderMatch[];
++	readonly publicContext: RouterRenderJsonRecord;
++	/** A profile-owned, closed public rewrite descriptor. Functions remain local. */
++	readonly i18n?: RouterRenderJsonRecord;
++}
++export type RouterRenderRoutingOptions = Pick<
++	AnyRouter['options'],
++	| 'parseSearch'
++	| 'stringifySearch'
++	| 'rewrite'
++	| 'routeMasks'
++	| 'caseSensitive'
++	| 'trailingSlash'
++	| 'pathParamsAllowedCharacters'
++>;
++export interface RouterRenderProfile {
++	readonly id: RouterRenderProfileId;
++	/** Verify the associated host uses this declared routing contract. */
++	readonly assertHost: (router: AnyRouter, snapshot: RouterRenderSnapshot) => void;
++	/** Return a routing-only native tree. Loaders and lifecycle hooks are forbidden. */
++	readonly createRoutingTree: (snapshot: RouterRenderSnapshot) => AnyRoute;
++	readonly routingOptions: (snapshot: RouterRenderSnapshot) => RouterRenderRoutingOptions;
++}
++export interface RouterRenderAssociation {
++	readonly id: RouterRenderProfileId;
++	readonly publicContext: RouterRenderJsonRecord;
++	readonly i18n?: RouterRenderJsonRecord;
++}
++
++const profiles = new Map<string, RouterRenderProfile>();
++const associations = new WeakMap<AnyRouter, RouterRenderAssociation>();
++const owned = new WeakMap<AnyRouter, () => void>();
++const retiredRestorations = new WeakSet<AnyRouter>();
++const restoredOrigins = new WeakMap<
++	AnyRouter,
++	{
++		readonly profile: RouterRenderProfile;
++		readonly association: RouterRenderAssociation;
++		readonly unchanged: () => boolean;
++	}
++>();
++const LIMITS = Object.freeze({
++	depth: 64,
++	nodes: 100000,
++	bytes: 8 * 1024 * 1024,
++	stringBytes: 1024 * 1024,
++	routes: 4096,
++	matches: 128,
++});
++const forbiddenRestoreHooks = [
++	'loader',
++	'beforeLoad',
++	'context',
++	'onEnter',
++	'onStay',
++	'onLeave',
++	'lazyFn',
++	'head',
++	'scripts',
++	'headers',
++	'onError',
++	'component',
++	'pendingComponent',
++	'errorComponent',
++	'notFoundComponent',
++];
++const authoredRouting = [
++	'caseSensitive',
++	'validateSearch',
++	'loaderDeps',
++	'beforeLoad',
++	'context',
++	'onEnter',
++	'onStay',
++	'onLeave',
++	'lazyFn',
++	'head',
++	'scripts',
++	'headers',
++	'onError',
++	'parseParams',
++	'stringifyParams',
++];
++function invalid(message: string): TypeError {
++	return new TypeError(`Router render snapshot: ${message}`);
++}
++function plain(value: unknown): value is Record<string, unknown> {
++	return (
++		value !== null &&
++		typeof value === 'object' &&
++		[Object.prototype, null].includes(Object.getPrototypeOf(value))
++	);
++}
++function object(value: unknown, allowed?: readonly string[]): Record<string, unknown> {
++	if (!plain(value)) throw invalid('expected a plain record');
++	for (const key of Reflect.ownKeys(value)) {
++		const descriptor = Object.getOwnPropertyDescriptor(value, key);
++		if (
++			typeof key !== 'string' ||
++			(allowed && !allowed.includes(key)) ||
++			!descriptor ||
++			!descriptor.enumerable ||
++			descriptor.get ||
++			descriptor.set
++		)
++			throw invalid('unsupported field or accessor');
++	}
++	return value;
++}
++function string(value: unknown, allowEmpty = false): string {
++	if (
++		typeof value !== 'string' ||
++		(!allowEmpty && value.length === 0) ||
++		value.length > LIMITS.stringBytes
++	)
++		throw invalid('invalid string');
++	return value;
++}
++function profileId(value: unknown): RouterRenderProfileId {
++	const input = object(value, ['key', 'version']);
++	const key = string(input['key']),
++		version = string(input['version']);
++	if (key.length > 256 || version.length > 128) throw invalid('invalid profile identity');
++	return Object.freeze({ key, version });
++}
++function profileKey(id: RouterRenderProfileId): string {
++	return JSON.stringify([id.key, id.version]);
++}
++interface Budget {
++	nodes: number;
++	bytes: number;
++	ancestors: Set<object>;
++}
++function json(value: unknown, budget: Budget, depth = 0): RouterRenderJson {
++	if (++budget.nodes > LIMITS.nodes || depth > LIMITS.depth)
++		throw invalid('value complexity limit exceeded');
++	if (value === null || typeof value === 'boolean') return value;
++	if (typeof value === 'number') {
++		if (!Number.isFinite(value)) throw invalid('non-finite number');
++		return value;
++	}
++	if (typeof value === 'string') {
++		if (value.length > LIMITS.stringBytes) throw invalid('string limit exceeded');
++		const bytes = new TextEncoder().encode(value).byteLength;
++		if (bytes > LIMITS.stringBytes || (budget.bytes += bytes) > LIMITS.bytes)
++			throw invalid('string budget exceeded');
++		return value;
++	}
++	if (typeof value !== 'object' || value === undefined || budget.ancestors.has(value))
++		throw invalid('only acyclic public JSON values are supported');
++	budget.ancestors.add(value);
++	try {
++		if (Array.isArray(value)) {
++			const keys = Reflect.ownKeys(value);
++			if (
++				Object.getPrototypeOf(value) !== Array.prototype ||
++				value.length > LIMITS.nodes ||
++				keys.length !== value.length + 1
++			)
++				throw invalid('only dense plain arrays are supported');
++			const result: RouterRenderJson[] = [];
++			for (let i = 0; i < value.length; i++) {
++				const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
++				if (!descriptor || !descriptor.enumerable || !('value' in descriptor))
++					throw invalid('invalid array field');
++				result.push(json(descriptor.value, budget, depth + 1));
++			}
++			return Object.freeze(result);
++		}
++		const input = object(value);
++		const result: Record<string, RouterRenderJson> = Object.create(null);
++		for (const [key, item] of Object.entries(input)) {
++			json(key, budget, depth + 1);
++			result[key] = json(item, budget, depth + 1);
++		}
++		return Object.freeze(result);
++	} finally {
++		budget.ancestors.delete(value);
++	}
++}
++function isJsonRecord(value: RouterRenderJson): value is RouterRenderJsonRecord {
++	return plain(value);
++}
++function jsonRecord(value: unknown, budget: Budget): RouterRenderJsonRecord {
++	const result = json(value, budget);
++	if (!isJsonRecord(result)) throw invalid('expected a public JSON record');
++	return result;
++}
++function pathCharacters(value: unknown): readonly RouterRenderPathCharacter[] {
++	if (!Array.isArray(value) || value.length > 8) throw invalid('invalid path parameter characters');
++	return Object.freeze(
++		value.map((character: unknown) => {
++			if (
++				character !== ';' &&
++				character !== ':' &&
++				character !== '@' &&
++				character !== '&' &&
++				character !== '=' &&
++				character !== '+' &&
++				character !== '$' &&
++				character !== ','
++			)
++				throw invalid('invalid path parameter character');
++			return character;
++		}),
++	);
++}
++function readSnapshot(value: unknown): RouterRenderSnapshot {
++	const budget: Budget = { nodes: 0, bytes: 0, ancestors: new Set() };
++	const input = object(json(value, budget), [
++		'version',
++		'profile',
++		'routes',
++		'routing',
++		'matches',
++		'publicContext',
++		'i18n',
++	]);
++	if (input['version'] !== 1) throw invalid('unsupported version');
++	if (
++		!Array.isArray(input['routes']) ||
++		input['routes'].length === 0 ||
++		input['routes'].length > LIMITS.routes
++	)
++		throw invalid('invalid route count');
++	const routes = input['routes'].map((value) => {
++		const route = object(value, [
++			'routeId',
++			'parentRouteId',
++			'path',
++			'pathlessId',
++			'ultramodernRouteId',
++		]);
++		const parentRouteId = route['parentRouteId'] === null ? null : string(route['parentRouteId']);
++		const path = route['path'] === undefined ? undefined : string(route['path']);
++		const pathlessId = route['pathlessId'] === undefined ? undefined : string(route['pathlessId']);
++		if (
++			(parentRouteId === null && (path !== undefined || pathlessId !== undefined)) ||
++			(parentRouteId !== null && (path === undefined) === (pathlessId === undefined))
++		)
++			throw invalid('invalid root or child route geometry');
++		return Object.freeze({
++			routeId: string(route['routeId']),
++			parentRouteId,
++			...(path === undefined ? {} : { path }),
++			...(pathlessId === undefined ? {} : { pathlessId }),
++			...(route['ultramodernRouteId'] === undefined
++				? {}
++				: { ultramodernRouteId: string(route['ultramodernRouteId']) }),
++		});
++	});
++	const ids = new Map(routes.map((route) => [route.routeId, route]));
++	if (
++		ids.size !== routes.length ||
++		routes.filter((route) => route.parentRouteId === null).length !== 1
++	)
++		throw invalid('duplicate route or root');
++	for (const route of routes) {
++		const seen = new Set<string>();
++		let current: RouterRenderRoute | undefined = route;
++		while (current) {
++			if (seen.has(current.routeId) || seen.size > LIMITS.depth)
++				throw invalid('cyclic or deep geometry');
++			seen.add(current.routeId);
++			if (current.parentRouteId === null) break;
++			current = ids.get(current.parentRouteId);
++			if (!current) throw invalid('missing parent route');
++		}
++	}
++	const routing = object(input['routing'], [
++		'origin',
++		'basepath',
++		'publicHref',
++		'unmaskedHref',
++		'userState',
++		'caseSensitive',
++		'trailingSlash',
++		'pathParamsAllowedCharacters',
++	]);
++	const origin = string(routing['origin']),
++		basepath = string(routing['basepath']),
++		publicHref = string(routing['publicHref']);
++	const unmaskedHref =
++		routing['unmaskedHref'] === undefined ? undefined : string(routing['unmaskedHref']);
++	const url = new URL(origin);
++	if (
++		!['http:', 'https:'].includes(url.protocol) ||
++		url.origin !== origin ||
++		!basepath.startsWith('/') ||
++		[publicHref, ...(unmaskedHref === undefined ? [] : [unmaskedHref])].some(
++			(href) =>
++				!href.startsWith('/') || href.startsWith('//') || new URL(href, origin).origin !== origin,
++		)
++	)
++		throw invalid('invalid routing URL');
++	if (
++		typeof routing['caseSensitive'] !== 'boolean' ||
++		!['always', 'never', 'preserve'].includes(String(routing['trailingSlash']))
++	)
++		throw invalid('invalid routing options');
++	const trailingSlash = routing['trailingSlash'];
++	if (trailingSlash !== 'always' && trailingSlash !== 'never' && trailingSlash !== 'preserve')
++		throw invalid('invalid trailing slash');
++	const userState = jsonRecord(routing['userState'], { nodes: 0, bytes: 0, ancestors: new Set() });
++	if (
++		Object.keys(userState).some(
++			(key) =>
++				key.startsWith('__TSR_') ||
++				key === '__tempLocation' ||
++				key === '__tempKey' ||
++				key === 'key',
++		)
++	)
++		throw invalid('reserved native history fields');
++	if (
++		!Array.isArray(input['matches']) ||
++		input['matches'].length === 0 ||
++		input['matches'].length > LIMITS.matches
++	)
++		throw invalid('invalid match count');
++	const matches = input['matches'].map((value) => {
++		const match = object(value, ['id', 'routeId', 'params', 'search', 'loaderData']);
++		const routeId = string(match['routeId']);
++		if (!ids.has(routeId)) throw invalid('unknown matched route');
++		return Object.freeze({
++			id: string(match['id']),
++			routeId,
++			params: jsonRecord(match['params'], { nodes: 0, bytes: 0, ancestors: new Set() }),
++			search: jsonRecord(match['search'], { nodes: 0, bytes: 0, ancestors: new Set() }),
++			...(Object.hasOwn(match, 'loaderData')
++				? { loaderData: json(match['loaderData'], { nodes: 0, bytes: 0, ancestors: new Set() }) }
++				: {}),
++		});
++	});
++	if (
++		new Set(matches.map((match) => match.id)).size !== matches.length ||
++		new Set(matches.map((match) => match.routeId)).size !== matches.length
++	)
++		throw invalid('duplicate match');
++	return Object.freeze({
++		version: 1,
++		profile: profileId(input['profile']),
++		routes: Object.freeze(routes),
++		routing: Object.freeze({
++			origin,
++			basepath,
++			publicHref,
++			...(unmaskedHref === undefined ? {} : { unmaskedHref }),
++			userState,
++			caseSensitive: routing['caseSensitive'],
++			trailingSlash,
++			pathParamsAllowedCharacters: pathCharacters(routing['pathParamsAllowedCharacters']),
++		}),
++		matches: Object.freeze(matches),
++		publicContext: jsonRecord(input['publicContext'], { nodes: 0, bytes: 0, ancestors: new Set() }),
++		...(input['i18n'] === undefined
++			? {}
++			: { i18n: jsonRecord(input['i18n'], { nodes: 0, bytes: 0, ancestors: new Set() }) }),
++	});
++}
++
++export function registerRouterRenderProfile(profile: RouterRenderProfile): () => void {
++	const id = profileId(profile.id),
++		key = profileKey(id);
++	if (
++		profiles.has(key) ||
++		typeof profile.assertHost !== 'function' ||
++		typeof profile.createRoutingTree !== 'function' ||
++		typeof profile.routingOptions !== 'function'
++	)
++		throw invalid('invalid or duplicate profile');
++	const entry = Object.freeze({
++		id,
++		assertHost: profile.assertHost,
++		createRoutingTree: profile.createRoutingTree,
++		routingOptions: profile.routingOptions,
++	});
++	profiles.set(key, entry);
++	return () => {
++		if (profiles.get(key) === entry) profiles.delete(key);
++	};
++}
++export function associateRouterRenderProfile(
++	router: AnyRouter,
++	association: RouterRenderAssociation,
++): void {
++	if (!(router instanceof Router) || retiredRestorations.has(router))
++		throw invalid('requires a genuine live Octane Router');
++	const id = profileId(association.id);
++	if (!profiles.has(profileKey(id))) throw invalid('unknown profile');
++	const budget: Budget = { nodes: 0, bytes: 0, ancestors: new Set() };
++	associations.set(
++		router,
++		Object.freeze({
++			id,
++			publicContext: jsonRecord(association.publicContext, budget),
++			...(association.i18n === undefined ? {} : { i18n: jsonRecord(association.i18n, budget) }),
++		}),
++	);
++}
++/** The immutable declared profile; renderers must preserve an explicit replacement. */
++export function getRouterRenderProfile(router: AnyRouter): RouterRenderProfileId | undefined {
++	return associations.get(router)?.id;
++}
++/** Native defaults only. A recognized rewrite must be explicitly admitted by its owning profile. */
++export function assertDefaultRouterRenderHost(router: AnyRouter, allowRewrite = false): void {
++	if (
++		router.options.parseSearch !== defaultParseSearch ||
++		router.options.stringifySearch !== defaultStringifySearch ||
++		(!allowRewrite && router.options.rewrite) ||
++		router.options.routeMasks?.length
++	)
++		throw invalid('authored router behavior requires an exact local profile');
++	const seen = new Set<AnyRoute>();
++	const visit = (route: AnyRoute, depth: number) => {
++		if (seen.has(route) || seen.size >= LIMITS.routes || depth > LIMITS.depth)
++			throw invalid('route geometry must be bounded and acyclic');
++		seen.add(route);
++		if (
++			authoredRouting.some((key) => Reflect.get(route.options, key) !== undefined) ||
++			route.options.params?.parse ||
++			route.options.params?.stringify ||
++			route.options.search?.middlewares?.length ||
++			route.lazyFn ||
++			('path' in route.options && 'id' in route.options)
++		)
++			throw invalid('authored route behavior requires an exact local profile');
++		for (const child of route.children ?? []) visit(child, depth + 1);
++	};
++	visit(router.options.routeTree, 0);
++}
++export function createRouterRenderRouteTree(routes: readonly RouterRenderRoute[]): AnyRoute {
++	const rootDescriptor = routes.find((route) => route.parentRouteId === null);
++	if (!rootDescriptor) throw invalid('missing root');
++	const routesByParent = new Map<string, RouterRenderRoute[]>();
++	for (const route of routes) {
++		const parentId = route.parentRouteId;
++		if (parentId === null) continue;
++		const siblings = routesByParent.get(parentId);
++		if (siblings) siblings.push(route);
++		else routesByParent.set(parentId, [route]);
++	}
++	const staticData = (route: RouterRenderRoute) =>
++		route.ultramodernRouteId === undefined
++			? {}
++			: { staticData: { ultramodernRouteId: route.ultramodernRouteId } };
++	const root = createRootRoute(staticData(rootDescriptor));
++	const children = (parent: AnyRoute, parentId: string): AnyRoute[] =>
++		(routesByParent.get(parentId) ?? []).map((route) => {
++			const child =
++				route.path === undefined
++					? createRoute({
++							getParentRoute: () => parent,
++							id: string(route.pathlessId),
++							...staticData(route),
++						})
++					: createRoute({ getParentRoute: () => parent, path: route.path, ...staticData(route) });
++			return child.addChildren(children(child, route.routeId));
++		});
++	return root.addChildren(children(root, rootDescriptor.routeId));
++}
++function geometry(router: AnyRouter): readonly RouterRenderRoute[] {
++	const result: RouterRenderRoute[] = [];
++	const seen = new Set<AnyRoute>();
++	const visit = (route: AnyRoute, parentRouteId: string | null, depth: number) => {
++		if (seen.has(route) || seen.size >= LIMITS.routes || depth > LIMITS.depth)
++			throw invalid('route geometry must be bounded and acyclic');
++		seen.add(route);
++		const routePath: unknown = 'path' in route.options ? route.options.path : undefined;
++		const routeId: unknown = 'id' in route.options ? route.options.id : undefined;
++		const staticId: unknown =
++			route.options.staticData && Reflect.get(route.options.staticData, 'ultramodernRouteId');
++		result.push({
++			routeId: route.id,
++			parentRouteId,
++			...(parentRouteId === null
++				? {}
++				: routePath === undefined
++					? { pathlessId: string(routeId) }
++					: { path: string(routePath) }),
++			...(typeof staticId === 'string' ? { ultramodernRouteId: staticId } : {}),
++		});
++		for (const child of route.children ?? []) visit(child, route.id, depth + 1);
++	};
++	visit(router.options.routeTree, null, 0);
++	return result;
++}
++function settled(router: AnyRouter): void {
++	if (
++		router.state.isLoading ||
++		(router._serverLoads ?? 0) > 0 ||
++		router.latestLocation !== router.state.location ||
++		router._serverResult?.type === 'redirect' ||
++		router.state.matches.length === 0 ||
++		router.state.matches.some(
++			(match) => match.status !== 'success' || match.isFetching || match.error,
++		)
++	)
++		throw invalid('router must contain settled successful matches');
++}
++export function captureRouterRenderSnapshot(router: AnyRouter): RouterRenderSnapshot {
++	const association = associations.get(router);
++	if (!(router instanceof Router) || !association)
++		throw invalid('router has no declared render profile');
++	const profile = profiles.get(profileKey(association.id));
++	if (!profile) throw invalid('unknown profile');
++	settled(router);
++	const userState: Record<string, unknown> = Object.create(null);
++	for (const [key, value] of Object.entries(router.state.location.state))
++		if (
++			!key.startsWith('__TSR_') &&
++			key !== '__tempLocation' &&
++			key !== '__tempKey' &&
++			key !== 'key'
++		)
++			userState[key] = value;
++	const location = router.state.location.maskedLocation ?? router.state.location;
++	const snapshot = readSnapshot({
++		version: 1,
++		profile: association.id,
++		routes: geometry(router),
++		routing: {
++			origin: router.options.origin ?? router.origin,
++			basepath: router.options.basepath ?? '/',
++			publicHref: location.publicHref,
++			...(router.state.location.maskedLocation
++				? { unmaskedHref: router.state.location.publicHref }
++				: {}),
++			userState,
++			caseSensitive: router.options.caseSensitive ?? false,
++			trailingSlash: router.options.trailingSlash ?? 'never',
++			pathParamsAllowedCharacters: router.options.pathParamsAllowedCharacters ?? [],
++		},
++		matches: router.state.matches.map((match) => ({
++			id: match.id,
++			routeId: match.routeId,
++			params: match.params,
++			search: match.search,
++			...(match.loaderData === undefined ? {} : { loaderData: match.loaderData }),
++		})),
++		publicContext: association.publicContext,
++		...(association.i18n === undefined ? {} : { i18n: association.i18n }),
++	});
++	const restored = restoredOrigins.get(router);
++	if (restored) {
++		if (
++			restored.profile !== profile ||
++			association !== restored.association ||
++			!owned.has(router) ||
++			!restored.unchanged()
++		)
++			throw invalid('restored routing provenance changed or expired');
++		checkRestorationTree(router.options.routeTree);
++	} else profile.assertHost(router, snapshot);
++	return snapshot;
++}
++function equal(left: unknown, right: unknown): boolean {
++	if (Object.is(left, right)) return true;
++	if (Array.isArray(left) && Array.isArray(right))
++		return left.length === right.length && left.every((value, i) => equal(value, right[i]));
++	if (plain(left) && plain(right)) {
++		const keys = Object.keys(left);
++		return (
++			keys.length === Object.keys(right).length &&
++			keys.every((key) => Object.hasOwn(right, key) && equal(left[key], right[key]))
++		);
++	}
++	return false;
++}
++function checkRestorationTree(root: AnyRoute): void {
++	const seen = new Set<AnyRoute>();
++	const visit = (route: AnyRoute, depth: number) => {
++		if (
++			seen.has(route) ||
++			seen.size >= LIMITS.routes ||
++			depth > LIMITS.depth ||
++			forbiddenRestoreHooks.some((key) => Reflect.get(route.options, key) !== undefined) ||
++			route.lazyFn
++		)
++			throw invalid('restoration tree must be bounded and free of lifecycle hooks');
++		seen.add(route);
++		for (const child of route.children ?? []) visit(child, depth + 1);
++	};
++	visit(root, 0);
++}
++function descriptorProof(value: unknown, ancestors = new Set<object>()): () => boolean {
++	if (value === null || typeof value !== 'object' || (!plain(value) && !Array.isArray(value)))
++		return () => true;
++	if (ancestors.has(value)) return () => true;
++	ancestors.add(value);
++	const prototype = Object.getPrototypeOf(value);
++	const keys = Reflect.ownKeys(value);
++	const descriptors = keys.map((key) => {
++		const descriptor = Object.getOwnPropertyDescriptor(value, key);
++		if (!descriptor || !('value' in descriptor))
++			throw invalid('routing provenance cannot contain accessors');
++		return { key, descriptor, nested: descriptorProof(descriptor.value, ancestors) };
++	});
++	ancestors.delete(value);
++	return () => {
++		const currentKeys = Reflect.ownKeys(value);
++		return (
++			Object.getPrototypeOf(value) === prototype &&
++			currentKeys.length === keys.length &&
++			currentKeys.every((key, index) => key === keys[index]) &&
++			descriptors.every(({ key, descriptor, nested }) => {
++				const current = Object.getOwnPropertyDescriptor(value, key);
++				return (
++					!!current &&
++					'value' in current &&
++					current.value === descriptor.value &&
++					current.enumerable === descriptor.enumerable &&
++					current.configurable === descriptor.configurable &&
++					current.writable === descriptor.writable &&
++					nested()
++				);
++			})
++		);
++	};
++}
++function restoredRoutingProof(
++	router: AnyRouter,
++	routes: readonly RouterRenderRoute[],
++): () => boolean {
++	const nativeOptions = router.options,
++		tree = router.options.routeTree,
++		history = router.history;
++	const nativeOptionKeys = Reflect.ownKeys(nativeOptions);
++	const optionKeys = [
++		'parseSearch',
++		'stringifySearch',
++		'rewrite',
++		'routeMasks',
++		'origin',
++		'basepath',
++		'caseSensitive',
++		'trailingSlash',
++		'pathParamsAllowedCharacters',
++		'context',
++		'isServer',
++	];
++	const options = optionKeys.map((key) => {
++		const value: unknown = Reflect.get(router.options, key);
++		const unchanged = descriptorProof(value);
++		return () => Reflect.get(router.options, key) === value && unchanged();
++	});
++	const routeProofs: Array<() => boolean> = [];
++	const visit = (route: AnyRoute) => {
++		const value = route.options;
++		const unchanged = descriptorProof(value);
++		routeProofs.push(() => route.options === value && unchanged());
++		for (const child of route.children ?? []) visit(child);
++	};
++	visit(tree);
++	return () =>
++		router.options === nativeOptions &&
++		Reflect.ownKeys(nativeOptions).length === nativeOptionKeys.length &&
++		Reflect.ownKeys(nativeOptions).every((key, index) => key === nativeOptionKeys[index]) &&
++		router.options.routeTree === tree &&
++		router.history === history &&
++		equal(geometry(router), routes) &&
++		options.every((proof) => proof()) &&
++		routeProofs.every((proof) => proof());
++}
++export async function restoreRouterRenderSnapshot(
++	value: unknown,
++	{ signal }: { readonly signal?: AbortSignal } = {},
++): Promise<AnyRouter> {
++	signal?.throwIfAborted();
++	const snapshot = readSnapshot(value);
++	const profile = profiles.get(profileKey(snapshot.profile));
++	if (!profile) throw invalid('unknown profile');
++	const routeTree = profile.createRoutingTree(snapshot);
++	signal?.throwIfAborted();
++	checkRestorationTree(routeTree);
++	const options = profile.routingOptions(snapshot);
++	signal?.throwIfAborted();
++	object(options, [
++		'parseSearch',
++		'stringifySearch',
++		'rewrite',
++		'routeMasks',
++		'caseSensitive',
++		'trailingSlash',
++		'pathParamsAllowedCharacters',
++	]);
++	const history = createMemoryHistory({ initialEntries: [snapshot.routing.publicHref] });
++	history.replace(snapshot.routing.publicHref, {
++		...snapshot.routing.userState,
++		...(snapshot.routing.unmaskedHref === undefined
++			? {}
++			: {
++					__tempLocation: parseHref(snapshot.routing.unmaskedHref, {
++						...history.location.state,
++						...snapshot.routing.userState,
++					}),
++				}),
++	});
++	let router: AnyRouter;
++	try {
++		router = createRouter({
++			...options,
++			routeTree,
++			isServer: true,
++			history,
++			origin: snapshot.routing.origin,
++			basepath: snapshot.routing.basepath,
++			context: snapshot.publicContext,
++			caseSensitive: snapshot.routing.caseSensitive,
++			trailingSlash: snapshot.routing.trailingSlash,
++			pathParamsAllowedCharacters: [...snapshot.routing.pathParamsAllowedCharacters],
++		});
++	} catch (error) {
++		history.destroy();
++		throw error;
++	}
++	const lifetime = new AbortController();
++	let disposed = false;
++	const dispose = () => {
++		if (disposed) return;
++		disposed = true;
++		signal?.removeEventListener('abort', abort);
++		retiredRestorations.add(router);
++		owned.delete(router);
++		associations.delete(router);
++		restoredOrigins.delete(router);
++		lifetime.abort(signal?.reason);
++		for (const match of router.state.matches) match.abortController.abort(lifetime.signal.reason);
++		history.destroy();
++	};
++	owned.set(router, dispose);
++	const abort = () => dispose();
++	signal?.addEventListener('abort', abort, { once: true });
++	try {
++		if (signal?.aborted) {
++			dispose();
++			signal.throwIfAborted();
++		}
++		await router.load({ _signal: lifetime.signal });
++		signal?.throwIfAborted();
++		settled(router);
++		if (
++			!equal(geometry(router), snapshot.routes) ||
++			router.state.matches.length !== snapshot.matches.length
++		)
++			throw invalid('restored route geometry or matches differ');
++		const restoredPublic = (router.state.location.maskedLocation ?? router.state.location)
++			.publicHref;
++		if (
++			restoredPublic !== snapshot.routing.publicHref ||
++			router.state.location.publicHref !==
++				(snapshot.routing.unmaskedHref ?? snapshot.routing.publicHref)
++		)
++			throw invalid('restored public or unmasked location differs');
++		for (let i = 0; i < snapshot.matches.length; i++) {
++			const expected = snapshot.matches[i];
++			const actual: AnyRouteMatch | undefined = router.state.matches[i];
++			if (expected === undefined || actual === undefined)
++				throw invalid('restored route geometry or matches differ');
++			if (
++				actual.id !== expected.id ||
++				actual.routeId !== expected.routeId ||
++				!equal(actual.params, expected.params) ||
++				!equal(actual.search, expected.search)
++			)
++				throw invalid('restored native match identity, parameters or search differ');
++			if (Object.hasOwn(expected, 'loaderData')) actual.loaderData = expected.loaderData;
++		}
++		const unchanged = restoredRoutingProof(router, snapshot.routes);
++		const association = Object.freeze({
++			id: snapshot.profile,
++			publicContext: snapshot.publicContext,
++			...(snapshot.i18n === undefined ? {} : { i18n: snapshot.i18n }),
++		});
++		associations.set(router, association);
++		restoredOrigins.set(router, Object.freeze({ profile, association, unchanged }));
++		return router;
++	} catch (error) {
++		dispose();
++		throw error;
++	}
++}
++export function disposeRouterRenderSnapshot(router: AnyRouter): void {
++	owned.get(router)?.();
++}
+diff --git a/src/ssr/server.ts b/src/ssr/server.ts
+index 73c30299c7..e1fe802261 100644
+--- a/src/ssr/server.ts
++++ b/src/ssr/server.ts
+@@ -6,3 +6,5 @@ export { defaultStreamHandler } from './defaultStreamHandler';
+ export { renderRouterToStream } from './renderRouterToStream';
+ export { renderRouterToString } from './renderRouterToString';
+ export * from '@tanstack/router-core/ssr/server';
++
++export * from './routerRenderSnapshot';

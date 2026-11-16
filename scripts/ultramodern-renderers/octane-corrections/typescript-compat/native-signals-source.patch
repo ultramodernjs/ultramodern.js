@@ -1,0 +1,110 @@
+diff --git a/packages/octane/src/compiler/typescript.js b/packages/octane/src/compiler/typescript.js
+--- a/packages/octane/src/compiler/typescript.js
++++ b/packages/octane/src/compiler/typescript.js
+@@ -30,7 +30,7 @@
+ 		return loadTypeScript(request, directory);
+ 	} catch (error) {
+ 		throw new Error(
+-			`octane/compiler/typescript could not load ${request === undefined ? 'the optional `typescript` peer' : JSON.stringify(request)}. Install TypeScript 5.9, 6, or 7.1 or later, or pass the package to use as \`typescript\`.`,
++			`octane/compiler/typescript could not load ${request === undefined ? 'the optional `typescript` peer' : JSON.stringify(request)}. Install TypeScript 5.9, 6, or 7.0 or later, or pass the package to use as \`typescript\`.`,
+ 			{ cause: error },
+ 		);
+ 	}
+@@ -51,7 +51,8 @@
+ /**
+  * Validate native signal names and known live reads in ordinary memo callbacks
+  * against the exact SourceFile of an existing Program: a classic Program, or a
+- * TypeScript 7 Program from `typescript/unstable/sync`. Its API must come from
++ * TypeScript 7 Program (nightly) or Project (stable) from `typescript/unstable/sync`.
++ * Stable exposes the checker on Project, not Program. Its API must come from
+  * the TypeScript `options.typescript` names (resolved from the working
+  * directory), by default octane's `typescript` peer.
+  * @param {any} program
+@@ -74,10 +75,19 @@
+ 		}
+ 		return validateNativeSignalNamesWith(host, program, file);
+ 	}
++	const project = program instanceof typescript.sync.Project ? program : null;
++	if (project !== null) program = project.program;
+ 	if (!(program instanceof typescript.sync.Program)) {
+ 		throw new TypeError(
+-			`Native signal type validation requires a Program from the typescript/unstable/sync API of TypeScript ${typescript.version}; pass \`typescript\` to name the package that created it.`,
++			`Native signal type validation requires a Program or Project from the typescript/unstable/sync API of TypeScript ${typescript.version}; pass \`typescript\` to name the package that created it.`,
+ 		);
++	}
++	if (project !== null) {
++		const host = nativeNativeReadHost(typescript.sync, typescript.ast, typescript.is, project.checker);
++		return validateNativeSignalNamesWith(host, program, file);
++	}
++	if (typeof program.getProject !== 'function') {
++		throw new TypeError('Stable TypeScript native signal validation requires the Project from snapshot.getProject(config), not its Program.');
+ 	}
+ 	let host = nativeReadHosts.get(typescript);
+ 	if (host === undefined) {
+diff --git a/packages/octane/src/compiler/typescript.d.ts b/packages/octane/src/compiler/typescript.d.ts
+--- a/packages/octane/src/compiler/typescript.d.ts
++++ b/packages/octane/src/compiler/typescript.d.ts
+@@ -29,7 +29,7 @@
+ 	 * The TypeScript to analyze with: a package name, resolved from the tsconfig
+ 	 * directory (for example an aliased `typescript-native` install), or the
+ 	 * absolute path of a package directory. Defaults to octane's `typescript`
+-	 * peer. TypeScript 5.9 and 6 run on the classic compiler API, TypeScript 7.1
++	 * peer. TypeScript 5.9 and 6 run on the classic compiler API, TypeScript 7.0
+ 	 * and later on its native `typescript/unstable/sync` API.
+ 	 */
+ 	typescript?: string;
+@@ -86,6 +86,12 @@
+ 	getSourceFileNames(): readonly string[];
+ }
+ 
++/** Stable TypeScript 7 exposes its checker on the caller-owned Project. */
++export interface NativeTypeScriptProject {
++	readonly program: Omit<NativeTypeScriptProgram, 'getProject'>;
++	readonly checker: unknown;
++}
++
+ export interface NativeSignalValidationOptions {
+ 	/**
+ 	 * The TypeScript whose API created `program`: a package name resolved from
+@@ -98,13 +104,15 @@
+ /**
+  * Validate native signal names and known live reads in ordinary memo callbacks
+  * against the exact SourceFile in an existing TypeScript Program, either a
+- * classic Program or a TypeScript 7 Program. The caller owns project lifetime
++ * classic Program, a nightly TypeScript 7 Program, or a stable TypeScript 7
++ * Project from snapshot.getProject(config). Stable Programs alone do not expose
++ * a checker. The caller owns project lifetime
+  * and mapping diagnostics from virtual .tsrx files. Resolves the native
+  * SIGNAL_HANDLE brand by symbol; unrelated structural shapes and ordinary
+  * sampled values are not native capabilities.
+  */
+ export function validateNativeSignalNames(
+-	program: ClassicTypeScriptProgram | NativeTypeScriptProgram,
++	program: ClassicTypeScriptProgram | NativeTypeScriptProgram | NativeTypeScriptProject,
+ 	file: string | { readonly fileName: string },
+ 	options?: NativeSignalValidationOptions,
+ ): import('./index.js').CompileDiagnostic[];
+diff --git a/packages/octane/src/compiler/native-read-types.js b/packages/octane/src/compiler/native-read-types.js
+--- a/packages/octane/src/compiler/native-read-types.js
++++ b/packages/octane/src/compiler/native-read-types.js
+@@ -60,9 +60,10 @@
+  * @param {any} sync typescript/unstable/sync
+  * @param {any} ast typescript/unstable/ast
+  * @param {any} is typescript/unstable/ast/is
++ * @param {any} [checker] Stable Project.checker, owned by the caller snapshot.
+  * @returns {NativeReadHost}
+  */
+-export function nativeNativeReadHost(sync, ast, is) {
++export function nativeNativeReadHost(sync, ast, is, checker) {
+ 	const moduleFilesOf = (program) =>
+ 		program
+ 			.getSourceFileNames()
+@@ -81,7 +82,7 @@
+ 		SignatureKind: sync.SignatureKind,
+ 		SyntaxKind: ast.SyntaxKind,
+ 		forEachChild: (node, visit) => node.forEachChild(visit),
+-		checkerOf: (program) => program.getProject().checker,
++		checkerOf: (program) => checker ?? program.getProject().checker,
+ 		declarationsOf: (symbol) =>
+ 			(symbol.declarations ?? []).map((handle) => handle.resolve()).filter(Boolean),
+ 		valueDeclarationOf: (symbol) => symbol.valueDeclaration?.resolve(),

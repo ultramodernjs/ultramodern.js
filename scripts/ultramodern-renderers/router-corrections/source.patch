@@ -1,0 +1,835 @@
+diff --git a/packages/router-core/src/link.ts b/packages/router-core/src/link.ts
+index 799ae50811..6029f64e92 100644
+--- a/packages/router-core/src/link.ts
++++ b/packages/router-core/src/link.ts
+@@ -378,9 +378,19 @@ export type ToMaskOptions<
+   TRouter extends AnyRouter = RegisteredRouter,
+   TMaskFrom extends string = string,
+   TMaskTo extends string = '.',
+-> = ToSubOptions<TRouter, TMaskFrom, TMaskTo> & {
+-  unmaskOnReload?: boolean
+-}
++> = ToSubOptionsProps<TRouter, TMaskFrom, TMaskTo> &
++  PathParamOptions<TRouter, TMaskFrom, TMaskTo> & {
++    unmaskOnReload?: boolean
++  } & (
++    | {
++        /** Use the fully resolved main location search without mask processing. */
++        inheritSearch: true
++        search?: never
++      }
++    | (SearchParamOptions<TRouter, TMaskFrom, TMaskTo> & {
++        inheritSearch?: false
++      })
++  )
+ 
+ export type ToSubOptions<
+   TRouter extends AnyRouter = RegisteredRouter,
+@@ -628,7 +638,7 @@ export type ToPathOption<
+ 
+ export type FromPathOption<TRouter extends AnyRouter, TFrom> = ConstrainLiteral<
+   TFrom,
+-  RoutePaths<TRouter['routeTree']>
++  RoutePaths<TRouter['routeTree']> & string
+ >
+ 
+ /**
+diff --git a/packages/router-core/src/load-server.ts b/packages/router-core/src/load-server.ts
+index 325f8d63f7..5d6e611347 100644
+--- a/packages/router-core/src/load-server.ts
++++ b/packages/router-core/src/load-server.ts
+@@ -900,65 +900,95 @@ type ServerLoadOptions = NonNullable<Parameters<AnyRouter['load']>[0]> & {
+   _signal?: AbortSignal
+ }
+ 
++function notifyServerLoadActivity(router: AnyRouter) {
++  const pending = router._serverLoadPromise
++  router._serverLoadPromise = undefined
++  if (pending?.status === 'pending') {
++    pending.resolve()
++  }
++}
++
+ export async function loadServerRoute(
+   router: AnyRouter,
+   opts?: ServerLoadOptions,
+ ): Promise<void> {
+-  if (!opts?._skipLocationUpdate) {
+-    router.updateLatestLocation()
+-  }
+-  const next = router.latestLocation
+-  const previous = router._committed
+-  const previousEnd = router._lifecycleEnd
+-  let result: ServerLoadResult
++  const serverSsr = router.serverSsr
++  router._serverLoads = (router._serverLoads ?? 0) + 1
++  // Wake dehydration even when this load begins after its custom hook yielded.
++  notifyServerLoadActivity(router)
+   try {
+-    const canonical = router.buildLocation({
+-      to: next.pathname,
+-      search: true,
+-      params: true,
+-      hash: true,
+-      state: true,
+-      _includeValidateSearch: true,
++    router.stores.status.set('pending')
++    if (!opts?._skipLocationUpdate) {
++      router.updateLatestLocation()
++    }
++    const next = router.latestLocation
++    const previous = router._committed
++    const previousEnd = router._lifecycleEnd
++    let result: ServerLoadResult
++    try {
++      const canonical = router.buildLocation({
++        to: next.pathname,
++        search: true,
++        params: true,
++        hash: true,
++        state: true,
++        _includeValidateSearch: true,
++      })
++      if (next.publicHref !== canonical.publicHref) {
++        const href = canonical.publicHref || '/'
++        throw redirect({ href })
++      }
++
++      const fromLocation = router.stores.resolvedLocation.get()
++      const changeInfo = getLocationChangeInfo(next, fromLocation)
++      router.emit({ type: 'onBeforeNavigate', ...changeInfo })
++      router.emit({ type: 'onBeforeLoad', ...changeInfo })
++      opts?._signal?.throwIfAborted()
++      result = await waitFor(
++        executeServerLane(
++          router,
++          next,
++          router.matchRoutes(next),
++          opts?._signal,
++        ),
++        opts?._signal,
++      )
++      opts?._signal?.throwIfAborted()
++    } catch (cause) {
++      opts?._signal?.throwIfAborted()
++      if (!isRedirect(cause)) {
++        throw cause
++      }
++      cause.options._fromLocation = next
++      result = { type: 'redirect', redirect: router.resolveRedirect(cause) }
++    }
++
++    router._serverResult = result
++    let nextEnd = 0
++    router.batch(() => {
++      router.stores.location.set(next)
++      if (result.type === 'render') {
++        router._committed = result.matches
++        nextEnd = router._lifecycleEnd = lifecycleEnd(result.matches)
++        router.stores.setMatches(result.matches)
++        router.stores.resolvedLocation.set(next)
++      }
+     })
+-    if (next.publicHref !== canonical.publicHref) {
+-      const href = canonical.publicHref || '/'
+-      throw redirect({ href })
+-    }
+-
+-    const fromLocation = router.stores.resolvedLocation.get()
+-    const changeInfo = getLocationChangeInfo(next, fromLocation)
+-    router.emit({ type: 'onBeforeNavigate', ...changeInfo })
+-    router.emit({ type: 'onBeforeLoad', ...changeInfo })
+-    opts?._signal?.throwIfAborted()
+-    result = await waitFor(
+-      executeServerLane(router, next, router.matchRoutes(next), opts?._signal),
+-      opts?._signal,
+-    )
+-    opts?._signal?.throwIfAborted()
+-  } catch (cause) {
+-    opts?._signal?.throwIfAborted()
+-    if (!isRedirect(cause)) {
+-      throw cause
+-    }
+-    cause.options._fromLocation = next
+-    result = { type: 'redirect', redirect: router.resolveRedirect(cause) }
+-  }
+-
+-  router._serverResult = result
+-  let nextEnd = 0
+-  router.batch(() => {
+-    router.stores.location.set(next)
+-    router.stores.status.set('idle')
+     if (result.type === 'render') {
+-      router._committed = result.matches
+-      nextEnd = router._lifecycleEnd = lifecycleEnd(result.matches)
+-      router.stores.setMatches(result.matches)
+-      router.stores.resolvedLocation.set(next)
++      runRouteLifecycle(router, previous, result.matches, previousEnd, nextEnd)
++    }
++    router._commitPromise?.resolve()
++    router._commitPromise = undefined
++  } catch (cause) {
++    if (serverSsr && router.serverSsr === serverSsr) {
++      router._serverLoadFailure ??= { cause }
++      router._serverLoadPromise?.reject(router._serverLoadFailure.cause)
++    }
++    throw cause
++  } finally {
++    if (--router._serverLoads === 0) {
++      router.stores.status.set('idle')
++      notifyServerLoadActivity(router)
+     }
+-  })
+-  if (result.type === 'render') {
+-    runRouteLifecycle(router, previous, result.matches, previousEnd, nextEnd)
+   }
+-  router._commitPromise?.resolve()
+-  router._commitPromise = undefined
+ }
+diff --git a/packages/router-core/src/route.ts b/packages/router-core/src/route.ts
+index 089369b454..ab3d9ffb57 100644
+--- a/packages/router-core/src/route.ts
++++ b/packages/router-core/src/route.ts
+@@ -1591,11 +1591,20 @@ export type RouteMask<TRouteTree extends AnyRoute> = {
+   from: RoutePaths<TRouteTree>
+   to?: any
+   params?: any
+-  search?: any
+   hash?: any
+   state?: any
+   unmaskOnReload?: boolean
+-}
++} & (
++  | {
++      /** Use the fully resolved main location search without mask processing. */
++      inheritSearch: true
++      search?: never
++    }
++  | {
++      inheritSearch?: false
++      search?: any
++    }
++)
+ 
+ /**
+  * @deprecated Use `ErrorComponentProps` instead.
+diff --git a/packages/router-core/src/router.ts b/packages/router-core/src/router.ts
+index ecf443168d..d6951f2d03 100644
+--- a/packages/router-core/src/router.ts
++++ b/packages/router-core/src/router.ts
+@@ -81,6 +81,7 @@ import type {
+ import type {
+   Awaitable,
+   Constrain,
++  ControlledPromise,
+   NoInfer,
+   NonNullableUpdater,
+   PickAsRequired,
+@@ -592,11 +593,19 @@ export interface BuildNextOptions {
+   mask?: {
+     to?: string | number | null
+     params?: true | Updater<unknown>
+-    search?: true | Updater<unknown>
+     hash?: true | Updater<string>
+     state?: true | NonNullableUpdater<ParsedHistoryState, HistoryState>
+     unmaskOnReload?: boolean
+-  }
++  } & (
++    | {
++        inheritSearch: true
++        search?: never
++      }
++    | {
++        inheritSearch?: false
++        search?: true | Updater<unknown>
++      }
++  )
+   from?: string
+   href?: string
+   _fromLocation?: ParsedLocation
+@@ -871,6 +880,8 @@ export interface ServerSsr {
+   dehydrate: (opts?: {
+     requestAssets?: ManifestRouteAssets
+     signal?: AbortSignal
++    /** Framework-only: publish settled route assets before the custom hook. */
++    onBeforeDehydrate?: () => void
+   }) => Promise<void>
+   /**
+    * Framework-only: opt this request out of hydration output entirely (for
+@@ -1107,6 +1118,12 @@ export interface RouterCore<
+   _pending?: PendingSession
+   /** Result of the latest server load, used to render or redirect. */
+   _serverResult?: ServerLoadResult
++  /** Server loads retain pending status until every active load has settled. */
++  _serverLoads?: number
++  /** Request-scoped wakeup for server load activity during dehydration. */
++  _serverLoadPromise?: ControlledPromise<void>
++  /** First thrown load failure in the attached SSR request, until cleanup. */
++  _serverLoadFailure?: { cause: unknown }
+   /** Framework publication waiting for an exact render acknowledgement. */
+   _rendered?: [
+     offered?: Array<AnyRouteMatch>,
+@@ -1902,6 +1919,7 @@ export class RouterCore<
+       dest: BuildNextOptions & {
+         unmaskOnReload?: boolean
+       } = {},
++      inheritedLocation?: ParsedLocation,
+     ): ParsedLocation => {
+       if (dest.href) {
+         const parsed = parseHref(dest.href, {} as ParsedHistoryState)
+@@ -2070,47 +2088,54 @@ export class RouterCore<
+         }
+       }
+ 
+-      // Resolve the next search
+-      const middlewares = getSearchMiddlewares(
+-        destRoutes,
+-        opts._includeValidateSearch,
+-      )
+-      const fromSearch = () => {
+-        let search = currentMatch()[2 /* search */]
+-        if (opts._includeValidateSearch && this.options.search?.strict) {
+-          const validatedSearch = {}
+-          destRoutes.forEach((route) => {
+-            if (route.options.validateSearch) {
+-              try {
+-                Object.assign(
+-                  validatedSearch,
+-                  validateSearch(route.options.validateSearch, {
+-                    ...validatedSearch,
+-                    ...search,
+-                  }),
+-                )
+-              } catch {
+-                // ignore errors here because they are already handled in matchRoutes
++      let nextSearch: Record<string, unknown>
++      let searchStr: string
++      if (inheritedLocation) {
++        nextSearch = inheritedLocation.search
++        searchStr = inheritedLocation.searchStr
++      } else {
++        // Resolve the next search
++        const middlewares = getSearchMiddlewares(
++          destRoutes,
++          opts._includeValidateSearch,
++        )
++        const fromSearch = () => {
++          let search = currentMatch()[2 /* search */]
++          if (opts._includeValidateSearch && this.options.search?.strict) {
++            const validatedSearch = {}
++            destRoutes.forEach((route) => {
++              if (route.options.validateSearch) {
++                try {
++                  Object.assign(
++                    validatedSearch,
++                    validateSearch(route.options.validateSearch, {
++                      ...validatedSearch,
++                      ...search,
++                    }),
++                  )
++                } catch {
++                  // ignore errors here because they are already handled in matchRoutes
++                }
+               }
+-            }
+-          })
+-          search = validatedSearch
++            })
++            search = validatedSearch
++          }
++          return search
+         }
+-        return search
+-      }
+-      // A literal search never reads the current one. The result is not
+-      // structurally shared with the current search: `parseLocation` keeps
+-      // equal nested values stable once the location is committed.
+-      const nextSearch: Record<string, unknown> = middlewares.length
+-        ? applySearchMiddleware(middlewares, fromSearch(), dest)
+-        : dest.search === true
+-          ? fromSearch()
+-          : typeof dest.search === 'function'
+-            ? dest.search(fromSearch())
+-            : (dest.search as Record<string, unknown>) || EMPTY_RECORD
++        // A literal search never reads the current one. The result is not
++        // structurally shared with the current search: `parseLocation` keeps
++        // equal nested values stable once the location is committed.
++        nextSearch = middlewares.length
++          ? applySearchMiddleware(middlewares, fromSearch(), dest)
++          : dest.search === true
++            ? fromSearch()
++            : typeof dest.search === 'function'
++              ? dest.search(fromSearch())
++              : (dest.search as Record<string, unknown>) || EMPTY_RECORD
+ 
+-      // Stringify the next search
+-      const searchStr = this.options.stringifySearch(nextSearch)
++        // Stringify the next search
++        searchStr = this.options.stringifySearch(nextSearch)
++      }
+ 
+       // Resolve the next hash
+       const hash =
+@@ -2181,12 +2206,13 @@ export class RouterCore<
+ 
+     const next = build(opts)
+ 
+-    if (opts.mask) {
+-      next.maskedLocation = build({
+-        from: opts.from,
+-        ...opts.mask,
+-      })
+-    } else if (this.options.routeMasks) {
++    let mask:
++      | (BuildNextOptions & {
++          unmaskOnReload?: boolean
++          inheritSearch?: boolean
++        })
++      | undefined = opts.mask && { from: opts.from, ...opts.mask }
++    if (!mask && this.options.routeMasks) {
+       const match = findFlatMatch<RouteMask<TRouteTree>>(
+         next.pathname,
+         this.processedTree,
+@@ -2199,13 +2225,16 @@ export class RouterCore<
+         // Otherwise, use the matched params or the provided params value
+         const nextParams = resolveNextParams(maskParams, params)
+ 
+-        next.maskedLocation = build({
+-          from: opts.from,
+-          ...maskProps,
+-          params: nextParams,
+-        })
++        mask = { from: opts.from, ...maskProps, params: nextParams }
+       }
+     }
++    if (mask) {
++      const inheritSearch = mask.inheritSearch === true
++      if (inheritSearch && mask.search !== undefined) {
++        throw new Error('A route mask cannot combine inheritSearch with search')
++      }
++      next.maskedLocation = build(mask, inheritSearch ? next : undefined)
++    }
+ 
+     // A mask that reads the current location marks the whole result through
+     // `usedCurrent`. Route masks belong to the route tree and options, whose
+@@ -2243,6 +2272,8 @@ export class RouterCore<
+     let historyAction: HistoryAction | undefined
+     const isSameLocation =
+       trimPathRight(this.latestLocation.href) === trimPathRight(next.href) &&
++      (this.latestLocation.maskedLocation ?? this.latestLocation).publicHref ===
++        nextLocation.publicHref &&
+       deepEqual(
+         _getUserHistoryState(next.state),
+         _getUserHistoryState(this.latestLocation.state),
+diff --git a/packages/router-core/src/ssr/STREAMING.md b/packages/router-core/src/ssr/STREAMING.md
+index 12d3bd7b08..d299001d47 100644
+--- a/packages/router-core/src/ssr/STREAMING.md
++++ b/packages/router-core/src/ssr/STREAMING.md
+@@ -3,6 +3,24 @@
+ This document explains how TanStack Router adds hydration scripts to server-rendered HTML.
+ It describes the transport in `router-core` and the React, Solid, and Vue adapters.
+ 
++## Server entries
++
++`@tanstack/router-core/ssr/server` exposes the Web stream and HTML transforms.
++Its Node condition also exposes `transformPipeableStreamWithRouter`.
++Bundlers targeting Node can select the explicit `@tanstack/router-core/ssr/server.node` entry.
++Browser and Worker conditions use the portable entry and do not require Node stream types.
++
++`@tanstack/start-server-core` follows the same condition contract.
++Its explicit Node entry is `@tanstack/start-server-core/node`.
++The React, Solid and Vue Start server entries re-export this platform-selected API.
++
++Node TypeScript consumers select NodeNext resolution, or Bundler resolution with
++`customConditions: ['node']`, to import `transformPipeableStreamWithRouter` through these server entries.
++Bundler resolution without a Node condition selects the portable Web API.
++Direct consumers can also use the explicit Node entries above.
++Worker projects use Bundler resolution with their Worker condition; NodeNext adds
++the Node condition automatically unless a Worker condition takes precedence.
++
+ ## Main terms
+ 
+ The renderer and Seroval produce output independently.
+diff --git a/packages/router-core/src/ssr/createRequestHandler.ts b/packages/router-core/src/ssr/createRequestHandler.ts
+index 21e48ca242..864ed27a87 100644
+--- a/packages/router-core/src/ssr/createRequestHandler.ts
++++ b/packages/router-core/src/ssr/createRequestHandler.ts
+@@ -83,6 +83,9 @@ export function createRequestHandler<TRouter extends AnyRouter>({
+ 
+       await router.serverSsr?.dehydrate({ signal })
+       signal.throwIfAborted()
++      if (router._serverResult?.type === 'redirect') {
++        return router._serverResult.redirect
++      }
+ 
+       const responseHeaders = getRequestHeaders({
+         router,
+diff --git a/packages/router-core/src/ssr/headers.ts b/packages/router-core/src/ssr/headers.ts
+index a31a41c161..3e2aa9d840 100644
+--- a/packages/router-core/src/ssr/headers.ts
++++ b/packages/router-core/src/ssr/headers.ts
+@@ -1,12 +1,11 @@
+ import { splitSetCookieString } from 'cookie-es'
+-import type { OutgoingHttpHeaders } from 'node:http2'
+ 
+ export type AnyHeaders =
+   | Headers
+   | HeadersInit
+   | Record<string, string>
+   | Array<[string, string]>
+-  | OutgoingHttpHeaders
++  | Record<string, string | number | Array<string> | undefined>
+   | undefined
+ 
+ // Helper function to convert various HeaderInit types to a Headers instance
+diff --git a/packages/router-core/src/ssr/server.node.ts b/packages/router-core/src/ssr/server.node.ts
+new file mode 100644
+index 0000000000..355d314d5a
+--- /dev/null
++++ b/packages/router-core/src/ssr/server.node.ts
+@@ -0,0 +1,2 @@
++export * from './server'
++export { transformPipeableStreamWithRouter } from './transformPipeableStreamWithRouter'
+diff --git a/packages/router-core/src/ssr/server.ts b/packages/router-core/src/ssr/server.ts
+index 84c34976c9..c0d2fd8be9 100644
+--- a/packages/router-core/src/ssr/server.ts
++++ b/packages/router-core/src/ssr/server.ts
+@@ -17,7 +17,6 @@ export type {
+   SsrResponse,
+ } from './handlerCallback'
+ export {
+-  transformPipeableStreamWithRouter,
+   transformHtmlStringWithRouter,
+   transformReadableStreamWithRouter,
+ } from './transformStreamWithRouter'
+diff --git a/packages/router-core/src/ssr/ssr-server.ts b/packages/router-core/src/ssr/ssr-server.ts
+index e7c9cc2fa6..c44d451a8d 100644
+--- a/packages/router-core/src/ssr/ssr-server.ts
++++ b/packages/router-core/src/ssr/ssr-server.ts
+@@ -5,7 +5,7 @@ import {
+   createInlineCssStyleAsset,
+   getStylesheetHref,
+ } from '../manifest'
+-import { decodePath } from '../utils'
++import { createControlledPromise, decodePath } from '../utils'
+ import { createSieveCache } from '../sieve-cache'
+ import { rootRouteId } from '../root'
+ import { _getRenderedMatches } from '../load-client'
+@@ -30,6 +30,32 @@ import type {
+ 
+ type DehydrationPhase = 'idle' | 'started' | 'disabled'
+ 
++function hasServerRedirect(router: AnyRouter): boolean {
++  return router._serverResult?.type === 'redirect'
++}
++
++async function waitForServerLoads(
++  router: AnyRouter,
++  serverSsr: ServerSsr,
++  signal?: AbortSignal,
++) {
++  while (router.serverSsr === serverSsr) {
++    if (router._serverLoadFailure) {
++      throw router._serverLoadFailure.cause
++    }
++    if (!router._serverLoads) {
++      return
++    }
++    const pending = (router._serverLoadPromise ??=
++      createControlledPromise<void>())
++    if (signal) {
++      await waitForReason(pending, signal)
++    } else {
++      await pending
++    }
++  }
++}
++
+ export function dehydrateMatch(match: AnyRouteMatch): DehydratedMatch {
+   const dehydratedMatch: DehydratedMatch = {
+     i: dehydrateSsrMatchId(match.id),
+@@ -410,6 +436,7 @@ export function attachRouterServerSsrUtils({
+     dehydrate: async (opts?: {
+       requestAssets?: ManifestRouteAssets
+       signal?: AbortSignal
++      onBeforeDehydrate?: () => void
+     }) => {
+       // Guard synchronously before the first await: a concurrent second call
+       // would double-serialize and corrupt the hydration payload.
+@@ -426,6 +453,126 @@ export function attachRouterServerSsrUtils({
+       }
+       opts?.signal?.throwIfAborted()
+       dehydrationPhase = 'started'
++      if (router._serverLoads || router._serverLoadFailure) {
++        await waitForServerLoads(router, serverSsr, opts?.signal)
++      }
++      opts?.signal?.throwIfAborted()
++      if (cleanupStarted || router.serverSsr !== serverSsr) {
++        return
++      }
++      if (hasServerRedirect(router)) {
++        return
++      }
++      if (opts?.onBeforeDehydrate) {
++        while (true) {
++          opts.onBeforeDehydrate()
++          opts.signal?.throwIfAborted()
++          if (
++            cleanupStarted ||
++            router.serverSsr !== serverSsr ||
++            hasServerRedirect(router)
++          ) {
++            return
++          }
++          if (!router._serverLoads && !router._serverLoadFailure) {
++            break
++          }
++          // Publishing assets can synchronously start another load. Publish its
++          // settled assets before entering a potentially pending custom hook.
++          await waitForServerLoads(router, serverSsr, opts.signal)
++          opts.signal?.throwIfAborted()
++          if (
++            cleanupStarted ||
++            router.serverSsr !== serverSsr ||
++            hasServerRedirect(router)
++          ) {
++            return
++          }
++        }
++      }
++      const dehydrate = router.options.dehydrate
++      let dehydratedData: unknown
++      if (dehydrate) {
++        let publishedResult = router._serverResult
++        let hookResult: { value: unknown } | { error: unknown } | undefined
++        let wakeHook: (() => void) | undefined
++        let pending: AnyRouter['_serverLoadPromise']
++        // Observe the hook once. A never-settling hook must not retain one
++        // Promise.race handler for every load started during this request.
++        void Promise.resolve(dehydrate.call(router.options)).then(
++          (value) => {
++            hookResult = { value }
++            wakeHook?.()
++          },
++          (error) => {
++            hookResult = { error }
++            wakeHook?.()
++          },
++        )
++        try {
++          while (true) {
++            opts?.signal?.throwIfAborted()
++            if (cleanupStarted || router.serverSsr !== serverSsr) {
++              return
++            }
++            if (router._serverLoads || router._serverLoadFailure) {
++              await waitForServerLoads(router, serverSsr, opts?.signal)
++              continue
++            }
++            if (hasServerRedirect(router)) {
++              return
++            }
++            if (!hookResult && publishedResult !== router._serverResult) {
++              publishedResult = router._serverResult
++              opts?.onBeforeDehydrate?.()
++              continue
++            }
++            if (hookResult) {
++              if ('error' in hookResult) {
++                throw hookResult.error
++              }
++              dehydratedData = hookResult.value
++              break
++            }
++            const activity = (router._serverLoadPromise ??=
++              createControlledPromise<void>())
++            pending = activity
++            wakeHook = () => {
++              if (router._serverLoadPromise === activity) {
++                router._serverLoadPromise = undefined
++              }
++              if (activity.status === 'pending') {
++                activity.resolve()
++              }
++            }
++            if (opts?.signal) {
++              await waitForReason(activity, opts.signal)
++            } else {
++              await activity
++            }
++            wakeHook = undefined
++          }
++        } finally {
++          wakeHook = undefined
++          if (pending && router._serverLoadPromise === pending) {
++            router._serverLoadPromise = undefined
++            if (pending.status === 'pending') {
++              pending.resolve()
++            }
++          }
++        }
++      }
++      // A custom hook can start a load. Capture matches only after it settles.
++      if (router._serverLoads || router._serverLoadFailure) {
++        await waitForServerLoads(router, serverSsr, opts?.signal)
++      }
++      opts?.signal?.throwIfAborted()
++      if (cleanupStarted || router.serverSsr !== serverSsr) {
++        return
++      }
++      if (hasServerRedirect(router)) {
++        return
++      }
+       let matchesToDehydrate = _getRenderedMatches(router.stores.matches.get())
+       const isShell = router.isShell()
+       if (isShell) {
+@@ -458,16 +605,6 @@ export function attachRouterServerSsrUtils({
+         manifest: manifestToDehydrate,
+         matches,
+       }
+-      const dehydrate = router.options.dehydrate
+-      const dehydratedData = dehydrate
+-        ? opts?.signal
+-          ? await waitForReason(dehydrate.call(router.options), opts.signal)
+-          : await dehydrate.call(router.options)
+-        : undefined
+-      opts?.signal?.throwIfAborted()
+-      if (cleanupStarted) {
+-        return
+-      }
+       if (dehydratedData !== undefined) {
+         dehydratedRouter.dehydratedData = dehydratedData
+       }
+@@ -630,12 +767,26 @@ export function attachRouterServerSsrUtils({
+         settled,
+       )
+       renderFinishedListeners.length = 0
+-      router.ssr = undefined
+-      router.serverSsr = undefined
++      if (router.serverSsr === serverSsr) {
++        router.ssr = undefined
++        router.serverSsr = undefined
++        router._serverLoadFailure = undefined
++        const pending = router._serverLoadPromise
++        router._serverLoadPromise = undefined
++        if (pending?.status === 'pending') {
++          pending.resolve()
++        }
++      }
+     },
+   }
+ 
++  const pending = router._serverLoadPromise
++  router._serverLoadPromise = undefined
++  router._serverLoadFailure = undefined
+   router.serverSsr = serverSsr
++  if (pending?.status === 'pending') {
++    pending.resolve()
++  }
+   for (const listener of router.serverSsrLifecycle?.onServerSsrAttach ?? []) {
+     try {
+       listener(serverSsr)
+diff --git a/packages/router-core/src/ssr/transformPipeableStreamWithRouter.ts b/packages/router-core/src/ssr/transformPipeableStreamWithRouter.ts
+new file mode 100644
+index 0000000000..69a34eb124
+--- /dev/null
++++ b/packages/router-core/src/ssr/transformPipeableStreamWithRouter.ts
+@@ -0,0 +1,19 @@
++import { Readable } from 'node:stream'
++import { transformReadableStreamWithRouter } from './transformStreamWithRouter'
++import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
++import type { AnyRouter } from '../router'
++import type { TransformStreamWithRouterOptions } from './transformStreamWithRouter'
++
++export function transformPipeableStreamWithRouter(
++  router: AnyRouter,
++  routerStream: Readable,
++  opts?: TransformStreamWithRouterOptions,
++) {
++  return Readable.fromWeb(
++    transformReadableStreamWithRouter(
++      router,
++      Readable.toWeb(routerStream),
++      opts,
++    ) as NodeReadableStream<Uint8Array>,
++  )
++}
+diff --git a/packages/router-core/src/ssr/transformStreamWithRouter.ts b/packages/router-core/src/ssr/transformStreamWithRouter.ts
+index d253034073..a89dd4366f 100644
+--- a/packages/router-core/src/ssr/transformStreamWithRouter.ts
++++ b/packages/router-core/src/ssr/transformStreamWithRouter.ts
+@@ -1,4 +1,3 @@
+-import { Readable } from 'node:stream'
+ import {
+   DOCUMENT_CLOSE_ANCHOR_INDEX,
+   DOCUMENT_CLOSE_BYTES,
+@@ -14,7 +13,6 @@ import {
+   HYDRATION_SCRIPT_BOUNDARY_BYTES,
+   HydrationScriptOutputState,
+ } from './hydrationScripts'
+-import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
+ import type { AnyRouter } from '../router'
+ import type { ByteMatcherState } from './htmlBoundaryScanner'
+ import type { HydrationScriptOutput } from './hydrationScripts'
+@@ -42,25 +40,13 @@ export type TransformStreamWithRouterOptions = {
+ }
+ 
+ type AppStreamValue = Uint8Array | string
+-/** Renderer output: UTF-8 bytes, or string records from a Node pipeable. */
+-type AppStream =
+-  | ReadableStream<Uint8Array>
+-  | ReadableStream<string>
+-  | ReadableStream<AppStreamValue>
+-  | NodeReadableStream<AppStreamValue>
+-
+-export function transformPipeableStreamWithRouter(
+-  router: AnyRouter,
+-  routerStream: Readable,
+-  opts?: TransformStreamWithRouterOptions,
+-) {
+-  return Readable.fromWeb(
+-    transformReadableStreamWithRouter(
+-      router,
+-      Readable.toWeb(routerStream) as AppStream,
+-      opts,
+-    ) as NodeReadableStream<Uint8Array>,
+-  )
++type AppStreamReader = Pick<
++  ReadableStreamDefaultReader<AppStreamValue>,
++  'read' | 'cancel' | 'releaseLock'
++>
++/** The default-reader operations shared by Web and Node Web streams. */
++type AppStream = {
++  getReader: () => AppStreamReader
+ }
+ 
+ export async function transformHtmlStringWithRouter(
+@@ -133,7 +119,6 @@ const ApplicationPhase = {
+ 
+ type ApplicationPhase = (typeof ApplicationPhase)[keyof typeof ApplicationPhase]
+ type Termination = 'complete' | 'cancel' | 'failure'
+-type AppStreamReader = ReadableStreamDefaultReader<AppStreamValue>
+ 
+ function releaseReader(reader: AppStreamReader) {
+   try {
+@@ -330,7 +315,7 @@ export function transformReadableStreamWithRouter(
+ 
+   let reader: AppStreamReader
+   try {
+-    reader = appStream.getReader() as AppStreamReader
++    reader = appStream.getReader()
+   } catch (error) {
+     cleanupFailedStreamCreation(serverSsr, opts?.onAbort, error)
+     throw error
+diff --git a/packages/router-core/vite.config.ts b/packages/router-core/vite.config.ts
+index 97859dda97..f6e86a56bb 100644
+--- a/packages/router-core/vite.config.ts
++++ b/packages/router-core/vite.config.ts
+@@ -44,6 +44,7 @@ export default mergeConfig(
+       './src/index.ts',
+       './src/ssr/client.ts',
+       './src/ssr/server.ts',
++      './src/ssr/server.node.ts',
+       './src/scroll-restoration-script/client.ts',
+       './src/scroll-restoration-script/server.ts',
+       './src/isServer/server.ts',
