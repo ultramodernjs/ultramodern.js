@@ -13,6 +13,7 @@ const {
 const {
   nodeSsrEvidence,
   runTractorAcceptanceFixture,
+  supportArtifactsDescriptor,
 } = require('../../ultramodern-production-readiness/__tests__/support/tractor-acceptance-run.js');
 
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -76,6 +77,7 @@ async function createEvidenceFixture({
   const definitions = [
     {
       dependencies: {
+        '@effect/tsgo': '0.69.0',
         '@modern-js/i18n-utils': `npm:${i18nTarget}@${release.version}`,
         '@module-federation/runtime': '2.8.0',
         ...(compilerVersion ? { tsrs: compilerVersion } : {}),
@@ -83,7 +85,10 @@ async function createEvidenceFixture({
       exports: exportsMap,
       sourceName: createSourceName,
       targetName: createTargetName,
-      ultramodern: { frameworkVersion: release.version },
+      ultramodern: {
+        frameworkVersion: release.version,
+        supportArtifacts: await supportArtifactsDescriptor(),
+      },
     },
     {
       dependencies: {},

@@ -12,6 +12,40 @@ const baselineRevision = 'cb6974e31bc919c86ae5bb86044409f0f1e036d5';
 const verticalIds = ['checkout', 'decide', 'explore'];
 const product = { detailName: 'Example', sku: 'EX-01', slug: 'example' };
 
+async function supportArtifactsDescriptor() {
+  const { inputs, supportProtocol } = await import(
+    '../../../ultramodern-support-artifacts/protocol.mjs'
+  );
+  const producer = {
+    repository: supportProtocol.repository,
+    repositoryId: supportProtocol.repositoryId,
+    workflow: supportProtocol.workflow,
+    source: 'd'.repeat(40),
+    runId: 43934193068,
+    runAttempt: 2,
+    tag: `support-artifacts-${'d'.repeat(40)}-43934193068-2`,
+  };
+  return supportProtocol.descriptorFor({
+    protocol: supportProtocol.protocol,
+    producer,
+    packages: Object.fromEntries(
+      Object.entries(supportProtocol.cohort).map(([name, version]) => [
+        name,
+        {
+          version,
+          request: supportProtocol.releaseUrl(
+            producer,
+            supportProtocol.assetFilename(name, version),
+          ),
+          integrity: `sha512-${Buffer.alloc(64, name.length).toString('base64')}`,
+          upstream: inputs[name].upstream,
+          patchSha256: inputs[name].patchSha256,
+        },
+      ]),
+    ),
+  });
+}
+
 function writeJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(value)}\n`);
@@ -204,14 +238,23 @@ async function runTractorAcceptanceFixture({
   nodeSsr = nodeSsrEvidence(),
   root,
 }) {
-  const [{ runTractorDownstreamAcceptance }, { readReleaseManifest }] =
-    await Promise.all([
-      import('../../tractor-downstream/main.mjs'),
-      import(
-        '../../../ultramodern-publish/lib/source-create-proof/release-manifest.mjs'
-      ),
-    ]);
+  const [
+    { runTractorDownstreamAcceptance },
+    { readReleaseManifest },
+    { resolveCreatePackage, compilerBootstrapSelectors },
+  ] = await Promise.all([
+    import('../../tractor-downstream/main.mjs'),
+    import(
+      '../../../ultramodern-publish/lib/source-create-proof/release-manifest.mjs'
+    ),
+    import('../../published-create-proof/package-cohort.mjs'),
+  ]);
   const release = readReleaseManifest({ manifestPath });
+  resolveCreatePackage(release);
+  const packedManifest = release.createPackage.packageJson;
+  const descriptor = packedManifest.ultramodern.supportArtifacts;
+  const telemetry = descriptor.packages['@effect/opentelemetry'];
+  const compilerSelectors = compilerBootstrapSelectors(packedManifest);
   const workspace = path.join(root, 'tractor');
   const outPath = path.join(root, 'tractor-downstream-acceptance.json');
   const releaseAgePolicyPath = path.join(root, 'release-age-policy.json');
@@ -236,14 +279,17 @@ async function runTractorAcceptanceFixture({
       fs.mkdirSync(generated, { recursive: true });
       writeJson(path.join(generated, 'package.json'), {
         devDependencies: {
-          effect: '4.0.0',
-          '@effect/opentelemetry': '4.0.0',
-          '@effect/tsgo': '0.53.1',
+          effect: telemetry.version,
+          '@effect/opentelemetry': telemetry.request,
+          '@effect/tsgo': packedManifest.dependencies['@effect/tsgo'],
+          'rsbuild-plugin-dts':
+            descriptor.packages['rsbuild-plugin-dts'].request,
           react: '19.3.0',
           'react-dom': '19.3.0',
           '@types/react': '19.3.0',
           '@types/react-dom': '19.3.0',
         },
+        ultramodern: { supportArtifacts: descriptor },
       });
       fs.writeFileSync(
         path.join(generated, 'pnpm-workspace.yaml'),
@@ -252,6 +298,7 @@ async function runTractorAcceptanceFixture({
           ...(release.sidecars?.packages ?? []).map(
             item => `${item.name}@${item.version}`,
           ),
+          ...compilerSelectors,
         ]
           .sort()
           .map(selector => `  - ${JSON.stringify(selector)}`)
@@ -333,4 +380,8 @@ async function runTractorAcceptanceFixture({
   return { baselineRevision, reportPath: outPath };
 }
 
-module.exports = { nodeSsrEvidence, runTractorAcceptanceFixture };
+module.exports = {
+  nodeSsrEvidence,
+  runTractorAcceptanceFixture,
+  supportArtifactsDescriptor,
+};
