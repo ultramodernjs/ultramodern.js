@@ -44,7 +44,11 @@ test('packed prerequisites round-trip without the retired aggregate edge list', 
   write('packed/package/package.json', JSON.stringify(project));
   const tarball = path.join(root, 'packed/example.tgz');
   execFileSync('tar', [
-    '-czf', tarball, '-C', path.join(root, 'packed'), 'package',
+    '-czf',
+    tarball,
+    '-C',
+    path.join(root, 'packed'),
+    'package',
   ]);
   const manifest = {
     packages: {
