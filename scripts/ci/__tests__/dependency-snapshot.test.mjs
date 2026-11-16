@@ -178,7 +178,7 @@ test('native executables and relative file links survive file-only archive trans
   const link = path.join(root, 'node_modules/.bin/native-tool');
   assert.equal(
     fs.realpathSync(link),
-    path.join(root, 'node_modules/native-tool'),
+    fs.realpathSync(path.join(root, 'node_modules/native-tool')),
   );
   if (process.platform !== 'win32') {
     assert.equal(
