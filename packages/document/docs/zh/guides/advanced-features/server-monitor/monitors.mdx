@@ -73,7 +73,7 @@ Modern.js 内置了默认的 Monitor，不同的事件会触发内置 Monitor �
 
 ## 注册 Monitors
 
-开发者可以通过 Monitors 的 `push` API 注册自己的 Monitor，但只能在[服务端中间件](/guides/advanced-features/web-server#unstable-middleware)或[服务端插件](/plugin/server-plugins/api)中注册，在 Data Loader、组件、init 函数中无法注册。
+开发者可以通过 Monitors 的 `push` API 注册自己的 Monitor，但只能在[服务端中间件](/guides/advanced-features/web-server#middleware)或[服务端插件](/plugin/server-plugins/api)中注册，在 Data Loader、组件、init 函数中无法注册。
 
 ```ts title="server/modern.server.ts"
 import {

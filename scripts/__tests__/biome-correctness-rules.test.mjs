@@ -77,6 +77,50 @@ const lintProbes = (relativePaths, source = PROBE_SOURCE) => {
   }
 };
 
+test('the code formatter preserves Changeset front matter and generated YAML', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'biome-format-scope-'));
+  try {
+    fs.writeFileSync(
+      path.join(root, 'biome.json'),
+      JSON.stringify({
+        $schema: biomeConfig.$schema,
+        formatter: biomeConfig.formatter,
+        javascript: biomeConfig.javascript,
+      }),
+    );
+    fs.mkdirSync(path.join(root, '.changeset'));
+    const changeset =
+      "---\n'@modern-js/app-tools': patch\n---\n\nFix routing.\n";
+    const yaml = "packages:\n  - 'packages/*'\n";
+    fs.writeFileSync(path.join(root, '.changeset/release.md'), changeset);
+    fs.writeFileSync(path.join(root, 'pnpm-lock.yaml'), yaml);
+    fs.writeFileSync(
+      path.join(root, 'probe.ts'),
+      'export const value={x:1};\n',
+    );
+    const result = spawnSync(
+      biomeBin,
+      ['format', '--vcs-enabled=false', '--write', '.'],
+      { cwd: root, encoding: 'utf8' },
+    );
+    assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+    assert.equal(
+      fs.readFileSync(path.join(root, '.changeset/release.md'), 'utf8'),
+      changeset,
+    );
+    assert.equal(
+      fs.readFileSync(path.join(root, 'pnpm-lock.yaml'), 'utf8'),
+      yaml,
+    );
+    assert.equal(
+      fs.readFileSync(path.join(root, 'probe.ts'), 'utf8'),
+      'export const value = { x: 1 };\n',
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('unused imports, unused variables and @ts-ignore fail lint in fork-owned code', () => {
   const guarded = [
     'packages/toolkit/ultramodern-create/src/probe.ts',
