@@ -182,8 +182,14 @@ jobs:
   # change reaches the default branch. The seed leg stays default-branch-only
   # because its keys already exist there and every ref can read them, so a
   # branch copy would be the duplicate ~1 GB per branch the header records.
+  #
+  # Gated on the event, not on `startsWith(github.ref, 'refs/heads/')`: a
+  # merge_group ref is `refs/heads/gh-readonly-queue/...`, so a ref-prefix
+  # guard would park one entry per merge-queue entry. `schedule` is listed
+  # because it is what refreshes the entry inside GitHub's 7-day eviction
+  # window.
   seed-windows-dependencies:
-    if: startsWith(github.ref, 'refs/heads/')
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
     timeout-minutes: 30
 

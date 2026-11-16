@@ -1,10 +1,23 @@
-// A cache saved on any ref but the default branch is readable only by that
-// ref, so every PR that saved its own pnpm store, mise tools and browsers
+// A cache is readable only from the ref that saved it and from the default
+// branch, so every PR that saved its own pnpm store, mise tools and browsers
 // parked ~1 GB per OS that no other run could reuse, and the repository blew
-// its 10 GB cache quota. Only saves pinned to main-ultramodern are allowed;
-// ci-cache.yml seeds the keys everything else restores. The pin may sit on the
-// job or on the save step itself, because a job that must also run on pull
-// requests (the Effect compiler build) can only guard the write at step level.
+// its 10 GB cache quota. What makes such an entry waste is not that the ref
+// is a branch other than main-ultramodern - a branch ref outlives the run and
+// its own later runs reuse what it wrote, which is the only way to measure a
+// new cache lever before merging it. What makes it waste is that the ref is
+// thrown away when the run ends: refs/pull/N/merge for `pull_request`, and
+// refs/heads/gh-readonly-queue/... for `merge_group`. `pull_request_target`
+// is worse than waste: its github.ref is the base branch, so a save there
+// would let unmerged code write the scope every other run reads.
+//
+// A save is therefore allowed under exactly one of the guards below, and no
+// other, so that reaching for a looser one is a test failure rather than a
+// review question. The guard may sit on the job or on the save step itself,
+// because a job that must also run on pull requests (the Effect compiler
+// build) can only guard the write at step level.
+//
+// Note that `startsWith(github.ref, 'refs/heads/')` is NOT one of them: it
+// admits the merge-queue ref and is a named negative control below.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -60,7 +73,20 @@ const pinnedToMain = condition =>
     condition,
   );
 
-test('only jobs pinned to main-ultramodern save caches', () => {
+// The two exact event guards allowed instead of the default-branch pin. Both
+// name every event they admit, so neither can admit `pull_request`,
+// `pull_request_target` or `merge_group` by omission. `schedule` appears only
+// in the second because refreshing an entry inside GitHub's 7-day eviction
+// window is the one reason a timer needs to write at all.
+const durableRefEvents = new Set([
+  "github.event_name == 'push' || github.event_name == 'workflow_dispatch'",
+  "github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'",
+]);
+
+const mayWriteCache = condition =>
+  pinnedToMain(condition) || durableRefEvents.has(condition.trim());
+
+test('only a default-branch pin or a durable-ref event guard saves caches', () => {
   const writers = [];
   for (const { file, workflow } of workflows) {
     for (const entry of steps(workflow)) {
@@ -69,12 +95,36 @@ test('only jobs pinned to main-ultramodern save caches', () => {
       }
       writers.push(file);
       assert.ok(
-        pinnedToMain(entry.condition) || pinnedToMain(entry.step.if ?? ''),
-        `${where(file, entry.job, entry.step)} can save a cache on a branch-scoped ref; restore only (actions/cache/restore, mise cache_save: false) and let ${seedWorkflow} seed the key`,
+        mayWriteCache(entry.condition) || mayWriteCache(entry.step.if ?? ''),
+        `${where(file, entry.job, entry.step)} can save a cache on a ref that is discarded when the run ends; restore only (actions/cache/restore, mise cache_save: false) and let ${seedWorkflow} seed the key, or guard the write on a durable ref`,
       );
     }
   }
   assert.ok(writers.includes(seedWorkflow));
+});
+
+test('the write guard rejects every ref that does not outlive its run', () => {
+  for (const guard of [
+    '',
+    'always()',
+    "github.event_name == 'pull_request'",
+    "github.event_name == 'merge_group'",
+    "github.event_name == 'pull_request_target'",
+    // Admits refs/heads/gh-readonly-queue/..., so it parks one entry per
+    // merge-queue entry - the per-ref parking this file exists to stop.
+    "startsWith(github.ref, 'refs/heads/')",
+    // Admits any ref at all once the event is right.
+    "github.event_name != 'pull_request'",
+    "github.ref != 'refs/pull/1/merge'",
+  ]) {
+    assert.equal(mayWriteCache(guard), false, guard || '(no guard)');
+  }
+  for (const guard of [
+    "github.ref == 'refs/heads/main-ultramodern'",
+    "github.event_name == 'push' || github.event_name == 'workflow_dispatch'",
+  ]) {
+    assert.equal(mayWriteCache(guard), true, guard);
+  }
 });
 
 test('setup-node never owns the pnpm store cache', () => {
