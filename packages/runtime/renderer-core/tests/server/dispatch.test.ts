@@ -1003,38 +1003,44 @@ describe('production native Node Fetch dispatch', () => {
   ])(
     'stores no longer than confirmed Cache-Control %s with Age %s allows',
     async (cacheControl, age, remaining) => {
-      const cache = store();
-      const response = await dispatchNativeNodeRequest(
-        new Request('https://example.test/'),
-        options(
-          (_request, context) => publicDocument('delivered shell', context),
-          {
-            cache,
-            confirmDelivery: async () =>
-              new Headers({
-                'content-type': 'text/html',
-                'cache-control': cacheControl,
-                ...(age === undefined
-                  ? {}
-                  : age.startsWith('date-')
-                    ? {
-                        date: new Date(
-                          Date.now() - Number(age.slice(5)) * 1000,
-                        ).toUTCString(),
-                      }
-                    : { age }),
-              }),
-          },
-        ),
-      );
-      await response.text();
-      await new Promise(resolve => setTimeout(resolve, 0));
-      const [stored] = cache.documents.values();
-      if (remaining === undefined) expect(stored).toBeUndefined();
-      else {
-        const left = stored.expiresAt - Date.now();
-        expect(left).toBeGreaterThan(remaining - 1_000);
-        expect(left).toBeLessThanOrEqual(remaining);
+      // HTTP dates discard milliseconds. Exercise that boundary without
+      // letting runner scheduling consume the remaining cache lifetime.
+      const checkedAt = 1_800_000_000_999;
+      const clock = rstest.spyOn(Date, 'now').mockReturnValue(checkedAt);
+      try {
+        const cache = store();
+        const response = await dispatchNativeNodeRequest(
+          new Request('https://example.test/'),
+          options(
+            (_request, context) => publicDocument('delivered shell', context),
+            {
+              cache,
+              confirmDelivery: async () =>
+                new Headers({
+                  'content-type': 'text/html',
+                  'cache-control': cacheControl,
+                  ...(age === undefined
+                    ? {}
+                    : age.startsWith('date-')
+                      ? {
+                          date: new Date(
+                            Date.now() - Number(age.slice(5)) * 1000,
+                          ).toUTCString(),
+                        }
+                      : { age }),
+                }),
+            },
+          ),
+        );
+        await response.text();
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const [stored] = cache.documents.values();
+        if (remaining === undefined) expect(stored).toBeUndefined();
+        else {
+          expect(stored.expiresAt - checkedAt).toBe(remaining);
+        }
+      } finally {
+        clock.mockRestore();
       }
     },
   );

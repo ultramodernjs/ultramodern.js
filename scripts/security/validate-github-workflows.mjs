@@ -1928,11 +1928,7 @@ function collectFrameworkPartitionErrors(workflow, relativePath) {
     "vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'",
     '}}',
   ].join(' ');
-  const windowsRunner = [
-    '${{',
-    "vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8'",
-    '}}',
-  ].join(' ');
+  const windowsRunner = 'depot-windows-2025-16';
   const job = workflow.jobs?.integration;
   const combinations = expandIntegrationMatrix(job?.strategy?.matrix);
   const platforms = ['Linux', 'Windows'];

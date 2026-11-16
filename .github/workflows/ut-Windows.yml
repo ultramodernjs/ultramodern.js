@@ -22,7 +22,7 @@ permissions:
 jobs:
   ut-windows-shards:
     # The type of runner that the job will run on
-    runs-on: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+    runs-on: depot-windows-2025-16
     strategy:
       fail-fast: false
       matrix:
@@ -30,7 +30,7 @@ jobs:
         # scripts/ci/windows-unit-selection.mjs, which also owns the
         # assignment. Keep this list equal to its windowsLanes: a lane that is
         # assigned work but never dispatched would skip those files silently.
-        lane: ['1/8', '2/8', '3/8', '4/8', '5/8', '6/8', '7/8', '8/8', 'generator-shell', 'generator-workspace']
+        lane: ["1/4", "2/4", "3/4", "4/4", "generator-shell", "generator-workspace"]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -53,13 +53,16 @@ jobs:
           pnpm_version="$(pnpm --version)"
           node scripts/ci/check-test-toolchain.mjs "$pnpm_version"
 
-      # Restore only; ci-cache.yml seeds the store on main-ultramodern.
-      # Always link dependencies with a frozen install: cached Windows
-      # junctions do not survive the Actions cache archive round trip.
+      # Restore only; ci-cache.yml seeds file-only Windows snapshots on main.
+      # Junctions are rebuilt natively, never extracted from the archive.
       - name: Restore Windows dependencies
+        id: dependencies
         uses: ./.github/actions/windows-dependencies
 
       - name: Install Dependencies
+        # A fresh checkout changes patch mtimes even on an exact snapshot hit.
+        # Let pnpm revalidate its installed state and run genuine lifecycle
+        # hooks; a script-only prepare cannot establish that state.
         run: pnpm install --frozen-lockfile
 
       - name: Restore prepared build outputs
@@ -89,12 +92,14 @@ jobs:
           --version ${{ steps.browser-runtime.outputs.version }}
 
       - name: Verify dependency bundle module classification
+        if: matrix.lane == '1/4'
         run: node --test --test-name-pattern="prebundle distinguishes" scripts/prebundle/ultramodern/packed-utils-consumer.test.mjs
 
       - name: Verify complete disjoint Windows test coverage
-        if: matrix.lane == '1/8'
+        if: matrix.lane == '1/4'
+        shell: pwsh
         run: |
-          node --test scripts/__tests__/windows-unit-selection.test.mjs
+          node --test scripts/__tests__/windows-unit-selection.test.mjs scripts/ci/__tests__/windows-dependency-snapshot.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/ci/windows-unit-selection.mjs --verify
 
@@ -103,12 +108,11 @@ jobs:
           node --input-type=module --eval "import os from 'node:os';
           console.log(JSON.stringify({platform:process.platform,
           availableParallelism:os.availableParallelism(),cpuCount:os.cpus().length,
-          totalMemoryBytes:os.totalmem(),testFileWorkers:1}))"
+          totalMemoryBytes:os.totalmem(),testFileWorkers:${{ startsWith(matrix.lane, 'generator-') && 1 || 2 }}}))"
 
       # Give each measured slow generator file its own runner. Remaining
-      # files also launch nested tools, so all ten lanes keep one file
-      # worker; with one worker a lane's cost is the sum of its files, which
-      # is what windows-unit-selection.mjs balances.
+      # ordinary lanes use two file workers on 16 cores. Each generator stays
+      # isolated with one worker. Six VMs replace ten without losing any files.
       - name: Test
         env:
           WINDOWS_UNIT_LANE: ${{ matrix.lane }}
@@ -117,7 +121,7 @@ jobs:
         shell: pwsh
         run: >-
           pnpm run test:ut:prepared --config=scripts/ci/rstest-windows.config.mts
-          --pool.maxWorkers=1 --reporters default --reporters blob
+          --pool.maxWorkers=${{ startsWith(matrix.lane, 'generator-') && 1 || 2 }} --reporters default --reporters blob
 
       # Keep exact per-file timings for the next balancing pass, including red
       # runs. Each lane writes its own blob on its isolated runner.

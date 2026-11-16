@@ -8,20 +8,10 @@ export const generatorFiles = [
   'packages/toolkit/ultramodern-create/tests/workspace-integration.test.ts',
 ];
 
-// Run 43898596159 still took 10m29s: the generator pair's Test step
-// was 255 s and ordinary lanes reached 219 s. Split the generator pair and
-// spread ordinary work across eight runners; keep one file worker because
-// these files launch nested compilers and package installs.
-export const windowsOrdinaryLanes = [
-  '1/8',
-  '2/8',
-  '3/8',
-  '4/8',
-  '5/8',
-  '6/8',
-  '7/8',
-  '8/8',
-];
+// The unchanged warm PR (43925304889) spent up to 293 s provisioning ten
+// Windows VMs. Four cost-balanced ordinary lanes use two workers on 16 cores;
+// the two isolated generator files retain one worker. Coverage stays disjoint.
+export const windowsOrdinaryLanes = ['1/4', '2/4', '3/4', '4/4'];
 export const windowsGeneratorLanes = ['generator-shell', 'generator-workspace'];
 export const windowsLanes = [...windowsOrdinaryLanes, ...windowsGeneratorLanes];
 
