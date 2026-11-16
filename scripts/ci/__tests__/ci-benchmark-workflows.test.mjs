@@ -103,7 +103,7 @@ test('cold measurements bypass project caches and clean only the owned temporary
     assert.equal(mise.with.cache, false);
     assert.equal(mise.with.cache_save, false);
     assert.equal(mise.with.mise_dir, '${{ env.MISE_DATA_DIR }}');
-    assert.equal(mise.with.version, '2026.9.18');
+    assert.equal(mise.with.version, '2026.11.8');
     assert.equal(mise.with.install, true);
     assert.equal(
       step(job, 'Install Dependencies').run,

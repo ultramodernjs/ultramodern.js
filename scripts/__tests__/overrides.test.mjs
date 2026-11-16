@@ -25,6 +25,44 @@ const repoRoot = path.resolve(
   '../..',
 );
 
+test('peer selectors preserve the published peer without exempting dependency overrides', () => {
+  const lockfile = `
+lockfileVersion: '9.0'
+overrides:
+  'ws@>=8.0.0 <8.23.0': 8.23.0
+  'isomorphic-ws@5.0.0>ws:peer': '*'
+packages:
+  isomorphic-ws@5.0.0:
+    peerDependencies:
+      ws: '*'
+  ws@8.23.0: {}
+snapshots:
+  isomorphic-ws@5.0.0(ws@8.23.0):
+    dependencies:
+      ws: 8.23.0
+  ws@8.23.0: {}
+`;
+  assert.deepEqual(findOverrideViolations(lockfile, new Map()), []);
+  assert(
+    findOverrideViolations(
+      lockfile.replace("ws: '*'", 'ws: 7.5.11'),
+      new Map(),
+    ).some(message => message.includes('peer range')),
+  );
+  assert(
+    findOverrideViolations(
+      lockfile.replace('ws: 8.23.0', 'ws: 8.22.0'),
+      new Map(),
+    ).some(message => message.includes('should replace')),
+  );
+  assert(
+    findOverrideViolations(
+      lockfile.replace("      ws: '*'\n", ''),
+      new Map(),
+    ).some(message => message.includes('peer')),
+  );
+});
+
 test('workspace lockfile has only live, honoured overrides', () => {
   const lockfileText = readFileSync(
     path.join(repoRoot, 'pnpm-lock.yaml'),

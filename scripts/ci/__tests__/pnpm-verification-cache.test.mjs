@@ -20,14 +20,14 @@ const files = {
   'pnpm-lock.yaml': 'lockfileVersion: 9.0\n',
   'pnpm-workspace.yaml': 'minimumReleaseAge: 1440\n',
   '.npmrc': 'registry=https://registry.npmjs.org/\n',
-  '.mise.toml': '[tools]\nnode = "26.12.0"\npnpm = "12.11.2"\n',
-  'package.json': '{"packageManager":"pnpm@12.11.2"}',
+  '.mise.toml': '[tools]\nnode = "26.12.0"\npnpm = "12.21.0"\n',
+  'package.json': '{"packageManager":"pnpm@12.21.0"}',
 };
 const identify = (overrides = {}, contents = files) =>
   verificationCacheIdentity({
     cacheDirectory: '/runner/pnpm-cache',
     nodeVersion: '26.12.0',
-    pnpmVersion: '12.11.2',
+    pnpmVersion: '12.21.0',
     platform: 'linux',
     architecture: 'x64',
     read: name => Buffer.from(contents[name]),
@@ -39,7 +39,7 @@ test('identity restores only pnpm verification and ignores runner-specific cache
   assert.equal(result.path, '/runner/pnpm-cache/lockfile-verified.jsonl');
   assert.match(
     result.key,
-    /^pnpm-verification-v1-Linux-x64-node26\.12\.0-pnpm12\.11\.2-[a-f0-9]{64}$/u,
+    /^pnpm-verification-v1-Linux-x64-node26\.12\.0-pnpm12\.21\.0-[a-f0-9]{64}$/u,
   );
   assert.equal(identify({ cacheDirectory: '/another/cache' }).key, result.key);
   assert.equal(
@@ -163,7 +163,7 @@ test('seed requires a real regular verification file and never alters pnpm verdi
             new URL('../pnpm-verification-cache.mjs', import.meta.url),
           ),
           'seed',
-          '12.11.2',
+          '12.21.0',
           directory,
         ],
         {

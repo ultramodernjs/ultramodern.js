@@ -112,6 +112,7 @@ overrides:
   'ws@>=7.0.0 <7.5.11': 7.5.11
   'ws@>=8.0.0 <8.23.0': 8.23.0
   # Keep the published wildcard peer; security overrides still cover runtime edges.
+  'isomorphic-ws@5.0.0>ws:peer': '*'
   'fast-uri@>=3.0.0 <3.1.6': 3.1.8
   'follow-redirects@>=1.0.0 <1.16.2': 1.16.3
   'handlebars@>=4.0.0 <4.7.10': 4.7.10

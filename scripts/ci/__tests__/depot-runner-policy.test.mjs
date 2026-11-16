@@ -8,6 +8,14 @@ const npmOidcJobs = new Set([
   'publish-bleedingdev.yml:publish',
   'publish-bleedingdev.yml:publish-sidecars',
 ]);
+// Both Depot native attempts lost runner capacity (32 min, 0 artifacts), so
+// these three jobs, and only these, use the reviewed GitHub-hosted runner.
+const nativeRendererJobs = new Set([
+  'native-renderer-artifacts.yml:produce',
+  'native-renderer-artifacts.yml:qualify',
+  'native-renderer-artifacts.yml:release',
+]);
+const nativeRendererRunner = 'ubuntu-24.04';
 
 function assertRunner(value, label, { npmOidc = false } = {}) {
   assert.equal(typeof value, 'string', `${label}: runner must be explicit`);
@@ -26,20 +34,35 @@ function assertRunner(value, label, { npmOidc = false } = {}) {
   );
 }
 
-test('every regular job selects Depot except the two npm trusted-publisher jobs', () => {
-  const foundNpmJobs = new Set();
-  for (const name of fs
-    .readdirSync(workflows)
-    .filter(name => /\.ya?ml$/u.test(name))) {
-    const workflow = yaml.load(
-      fs.readFileSync(new URL(name, workflows), 'utf8'),
-    );
+function parseWorkflows() {
+  return Object.fromEntries(
+    fs
+      .readdirSync(workflows)
+      .filter(name => /\.ya?ml$/u.test(name))
+      .map(name => [
+        name,
+        yaml.load(fs.readFileSync(new URL(name, workflows), 'utf8')),
+      ]),
+  );
+}
+
+// Throws on the first policy violation; returns the exception jobs it admitted.
+function admitRunners(parsed) {
+  const admitted = new Set();
+  for (const [name, workflow] of Object.entries(parsed)) {
     for (const [id, job] of Object.entries(workflow.jobs ?? {})) {
       const label = `${name}:${id}`;
       if (job.uses) continue;
       if (npmOidcJobs.has(label)) {
         assertRunner(job['runs-on'], label, { npmOidc: true });
-        foundNpmJobs.add(label);
+        admitted.add(label);
+      } else if (nativeRendererJobs.has(label)) {
+        assert.equal(
+          job['runs-on'],
+          nativeRendererRunner,
+          `${label}: reviewed native renderer runner`,
+        );
+        admitted.add(label);
       } else if (job['runs-on'] === '${{ matrix.runner }}') {
         const entries = job.strategy?.matrix?.include;
         assert(
@@ -52,7 +75,52 @@ test('every regular job selects Depot except the two npm trusted-publisher jobs'
       }
     }
   }
-  assert.deepEqual(foundNpmJobs, npmOidcJobs);
+  return admitted;
+}
+
+test('every regular job selects Depot except the reviewed npm and native renderer exceptions', () => {
+  assert.deepEqual(
+    admitRunners(parseWorkflows()),
+    new Set([...npmOidcJobs, ...nativeRendererJobs]),
+  );
+});
+
+test('runner exceptions admit only the exact reviewed jobs and runner', () => {
+  const hosted = runner => ({ 'runs-on': runner });
+  const cases = [
+    {
+      name: 'native-renderer-artifacts.yml',
+      jobs: { produce: hosted('ubuntu-22.04') },
+      message: /reviewed native renderer runner/u,
+    },
+    {
+      name: 'native-renderer-artifacts.yml',
+      jobs: { qualify: hosted('depot-ubuntu-24.04-8') },
+      message: /reviewed native renderer runner/u,
+    },
+    {
+      name: 'native-renderer-artifacts.yml',
+      jobs: { release: hosted('macos-26-intel') },
+      message: /reviewed native renderer runner/u,
+    },
+    {
+      name: 'native-renderer-artifacts.yml',
+      jobs: { extra: hosted('ubuntu-24.04') },
+      message: /use Depot/u,
+    },
+    {
+      name: 'ci.yml',
+      jobs: { build: hosted('ubuntu-24.04') },
+      message: /use Depot/u,
+    },
+    {
+      name: 'publish-bleedingdev.yml',
+      jobs: { other: hosted('ubuntu-24.04') },
+      message: /use Depot/u,
+    },
+  ];
+  for (const { name, jobs, message } of cases)
+    assert.throws(() => admitRunners({ [name]: { jobs } }), message, name);
 });
 
 test('runner policy rejects the old compiler and acceptance defaults', () => {

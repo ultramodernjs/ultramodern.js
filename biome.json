@@ -168,6 +168,17 @@
       }
     },
     {
+      "includes": [
+        "packages/runtime/federation-runtime/src/module-federation/distributed-ssr.tsx",
+        "packages/runtime/i18n-extensions/src/router-navigation/adapter.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "correctness": { "noComponentHookFactories": "off" }
+        }
+      }
+    },
+    {
       "includes": ["packages/**/src/**"],
       "plugins": ["./scripts/biome-plugins/no-resolve-filename-patch.grit"]
     }

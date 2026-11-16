@@ -39,13 +39,18 @@ function parseSpec(spec) {
 }
 
 export function parseOverrideKey(key) {
+  const peer = key.endsWith(':peer');
+  if (peer) key = key.slice(0, -':peer'.length);
   const at = key.search(PARENT_SEPARATOR);
-  return at === -1
-    ? { target: parseSpec(key) }
-    : {
-        parent: parseSpec(key.slice(0, at + 1)),
-        target: parseSpec(key.slice(at + 2)),
-      };
+  const parsed =
+    at === -1
+      ? { target: parseSpec(key) }
+      : {
+          parent: parseSpec(key.slice(0, at + 1)),
+          target: parseSpec(key.slice(at + 2)),
+        };
+  if (peer) parsed.target.peer = true;
+  return parsed;
 }
 
 // `name@version(peer@x)` -> { name, version } without the peer suffix.
@@ -177,7 +182,7 @@ export function findOverrideViolations(lockfileText, importerNames) {
   // already owns.
   const parentOverrides = Object.keys(lockfile.overrides ?? {})
     .map(parseOverrideKey)
-    .filter(({ parent }) => parent);
+    .filter(({ parent, target }) => parent && !target.peer);
   const ownedByParentOverride = (entry, targetName) =>
     parentOverrides.some(
       ({ parent, target }) =>
@@ -214,6 +219,27 @@ export function findOverrideViolations(lockfileText, importerNames) {
         `'${key}': '${parent.name}' is a workspace package, so this overrides its own declared ${target.name}. ` +
           `Delete the override and set ${target.name} in ${workspaceParent.path}/package.json.`,
       );
+      continue;
+    }
+
+    if (target.peer) {
+      const scope = snapshots.filter(
+        entry =>
+          !parent ||
+          (entry.name === parent.name && inRange(entry.version, parent.range)),
+      );
+      const peers = scope.filter(entry =>
+        Object.hasOwn(entry.peers, target.name),
+      );
+      if (!peers.length)
+        violations.push(
+          `'${key}': no matching package declares the ${target.name} peer. Delete the override.`,
+        );
+      for (const entry of peers)
+        if (entry.peers[target.name] !== value)
+          violations.push(
+            `'${key}': ${entry.name}@${entry.version} has peer range ${entry.peers[target.name]}, not ${value}. Run pnpm install.`,
+          );
       continue;
     }
 
@@ -316,6 +342,7 @@ export function findUnscopedOverrides(overrides) {
     // Removals, aliases and references replace the package, not its version.
     if (!semver.valid(value) && !semver.validRange(value)) continue;
     const { parent, target } = parseOverrideKey(key);
+    if (target.peer) continue;
     if (target.range === undefined) {
       if (parent?.range) continue;
       violations.push(

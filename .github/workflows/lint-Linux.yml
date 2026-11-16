@@ -66,7 +66,7 @@ jobs:
         run: pnpm run lint:package-json
 
       - name: Lint
-        run: pnpm run lint
+        run: pnpm run lint --max-diagnostics=1000
 
       - name: Reject masked failures, skipped and retried tests
         run: node --test scripts/__tests__/no-masked-failures.test.mjs scripts/__tests__/rstest-no-retry.test.mjs
