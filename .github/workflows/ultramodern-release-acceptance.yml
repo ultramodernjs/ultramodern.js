@@ -35,6 +35,10 @@ permissions:
 env:
   BLEEDINGDEV_RELEASE_BUNDLE_ARTIFACT: bleedingdev-release-bundle
   BLEEDINGDEV_RELEASE_ACCEPTANCE_ARTIFACT: bleedingdev-release-acceptance
+  # Single-run handoffs between the three legs below. Nothing outside this
+  # workflow reads them; the sealed receipt keeps its own public artifact name.
+  BLEEDINGDEV_RELEASE_ERP_RECEIPTS_ARTIFACT: bleedingdev-release-erp-receipts
+  BLEEDINGDEV_RENDERER_FEATURE_ROWS_ARTIFACT: bleedingdev-renderer-feature-rows
   BLEEDINGDEV_RELEASE_MANIFEST: .modern/bleedingdev-publish/manifest.json
   BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT: .modern/bleedingdev-publish/acceptance-receipt.json
 
@@ -42,7 +46,7 @@ jobs:
   accept-release:
     name: Clean-room acceptance of the immutable release bundle
     # Feature proofs validate a job-owned RUNNER_TEMP on GitHub or Depot GHA.
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 180
     outputs:
       producer_artifact_identity: ${{ inputs.producer_artifact_identity }}
@@ -164,40 +168,122 @@ jobs:
           include-hidden-files: true
           retention-days: 3
 
+      # The ERP receipts the seal job binds the renderer rows to. The public
+      # acceptance artifact is still written once, by `seal`.
+      - name: Upload exact-artifact ERP receipts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.BLEEDINGDEV_RELEASE_ERP_RECEIPTS_ARTIFACT }}-${{ inputs.producer_artifact_identity }}
+          path: |
+            .modern/bleedingdev-publish/acceptance-receipt.json
+            .modern/bleedingdev-publish/acceptance-receipt.operational-independence.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+
+  # The installed-renderer feature rows do not read the ERP receipt: release.mjs
+  # only binds it in its final step, which `seal` runs. So this leg starts with
+  # the bundle, concurrently with the ERP leg above.
+  renderer-features:
+    name: Exact-bundle installed renderer features
+    if: inputs.required_renderer_features
+    # Feature proofs validate a job-owned RUNNER_TEMP on GitHub or Depot GHA.
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+    timeout-minutes: 180
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout acceptance runner
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Node.js 26.12.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26.12.0'
+
+      - name: Setup mise
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+        with:
+          version: 2026.9.18
+          cache_save: false
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(mise exec -- pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      # PR callers restore the shared key seeded by ci-cache.yml; this
+      # reusable job never saves a branch-scoped cache.
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install acceptance runner dependencies
+        run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts --filter @scripts/ultramodern-production-readiness --filter modern-js-monorepo --filter tests
+
+      - name: Download immutable release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          name: ${{ env.BLEEDINGDEV_RELEASE_BUNDLE_ARTIFACT }}-${{ inputs.producer_artifact_identity }}
+          path: .modern/bleedingdev-publish
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+
       - name: Resolve installed-renderer browser runtime
-        id: renderer-browser-runtime
-        if: inputs.required_renderer_features
+        id: browser-runtime
         run: mise exec -- node scripts/lib/browser-provisioning.js --resolve --runtime tests
 
+      # This leg no longer inherits the acceptance profile's
+      # PLAYWRIGHT_BROWSERS_PATH, so the chromium the `tests` runtime resolves
+      # comes from its own keyed cache instead of a cold download. No
+      # restore-keys: the resolved playwright version is the invalidation
+      # mechanism.
+      - name: Restore installed-renderer browser cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.browser-runtime.outputs.cache_path }}
+          key: ${{ steps.browser-runtime.outputs.cache_key }}
+
       - name: Install installed-renderer browser runtime
-        if: inputs.required_renderer_features
         run: >-
           mise exec -- node scripts/lib/browser-provisioning.js --install --runtime tests
-          --version ${{ steps.renderer-browser-runtime.outputs.version }}
+          --version ${{ steps.browser-runtime.outputs.version }}
 
       - name: Install pinned installed-renderer browser CLI
         id: renderer-browser-cli
-        if: inputs.required_renderer_features
         run: mise exec -- node scripts/ultramodern-renderers/provision-agent-browser.mjs
 
       - name: Install fixed installed-renderer Chrome
         id: renderer-fixed-browser
-        if: inputs.required_renderer_features
         run: mise exec -- node scripts/ultramodern-renderers/provision-browser.mjs
 
+      # $RUNNER_TEMP/renderer-features is fixed, not mktemp'd: `seal` verifies
+      # every evidence digest against the bytes at the absolute paths recorded
+      # here, so it must reconstruct the identical root. RUNNER_TEMP is the
+      # same /home/runner/work/_temp on the runner class both legs select.
       - name: Run exact-bundle installed renderer features
         id: renderer-features
-        if: inputs.required_renderer_features
         env:
           RENDERER_AGENT_BROWSER_EXECUTABLE: ${{ steps.renderer-browser-cli.outputs.executable_path }}
           RENDERER_BROWSER_EXECUTABLE: ${{ steps.renderer-fixed-browser.outputs.executable_path }}
           PRODUCER_RUN_IDENTITY: ${{ inputs.producer_run_identity }}
+          RENDERER_FEATURE_ROWS: ${{ runner.temp }}/renderer-feature-rows/rows.json
         run: |
           test -x "$RENDERER_BROWSER_EXECUTABLE"
           test -x "$RENDERER_AGENT_BROWSER_EXECUTABLE"
           test "$(command -v agent-browser)" = "$RENDERER_AGENT_BROWSER_EXECUTABLE"
-          feature_work="$(mktemp -d "$RUNNER_TEMP/renderer-features-XXXXXX")"
-          feature_work="$(realpath "$feature_work")"
+          mkdir -p "$RUNNER_TEMP/renderer-features"
+          feature_work="$(realpath "$RUNNER_TEMP/renderer-features")"
           export OWNED_TEMP_DIR="$feature_work"
           trap 'rm -rf -- "$feature_work/native-inputs"' EXIT
           mise exec -- node scripts/ultramodern-renderers/native-federation-inputs.mjs \
@@ -207,18 +293,133 @@ jobs:
             --work-dir "$feature_work" --required-features \
             --browser-executable "$RENDERER_BROWSER_EXECUTABLE" \
             --native-inputs "$feature_work/native-inputs/native-inputs.json" \
-            --acceptance-receipt .modern/bleedingdev-publish/acceptance-receipt.json \
-            --feature-receipt .modern/bleedingdev-publish/acceptance-receipt.renderer-features.json \
+            --emit-rows "$RENDERER_FEATURE_ROWS" \
             --run-identity "$PRODUCER_RUN_IDENTITY"
 
+      # The whole logs tree, not only *.log: a row's evidence can be any file
+      # under its feature-<row>. prefix, and `seal` re-digests every one of them.
       - name: Preserve renderer feature runtime evidence
         if: always() && inputs.required_renderer_features && steps.renderer-features.outcome != 'skipped'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: renderer-feature-source-runtime-${{ inputs.producer_artifact_identity }}
-          path: ${{ runner.temp }}/renderer-features-*/**/*.log
+          path: ${{ runner.temp }}/renderer-features/logs
           if-no-files-found: error
           include-hidden-files: true
+
+      - name: Upload executed renderer feature rows
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.BLEEDINGDEV_RENDERER_FEATURE_ROWS_ARTIFACT }}-${{ inputs.producer_artifact_identity }}
+          path: ${{ runner.temp }}/renderer-feature-rows/rows.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+
+  seal:
+    name: Seal the clean-room acceptance receipt
+    needs:
+      - accept-release
+      - renderer-features
+    # The renderer leg must have passed exactly when its features were
+    # required, and been skipped exactly when they were not. A failed or
+    # unexpectedly skipped leg never reaches a receipt.
+    if: >-
+      always() && cancelled() == false &&
+      needs.accept-release.result == 'success' &&
+      needs.renderer-features.result == (inputs.required_renderer_features && 'success' || 'skipped')
+    # Feature proofs validate a job-owned RUNNER_TEMP on GitHub or Depot GHA.
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+    timeout-minutes: 30
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout acceptance runner
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Node.js 26.12.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26.12.0'
+
+      - name: Setup mise
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+        with:
+          version: 2026.9.18
+          cache_save: false
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(mise exec -- pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      # PR callers restore the shared key seeded by ci-cache.yml; this
+      # reusable job never saves a branch-scoped cache.
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install acceptance runner dependencies
+        run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts --filter @scripts/ultramodern-production-readiness --filter modern-js-monorepo --filter tests
+
+      # The manifest the rows claim to have run against, read from the bundle
+      # bytes rather than trusted from the rows file.
+      - name: Download immutable release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          name: ${{ env.BLEEDINGDEV_RELEASE_BUNDLE_ARTIFACT }}-${{ inputs.producer_artifact_identity }}
+          path: .modern/bleedingdev-publish
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+
+      - name: Download exact-artifact ERP receipts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.BLEEDINGDEV_RELEASE_ERP_RECEIPTS_ARTIFACT }}-${{ inputs.producer_artifact_identity }}
+          path: .modern/bleedingdev-publish
+
+      - name: Download executed renderer feature rows
+        if: inputs.required_renderer_features
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.BLEEDINGDEV_RENDERER_FEATURE_ROWS_ARTIFACT }}-${{ inputs.producer_artifact_identity }}
+          path: ${{ runner.temp }}/renderer-feature-rows
+
+      # Restores the evidence to the identical absolute path the rows recorded,
+      # so the digest verification runs on the same bytes.
+      - name: Download renderer feature runtime evidence
+        if: inputs.required_renderer_features
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: renderer-feature-source-runtime-${{ inputs.producer_artifact_identity }}
+          path: ${{ runner.temp }}/renderer-features/logs
+
+      # One call, five rows, one evidence root: the completeness assertion and
+      # every evidence digest check run exactly as they do unsplit.
+      - name: Seal the renderer feature acceptance receipt
+        if: inputs.required_renderer_features
+        env:
+          PRODUCER_RUN_IDENTITY: ${{ inputs.producer_run_identity }}
+          RENDERER_FEATURE_ROWS: ${{ runner.temp }}/renderer-feature-rows/rows.json
+        run: |
+          feature_work="$(realpath "$RUNNER_TEMP/renderer-features")"
+          mise exec -- node scripts/ultramodern-renderers/release.mjs \
+            --cohort-dir .modern/bleedingdev-publish \
+            --rows "$RENDERER_FEATURE_ROWS" \
+            --work-dir "$feature_work" \
+            --acceptance-receipt .modern/bleedingdev-publish/acceptance-receipt.json \
+            --feature-receipt .modern/bleedingdev-publish/acceptance-receipt.renderer-features.json \
+            --run-identity "$PRODUCER_RUN_IDENTITY"
 
       - name: Upload release acceptance receipt
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -230,4 +431,3 @@ jobs:
             .modern/bleedingdev-publish/acceptance-receipt.renderer-features.json
           if-no-files-found: error
           include-hidden-files: true
-

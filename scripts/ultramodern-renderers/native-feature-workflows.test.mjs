@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import yaml from '../../packages/toolkit/utils/compiled/js-yaml/index.js';
 
 const readWorkflow = name =>
@@ -64,7 +65,7 @@ for (const mode of ['source', 'published'])
       const job =
         mode === 'source'
           ? readWorkflow('ultramodern-release-acceptance').jobs[
-              'accept-release'
+              'renderer-features'
             ]
           : readWorkflow('publish-bleedingdev').jobs['accept-published'];
       const command = job.steps.find(step =>
@@ -106,6 +107,7 @@ for (const mode of ['source', 'published'])
             BLEEDINGDEV_RELEASE_MANIFEST: '/control/manifest.json',
             BLEEDINGDEV_RELEASE_DIR: '/control',
             PRODUCER_RUN_IDENTITY: 'control-run',
+            RENDERER_FEATURE_ROWS: path.join(root, 'rows', 'rows.json'),
             RENDERER_BROWSER_EXECUTABLE: browserExecutable,
             RENDERER_AGENT_BROWSER_EXECUTABLE: browserCli,
             PATH: `${root}${path.delimiter}${process.env.PATH}`,
@@ -119,11 +121,15 @@ for (const mode of ['source', 'published'])
         failure === 'stage' ? 23 : failure === 'proof' ? 31 : 0,
         child.stderr,
       );
+      // The source lane owns a fixed root so a second job can reconstruct it;
+      // the published lane still mktemps one.
       const featureRoot = path.join(
         root,
-        fs
-          .readdirSync(root)
-          .find(name => name.startsWith('renderer-features-')),
+        mode === 'source'
+          ? 'renderer-features'
+          : fs
+              .readdirSync(root)
+              .find(name => name.startsWith('renderer-features-')),
       );
       assert.equal(
         fs.existsSync(path.join(featureRoot, 'native-inputs')),
@@ -139,7 +145,9 @@ for (const mode of ['source', 'published'])
   test(`${mode} installed feature command consumes the fixed browser provisioner's exact output`, () => {
     const job =
       mode === 'source'
-        ? readWorkflow('ultramodern-release-acceptance').jobs['accept-release']
+        ? readWorkflow('ultramodern-release-acceptance').jobs[
+            'renderer-features'
+          ]
         : readWorkflow('publish-bleedingdev').jobs['accept-published'];
     const install = job.steps.findIndex(
       step => step.id === 'renderer-fixed-browser',
@@ -174,6 +182,8 @@ for (const mode of ['source', 'published'])
         '-c',
         `
       mktemp() { return 96; }
+      mkdir() { return 96; }
+      realpath() { return 96; }
       mise() { return 97; }
       ${job.steps[proof].run}
     `,
@@ -195,7 +205,9 @@ for (const mode of ['source', 'published'])
   test(`${mode} installed features require their pinned job-owned native browser CLI`, () => {
     const job =
       mode === 'source'
-        ? readWorkflow('ultramodern-release-acceptance').jobs['accept-release']
+        ? readWorkflow('ultramodern-release-acceptance').jobs[
+            'renderer-features'
+          ]
         : readWorkflow('publish-bleedingdev').jobs['accept-published'];
     const install = job.steps.findIndex(
       step => step.id === 'renderer-browser-cli',
@@ -252,24 +264,25 @@ const expression = value => '$' + '{{ ' + value + ' }}';
 const depotLinux = expression(
   "vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'",
 );
-const isolatedDepotLinux = expression(
-  "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'",
-);
-
-test('acceptance uses Depot by default while external pull requests stay GitHub-hosted', () => {
+test('every acceptance leg selects the one Depot Linux runner', () => {
+  // All three acceptance legs select the same runner class, byte for byte: the
+  // sealed receipt verifies evidence digests against absolute RUNNER_TEMP
+  // paths, which only agree when both legs run the same image. The former
+  // `&& 'ubuntu-latest' ||` fork-isolation prefix is gone with it, so an
+  // external pull request can no longer move one leg to other hardware.
   for (const [workflow, job] of [
     ['ultramodern-release-acceptance', 'accept-release'],
+    ['ultramodern-release-acceptance', 'renderer-features'],
+    ['ultramodern-release-acceptance', 'seal'],
     ['ultramodern-tractor-downstream', 'tractor-downstream'],
     ['native-compatibility', 'native-compatibility'],
+    ['publish-bleedingdev', 'accept-published'],
   ])
     assert.equal(
       readWorkflow(workflow).jobs[job]['runs-on'],
-      isolatedDepotLinux,
+      depotLinux,
+      `${workflow}:${job}`,
     );
-  assert.equal(
-    readWorkflow('publish-bleedingdev').jobs['accept-published']['runs-on'],
-    depotLinux,
-  );
 });
 
 test('npm trusted-publisher jobs retain GitHub-hosted OIDC publication', () => {
@@ -278,4 +291,114 @@ test('npm trusted-publisher jobs retain GitHub-hosted OIDC publication', () => {
     assert.equal(jobs[name]['runs-on'], 'ubuntu-24.04');
     assert.equal(jobs[name].permissions['id-token'], 'write');
   }
+});
+
+test('the renderer leg executes rows without the ERP receipt only the seal leg binds', () => {
+  const jobs = readWorkflow('ultramodern-release-acceptance').jobs;
+  assert.deepEqual(Object.keys(jobs), [
+    'accept-release',
+    'renderer-features',
+    'seal',
+  ]);
+  // release.mjs reads --acceptance-receipt only in its last step, so the
+  // rows must not wait for the ERP leg that produces it.
+  assert.equal(jobs['renderer-features'].needs, undefined);
+  assert.equal(
+    jobs['renderer-features'].if,
+    'inputs.required_renderer_features',
+  );
+  assert.deepEqual(jobs.seal.needs, ['accept-release', 'renderer-features']);
+  const executed = jobs['renderer-features'].steps.find(
+    step => step.id === 'renderer-features',
+  );
+  const sealed = jobs.seal.steps.find(
+    step => step.name === 'Seal the renderer feature acceptance receipt',
+  );
+  assert.match(executed.run, /--emit-rows "\$RENDERER_FEATURE_ROWS"/u);
+  assert.doesNotMatch(executed.run, /--acceptance-receipt|--feature-receipt/u);
+  assert.match(sealed.run, /--rows "\$RENDERER_FEATURE_ROWS"/u);
+  assert.match(
+    sealed.run,
+    /--acceptance-receipt \.modern\/bleedingdev-publish\/acceptance-receipt\.json/u,
+  );
+  assert.match(
+    sealed.run,
+    /--feature-receipt \.modern\/bleedingdev-publish\/acceptance-receipt\.renderer-features\.json/u,
+  );
+  assert.doesNotMatch(sealed.run, /--required-features|--emit-rows/u);
+  assert.equal(
+    executed.env.RENDERER_FEATURE_ROWS,
+    sealed.env.RENDERER_FEATURE_ROWS,
+  );
+  // One reproducible evidence root, uploaded and restored at the same path.
+  const upload = jobs['renderer-features'].steps.find(
+    step => step.name === 'Preserve renderer feature runtime evidence',
+  );
+  const download = jobs.seal.steps.find(
+    step => step.name === 'Download renderer feature runtime evidence',
+  );
+  assert.equal(upload.with.name, download.with.name);
+  assert.equal(
+    upload.with.path,
+    `${expression('runner.temp')}/renderer-features/logs`,
+  );
+  assert.equal(download.with.path, upload.with.path);
+  assert.equal(upload.with['if-no-files-found'], 'error');
+  assert.equal(upload.with['include-hidden-files'], true);
+  for (const step of [executed, sealed])
+    assert.match(step.run, /realpath "\$RUNNER_TEMP\/renderer-features"/u);
+  assert.doesNotMatch(executed.run, /mktemp/u);
+  // The one public acceptance artifact still carries the same three receipts.
+  const receipt = jobs.seal.steps.find(
+    step => step.name === 'Upload release acceptance receipt',
+  );
+  assert.equal(
+    receipt.with.name,
+    `${expression('env.BLEEDINGDEV_RELEASE_ACCEPTANCE_ARTIFACT')}-${expression('inputs.producer_artifact_identity')}`,
+  );
+  assert.deepEqual(receipt.with.path.trim().split('\n'), [
+    '.modern/bleedingdev-publish/acceptance-receipt.json',
+    '.modern/bleedingdev-publish/acceptance-receipt.operational-independence.json',
+    '.modern/bleedingdev-publish/acceptance-receipt.renderer-features.json',
+  ]);
+  assert.equal(receipt.with['if-no-files-found'], 'error');
+  // No renderer work is left behind on the ERP leg.
+  for (const step of jobs['accept-release'].steps)
+    assert.doesNotMatch(`${step.name} ${step.run ?? ''}`, /renderer/iu);
+});
+
+test('the seal leg demands exactly the renderer result its inputs asked for', () => {
+  const seal = readWorkflow('ultramodern-release-acceptance').jobs.seal;
+  // GitHub treats hyphenated job ids as property names, not subtraction.
+  const condition = seal.if
+    .replaceAll('needs.accept-release', 'needs["accept-release"]')
+    .replaceAll('needs.renderer-features', 'needs["renderer-features"]');
+  function evaluate(required, erp, renderer) {
+    return runInNewContext(condition, {
+      always: () => true,
+      cancelled: () => false,
+      inputs: { required_renderer_features: required },
+      needs: {
+        'accept-release': { result: erp },
+        'renderer-features': { result: renderer },
+      },
+    });
+  }
+  assert.equal(evaluate(true, 'success', 'success'), true);
+  assert.equal(evaluate(false, 'success', 'skipped'), true);
+  for (const [required, erp, renderer] of [
+    [true, 'success', 'skipped'],
+    [true, 'success', 'failure'],
+    [true, 'success', 'cancelled'],
+    [true, 'failure', 'success'],
+    [true, 'skipped', 'success'],
+    [false, 'success', 'success'],
+    [false, 'success', 'failure'],
+    [false, 'failure', 'skipped'],
+  ])
+    assert.equal(
+      evaluate(required, erp, renderer),
+      false,
+      `${required} ${erp} ${renderer}`,
+    );
 });
