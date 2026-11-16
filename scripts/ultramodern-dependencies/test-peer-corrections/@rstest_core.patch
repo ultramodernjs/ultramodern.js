@@ -1,0 +1,12 @@
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -112,7 +112,7 @@
+     "webpack-license-plugin": "^4.5.1"
+   },
+   "peerDependencies": {
+-    "happy-dom": "^20.8.3",
++    "happy-dom": "^20.8.3 || ^21.0.4",
+     "jsdom": ">=15.0.0"
+   },
+   "peerDependenciesMeta": {

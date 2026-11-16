@@ -1,0 +1,102 @@
+[
+  {
+    "name": "@rstest/core",
+    "version": "0.12.6",
+    "tarball": "https://registry.npmjs.org/@rstest/core/-/core-0.12.6.tgz",
+    "integrity": "sha512-pOOij4Gj7h9fOJiRhcQ7zmVK+l3wSINpocwlsgq34ri60UOl9FACf5qyu7LMS2A3P4feqPdKmwS7QAT3vPk5ww==",
+    "signatures": [
+      {
+        "sig": "MEUCIQDtgNEvlyHTIlVLWkx7y4dPifxCEuO1dHLRCpnX0S3vXAIgN330CuAJeGsQV1sMGQ0pEhrUtP83SOdwLrt8lkjwGAk=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ]
+  },
+  {
+    "name": "happy-dom",
+    "version": "21.0.4",
+    "tarball": "https://registry.npmjs.org/happy-dom/-/happy-dom-21.0.4.tgz",
+    "integrity": "sha512-tFm+GaLBgo6o0awHnvHaNoraVo27qJ+2tZEtZ+cIa08hXbeitrxAJajLI05hsUy/2/YTKcUjQYzHe5mCcraLBw==",
+    "signatures": [
+      {
+        "sig": "MEUCIQDL0znwITcL7evuQJGW1nwUUWKCtG4a36zF9J50CrPn7wIgM76nZttjD1XXTfcQTVmK+KMiI0uWpKZiiWFFc1xQpAU=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "sig": "MEUCIQCM+F4f1hWBQ9S2we9wmyB5Z3/TE2mP0StAIxH0g5+2qwIgcgnHwIkllN/13e7aeApyo8idobU6H07pYoTD0q626qM=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ]
+  },
+  {
+    "name": "ioredis-mock",
+    "version": "8.13.1",
+    "tarball": "https://registry.npmjs.org/ioredis-mock/-/ioredis-mock-8.13.1.tgz",
+    "integrity": "sha512-Wsi50AU+cMiI32nAgfwpUaJVBtb4iQdVsOHl9M6R3tePCO/8vGsToCVIG82XWAxN4Se55TZoOzVseu+QngFLyw==",
+    "signatures": [
+      {
+        "sig": "MEUCIQChhLPUQENOMVDSpvciWRsvsj67r+urWb5u3Y4nu6OTkwIgfpfIiSHbQzvT1Tv0RObuTc0pTKSg+WGaD3j5KCmMoCo=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ]
+  },
+  {
+    "name": "@types/ioredis-mock",
+    "version": "8.2.8",
+    "tarball": "https://registry.npmjs.org/@types/ioredis-mock/-/ioredis-mock-8.2.8.tgz",
+    "integrity": "sha512-Nxr1CXk8NtGVzWQ8WoGCOyo+HARd4CFc/Nt2+ITt3WWLNlj1InW38SzZwOJNqzA38iplrpBFp6Ny4KjPfeI+bA==",
+    "signatures": [
+      {
+        "sig": "MEYCIQCbgDLnbbUdZXu4MggduB1rbdvAyxQxsrV+gTrojHtzWwIhAMyuG3I4KypjgGx8KOB4d3sOkKUiQGdVzYTZLGP/Nns9",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "sig": "MEUCIQCP4ollKQ8/JMAT1spjI9Gb03r85zMuYpBvBY3AwxLPrAIgMo1STj6NEzoO1ChOwD1FbCV5ioT6bfEdv4Vl4DeGILA=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ]
+  },
+  {
+    "name": "ioredis",
+    "version": "6.0.0",
+    "tarball": "https://registry.npmjs.org/ioredis/-/ioredis-6.0.0.tgz",
+    "integrity": "sha512-f+Dtubxfpf6KYFq7WVXJoOLn0bk4TJrMrN9SzeE+jrWrCWj7XX3fA6vkryafhADX+GMymRxgDJDOI33COkJc0w==",
+    "signatures": [
+      {
+        "sig": "MEQCIBHyvjKf8Kpmfyw8QUg8XM6oqoyEZX8BNvs59ButYlDCAiAWu+2XPRNmnz/kwExx2+Wb69/Jf1C7rQ46uslKgQxjPA==",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "sig": "MEUCIQCO6+4A11lr0f0J0QDpFRTGkX+zySv5sMZ8Zk8FmZiWjwIgDA4i6z6aqHTFSQ0zXaP0mhT6ma9T//fnkLmJ3sMs2GE=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ]
+  },
+  {
+    "name": "typescript",
+    "version": "7.0.2",
+    "tarball": "https://registry.npmjs.org/typescript/-/typescript-7.0.2.tgz",
+    "integrity": "sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==",
+    "signatures": [
+      {
+        "sig": "MEUCIHn8lVrLBbTJToaOcV3IJ0oVPREmFT5BhqmO2niVNCaSAiEAjbubGExGAYMSJN39iEgX/eDYhwBGnh/iyyGTRigXGjY=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ]
+  },
+  {
+    "name": "@types/node",
+    "version": "26.6.6",
+    "tarball": "https://registry.npmjs.org/@types/node/-/node-26.6.6.tgz",
+    "integrity": "sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==",
+    "signatures": [
+      {
+        "sig": "MEUCIHcSi7pEO72FMEZeNIDd+bzBw9AIYxx9grPD1AX6gZWRAiEA/fTMMgRXn/XqsiUeAvt5XLcc8PUtnTFPDRSYaB/wfH8=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "sig": "MEUCIQCNB8OeetAA6h1cLh8nQ23dVtV1Vlts4Fz3zrT0WOWKDQIgTBe7om+aQ6ts3NNZPfemprMwZ9nnRN4xPoWjoazWA6Q=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ]
+  }
+]
