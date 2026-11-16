@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import yaml from '../../../packages/toolkit/utils/compiled/js-yaml/index.js';
 import { evaluateJobSchedule } from '../../security/github-job-condition.mjs';
 
@@ -41,6 +42,26 @@ const step = (jobId, matcher) =>
   );
 const stage =
   'node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-input --complete-manifest';
+
+function checkCompilerVersionGuard(run, end, sourcePath) {
+  const guard = run.slice(run.indexOf('const version ='), run.indexOf(end));
+  const expected =
+    `Version ${compilerSource.typescript.version}+effect-tsgo.${compilerSource.effect.baseVersion} ` +
+    `(tsrs ${compilerSource.tsrs.version}, microsoft/TypeScript@${compilerSource.typescript.sourceCommit.slice(0, 12)})`;
+  const checkVersion = stdout =>
+    runInNewContext(guard, {
+      assert,
+      fs: {
+        readFileSync(file) {
+          assert.equal(file, sourcePath);
+          return JSON.stringify(compilerSource);
+        },
+      },
+      run: () => ({ status: 0, stdout, stderr: '' }),
+    });
+  checkVersion(`${expected}\n`);
+  assert.throws(() => checkVersion('Version foreign-compiler\n'));
+}
 
 test('default-branch caches seed the two actual compiler variants before integration reuses them', () => {
   assert.equal(cache.permissions.actions, 'read');
@@ -255,7 +276,11 @@ test('compiler matrix uses four Depot builds without Intel Mac or Ubuntu 22.04',
     smoke.env.ARTIFACT_DIR,
     expression('steps.compiler.outputs.artifact_path'),
   );
-  assert.match(smoke.run, /Version 7\.1\.0-beta\+effect-tsgo\.0\.69\.0/);
+  checkCompilerVersionGuard(
+    smoke.run,
+    'const client =',
+    'harness/packages/solutions/app-tools-extensions/compiler/source.json',
+  );
   assert.match(smoke.run, /client\.echo/);
   assert.match(smoke.run, /377001/);
   const notices = steps.find(step =>
@@ -415,15 +440,11 @@ test('a verified full restore skips the build matrix and the aggregate job', () 
     ) < resolveSteps.indexOf(smoke),
     'the smoke must run after the stager repaired the executable mode',
   );
-  const version = `Version ${compilerSource.typescript.version}+effect-tsgo.${compilerSource.effect.baseVersion} (tsrs ${compilerSource.tsrs.version}, microsoft/TypeScript@${compilerSource.typescript.sourceCommit.slice(0, 12)})`;
-  for (const command of [
+  checkCompilerVersionGuard(
     smoke.run,
-    step('build', 'Smoke the actual release binary').run,
-  ])
-    assert.ok(
-      command.includes(`assert.equal(version.stdout.trim(), '${version}');`),
-      'fresh and cached compiler smokes must require the committed source identity',
-    );
+    'const root = fs.mkdtempSync',
+    'packages/solutions/app-tools-extensions/compiler/source.json',
+  );
   assert.match(smoke.run, /lib\.d\.ts/);
 });
 

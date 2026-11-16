@@ -235,7 +235,6 @@ function snapshotPackedManifest(root, directory, manifestPath) {
     !source.packages ||
     !Object.keys(source.packages).length ||
     !source.sidecars ||
-    !Array.isArray(source.edges) ||
     !source.allowBuilds ||
     !Array.isArray(source.minimumReleaseAgeExclude)
   ) {
@@ -360,7 +359,6 @@ function validatePackedSnapshot(root, directory, packed) {
     !manifest?.packages ||
     !Object.keys(manifest.packages).length ||
     !manifest.sidecars ||
-    !Array.isArray(manifest.edges) ||
     !manifest.allowBuilds ||
     !Array.isArray(manifest.minimumReleaseAgeExclude)
   )

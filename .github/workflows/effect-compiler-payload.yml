@@ -174,7 +174,8 @@ jobs:
           assert.ok(fs.readdirSync(directory).filter(name => name.endsWith('.d.ts')).length > 10);
           const version = run(['--version']);
           assert.equal(version.status, 0, version.stderr);
-          assert.equal(version.stdout.trim(), 'Version 7.1.0-beta+effect-tsgo.0.69.0 (tsrs 0.25.0-ts7.1.0-beta, microsoft/TypeScript@3e9236361fa9)');
+          const source = JSON.parse(fs.readFileSync('packages/solutions/app-tools-extensions/compiler/source.json', 'utf8'));
+          assert.equal(version.stdout.trim(), `Version ${source.typescript.version}+effect-tsgo.${source.effect.baseVersion} (tsrs ${source.tsrs.version}, microsoft/TypeScript@${source.typescript.sourceCommit.slice(0, 12)})`);
           const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-smoke-'));
           try {
             const config = { compilerOptions: { strict: true, target: 'ESNext', module: 'NodeNext', noEmit: true, skipLibCheck: true, types: [] }, files: ['index.ts'] };
@@ -345,7 +346,8 @@ jobs:
           assert.ok(fs.readdirSync(process.env.ARTIFACT_DIR).filter(name => name.endsWith('.d.ts')).length > 10);
           const version = run(['--version']);
           assert.equal(version.status, 0, version.stderr);
-          assert.equal(version.stdout.trim(), 'Version 7.1.0-beta+effect-tsgo.0.69.0 (tsrs 0.25.0-ts7.1.0-beta, microsoft/TypeScript@3e9236361fa9)');
+          const source = JSON.parse(fs.readFileSync('harness/packages/solutions/app-tools-extensions/compiler/source.json', 'utf8'));
+          assert.equal(version.stdout.trim(), `Version ${source.typescript.version}+effect-tsgo.${source.effect.baseVersion} (tsrs ${source.tsrs.version}, microsoft/TypeScript@${source.typescript.sourceCommit.slice(0, 12)})`);
           const client = new Client({ tsserverPath: binary });
           try { assert.equal(client.echo('release-api-smoke'), 'release-api-smoke'); }
           finally { client.close(); }

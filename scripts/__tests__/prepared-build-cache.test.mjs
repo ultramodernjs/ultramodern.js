@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,9 +8,11 @@ import test from 'node:test';
 import {
   buildInputs,
   restoreBuild,
+  restorePackedManifest,
   snapshotBuild,
   verifyCurrentPreparedBuild,
 } from '../ci/prepared-build-cache.mjs';
+import { packFiles } from '../ultramodern-artifacts/reconstruct.mjs';
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prepared-build-cache-'));
@@ -32,6 +35,52 @@ function fixture(t) {
     inputs: () => buildInputs(root, { CI: 'true' }, { pnpm: '12.11.2' }),
   };
 }
+
+test('packed prerequisites round-trip without the retired aggregate edge list', t => {
+  const { root, write, inputs } = fixture(t);
+  const project = { name: '@modern-js/example', version: '1.0.0' };
+  write('packages/example/package.json', JSON.stringify(project));
+  const baseline = inputs();
+  write('packages/example/dist/index.js', 'compiled');
+  const tarball = path.join(root, 'packed/example.tgz');
+  write(
+    'packed/example.tgz',
+    packFiles(
+      new Map([
+        [
+          'package.json',
+          { bytes: Buffer.from(JSON.stringify(project)), mode: 0o644 },
+        ],
+      ]),
+    ),
+  );
+  const manifest = {
+    packages: {
+      [project.name]: {
+        tarball,
+        integrity: createHash('sha256')
+          .update(fs.readFileSync(tarball))
+          .digest('hex'),
+      },
+    },
+    sidecars: {},
+    allowBuilds: {},
+    minimumReleaseAgeExclude: [],
+  };
+  const manifestPath = path.join(root, 'packed/packages.json');
+  write('packed/packages.json', JSON.stringify(manifest));
+  snapshotBuild(root, baseline, manifestPath);
+  assert.equal(restoreBuild(root, baseline.key), 1);
+  const restored = JSON.parse(
+    fs.readFileSync(restorePackedManifest(root, baseline.key), 'utf8'),
+  );
+  assert.equal(restored.packages[project.name].version, project.version);
+  assert.deepEqual(
+    fs.readFileSync(restored.packages[project.name].tarball),
+    fs.readFileSync(tarball),
+  );
+  assert.deepEqual(restored.allowBuilds, manifest.allowBuilds);
+});
 
 test('identity changes with source, lockfile, shared build scripts and toolchain', t => {
   const { root, write, inputs } = fixture(t);
