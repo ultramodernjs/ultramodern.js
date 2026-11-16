@@ -18,9 +18,19 @@ interface OxlintReport {
 }
 
 const packageRoot = path.resolve(__dirname, '..');
-const lintDependencyNodeModules = path.dirname(
-  fs.realpathSync(path.join(packageRoot, 'node_modules/ultracite')),
+// `ultracite` is an npm alias of a scoped package, so its Oxc tools are
+// resolved through its own dependency graph rather than as siblings.
+const ultracitePackageDir = fs.realpathSync(
+  path.join(packageRoot, 'node_modules/ultracite'),
 );
+const ultraciteRequire = createRequire(
+  path.join(ultracitePackageDir, 'package.json'),
+);
+const lintDependencyPackageDirs = {
+  oxfmt: path.dirname(ultraciteRequire.resolve('oxfmt/package.json')),
+  oxlint: path.dirname(ultraciteRequire.resolve('oxlint/package.json')),
+  ultracite: ultracitePackageDir,
+};
 
 function provisionPackageBinary(
   nodeModulesDir: string,
@@ -60,12 +70,12 @@ function provisionPackageBinary(
 function provisionGeneratedLintDependencies(workspaceDir: string) {
   const nodeModulesDir = path.join(workspaceDir, 'node_modules');
   fs.mkdirSync(nodeModulesDir, { recursive: true });
-  for (const packageName of ['oxfmt', 'oxlint', 'ultracite']) {
-    const destination = path.join(nodeModulesDir, packageName);
-    fs.mkdirSync(path.dirname(destination), { recursive: true });
+  for (const [packageName, packageDir] of Object.entries(
+    lintDependencyPackageDirs,
+  )) {
     fs.symlinkSync(
-      path.join(lintDependencyNodeModules, packageName),
-      destination,
+      packageDir,
+      path.join(nodeModulesDir, packageName),
       process.platform === 'win32' ? 'junction' : 'dir',
     );
   }
@@ -99,11 +109,8 @@ function parseOxlintReport(
 }
 
 function provisionApiDependencies(workspaceDir: string, scope: string) {
-  const dependencyRequire = createRequire(
-    path.join(lintDependencyNodeModules, 'ultracite/package.json'),
-  );
   for (const [name, target] of [
-    ['effect', path.dirname(dependencyRequire.resolve('effect/package.json'))],
+    ['effect', path.dirname(ultraciteRequire.resolve('effect/package.json'))],
     [
       '@typescript/native',
       fs.realpathSync(path.join(packageRoot, 'node_modules/typescript')),

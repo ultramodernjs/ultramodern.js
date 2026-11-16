@@ -1,15 +1,28 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { formatGeneratedWorkspaceFiles } from '../src/ultramodern-workspace/fs-io';
 import { createWorkspace } from './helpers/workspace-kit';
 
 const packageRoot = path.resolve(__dirname, '..');
-const formatDependencyNodeModules = path.dirname(
-  fs.realpathSync(path.join(packageRoot, 'node_modules/ultracite')),
+// `ultracite` is an npm alias of a scoped package, so the Oxfmt it pairs with
+// is resolved through its own dependency graph rather than as a sibling.
+const oxfmtPackageJsonPath = createRequire(
+  path.join(
+    fs.realpathSync(path.join(packageRoot, 'node_modules/ultracite')),
+    'package.json',
+  ),
+).resolve('oxfmt/package.json');
+const oxfmtCliPath = path.join(
+  path.dirname(oxfmtPackageJsonPath),
+  (
+    JSON.parse(fs.readFileSync(oxfmtPackageJsonPath, 'utf-8')) as {
+      bin: { oxfmt: string };
+    }
+  ).bin.oxfmt,
 );
-const oxfmtCliPath = path.join(formatDependencyNodeModules, 'oxfmt/bin/oxfmt');
 
 function createFormatHarness(workspaceDir: string) {
   const formatHarnessDir = fs.mkdtempSync(
