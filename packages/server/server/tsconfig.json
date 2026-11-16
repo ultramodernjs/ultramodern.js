@@ -5,7 +5,8 @@
     "jsx": "preserve",
     "esModuleInterop": true,
     "paths": {},
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "explainFiles": true
   },
   "include": ["src"]
 }
