@@ -92,4 +92,4 @@ jobs:
           --version ${{ steps.browser-runtime.outputs.version }}
 
       - name: Test
-        run: pnpm run test:ut:prepared --maxWorkers=6
+        run: pnpm run test:ut:prepared --pool.maxWorkers=6
