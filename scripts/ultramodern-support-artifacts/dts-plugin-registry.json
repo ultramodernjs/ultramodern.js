@@ -1,0 +1,12 @@
+{
+  "name": "rsbuild-plugin-dts",
+  "version": "1.0.7",
+  "tarball": "https://registry.npmjs.org/rsbuild-plugin-dts/-/rsbuild-plugin-dts-1.0.7.tgz",
+  "integrity": "sha512-r9+bGoY0EmOB5Jisxd7qFQNTTcMTtB0Ke0oDZDYEEAvrpzTCvjWH2UtsscUnOwyPeUauXR2fBME+Vny8aVD66w==",
+  "signatures": [
+    {
+      "sig": "MEQCIAOQzdNidtTyxXeYmD+ZIixHdLh572KVdw0l3yaQKWTcAiBmq4AdoplLr76rUgeXuGjbfura1uJaiesxMOj0BcPXFw==",
+      "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+    }
+  ]
+}
