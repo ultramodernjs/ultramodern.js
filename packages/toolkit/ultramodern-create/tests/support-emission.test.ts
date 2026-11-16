@@ -9,14 +9,19 @@ import {
 } from '../../../../scripts/ultramodern-support-artifacts/protocol.mjs';
 import { solidProfile } from '../../../runtime/renderer-solid/src/plugin/profile';
 import { readWorkspacePackageSource } from '../src/ultramodern-tooling/config/metadata';
-import { shellApp } from '../src/ultramodern-workspace/descriptors';
 import {
+  createVerticalDescriptor,
+  shellApp,
+} from '../src/ultramodern-workspace/descriptors';
+import {
+  appDependencies,
   createAppPackage,
   createRootPackageJson,
 } from '../src/ultramodern-workspace/package-json';
 import {
   parseSupportArtifacts,
   readSupportArtifacts,
+  resolvePackageSource,
   selectSupportRequests,
 } from '../src/ultramodern-workspace/package-source';
 import { resolveRendererGenerationAdapter } from '../src/ultramodern-workspace/renderer-generations';
@@ -162,6 +167,29 @@ test.each(['react', 'solid'] as const)(
   },
 );
 
+test('shipped generator selects its admitted OTel correction for an Effect BFF', () => {
+  // Reads the generator's own checked-in manifest, as generation does.
+  const source = resolvePackageSource({
+    targetDir: os.tmpdir(),
+    packageName: 'support-proof',
+    modernVersion: 'workspace:*',
+    packageSource: { strategy: 'workspace' },
+  });
+  assert(
+    source.supportArtifacts,
+    'generator manifest carries support authority',
+  );
+  const dependencies = appDependencies(
+    'support-proof',
+    source,
+    createVerticalDescriptor('orders', 4101, { preset: 'api-only' }),
+  );
+  assert.equal(
+    dependencies['@effect/opentelemetry'],
+    source.supportArtifacts.packages['@effect/opentelemetry'].request,
+  );
+});
+
 test('closed support inputs reject missing, mismatched and inactive authority', () => {
   for (const mutate of [
     value => delete value.packages['solid-js'],
@@ -209,7 +237,18 @@ test('Solid runtime uses the exact required host peer, never a private runtime d
   );
   assert.equal(manifest.dependencies['solid-js'], undefined);
   assert.equal(manifest.optionalDependencies?.['solid-js'], undefined);
-  assert.equal(manifest.peerDependencies['solid-js'], '2.0.0-rc.22');
+  const support = parseSupportArtifacts(manifest.ultramodern.supportArtifacts);
+  assert.equal(
+    support.packages['solid-js'].version,
+    protocol.cohort['solid-js'],
+  );
+  assert.equal(
+    manifest.peerDependencies['solid-js'],
+    support.packages['solid-js'].version,
+  );
   assert.notEqual(manifest.peerDependenciesMeta?.['solid-js']?.optional, true);
-  assert.equal(manifest.devDependencies['solid-js'], '2.0.0-rc.22');
+  assert.equal(
+    manifest.devDependencies['solid-js'],
+    support.packages['solid-js'].request,
+  );
 });

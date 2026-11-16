@@ -955,6 +955,9 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
   );
   git('-C', root, 'checkout', sourceRevision, '--', ...selectedFiles);
   let reviewedEdges = 0;
+  // The generator has no direct support edge but emits support requests from
+  // its own manifest metadata into every generated app.
+  const generator = 'packages/toolkit/ultramodern-create/package.json';
   for (const file of selectedFiles) {
     const expected = JSON.parse(
       execFileSync('git', ['-C', root, 'show', `${sourceRevision}:${file}`], {
@@ -971,6 +974,12 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
         artifactAuthority: authority,
       });
     const result = invoke(current);
+    if (file === generator)
+      assert.deepEqual(
+        result.manifest.ultramodern.supportArtifacts,
+        descriptors.supportArtifacts,
+        `${file}: generator receives the admitted support descriptor`,
+      );
     for (const [kind, owners] of Object.entries(artifactOwners)) {
       for (const name of owners[file] ?? []) {
         for (const field of [

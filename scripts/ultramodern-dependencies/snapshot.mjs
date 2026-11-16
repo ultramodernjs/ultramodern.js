@@ -484,6 +484,9 @@ export const artifactOwners = Object.freeze({
       '@effect/opentelemetry',
       '@tanstack/react-router',
     ],
+    // The generator declares no support input itself; it reads this metadata
+    // from its own manifest and emits the admitted requests into generated apps.
+    'packages/toolkit/ultramodern-create/package.json': [],
   }),
 });
 
