@@ -87,5 +87,19 @@
       "repository": "TanStack/router",
       "commit": "6b9fe6d29552270836c511bc9b343d73541f4424"
     }
+  },
+  "rsbuild-plugin-dts": {
+    "version": "1.0.7",
+    "patchPath": "patches/rsbuild-plugin-dts@1.0.7.patch",
+    "patchSha256": "bd0c8f1b4c4681eeb0d1ea0123c252ad41b17f01be1ca171bd8c42ca2d652e44",
+    "upstream": {
+      "kind": "authenticated-npm-source",
+      "request": "https://registry.npmjs.org/rsbuild-plugin-dts/-/rsbuild-plugin-dts-1.0.7.tgz",
+      "integrity": "sha512-r9+bGoY0EmOB5Jisxd7qFQNTTcMTtB0Ke0oDZDYEEAvrpzTCvjWH2UtsscUnOwyPeUauXR2fBME+Vny8aVD66w==",
+      "sourceArchiveIntegrity": "sha512-r9+bGoY0EmOB5Jisxd7qFQNTTcMTtB0Ke0oDZDYEEAvrpzTCvjWH2UtsscUnOwyPeUauXR2fBME+Vny8aVD66w==",
+      "licenseSha256": "9d26ef3ec511840e10eeaaf1e1b211e196c838823baf6bf9033761f27ab349ce",
+      "licensePath": "LICENSE",
+      "archiveRoot": "package"
+    }
   }
 }

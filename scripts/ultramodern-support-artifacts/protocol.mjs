@@ -27,6 +27,7 @@ const cohort = Object.freeze({
   'ioredis-mock': '8.13.1',
   '@types/ioredis-mock': '8.2.8',
   '@tanstack/react-router': '1.170.46',
+  'rsbuild-plugin-dts': '1.0.7',
 });
 export function inspectSupportTarball(bytes) {
   // DefinitelyTyped's authenticated archive has a single historical root name.
@@ -106,7 +107,7 @@ function validateNpmLicense({ name, upstream, files }) {
   }
 }
 export const supportProtocol = bindArtifactProtocol({
-  protocol: 'ultramodern.support-artifacts.v2',
+  protocol: 'ultramodern.support-artifacts.v3',
   repository: 'ultramodernjs/ultramodern.js',
   repositoryId: 1151231350,
   workflow: '.github/workflows/support-artifacts.yml',

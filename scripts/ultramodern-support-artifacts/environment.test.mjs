@@ -10,6 +10,7 @@ import {
   qualifyHeldRead,
   readHeldReadRecipeBytes,
 } from '../ultramodern-renderers/solid-corrections/qualify-held-read.mjs';
+import { qualifyDtsPlugin } from './dts-plugin.mjs';
 
 const sentinels = {
   GH_TOKEN: 'boundary-test-only',
@@ -22,7 +23,7 @@ const sentinels = {
   SUPPORT_SKIP_GATES: 'true',
 };
 
-for (const name of ['Solid', 'metadata3', 'OTel']) {
+for (const name of ['Solid', 'metadata3', 'OTel', 'DTS']) {
   test(`${name} actual qualification child rejects ambient credentials and policy`, async t => {
     const parent = fs.mkdtempSync(
       path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'support-env-'),
@@ -65,8 +66,15 @@ for (const name of ['Solid', 'metadata3', 'OTel']) {
           recipeBytes: readHeldReadRecipeBytes(),
           run: (_command, _args, options) => inspect(options),
         });
-      } else {
+      } else if (name === 'OTel') {
         qualification = qualifyOtel({
+          workDirectory,
+          toolchain: { storeDirectory },
+          run: (_command, _args, options) => inspect(options),
+          log() {},
+        });
+      } else {
+        qualification = qualifyDtsPlugin({
           workDirectory,
           toolchain: { storeDirectory },
           run: (_command, _args, options) => inspect(options),

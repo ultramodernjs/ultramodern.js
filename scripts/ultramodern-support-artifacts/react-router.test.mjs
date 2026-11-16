@@ -10,7 +10,7 @@ import {
 import { inputs, supportProtocol as p } from './protocol.mjs';
 import { releaseRecipe } from './recipes.mjs';
 
-test('v2 React source, registry, license and patch bind the qualified owning inputs', () => {
+test('v3 React source, registry, license and patch bind the qualified owning inputs', () => {
   const owning = JSON.parse(
     fs.readFileSync(
       new URL(
