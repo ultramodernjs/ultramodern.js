@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { qualifyOtel } from '../ultramodern-dependencies/otel-corrections/portable.mjs';
 import { qualifyPeerCorrections } from '../ultramodern-dependencies/test-peer-corrections/qualify.mjs';
+import { qualifyReactSupport } from '../ultramodern-renderers/react-router-corrections/support-adapter.mjs';
 import {
   qualifyHeldRead,
   qualifyHeldReadPacked,
@@ -111,7 +112,9 @@ export function releaseRecipe() {
         ),
         toolchain,
       });
+      const react = await qualifyReactSupport({ workDirectory, toolchain });
       const evidence = {
+        '@tanstack/react-router': react,
         'solid-js': solidEvidence(solid),
         ...peerEvidence(metadata),
         '@effect/opentelemetry': otel,
@@ -134,6 +137,13 @@ export function releaseRecipe() {
           return [name, bytes];
         }),
       );
+      // React requires the actual core archive explicitly; its qualifier authenticates
+      // it against the reviewed correction, never the registry's uncorrected core.
+      await qualifyReactSupport({
+        workDirectory,
+        toolchain,
+        reactArchiveBytes: payloads.get('@tanstack/react-router'),
+      });
       const solid = await qualifyHeldReadPacked({
         workDirectory: path.join(
           workDirectory,

@@ -1,0 +1,24 @@
+diff --git a/package.json b/package.json
+index 4c4ad932c5e3bee5155062c71f1d773913fc5ead..59658a12f4a62e77c2eed82f0426cc23c0c43b12 100644
+--- a/package.json
++++ b/package.json
+@@ -79,8 +79,7 @@
+   "dependencies": {
+     "@tanstack/react-store": "^0.11.2",
+     "isbot": "^5.1.22",
+-    "@tanstack/history": "1.162.5",
+-    "@tanstack/router-core": "1.171.39"
++    "@tanstack/history": "1.162.5"
+   },
+   "devDependencies": {
+     "@testing-library/jest-dom": "^7.0.1",
+@@ -106,7 +105,8 @@
+   },
+   "peerDependencies": {
+     "react": ">=18.0.0 || >=19.0.0",
+-    "react-dom": ">=18.0.0 || >=19.0.0"
++    "react-dom": ">=18.0.0 || >=19.0.0",
++    "@tanstack/router-core": "1.171.39"
+   },
+   "scripts": {
+     "clean": "rimraf ./dist && rimraf ./coverage",

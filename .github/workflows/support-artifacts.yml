@@ -2,6 +2,11 @@ name: Support artifacts
 
 on:
   workflow_dispatch:
+    inputs:
+      native_manifest:
+        description: Exact accepted native-artifacts.json release URL
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -81,7 +86,11 @@ jobs:
           name: support-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/support-artifacts
       - name: Qualify the actual reconstructed archives
+        env:
+          NATIVE_MANIFEST_URL: ${{ inputs.native_manifest }}
         run: |
+          SUPPORT_REACT_CORE_ARCHIVE="$(mise exec node@26.13.1 -- node scripts/ultramodern-support-artifacts/prepare-react-core.mjs "$NATIVE_MANIFEST_URL")"
+          export SUPPORT_REACT_CORE_ARCHIVE
           SUPPORT_PNPM_BINARY="$(mise which pnpm --tool pnpm@12.21.0)"
           export SUPPORT_PNPM_BINARY
           mise exec node@26.13.1 -- node scripts/ultramodern-support-artifacts/main.mjs qualify "$RUNNER_TEMP/support-artifacts"

@@ -2919,6 +2919,19 @@ function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
     workflow.concurrency?.['cancel-in-progress'] !== false
   )
     fail('must be a read-only, non-cancelling manual dispatch');
+  if (
+    support &&
+    (!sameKeys(workflow.on?.workflow_dispatch, ['inputs']) ||
+      !sameKeys(workflow.on.workflow_dispatch.inputs, ['native_manifest']) ||
+      !sameKeys(workflow.on.workflow_dispatch.inputs.native_manifest, [
+        'description',
+        'required',
+        'type',
+      ]) ||
+      workflow.on.workflow_dispatch.inputs.native_manifest.required !== true ||
+      workflow.on.workflow_dispatch.inputs.native_manifest.type !== 'string')
+  )
+    fail('must require the exact native_manifest dispatch input');
   const jobs = workflow.jobs ?? {};
   if (!sameKeys(jobs, ['produce', 'qualify', writer]))
     fail(`must have exactly produce, qualify and ${writer} jobs`);
@@ -2963,6 +2976,12 @@ function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
         ? ''
         : support
           ? [
+              ...(id === 'qualify'
+                ? [
+                    'SUPPORT_REACT_CORE_ARCHIVE="$(mise exec node@26.13.1 -- node scripts/ultramodern-support-artifacts/prepare-react-core.mjs "$NATIVE_MANIFEST_URL")"',
+                    'export SUPPORT_REACT_CORE_ARCHIVE',
+                  ]
+                : []),
               'SUPPORT_PNPM_BINARY="$(mise which pnpm --tool pnpm@12.21.0)"',
               'export SUPPORT_PNPM_BINARY',
               'mise exec node@26.13.1 -- ',
@@ -2990,6 +3009,19 @@ function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
       fail(
         `${id} must execute its mandatory exact qualification or publication command`,
       );
+    if (
+      support &&
+      id === 'qualify' &&
+      (!sameKeys(steps[0]?.env, ['NATIVE_MANIFEST_URL']) ||
+        steps[0]?.env.NATIVE_MANIFEST_URL !== '${{ inputs.native_manifest }}')
+    )
+      fail('qualify must authenticate only the explicit native_manifest input');
+    if (
+      support &&
+      id !== 'qualify' &&
+      JSON.stringify(job).includes('SUPPORT_REACT_CORE_ARCHIVE')
+    )
+      fail(`${id} must not receive the packed React core archive`);
     if (id !== writer) {
       const installer = (job.steps ?? []).filter(step =>
         actionMatches(step, 'jdx/mise-action'),
