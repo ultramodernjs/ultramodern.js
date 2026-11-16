@@ -1016,19 +1016,34 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
   }
   assert(reviewedEdges > 50);
   // The batch reviews current source selections as well as manifest edges.
-  // Keep the real reviewed source descriptor while exercising the transition
-  // from original dependency edges to deliberately synthetic admitted URLs.
+  // Stage the admitted synthetic descriptor and matching source URL selections,
+  // then exercise the transition from the original dependency edges. These
+  // throwaway sources are not production evidence.
   const sourceOwner = 'packages/runtime/renderer-octane/package.json';
   const stagedOwner = JSON.parse(
     fs.readFileSync(path.join(root, sourceOwner), 'utf8'),
   );
-  stagedOwner.ultramodern.nativeArtifacts = JSON.parse(
+  const actualDescriptor = JSON.parse(
     fs.readFileSync(path.join(checkout, sourceOwner), 'utf8'),
   ).ultramodern.nativeArtifacts;
+  stagedOwner.ultramodern.nativeArtifacts = descriptors.nativeArtifacts;
   fs.writeFileSync(
     path.join(root, sourceOwner),
     `${JSON.stringify(stagedOwner, null, 2)}\n`,
   );
+  for (const file of [
+    'packages/runtime/renderer-octane/src/plugin/profile.ts',
+    'packages/runtime/renderer-solid/src/plugin/profile.ts',
+  ]) {
+    const filename = path.join(root, file);
+    let source = fs.readFileSync(filename, 'utf8');
+    for (const [name, item] of Object.entries(actualDescriptor.packages))
+      source = source.replaceAll(
+        item.request,
+        descriptors.nativeArtifacts.packages[name].request,
+      );
+    fs.writeFileSync(filename, source);
+  }
   const batch = runUpdater({ root, artifactAuthority: authority });
   for (const edge of batch.unresolved)
     assert(
