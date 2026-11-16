@@ -20,16 +20,18 @@ type Compiler = Awaited<ReturnType<Provider>>;
 async function privateTmp(appDirectory: string) {
   const directory = path.join(appDirectory, '.tmp');
   await fs.ensureDir(directory);
-  const previous = process.env.TMPDIR;
-  process.env.TMPDIR = directory;
+  const variable = process.platform === 'win32' ? 'TEMP' : 'TMPDIR';
+  const previous = process.env[variable];
+  process.env[variable] = directory;
+  expect(await fs.realpath(os.tmpdir())).toBe(directory);
   return {
     adapters: async () =>
       (await fs.readdir(directory))
         .filter(name => name.startsWith('modern-server-tsrs-'))
         .map(name => path.join(directory, name)),
     restore: () => {
-      if (previous === undefined) delete process.env.TMPDIR;
-      else process.env.TMPDIR = previous;
+      if (previous === undefined) delete process.env[variable];
+      else process.env[variable] = previous;
     },
   };
 }
