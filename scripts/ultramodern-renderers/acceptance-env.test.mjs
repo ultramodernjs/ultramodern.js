@@ -11,7 +11,8 @@ import { mergePnpmLockfileDocuments } from '../lib/pnpm-lockfile-documents.mjs';
 import { createRegistryEnv } from '../ultramodern-publish/lib/source-create-proof/runtime-proof/registry.mjs';
 import { createRendererAcceptanceEnv } from './acceptance-env.mjs';
 
-const compilerVersion = '0.21.0-ts7.1.0-beta';
+// The generator's reviewed compiler; only this release has a trust exception.
+const compilerVersion = '0.25.0-ts7.1.0-beta';
 const compiler = `tsrs@${compilerVersion}`;
 const version = '3.9.3-ultramodern.42';
 const targetName = '@bleedingdev/modern-js-ultramodern-create';
@@ -131,9 +132,10 @@ test('renderer starter installs the exact reviewed compiler with source registry
   const registryUrl = await registry(t, root);
   fs.writeFileSync(
     path.join(root, 'package.json'),
+    // No packageManager field: pnpm 12 resolves it as a config dependency from
+    // this compiler-only registry. Acceptance already runs the pinned manager.
     JSON.stringify({
       private: true,
-      packageManager: 'pnpm@12.11.2',
       dependencies: { tsrs: compilerVersion },
     }),
   );
@@ -226,20 +228,23 @@ for (const mode of ['source', 'published'])
     assert.equal(env.npm_config_registry, runtimeEnv.npm_config_registry);
     assert.equal(env.npm_config_store_dir, storeDir);
     assert.deepEqual(JSON.parse(env.pnpm_config_minimum_release_age_exclude), [
-      '@bleedingdev/modern-js-ultramodern-create@3.9.3-ultramodern.42',
-      '@tsrs/darwin-arm64@0.21.0-ts7.1.0-beta',
-      '@tsrs/darwin-x64@0.21.0-ts7.1.0-beta',
-      '@tsrs/linux-arm64-gnu@0.21.0-ts7.1.0-beta',
-      '@tsrs/linux-arm64-musl@0.21.0-ts7.1.0-beta',
-      '@tsrs/linux-x64-gnu@0.21.0-ts7.1.0-beta',
-      '@tsrs/linux-x64-musl@0.21.0-ts7.1.0-beta',
-      '@tsrs/win32-x64@0.21.0-ts7.1.0-beta',
-      'tsrs@0.21.0-ts7.1.0-beta',
+      ...cohort,
+      ...[
+        'darwin-arm64',
+        'darwin-x64',
+        'linux-arm64-gnu',
+        'linux-arm64-musl',
+        'linux-x64-gnu',
+        'linux-x64-musl',
+        'win32-arm64',
+        'win32-x64',
+      ].map(platform => `@tsrs/${platform}@${compilerVersion}`),
+      compiler,
     ]);
     if (mode === 'source')
       assert.deepEqual(JSON.parse(env.pnpm_config_trust_policy_exclude), [
-        '@bleedingdev/modern-js-ultramodern-create@3.9.3-ultramodern.42',
-        'tsrs@0.21.0-ts7.1.0-beta',
+        ...cohort,
+        compiler,
       ]);
     // Published consumers retain their generated workspace's exact exception.
     else assert.equal(env.pnpm_config_trust_policy_exclude, undefined);

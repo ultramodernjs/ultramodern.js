@@ -132,7 +132,8 @@ for (const scenario of [
           downloads[0],
           `https://github.com/jdx/mise/releases/download/v2026.11.8/mise-v2026.11.8-linux-${arch}`,
         );
-      if (success) assert.equal((await fs.stat(target)).mode & 0o777, 0o755);
+      if (success && process.platform !== 'win32')
+        assert.equal((await fs.stat(target)).mode & 0o777, 0o755);
       if (scenario === 'symlink')
         assert.equal((await fs.lstat(target)).isSymbolicLink(), true);
     } finally {

@@ -35,6 +35,8 @@ const artifactDirectory = path.resolve(
   path.dirname(require.resolve('@tanstack/redact')),
   '..',
 );
+// Module resources are native paths; assert file identities in POSIX form.
+const posixPath = (file: string) => file.split(path.sep).join(path.posix.sep);
 
 async function configure(
   options: {
@@ -110,7 +112,9 @@ async function compile(config: Rspack.Configuration, source: string) {
     expect(stats.toJson({ all: false, errors: true }).errors).toEqual([]);
     const modules = [...stats.compilation.modules]
       .map(module =>
-        'resource' in module ? String(module.resource) : module.identifier(),
+        posixPath(
+          'resource' in module ? String(module.resource) : module.identifier(),
+        ),
       )
       .join('\n');
     const assets = stats.compilation
@@ -159,7 +163,7 @@ describe('native Redact integration without the external wrapper', () => {
       export const client = createRoot;
     `,
       );
-      expect(modules).toContain(artifactDirectory);
+      expect(modules).toContain(posixPath(artifactDirectory));
       expect(modules).not.toMatch(/[/\\]react(?:-dom)?[/\\]cjs[/\\]/);
       expect(modules).not.toContain('external "react');
       expect(modules.includes('/view-transition/stub.js')).toBe(true);

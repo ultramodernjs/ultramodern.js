@@ -701,9 +701,20 @@ test('retains an explicitly supplied core archive in real host and remote fixtur
       for (const name of Object.keys(start))
         delete context.packageRequests[name];
       delete context.packageRequests['@tanstack/router-core'];
+      // The fixture authors the native router core, so its pin cannot vanish.
+      assert.throws(
+        () => packedNativeFederationManifest(manifest, context),
+        /Packed consumer is missing the @tanstack\/router-core dependency pin/u,
+      );
+      // An app that does not author it never receives an unsupplied core.
+      const unauthored = { ...manifest.dependencies };
+      delete unauthored['@tanstack/router-core'];
       assert.equal(
         Object.hasOwn(
-          packedNativeFederationManifest(manifest, context).dependencies,
+          packedNativeFederationManifest(
+            { ...manifest, dependencies: unauthored },
+            context,
+          ).dependencies,
           '@tanstack/router-core',
         ),
         false,
