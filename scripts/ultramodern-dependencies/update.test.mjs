@@ -1,11 +1,107 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-
 import { sourceRevision, targets } from './snapshot.mjs';
 import { planManifestUpdate, runUpdater } from './update.mjs';
 
 const plan = (expected, current = expected, path = 'package.json') =>
   planManifestUpdate({ path, expected, current, sourceRevision });
+
+test('accepts only exact reviewed post-source edge additions and moves', () => {
+  const solid = 'packages/runtime/renderer-solid/package.json';
+  const input = { dependencies: { isbot: '5.2.3' } };
+  const added = {
+    dependencies: { isbot: '5.2.3', '@types/convert-source-map': '2.0.3' },
+  };
+  const result = plan(input, added, solid);
+  assert.deepEqual(result.manifest, added);
+  assert.equal(result.changes.length, 0);
+  assert.deepEqual(
+    result.edges.find(edge => edge.name === '@types/convert-source-map'),
+    {
+      path: solid,
+      field: 'dependencies',
+      name: '@types/convert-source-map',
+      from: null,
+      to: '2.0.3',
+      target: null,
+      status: 'reviewed-addition',
+      reason: 'exact reviewed dependency addition',
+    },
+  );
+  // The updater never performs a reviewed addition itself.
+  assert.deepEqual(plan(input, input, solid).manifest, input);
+  assert.throws(
+    () =>
+      plan(
+        input,
+        {
+          dependencies: {
+            ...added.dependencies,
+            '@types/convert-source-map': '2.0.4',
+          },
+        },
+        solid,
+      ),
+    /unreviewed transition dependencies.@types\/convert-source-map/,
+  );
+  for (const [current, file] of [
+    [added, 'packages/runtime/renderer-octane/package.json'],
+    [{ devDependencies: added.dependencies }, solid],
+    [{ dependencies: { ...added.dependencies, surprise: '1.0.0' } }, solid],
+  ])
+    assert.throws(() => plan(input, current, file), /edge names changed/);
+
+  const tools = 'packages/solutions/app-tools/package.json';
+  const extensions = 'packages/solutions/app-tools-extensions/package.json';
+  const source = {
+    dependencies: {
+      '@types/babel__core': '^7.20.5',
+      prettier: '~3.9.10',
+      semver: '7.8.6',
+    },
+  };
+  const moved = { dependencies: { semver: '7.8.6' } };
+  assert.deepEqual(plan(source, moved, tools).manifest, moved);
+  assert.throws(
+    () =>
+      plan(
+        { dependencies: { ...source.dependencies, prettier: '~3.9.9' } },
+        moved,
+        tools,
+      ),
+    /edge names changed/,
+  );
+  const receiving = { devDependencies: { '@rsbuild/core': '2.3.2' } };
+  const received = {
+    devDependencies: {
+      ...receiving.devDependencies,
+      '@rsbuild/plugin-svgr': '2.0.5',
+      '@types/babel__core': '^7.20.5',
+      prettier: '~3.10.1',
+    },
+  };
+  const receivedPlan = plan(receiving, received, extensions);
+  assert.deepEqual(receivedPlan.manifest, received);
+  assert.equal(receivedPlan.changes.length, 0);
+  for (const [name, wrong] of [
+    ['prettier', '~3.9.10'],
+    ['@rsbuild/plugin-svgr', '^2.0.5'],
+  ])
+    assert.throws(
+      () =>
+        plan(
+          receiving,
+          { devDependencies: { ...received.devDependencies, [name]: wrong } },
+          extensions,
+        ),
+      /unreviewed transition/,
+    );
+  assert.throws(
+    () =>
+      plan(receiving, { dependencies: received.devDependencies }, extensions),
+    /edge names changed/,
+  );
+});
 
 test('runtime-utils keeps metadata corrections as exact development inputs, not public peers', () => {
   const input = {

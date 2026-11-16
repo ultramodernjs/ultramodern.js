@@ -83,20 +83,80 @@ export const satisfiedExceptions = Object.freeze({
   '@rsbuild-image/react': '0.0.1-next.36',
 });
 
-// Exact reviewed removals; the updater accepts but never performs these edits.
-export const reviewedRemovals = Object.freeze([
-  {
-    path: 'packages/solutions/ultramodern-app-tools/package.json',
-    field: 'dependencies',
-    name: 'rsbuild-redact-plugin',
-    from: '0.1.0',
-  },
-  {
-    path: 'examples/module-federation/app-export/host/package.json',
-    field: 'dependencies',
-    name: 'react-router',
-    from: '^7.18.4',
-  },
+// Exact reviewed edge additions (`from: null`) and removals (`to: null`) made
+// after sourceRevision. The updater accepts but never performs these edits:
+// `from` is the sourceRevision value; `commit` records review provenance, not
+// a runtime ancestry requirement on feature commits rewritten by rebasing.
+const reviewedTransition = (commit, path, field, name, from, to) =>
+  Object.freeze({ commit, path, field, name, from, to });
+const cohortCommit = 'efa682f9254ef4b8b4beb9a0612df8b161d47bbf';
+const solidDeclarationsCommit = 'a08a714015d1a8403e6b328049317027c19674a9';
+const svgrDeclarationsCommit = '7c27dc97387bbac67c051c9865bce114d04779b8';
+const appTools = 'packages/solutions/app-tools/package.json';
+const ultramodernAppTools =
+  'packages/solutions/ultramodern-app-tools/package.json';
+const appToolsExtensions =
+  'packages/solutions/app-tools-extensions/package.json';
+export const reviewedTransitions = Object.freeze([
+  reviewedTransition(
+    cohortCommit,
+    ultramodernAppTools,
+    'dependencies',
+    'rsbuild-redact-plugin',
+    '0.1.0',
+    null,
+  ),
+  reviewedTransition(
+    cohortCommit,
+    'examples/module-federation/app-export/host/package.json',
+    'dependencies',
+    'react-router',
+    '^7.18.4',
+    null,
+  ),
+  // Solid compiler declarations reference convert-source-map types.
+  reviewedTransition(
+    solidDeclarationsCommit,
+    'packages/runtime/renderer-solid/package.json',
+    'dependencies',
+    '@types/convert-source-map',
+    null,
+    '2.0.3',
+  ),
+  // SVGR option declarations are bundled by app-tools-extensions, so their
+  // type-only inputs leave the published tool dependency surfaces.
+  ...[appTools, ultramodernAppTools].flatMap(path => [
+    reviewedTransition(
+      svgrDeclarationsCommit,
+      path,
+      'dependencies',
+      '@types/babel__core',
+      '^7.20.5',
+      null,
+    ),
+    reviewedTransition(
+      svgrDeclarationsCommit,
+      path,
+      'dependencies',
+      'prettier',
+      '~3.9.10',
+      null,
+    ),
+  ]),
+  ...[
+    ['@rsbuild/plugin-svgr', '2.0.5'],
+    ['@types/babel__core', '^7.20.5'],
+    ['prettier', '~3.10.1'],
+  ].map(([name, to]) =>
+    reviewedTransition(
+      svgrDeclarationsCommit,
+      appToolsExtensions,
+      'devDependencies',
+      name,
+      null,
+      to,
+    ),
+  ),
 ]);
 
 // DOM v7 is only a re-export parent of router v7. These consumers have no DOM

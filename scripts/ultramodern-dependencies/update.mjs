@@ -16,7 +16,7 @@ import {
   currentNames,
   holds,
   queriedAt,
-  reviewedRemovals,
+  reviewedTransitions,
   routerDomRemovals,
   rslibPatchSha256,
   satisfiedExceptions,
@@ -348,11 +348,36 @@ export function planManifestUpdate({
       });
   }
   for (const field of fields) {
-    const before = reviewed[field] ?? {};
     const actual = actualManifest[field] ?? {};
+    const transitions = reviewedTransitions.filter(
+      edge =>
+        edge.path === file &&
+        edge.field === field &&
+        (edge.from === null
+          ? !Object.hasOwn(reviewed[field] ?? {}, edge.name)
+          : reviewed[field]?.[edge.name] === edge.from),
+    );
+    const added = new Set();
+    for (const edge of transitions)
+      if (edge.to !== null && Object.hasOwn(actual, edge.name)) {
+        assert.equal(
+          actual[edge.name],
+          edge.to,
+          `${file}: unreviewed transition ${field}.${edge.name}`,
+        );
+        added.add(edge.name);
+      }
+    const before = {
+      ...reviewed[field],
+      ...Object.fromEntries(
+        transitions
+          .filter(edge => added.has(edge.name))
+          .map(edge => [edge.name, edge.to]),
+      ),
+    };
     const removed = new Set(
       [
-        ...reviewedRemovals,
+        ...transitions.filter(edge => edge.to === null),
         ...routerDomRemovals.map(edge => ({
           ...edge,
           field: 'dependencies',
@@ -419,6 +444,14 @@ export function planManifestUpdate({
             reason: 'semantic/synthetic fixture',
           }
         : replacement({ file, field, name, value });
+      if (added.has(name) && edge.status === 'unknown')
+        edge = {
+          ...edge,
+          from: null,
+          to: value,
+          status: 'reviewed-addition',
+          reason: 'exact reviewed dependency addition',
+        };
       const artifact = admittedPin(name);
       if (artifact && !excludedFixture(file)) {
         assert(
@@ -608,9 +641,12 @@ export function runUpdater({ root, write = false, artifactAuthority }) {
       edge => edge.status === 'held' || edge.status === 'unknown',
     ),
     exceptions: allEdges.filter(edge =>
-      ['fixture', 'satisfied-exception', 'reviewed-removal'].includes(
-        edge.status,
-      ),
+      [
+        'fixture',
+        'satisfied-exception',
+        'reviewed-removal',
+        'reviewed-addition',
+      ].includes(edge.status),
     ),
   };
 }
