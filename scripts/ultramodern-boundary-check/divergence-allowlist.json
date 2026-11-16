@@ -4,9 +4,9 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1467,
-  "totalHunks": 4947,
-  "totalChangedLines": 105258,
+  "totalFiles": 1468,
+  "totalHunks": 4949,
+  "totalChangedLines": 105300,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -4456,7 +4456,7 @@
     {
       "file": "packages/server/server/tsconfig.json",
       "hunks": 2,
-      "changedLines": 5
+      "changedLines": 4
     },
     {
       "file": "packages/server/utils/.npmignore",
@@ -5781,7 +5781,7 @@
     {
       "file": "packages/toolkit/plugin/tsconfig.json",
       "hunks": 2,
-      "changedLines": 5
+      "changedLines": 4
     },
     {
       "file": "packages/toolkit/runtime-utils/.npmignore",
@@ -7185,8 +7185,8 @@
     },
     {
       "file": "packages/toolkit/utils/rslib.config.mts",
-      "hunks": 17,
-      "changedLines": 112
+      "hunks": 18,
+      "changedLines": 120
     },
     {
       "file": "packages/toolkit/utils/src/cli/commands.ts",
@@ -7307,6 +7307,11 @@
       "file": "packages/toolkit/utils/tests/compiledYamlExports.test.ts",
       "hunks": 1,
       "changedLines": 33
+    },
+    {
+      "file": "packages/toolkit/utils/tests/declarationSpecifiers.test.ts",
+      "hunks": 1,
+      "changedLines": 36
     },
     {
       "file": "packages/toolkit/utils/tests/fixtures/lazy-signale-inspect.mjs",
