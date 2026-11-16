@@ -217,21 +217,8 @@ jobs:
         if: runner.os == 'Windows' && matrix.compiler_payload == false && steps.windows-snapshot.outputs.cache-hit != 'true'
         run: node scripts/ci/windows-dependency-snapshot.mjs snapshot
 
-      # Prove the full real installation survives tar, not just a fixture.
-      - name: Verify Windows snapshot transport and native executables
-        if: runner.os == 'Windows' && matrix.compiler_payload == false && steps.windows-snapshot.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          node scripts/ci/windows-dependency-snapshot.mjs verify-transport
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm exec nx --version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm exec rstest --version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node scripts/prepare-effect-compiler.mjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node scripts/ci/windows-dependency-snapshot.mjs snapshot
-
+      # Consumer jobs restore this archive and execute the native tools before
+      # testing; a second local tar round trip duplicates that proof.
       - name: Save Windows dependency snapshot
         if: runner.os == 'Windows' && matrix.compiler_payload == false && steps.windows-snapshot.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
