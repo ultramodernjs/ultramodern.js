@@ -4,9 +4,9 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1455,
-  "totalHunks": 4894,
-  "totalChangedLines": 104117,
+  "totalFiles": 1456,
+  "totalHunks": 4902,
+  "totalChangedLines": 104233,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -167,6 +167,11 @@
       "file": "packages/cli/builder/tests/loaders/fixtures/client-component.jsx",
       "hunks": 1,
       "changedLines": 2
+    },
+    {
+      "file": "packages/cli/builder/tests/loaders/fixtures/inline-actions.tsx",
+      "hunks": 2,
+      "changedLines": 4
     },
     {
       "file": "packages/cli/builder/tests/neutralConfigTypes.test.ts",
@@ -2085,8 +2090,8 @@
     },
     {
       "file": "packages/document/src/components/FrameworkCode/index.tsx",
-      "hunks": 3,
-      "changedLines": 6
+      "hunks": 8,
+      "changedLines": 112
     },
     {
       "file": "packages/document/src/components/Mermaid/index.tsx",
@@ -2140,8 +2145,8 @@
     },
     {
       "file": "packages/document/src/pages/index.module.scss",
-      "hunks": 8,
-      "changedLines": 16
+      "hunks": 9,
+      "changedLines": 22
     },
     {
       "file": "packages/document/src/pages/index.tsx",
