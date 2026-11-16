@@ -59,7 +59,12 @@ jobs:
             type-check
             ut-linux
             ut-mac
-            ut-windows
+            ut-windows-shards (1/4)
+            ut-windows-shards (2/4)
+            ut-windows-shards (3/4)
+            ut-windows-shards (4/4)
+            ut-windows-shards (generator-shell)
+            ut-windows-shards (generator-workspace)
             workflow-security
         run: |
           set -euo pipefail

@@ -133,20 +133,3 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7
-
-  # Keep the original check name and fail it if any shard fails or is cancelled.
-  ut-windows:
-    if: ${{ always() }}
-    needs: ut-windows-shards
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
-    timeout-minutes: 5
-    steps:
-      - name: Verify all unit test shards passed
-        shell: bash
-        env:
-          SHARD_RESULT: ${{ needs.ut-windows-shards.result }}
-        run: |
-          if [[ "$SHARD_RESULT" != "success" ]]; then
-            echo "::error::Windows unit test shards finished with $SHARD_RESULT"
-            exit 1
-          fi
