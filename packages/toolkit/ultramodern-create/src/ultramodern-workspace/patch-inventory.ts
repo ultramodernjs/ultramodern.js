@@ -10,6 +10,16 @@ export default [
       'Resolve declaration outputs against the project root before alias rewriting and anchor discovery at that output so Windows short-path ancestors remain traversable. Preserve checked TypeScript 7 emit and alias rewriting; retire when the accepted Rslib dependency includes the same short-path fix.',
   },
   {
+    packageName: 'rsbuild-plugin-dts',
+    version: '1.0.7',
+    path: 'patches/rsbuild-plugin-dts@1.0.7.patch',
+    sha256: 'bd0c8f1b4c4681eeb0d1ea0123c252ad41b17f01be1ca171bd8c42ca2d652e44',
+    repository: false,
+    workspace: null,
+    reason:
+      'Resolve declaration outputs against the project root before alias rewriting and anchor discovery at that output so Windows short-path ancestors remain traversable. Keep explicit native tsgo plus typescriptPath on the executable backend instead of importing typescript/sync under TypeScript 7.1. Producer input only: the support-artifacts recipe reconstructs the corrected 1.0.7 archive from the authenticated npm source and this exact patch, so the selector is not projected into repository patchedDependencies. Generated workspaces remain patch-free; retire when the accepted Rslib dependency includes both fixes.',
+  },
+  {
     packageName: '@tanstack/redact',
     version: '0.2.1',
     path: 'patches/@tanstack__redact@0.2.1.patch',

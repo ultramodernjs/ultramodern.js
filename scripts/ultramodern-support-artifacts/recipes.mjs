@@ -10,6 +10,7 @@ import {
   qualifyHeldReadPacked,
   readHeldReadRecipeBytes,
 } from '../ultramodern-renderers/solid-corrections/qualify-held-read.mjs';
+import { qualifyDtsPlugin } from './dts-plugin.mjs';
 import { inputs, supportProtocol as protocol } from './protocol.mjs';
 import { validateRecipe, verifySourceQualification } from './reconstruct.mjs';
 
@@ -113,11 +114,13 @@ export function releaseRecipe() {
         toolchain,
       });
       const react = await qualifyReactSupport({ workDirectory, toolchain });
+      const dts = await qualifyDtsPlugin({ workDirectory, toolchain });
       const evidence = {
         '@tanstack/react-router': react,
         'solid-js': solidEvidence(solid),
         ...peerEvidence(metadata),
         '@effect/opentelemetry': otel,
+        'rsbuild-plugin-dts': dts,
       };
       verifySourceQualification(recipe, evidence);
       return evidence;
@@ -175,6 +178,11 @@ export function releaseRecipe() {
         payloads: new Map([
           ['@effect/opentelemetry', payloads.get('@effect/opentelemetry')],
         ]),
+      });
+      await qualifyDtsPlugin({
+        workDirectory,
+        toolchain,
+        payload: payloads.get('rsbuild-plugin-dts'),
       });
     },
   };

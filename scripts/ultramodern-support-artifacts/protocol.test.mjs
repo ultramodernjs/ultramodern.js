@@ -35,19 +35,21 @@ function manifest() {
     ),
   };
 }
-test('fixed v2 six support identities and seven release assets', () => {
+test('closed v3 seven support identities and eight release assets', () => {
   const m = manifest();
   p.validateManifest(m);
-  assert.equal(p.protocol, 'ultramodern.support-artifacts.v2');
+  assert.equal(p.protocol, 'ultramodern.support-artifacts.v3');
   assert.deepEqual(m.packages && Object.keys(m.packages).sort(), [
     '@effect/opentelemetry',
     '@rstest/core',
     '@tanstack/react-router',
     '@types/ioredis-mock',
     'ioredis-mock',
+    'rsbuild-plugin-dts',
     'solid-js',
   ]);
-  assert.equal(Object.keys(m.packages).length + 1, 7);
+  assert.equal(Object.keys(m.packages).length + 1, 8);
+  assert.equal(p.cohort['rsbuild-plugin-dts'], '1.0.7');
   assert.equal(p.manifestFilename, 'support-artifacts.json');
   assert.equal(
     p.descriptorFor(m).manifest.request,
@@ -58,7 +60,9 @@ test('native/support mixing and missing identities fail closed', () => {
   for (const mutate of [
     m => (m.protocol = 'ultramodern.native-artifacts.v1'),
     m => (m.protocol = 'ultramodern.support-artifacts.v1'),
+    m => (m.protocol = 'ultramodern.support-artifacts.v2'),
     m => delete m.packages['@tanstack/react-router'],
+    m => delete m.packages['rsbuild-plugin-dts'],
     m => (m.packages.octane = m.packages['solid-js']),
     m => delete m.packages['solid-js'],
   ]) {
@@ -72,6 +76,10 @@ test('unknown fields and invented npm-source commit rejected', () => {
     m => (m.bypass = true),
     m => (m.producer.skip = true),
     m => (m.packages['@effect/opentelemetry'].upstream.commit = source),
+    m => (m.packages['rsbuild-plugin-dts'].upstream.commit = source),
+    m =>
+      (m.packages['rsbuild-plugin-dts'].upstream.sourceArchiveIntegrity =
+        m.packages['@effect/opentelemetry'].upstream.sourceArchiveIntegrity),
     m => (m.packages['solid-js'].upstream.licenseLocation = 'npm'),
     m =>
       (m.packages['@tanstack/react-router'].upstream.commit = 'b'.repeat(40)),
@@ -175,6 +183,9 @@ test('support receipt package versions and producer tag cannot drift', () => {
   const m = manifest();
   m.packages['@rstest/core'].version = '0.12.5';
   assert.throws(() => p.validateManifest(m));
+  const dts = manifest();
+  dts.packages['rsbuild-plugin-dts'].version = '1.0.3';
+  assert.throws(() => p.validateManifest(dts));
   const other = manifest();
   other.producer.tag = 'native-renderers-' + source + '-1-1';
   assert.throws(() => p.validateManifest(other));
