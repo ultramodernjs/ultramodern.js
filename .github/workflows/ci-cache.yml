@@ -3,8 +3,9 @@ name: CI Cache
 # The one writer of the dependency caches PR jobs restore. Caches saved on a
 # PR ref are visible only to that PR, so per-PR saves parked one ~500 MB pnpm
 # store (plus mise and browsers) per PR and OS and blew the 10 GB repository
-# quota. Jobs on other refs restore only; this workflow saves on
-# main-ultramodern, whose caches every ref can read.
+# quota. Jobs on ephemeral refs restore only. This workflow saves on
+# main-ultramodern (readable everywhere), or on an explicitly dispatched
+# durable branch to measure a new snapshot before merging it.
 on:
   push:
     branches: [main-ultramodern]
@@ -26,14 +27,14 @@ permissions:
 
 jobs:
   effect-compiler-payload:
-    if: github.ref == 'refs/heads/main-ultramodern'
+    if: github.ref == 'refs/heads/main-ultramodern' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/effect-compiler-payload.yml
 
   seed:
     needs: effect-compiler-payload
-    # workflow_dispatch accepts any ref; a seed there would park branch-scoped
-    # entries again.
-    if: github.ref == 'refs/heads/main-ultramodern'
+    # Explicit dispatch can warm a durable development branch for measurement.
+    # PR and merge-queue refs never write caches.
+    if: github.ref == 'refs/heads/main-ultramodern' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -113,14 +114,14 @@ jobs:
       # pnpm writes this result only after its own policy verification passes.
       # Keep the writer on the trusted default branch; PR jobs restore only.
       - name: Validate pnpm verification seed
-        if: matrix.compiler_payload == false && steps.pnpm-verification.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main-ultramodern' && matrix.compiler_payload == false && steps.pnpm-verification.outputs.cache-hit != 'true'
         run: |
           pnpm_version="$(pnpm --version)"
           cache_directory="$(pnpm cache path)"
           node scripts/ci/pnpm-verification-cache.mjs seed "$pnpm_version" "$cache_directory"
 
       - name: Save pnpm verification
-        if: matrix.compiler_payload == false && steps.pnpm-verification.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main-ultramodern' && matrix.compiler_payload == false && steps.pnpm-verification.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.pnpm-verification.outputs.path }}
