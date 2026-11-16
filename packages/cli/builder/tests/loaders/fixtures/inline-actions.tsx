@@ -11,7 +11,7 @@ export async function bar() {
   return qux();
 }
 
-const b = () => {
+const b = async () => {
   'use server';
 
   return `baz`;
@@ -25,7 +25,7 @@ async function qux() {
   return `qux`;
 }
 
-export default function () {
+export default async function () {
   'use server';
 
   return `default`;

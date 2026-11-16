@@ -3068,7 +3068,10 @@ five previously invalid advisory rows remain non-authorizing historical prose.
     {"path":"packages/document/docs/zh/guides/basic-features/render/ssr.mdx","owner":"bleedingdev","reason":"2026-11-16: Repair authored links and page-owned section headings exposed by Rspress 2.1.3 anchor validation; preserve anchor checks and published documentation semantics.","dispositions":["inline-patch"]},
     {"path":"packages/document/docs/zh/guides/concept/entries.mdx","owner":"bleedingdev","reason":"2026-11-16: Repair authored links and page-owned section headings exposed by Rspress 2.1.3 anchor validation; preserve anchor checks and published documentation semantics.","dispositions":["inline-patch"]},
     {"path":"packages/document/docs/zh/guides/troubleshooting/hmr.mdx","owner":"bleedingdev","reason":"2026-11-16: Repair authored links and page-owned section headings exposed by Rspress 2.1.3 anchor validation; preserve anchor checks and published documentation semantics.","dispositions":["inline-patch"]},
-    {"path":"packages/document/docs/zh/tutorials/examples/csr-auth.mdx","owner":"bleedingdev","reason":"2026-11-16: Repair authored links and page-owned section headings exposed by Rspress 2.1.3 anchor validation; preserve anchor checks and published documentation semantics.","dispositions":["inline-patch"]}
+    {"path":"packages/document/docs/zh/tutorials/examples/csr-auth.mdx","owner":"bleedingdev","reason":"2026-11-16: Repair authored links and page-owned section headings exposed by Rspress 2.1.3 anchor validation; preserve anchor checks and published documentation semantics.","dispositions":["inline-patch"]},
+    {"path":"packages/document/src/components/FrameworkCode/index.tsx","owner":"bleedingdev","reason":"2026-11-16: Hoist the Shiki code wrapper to module scope to preserve React component identity across renders; remove unused props and rerun path replacement when the original highlighted element changes.","dispositions":["inline-patch"]},
+    {"path":"packages/document/src/pages/index.module.scss","owner":"bleedingdev","reason":"2026-11-16: Order the dark announcement-arrow color rule before its higher-specificity hover transform without changing declarations or visual behavior.","dispositions":["inline-patch"]},
+    {"path":"packages/cli/builder/tests/loaders/fixtures/inline-actions.tsx","owner":"bleedingdev","reason":"2026-11-16: Make the two remaining inline server-action fixture functions async as required by React; retain fixture contents without a lint suppression.","dispositions":["inline-patch"]}
   ]
 }
 ```
@@ -5047,6 +5050,9 @@ five previously invalid advisory rows remain non-authorizing historical prose.
 | `packages/document/docs/zh/guides/concept/entries.mdx` | bleedingdev | 2026-11-16: Repair authored links and page-owned section headings exposed by Rspress 2.1.3 anchor validation; preserve anchor checks and published documentation semantics. | `inline-patch` |
 | `packages/document/docs/zh/guides/troubleshooting/hmr.mdx` | bleedingdev | 2026-11-16: Repair authored links and page-owned section headings exposed by Rspress 2.1.3 anchor validation; preserve anchor checks and published documentation semantics. | `inline-patch` |
 | `packages/document/docs/zh/tutorials/examples/csr-auth.mdx` | bleedingdev | 2026-11-16: Repair authored links and page-owned section headings exposed by Rspress 2.1.3 anchor validation; preserve anchor checks and published documentation semantics. | `inline-patch` |
+| `packages/document/src/components/FrameworkCode/index.tsx` | bleedingdev | 2026-11-16: Hoist the Shiki code wrapper to module scope to preserve React component identity across renders; remove unused props and rerun path replacement when the original highlighted element changes. | `inline-patch` |
+| `packages/document/src/pages/index.module.scss` | bleedingdev | 2026-11-16: Order the dark announcement-arrow color rule before its higher-specificity hover transform without changing declarations or visual behavior. | `inline-patch` |
+| `packages/cli/builder/tests/loaders/fixtures/inline-actions.tsx` | bleedingdev | 2026-11-16: Make the two remaining inline server-action fixture functions async as required by React; retain fixture contents without a lint suppression. | `inline-patch` |
 <!-- /fork-evidence:table -->
 
 ### 2026-10-11 published stable Modern.js v3.9.3 integration

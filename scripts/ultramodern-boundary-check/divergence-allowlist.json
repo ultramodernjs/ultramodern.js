@@ -4,9 +4,9 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1445,
-  "totalHunks": 4859,
-  "totalChangedLines": 104038,
+  "totalFiles": 1455,
+  "totalHunks": 4894,
+  "totalChangedLines": 104117,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -560,13 +560,13 @@
     },
     {
       "file": "packages/document/docs/en/apis/app/commands.mdx",
-      "hunks": 17,
-      "changedLines": 92
+      "hunks": 18,
+      "changedLines": 96
     },
     {
       "file": "packages/document/docs/en/apis/app/hooks/api/lambda.mdx",
-      "hunks": 1,
-      "changedLines": 3
+      "hunks": 2,
+      "changedLines": 5
     },
     {
       "file": "packages/document/docs/en/apis/app/hooks/config/html.mdx",
@@ -605,8 +605,8 @@
     },
     {
       "file": "packages/document/docs/en/apis/app/hooks/src/routes.mdx",
-      "hunks": 2,
-      "changedLines": 3
+      "hunks": 4,
+      "changedLines": 7
     },
     {
       "file": "packages/document/docs/en/apis/app/hooks/src/server.mdx",
@@ -690,8 +690,8 @@
     },
     {
       "file": "packages/document/docs/en/components/deploy-command.mdx",
-      "hunks": 2,
-      "changedLines": 3
+      "hunks": 3,
+      "changedLines": 5
     },
     {
       "file": "packages/document/docs/en/components/deploy.mdx",
@@ -746,7 +746,7 @@
     {
       "file": "packages/document/docs/en/components/serve-command.mdx",
       "hunks": 1,
-      "changedLines": 2
+      "changedLines": 4
     },
     {
       "file": "packages/document/docs/en/components/ssr-monitor.mdx",
@@ -755,6 +755,11 @@
     },
     {
       "file": "packages/document/docs/en/components/tech-stack-node-framework.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
+      "file": "packages/document/docs/en/components/ua-polyfill.mdx",
       "hunks": 1,
       "changedLines": 2
     },
@@ -864,6 +869,11 @@
       "changedLines": 42
     },
     {
+      "file": "packages/document/docs/en/configure/app/runtime/0-intro.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
       "file": "packages/document/docs/en/configure/app/runtime/plugins.mdx",
       "hunks": 1,
       "changedLines": 10
@@ -881,7 +891,7 @@
     {
       "file": "packages/document/docs/en/configure/app/server/ssr.mdx",
       "hunks": 4,
-      "changedLines": 8
+      "changedLines": 10
     },
     {
       "file": "packages/document/docs/en/configure/app/server/static-cache-control.mdx",
@@ -960,8 +970,8 @@
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/compatibility.mdx",
-      "hunks": 4,
-      "changedLines": 7
+      "hunks": 5,
+      "changedLines": 11
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/international.mdx",
@@ -1009,6 +1019,11 @@
       "changedLines": 182
     },
     {
+      "file": "packages/document/docs/en/guides/advanced-features/page-performance/code-split.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
       "file": "packages/document/docs/en/guides/advanced-features/page-performance/optimize-bundle.mdx",
       "hunks": 3,
       "changedLines": 6
@@ -1030,8 +1045,8 @@
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/server-monitor/monitors.mdx",
-      "hunks": 1,
-      "changedLines": 4
+      "hunks": 2,
+      "changedLines": 6
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/source-build.mdx",
@@ -1045,13 +1060,13 @@
     },
     {
       "file": "packages/document/docs/en/guides/basic-features/data/data-fetch.mdx",
-      "hunks": 1,
-      "changedLines": 4
+      "hunks": 3,
+      "changedLines": 8
     },
     {
       "file": "packages/document/docs/en/guides/basic-features/data/data-write.mdx",
-      "hunks": 18,
-      "changedLines": 58
+      "hunks": 19,
+      "changedLines": 60
     },
     {
       "file": "packages/document/docs/en/guides/basic-features/debug/mock.mdx",
@@ -1105,8 +1120,8 @@
     },
     {
       "file": "packages/document/docs/en/guides/basic-features/render/ssr.mdx",
-      "hunks": 6,
-      "changedLines": 20
+      "hunks": 7,
+      "changedLines": 22
     },
     {
       "file": "packages/document/docs/en/guides/basic-features/render/streaming-ssr.mdx",
@@ -1140,8 +1155,8 @@
     },
     {
       "file": "packages/document/docs/en/guides/concept/entries.mdx",
-      "hunks": 1,
-      "changedLines": 2
+      "hunks": 2,
+      "changedLines": 4
     },
     {
       "file": "packages/document/docs/en/guides/concept/server.mdx",
@@ -1189,6 +1204,11 @@
       "changedLines": 4
     },
     {
+      "file": "packages/document/docs/en/guides/topic-detail/module-federation/i18n.mdx",
+      "hunks": 2,
+      "changedLines": 4
+    },
+    {
       "file": "packages/document/docs/en/guides/topic-detail/module-federation/introduce.mdx",
       "hunks": 1,
       "changedLines": 1
@@ -1204,9 +1224,19 @@
       "changedLines": 2
     },
     {
+      "file": "packages/document/docs/en/guides/troubleshooting/hmr.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
       "file": "packages/document/docs/en/guides/upgrade/config.mdx",
       "hunks": 6,
       "changedLines": 37
+    },
+    {
+      "file": "packages/document/docs/en/guides/upgrade/entry.mdx",
+      "hunks": 1,
+      "changedLines": 2
     },
     {
       "file": "packages/document/docs/en/guides/upgrade/other.mdx",
@@ -1230,8 +1260,8 @@
     },
     {
       "file": "packages/document/docs/en/plugin/cli-plugins/api.mdx",
-      "hunks": 1,
-      "changedLines": 46
+      "hunks": 2,
+      "changedLines": 48
     },
     {
       "file": "packages/document/docs/en/plugin/cli-plugins/life-cycle.mdx",
@@ -1285,8 +1315,8 @@
     },
     {
       "file": "packages/document/docs/zh/apis/app/commands.mdx",
-      "hunks": 17,
-      "changedLines": 86
+      "hunks": 19,
+      "changedLines": 88
     },
     {
       "file": "packages/document/docs/zh/apis/app/hooks/api/lambda.mdx",
@@ -1330,8 +1360,8 @@
     },
     {
       "file": "packages/document/docs/zh/apis/app/hooks/src/routes.mdx",
-      "hunks": 2,
-      "changedLines": 3
+      "hunks": 3,
+      "changedLines": 5
     },
     {
       "file": "packages/document/docs/zh/apis/app/hooks/src/server.mdx",
@@ -1415,8 +1445,8 @@
     },
     {
       "file": "packages/document/docs/zh/components/deploy-command.mdx",
-      "hunks": 2,
-      "changedLines": 3
+      "hunks": 3,
+      "changedLines": 5
     },
     {
       "file": "packages/document/docs/zh/components/deploy.mdx",
@@ -1476,7 +1506,7 @@
     {
       "file": "packages/document/docs/zh/components/serve-command.mdx",
       "hunks": 1,
-      "changedLines": 2
+      "changedLines": 4
     },
     {
       "file": "packages/document/docs/zh/components/ssr-monitor.mdx",
@@ -1485,6 +1515,11 @@
     },
     {
       "file": "packages/document/docs/zh/components/tech-stack-node-framework.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
+      "file": "packages/document/docs/zh/components/ua-polyfill.mdx",
       "hunks": 1,
       "changedLines": 2
     },
@@ -1626,7 +1661,7 @@
     {
       "file": "packages/document/docs/zh/configure/app/server/ssr.mdx",
       "hunks": 2,
-      "changedLines": 3
+      "changedLines": 5
     },
     {
       "file": "packages/document/docs/zh/configure/app/server/static-cache-control.mdx",
@@ -1700,8 +1735,8 @@
     },
     {
       "file": "packages/document/docs/zh/guides/advanced-features/compatibility.mdx",
-      "hunks": 3,
-      "changedLines": 6
+      "hunks": 4,
+      "changedLines": 8
     },
     {
       "file": "packages/document/docs/zh/guides/advanced-features/international.mdx",
@@ -1749,6 +1784,11 @@
       "changedLines": 215
     },
     {
+      "file": "packages/document/docs/zh/guides/advanced-features/page-performance/code-split.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
       "file": "packages/document/docs/zh/guides/advanced-features/page-performance/optimize-bundle.mdx",
       "hunks": 3,
       "changedLines": 6
@@ -1769,6 +1809,11 @@
       "changedLines": 19
     },
     {
+      "file": "packages/document/docs/zh/guides/advanced-features/server-monitor/monitors.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
       "file": "packages/document/docs/zh/guides/advanced-features/source-build.mdx",
       "hunks": 2,
       "changedLines": 4
@@ -1780,13 +1825,13 @@
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/data/data-fetch.mdx",
-      "hunks": 1,
-      "changedLines": 4
+      "hunks": 3,
+      "changedLines": 8
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/data/data-write.mdx",
-      "hunks": 21,
-      "changedLines": 62
+      "hunks": 22,
+      "changedLines": 64
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/debug/mock.mdx",
@@ -1825,8 +1870,8 @@
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/render/rsc.mdx",
-      "hunks": 8,
-      "changedLines": 44
+      "hunks": 9,
+      "changedLines": 46
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/render/ssg.mdx",
@@ -1840,8 +1885,8 @@
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/render/ssr.mdx",
-      "hunks": 10,
-      "changedLines": 25
+      "hunks": 11,
+      "changedLines": 27
     },
     {
       "file": "packages/document/docs/zh/guides/basic-features/routes/config-routes.mdx",
@@ -1870,8 +1915,8 @@
     },
     {
       "file": "packages/document/docs/zh/guides/concept/entries.mdx",
-      "hunks": 1,
-      "changedLines": 2
+      "hunks": 2,
+      "changedLines": 4
     },
     {
       "file": "packages/document/docs/zh/guides/concept/server.mdx",
@@ -1930,6 +1975,11 @@
     },
     {
       "file": "packages/document/docs/zh/guides/troubleshooting/cli.mdx",
+      "hunks": 1,
+      "changedLines": 2
+    },
+    {
+      "file": "packages/document/docs/zh/guides/troubleshooting/hmr.mdx",
       "hunks": 1,
       "changedLines": 2
     },
@@ -5511,7 +5561,7 @@
     {
       "file": "packages/toolkit/plugin/src/cli/run/utils/createFileWatcher.ts",
       "hunks": 6,
-      "changedLines": 45
+      "changedLines": 44
     },
     {
       "file": "packages/toolkit/plugin/src/cli/run/utils/debug.ts",
