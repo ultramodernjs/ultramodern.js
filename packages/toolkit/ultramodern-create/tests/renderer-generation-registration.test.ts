@@ -27,7 +27,7 @@ const paper = rstest.hoisted(() => {
     renderer: 'octane',
     status: 'preview',
     protocolVersion: 1,
-    minimumNode: '26.12.0',
+    minimumNode: '26.13.1',
     hmr: {
       editedBoundary: 'may-reset',
       unaffectedComponents: 'preserved',
