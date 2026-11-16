@@ -170,7 +170,15 @@ export function prepareTractorCohortInstallation(
     ),
     ...reactDependencies,
   };
-  const nativePackages = [...tractorEffectPackages, ...tractorReactPackages];
+  const supportArtifacts = packed.packageJson.ultramodern.supportArtifacts;
+  const supportRequests = Object.fromEntries(
+    Object.entries(supportArtifacts.packages).map(([name, artifact]) => [
+      name,
+      artifact.request,
+    ]),
+  );
+  Object.assign(nativeDependencies, supportRequests);
+  const nativePackages = Object.keys(nativeDependencies);
   const expectedExclusions = [
     ...cohort.targetNames.map(name => `${name}@${version}`),
     ...Array.from(
@@ -221,11 +229,22 @@ export function prepareTractorCohortInstallation(
     throw new Error('Tractor requires a native catalogs.ultramodern entry');
   }
   const requested = new Set();
+  const supportHosts = new Set(['rsbuild-plugin-dts']);
+  const consumerManifests = collectPackageJsonFiles(workspace).map(file => ({
+    file,
+    manifest: JSON.parse(fs.readFileSync(file, 'utf8')),
+  }));
   let dependencyCount = 0;
-  for (const file of collectPackageJsonFiles(workspace)) {
-    const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+  for (const { file, manifest } of consumerManifests) {
     for (const block of dependencyBlocks) {
       for (const [name, specifier] of Object.entries(manifest[block] ?? {})) {
+        if (Object.hasOwn(supportRequests, name)) {
+          if (block === 'optionalDependencies')
+            throw new Error(
+              `Tractor support artifact ${name} must not be an optional dependency`,
+            );
+          supportHosts.add(name);
+        }
         if (!name.startsWith('@modern-js/')) continue;
         if (!cohort.aliases[name]) {
           throw new Error(
@@ -277,9 +296,9 @@ export function prepareTractorCohortInstallation(
           selections[name] = nativeDependencies[name];
       }
   }
-  const manifestUpdates = collectPackageJsonFiles(workspace).flatMap(file => {
-    const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const manifestUpdates = consumerManifests.flatMap(({ file, manifest }) => {
     let changed = false;
+    let ownsSupport = false;
     if (
       path.dirname(file) !== workspace &&
       ['ts', 'js', 'mjs'].some(extension =>
@@ -302,12 +321,36 @@ export function prepareTractorCohortInstallation(
       for (const name of nativePackages) {
         if (
           Object.hasOwn(manifest[block] ?? {}, name) &&
+          Object.hasOwn(supportRequests, name)
+        ) {
+          const selected =
+            block === 'peerDependencies'
+              ? supportArtifacts.packages[name].version
+              : supportRequests[name];
+          changed ||= manifest[block][name] !== selected;
+          manifest[block][name] = selected;
+          ownsSupport = true;
+        } else if (
+          Object.hasOwn(manifest[block] ?? {}, name) &&
           !manifest[block][name].startsWith('catalog:')
         ) {
           changed ||= manifest[block][name] !== nativeDependencies[name];
           manifest[block][name] = nativeDependencies[name];
         }
       }
+    }
+    if (path.dirname(file) === workspace) {
+      manifest.devDependencies ??= {};
+      for (const name of supportHosts)
+        manifest.devDependencies[name] = supportRequests[name];
+      ownsSupport = true;
+    }
+    if (ownsSupport) {
+      manifest.ultramodern = {
+        ...manifest.ultramodern,
+        supportArtifacts,
+      };
+      changed = true;
     }
     return changed ? [[file, manifest]] : [];
   });
