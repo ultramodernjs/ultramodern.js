@@ -290,7 +290,14 @@ test('the cache key carries every pinned identity, the epoch and the runner labe
   const save = producer.jobs.build.steps.find(item =>
     item.uses?.startsWith('actions/cache/save@'),
   );
-  assert.equal(save.if, "github.ref == 'refs/heads/main-ultramodern'");
+  // Durable-ref events only. A pull_request or merge_group ref is discarded
+  // after the run, so an entry written there is unreadable dead quota - the
+  // parking ci-cache.yml's header records. Asserting the condition rather
+  // than a branch name is what keeps both of those events excluded.
+  assert.equal(
+    save.if,
+    "github.event_name == 'push' || github.event_name == 'workflow_dispatch'",
+  );
   assert.equal(
     save.with.path,
     `.effect-compiler-cache/${expression('matrix.target')}`,

@@ -447,10 +447,19 @@ jobs:
           echo "epoch=$epoch" >> "$GITHUB_OUTPUT"
 
       # Saved after the stager accepted these exact bytes in this run, so a run
-      # that cannot produce a valid inventory never seeds the cache, and only
-      # the trusted default branch writes entries every ref can read.
+      # that cannot produce a valid inventory never seeds the cache.
+      #
+      # `push` and `workflow_dispatch` are this repository's two events whose
+      # github.ref is a durable branch: on the default branch they write the
+      # entries every ref can read, and on a working branch they write entries
+      # that branch's own later runs can read. `pull_request` (refs/pull/N/
+      # merge) and `merge_group` (refs/heads/gh-readonly-queue/...) are
+      # excluded, because their refs are thrown away after the run - that is
+      # the per-PR parking ci-cache.yml's header records, and it is also why a
+      # cache lever could not be verified before merging it. A reusable call
+      # inherits the caller's event, so a PR-triggered call still never saves.
       - name: Save the verified target directory for identical future runs
-        if: github.ref == 'refs/heads/main-ultramodern'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .effect-compiler-cache/${{ matrix.target }}
