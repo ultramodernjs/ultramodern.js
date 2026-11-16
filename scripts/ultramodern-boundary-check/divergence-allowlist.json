@@ -4,9 +4,9 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1444,
-  "totalHunks": 4860,
-  "totalChangedLines": 103975,
+  "totalFiles": 1445,
+  "totalHunks": 4859,
+  "totalChangedLines": 104038,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -41,7 +41,7 @@
     {
       "file": "packages/cli/builder/package.json",
       "hunks": 13,
-      "changedLines": 72
+      "changedLines": 76
     },
     {
       "file": "packages/cli/builder/rslib.config.mts",
@@ -3370,8 +3370,8 @@
     },
     {
       "file": "packages/runtime/render/package.json",
-      "hunks": 12,
-      "changedLines": 45
+      "hunks": 10,
+      "changedLines": 49
     },
     {
       "file": "packages/runtime/render/react-server-dom-rspack.d.ts",
@@ -4230,8 +4230,8 @@
     },
     {
       "file": "packages/server/server/src/dev-tools/https/index.ts",
-      "hunks": 2,
-      "changedLines": 2
+      "hunks": 3,
+      "changedLines": 4
     },
     {
       "file": "packages/server/server/src/dev-tools/reloadManager.ts",
@@ -4496,12 +4496,12 @@
     {
       "file": "packages/solutions/app-tools/bin/modern-bundle-docs.js",
       "hunks": 1,
-      "changedLines": 11
+      "changedLines": 12
     },
     {
       "file": "packages/solutions/app-tools/bin/modern.js",
       "hunks": 1,
-      "changedLines": 11
+      "changedLines": 12
     },
     {
       "file": "packages/solutions/app-tools/CHANGELOG.md",
@@ -5124,6 +5124,11 @@
       "changedLines": 8
     },
     {
+      "file": "packages/toolkit/create/template/.nvmrc",
+      "hunks": 1,
+      "changedLines": 3
+    },
+    {
       "file": "packages/toolkit/create/template/.rstack/hooks/pre-commit",
       "hunks": 1,
       "changedLines": 3
@@ -5145,8 +5150,8 @@
     },
     {
       "file": "packages/toolkit/create/template/package.json.handlebars",
-      "hunks": 5,
-      "changedLines": 31
+      "hunks": 4,
+      "changedLines": 35
     },
     {
       "file": "packages/toolkit/create/template/README.md",
@@ -5680,8 +5685,8 @@
     },
     {
       "file": "packages/toolkit/runtime-utils/package.json",
-      "hunks": 10,
-      "changedLines": 43
+      "hunks": 9,
+      "changedLines": 45
     },
     {
       "file": "packages/toolkit/runtime-utils/rslib.config.mts",
@@ -5700,8 +5705,8 @@
     },
     {
       "file": "packages/toolkit/runtime-utils/src/browser/nestedRoutes.tsx",
-      "hunks": 6,
-      "changedLines": 18
+      "hunks": 7,
+      "changedLines": 19
     },
     {
       "file": "packages/toolkit/runtime-utils/src/node/fileReader.ts",
@@ -5751,7 +5756,7 @@
     {
       "file": "packages/toolkit/runtime-utils/tests/browser/nestedRoutes.test.tsx",
       "hunks": 1,
-      "changedLines": 70
+      "changedLines": 111
     },
     {
       "file": "packages/toolkit/runtime-utils/tests/build-artifact/async-storage-externals.test.ts",
