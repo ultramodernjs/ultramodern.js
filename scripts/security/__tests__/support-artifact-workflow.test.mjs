@@ -71,6 +71,28 @@ test('both security workflows execute the shared kernel and support controls', (
 });
 
 for (const [label, mutate] of Object.entries({
+  'optional native manifest': workflow => {
+    workflow.on.workflow_dispatch.inputs.native_manifest.required = false;
+  },
+  'guessed native manifest': workflow => {
+    workflow.jobs.qualify.steps.find(step =>
+      step.run?.includes('support-artifacts/main.mjs'),
+    ).env.NATIVE_MANIFEST_URL = 'latest';
+  },
+  'missing core authentication': workflow => {
+    const step = workflow.jobs.qualify.steps.find(step =>
+      step.run?.includes('support-artifacts/main.mjs'),
+    );
+    step.run = step.run
+      .split('\n')
+      .filter(line => !line.includes('SUPPORT_REACT_CORE_ARCHIVE'))
+      .join('\n');
+  },
+  'core archive in producer': workflow => {
+    workflow.jobs.produce.env = {
+      SUPPORT_REACT_CORE_ARCHIVE: 'unreviewed.tgz',
+    };
+  },
   'automatic trigger': workflow => {
     workflow.on.push = {};
   },

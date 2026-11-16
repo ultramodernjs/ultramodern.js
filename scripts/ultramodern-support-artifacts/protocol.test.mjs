@@ -35,10 +35,19 @@ function manifest() {
     ),
   };
 }
-test('fixed five support identities and six release assets', () => {
+test('fixed v2 six support identities and seven release assets', () => {
   const m = manifest();
   p.validateManifest(m);
-  assert.equal(Object.keys(m.packages).length, 5);
+  assert.equal(p.protocol, 'ultramodern.support-artifacts.v2');
+  assert.deepEqual(m.packages && Object.keys(m.packages).sort(), [
+    '@effect/opentelemetry',
+    '@rstest/core',
+    '@tanstack/react-router',
+    '@types/ioredis-mock',
+    'ioredis-mock',
+    'solid-js',
+  ]);
+  assert.equal(Object.keys(m.packages).length + 1, 7);
   assert.equal(p.manifestFilename, 'support-artifacts.json');
   assert.equal(
     p.descriptorFor(m).manifest.request,
@@ -48,6 +57,8 @@ test('fixed five support identities and six release assets', () => {
 test('native/support mixing and missing identities fail closed', () => {
   for (const mutate of [
     m => (m.protocol = 'ultramodern.native-artifacts.v1'),
+    m => (m.protocol = 'ultramodern.support-artifacts.v1'),
+    m => delete m.packages['@tanstack/react-router'],
     m => (m.packages.octane = m.packages['solid-js']),
     m => delete m.packages['solid-js'],
   ]) {
@@ -62,6 +73,15 @@ test('unknown fields and invented npm-source commit rejected', () => {
     m => (m.producer.skip = true),
     m => (m.packages['@effect/opentelemetry'].upstream.commit = source),
     m => (m.packages['solid-js'].upstream.licenseLocation = 'npm'),
+    m =>
+      (m.packages['@tanstack/react-router'].upstream.commit = 'b'.repeat(40)),
+    m =>
+      (m.packages['@tanstack/react-router'].upstream.sourceArchiveIntegrity =
+        m.packages['solid-js'].upstream.sourceArchiveIntegrity),
+    m =>
+      (m.packages['@tanstack/react-router'].upstream.licenseSha256 = 'b'.repeat(
+        64,
+      )),
   ]) {
     const m = manifest();
     mutate(m);

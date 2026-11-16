@@ -71,5 +71,21 @@
       "licensePath": "LICENSE",
       "archiveRoot": "ioredis-mock"
     }
+  },
+  "@tanstack/react-router": {
+    "version": "1.170.46",
+    "patchPath": "scripts/ultramodern-renderers/react-router-corrections/react-router-1.170.46.patch",
+    "patchSha256": "186e54be20a0d481731091924921ec409a15968fa13de5bfc3888a0ddbaf18d9",
+    "upstream": {
+      "kind": "git-source",
+      "request": "https://registry.npmjs.org/@tanstack/react-router/-/react-router-1.170.46.tgz",
+      "integrity": "sha512-ez1iNIhsPjGlaDHg3BXWs67EWVIYzB2tbopEHYDESdkO7owgkGb5de52+5Kv2v1fxdkggcNzo35bdk4arTVGQw==",
+      "sourceArchiveIntegrity": "sha512-Ng/f9xHhLhmtYZL4/yy29bn1RA5kkAp5lnW4pWj1MNp9+HrtIdLGCsVb9jdkwt/0AJDys97c7QL67qymftHkzA==",
+      "licenseSha256": "a405ee70c632bb938acb7ac5f210e814409b3760ea9d2329d8ed8ffcfd11a0e7",
+      "licensePath": "LICENSE",
+      "archiveRoot": "package",
+      "repository": "TanStack/router",
+      "commit": "6b9fe6d29552270836c511bc9b343d73541f4424"
+    }
   }
 }
