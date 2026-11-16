@@ -1,5 +1,9 @@
 name: Restore Windows dependencies
 description: Restore regular installed files, rebuild native junctions and restore pnpm verification before frozen install
+inputs:
+  store-required:
+    description: Fresh fixture installations need the pnpm store in addition to installed files
+    default: 'true'
 outputs:
   cache-hit:
     description: True only when the exact installed-file snapshot was restored
@@ -34,10 +38,12 @@ runs:
     # warm too; the installed-file snapshot replaces linking, not this store.
     - name: Resolve pnpm store path
       id: pnpm-store
+      if: steps.snapshot.outputs.cache-hit != 'true' || inputs.store-required == 'true'
       shell: bash
       run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
     - name: Restore pnpm store cache
+      if: steps.snapshot.outputs.cache-hit != 'true' || inputs.store-required == 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.pnpm-store.outputs.path }}

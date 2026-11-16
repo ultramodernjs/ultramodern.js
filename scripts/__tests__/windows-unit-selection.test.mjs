@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import yaml from '../../packages/toolkit/utils/compiled/js-yaml/index.js';
 import {
   assertWindowsCoverage,
   excludeUnselected,
@@ -383,4 +384,17 @@ test('the Windows unit matrix dispatches exactly these lanes', () => {
     workflow.includes(`if: matrix.lane == '${firstLane}'`),
     `the coverage verification must run on lane ${firstLane}`,
   );
+});
+
+test('branch rules require every Windows lane directly without an aggregate runner', () => {
+  const workflow = yaml.load(readRepoText('.github/workflows/ut-Windows.yml'));
+  const rules = yaml.load(readRepoText('.github/workflows/branch-ruleset.yml'));
+  const required = rules.jobs['main-ultramodern-ruleset'].steps
+    .find(step => step.env?.REQUIRED_CHECKS)
+    .env.REQUIRED_CHECKS.trim()
+    .split('\n');
+  assert.equal(workflow.jobs['ut-windows'], undefined);
+  for (const lane of workflow.jobs['ut-windows-shards'].strategy.matrix.lane)
+    assert.ok(required.includes(`ut-windows-shards (${lane})`), lane);
+  assert.ok(!required.includes('ut-windows'));
 });

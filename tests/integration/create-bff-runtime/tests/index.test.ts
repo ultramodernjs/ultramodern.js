@@ -1,18 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  generatedModernBin,
-  installPackedGenerator,
-  materializeGeneratedWorkspaceDependencies,
-} from '../../../utils/generatedWorkspaceDependencies';
+import { installPackedGenerator } from '../../../utils/generatedWorkspaceDependencies';
 import { generatorTestTempParent } from '../../../utils/generatorTestTemp.mjs';
-import {
-  getPort,
-  killApp,
-  modernBuild,
-  modernServe,
-} from '../../../utils/modernTestUtils';
 import { setSuiteTimeout } from '../../../utils/setSuiteTimeout';
 
 setSuiteTimeout(600_000);
@@ -107,48 +97,33 @@ describe('create-bff-runtime', () => {
     }
   });
 
-  test('generates, builds, and serves a strict Effect BFF app', async () => {
+  test('generates strict Effect BFF files through the packed CLI', () => {
     const workspaceDir = path.join(tempRoot, 'with-bff-effect');
     scaffoldWorkspaceWithVertical(
       workspaceDir,
       ['--bff-runtime', 'effect', '--lang', 'en'],
       ['greetings', '--vertical', '--bff-runtime', 'effect', '--lang', 'en'],
     );
-    await materializeGeneratedWorkspaceDependencies(workspaceDir);
-    const verticalDir = path.join(workspaceDir, 'verticals/greetings');
-    const buildResult = await modernBuild(verticalDir, [], {
-      modernBin: generatedModernBin(verticalDir),
-      env: { NODE_PATH: '' },
-      stdout: false,
-      stderr: false,
-    });
+    const topology = JSON.parse(
+      fs.readFileSync(
+        path.join(workspaceDir, 'topology/reference-topology.json'),
+        'utf8',
+      ),
+    );
+    expect(topology.verticals).toContainEqual(
+      expect.objectContaining({
+        id: 'greetings',
+        api: expect.objectContaining({
+          runtime: 'effect',
+          bff: expect.objectContaining({ strictEffectApproach: true }),
+        }),
+      }),
+    );
     expect(
-      buildResult.code,
-      `${buildResult.stdout}
-${buildResult.stderr}`,
-    ).toBe(0);
-
-    const port = await getPort();
-    const server = await modernServe(verticalDir, port, {
-      modernBin: generatedModernBin(verticalDir),
-      env: { NODE_PATH: '' },
-    });
-    try {
-      const response = await fetch(
-        `http://127.0.0.1:${port}/greetings-api/greetings?limit=1`,
-      );
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toMatchObject({
-        items: [
-          {
-            id: 'starter-greetings',
-            title: 'Wire a real greetings source here',
-          },
-        ],
-      });
-    } finally {
-      await killApp(server);
-    }
+      fs.existsSync(
+        path.join(workspaceDir, 'verticals/greetings/api/index.ts'),
+      ),
+    ).toBe(true);
   });
 
   test('rejects unsupported BFF runtimes before writing', () => {

@@ -226,6 +226,8 @@ jobs:
         id: dependencies
         if: runner.os == 'Windows'
         uses: ./.github/actions/windows-dependencies
+        with:
+          store-required: ${{ startsWith(matrix.suite, 'framework-generator-') }}
 
       - name: Install Dependencies
         shell: bash
@@ -258,16 +260,19 @@ jobs:
       # reads the playwright the frozen install resolved for these runtimes,
       # and that version keys the browser cache.
       - name: Resolve Playwright runtime
+        if: matrix.suite == 'framework' || matrix.suite == 'rstest-adapter'
         id: browser-runtime
         run: node scripts/lib/browser-provisioning.js --resolve --runtime tests --runtime tests/integration/rstest/basic-app-rstest-browser
 
       - name: Restore Playwright browser cache
+        if: matrix.suite == 'framework' || matrix.suite == 'rstest-adapter'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.browser-runtime.outputs.cache_path }}
           key: ${{ steps.browser-runtime.outputs.cache_key }}
 
       - name: Install Playwright browsers
+        if: matrix.suite == 'framework' || matrix.suite == 'rstest-adapter'
         run: >-
           node scripts/lib/browser-provisioning.js --install --runtime tests --runtime tests/integration/rstest/basic-app-rstest-browser
           --version ${{ steps.browser-runtime.outputs.version }}

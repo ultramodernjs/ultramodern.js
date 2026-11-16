@@ -31,7 +31,6 @@ jobs:
     uses: ./.github/workflows/effect-compiler-payload.yml
 
   seed:
-    needs: effect-compiler-payload
     # Explicit dispatch can warm a durable development branch for measurement.
     # PR and merge-queue refs never write caches.
     if: github.ref == 'refs/heads/main-ultramodern' || github.event_name == 'workflow_dispatch'
@@ -45,13 +44,6 @@ jobs:
             compiler_payload: false
           - runner: ${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}
             compiler_payload: false
-          # Integration uses corrected compiler bytes; units retain their
-          # existing compiler selection. No integration cache for macOS:
-          # there is no macOS integration consumer.
-          - runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
-            compiler_payload: true
-          - runner: depot-windows-2025-16
-            compiler_payload: true
 
     runs-on: ${{ matrix.runner }}
 
@@ -59,7 +51,7 @@ jobs:
       run:
         shell: bash
 
-    steps:
+    steps: &seed-steps
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -80,16 +72,20 @@ jobs:
 
       - name: Identify Windows dependency snapshot
         id: windows-identity
-        if: runner.os == 'Windows' && matrix.compiler_payload == false
+        if: runner.os == 'Windows'
         run: node scripts/ci/windows-dependency-snapshot.mjs key
 
       - name: Restore Windows dependency snapshot
         id: windows-snapshot
-        if: runner.os == 'Windows' && matrix.compiler_payload == false
+        if: runner.os == 'Windows'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .ci-windows-dependencies/snapshot
           key: ${{ steps.windows-identity.outputs.key }}
+
+      - name: Rebuild native Windows dependency links
+        if: runner.os == 'Windows' && steps.windows-snapshot.outputs.cache-hit == 'true'
+        run: node scripts/ci/windows-dependency-snapshot.mjs restore
 
       - name: Resolve pnpm store path
         id: pnpm-store
@@ -226,3 +222,21 @@ jobs:
           path: .ci-windows-dependencies/snapshot
           key: ${{ steps.windows-identity.outputs.key }}
 
+  # Only these two builds consume the same-run corrected compiler artifact.
+  # Dependency, browser and unit-build caches start alongside its producer.
+  seed-integration:
+    needs: effect-compiler-payload
+    if: github.ref == 'refs/heads/main-ultramodern' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+            compiler_payload: true
+          - runner: depot-windows-2025-16
+            compiler_payload: true
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps: *seed-steps
