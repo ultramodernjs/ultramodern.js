@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import yaml from '../../../packages/toolkit/utils/compiled/js-yaml/index.js';
 import { evaluateJobSchedule } from '../../security/github-job-condition.mjs';
 
@@ -415,7 +416,21 @@ test('a verified full restore skips the build matrix and the aggregate job', () 
     ) < resolveSteps.indexOf(smoke),
     'the smoke must run after the stager repaired the executable mode',
   );
-  assert.match(smoke.run, /Version 7\.1\.0-beta\+effect-tsgo\.0\.67\.0/);
+  const versionGuard = smoke.run.slice(
+    smoke.run.indexOf('const version ='),
+    smoke.run.indexOf('const root = fs.mkdtempSync'),
+  );
+  const expectedVersion =
+    `Version ${compilerSource.typescript.version}+effect-tsgo.${compilerSource.effect.baseVersion} ` +
+    `(tsrs ${compilerSource.tsrs.version}, microsoft/TypeScript@${compilerSource.typescript.sourceCommit.slice(0, 12)})`;
+  const checkVersion = stdout =>
+    runInNewContext(versionGuard, {
+      assert,
+      fs,
+      run: () => ({ status: 0, stdout, stderr: '' }),
+    });
+  checkVersion(`${expectedVersion}\n`);
+  assert.throws(() => checkVersion('Version foreign-compiler\n'));
   assert.match(smoke.run, /lib\.d\.ts/);
 });
 
