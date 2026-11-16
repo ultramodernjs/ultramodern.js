@@ -33,7 +33,7 @@ import {
   canonicalJson,
   inspectNpmTarball,
 } from './release-artifacts.mjs';
-import { verifySidecar } from '../../../ultramodern-supply/verify-sidecars.mjs';
+import { verifySidecar, reconstructSidecarRecipe } from '../../../ultramodern-supply/verify-sidecars.mjs';
 
 const { readJsonFile } = fsKit;
 const recipes = JSON.parse(
@@ -228,10 +228,11 @@ function readSidecarManifest(repoRoot, root) {
  */
 function collectSidecarPackages(
   repoRoot = defaultRepoRoot,
-  { roots = SIDECAR_PACKAGE_ROOTS } = {},
+  { roots = SIDECAR_PACKAGE_ROOTS, reviewedRecipes } = {},
 ) {
+  const selectedRecipes = reviewedRecipes ? new Map(reviewedRecipes.map(recipe => [`packages/sidecar/${recipe.id}`, recipe])) : recipeByRoot;
   const sidecars = roots.map(root => {
-    const recipe = repoRoot === defaultRepoRoot ? recipeByRoot.get(root) : undefined;
+    const recipe = repoRoot === defaultRepoRoot ? selectedRecipes.get(root) : undefined;
     if (recipe) {
       const packageJson = {
         name: recipe.fork.name,
@@ -250,6 +251,7 @@ function collectSidecarPackages(
         packageJson,
         packageJsonPath: undefined,
         recipeOnly: true,
+        ...(reviewedRecipes ? { reviewedRecipe: recipe } : {}),
         root,
         version: packageJson.version,
       };
@@ -376,9 +378,8 @@ async function stageSidecarPackage(
   const packageDir = path.join(stageDir, stagedDirectoryName(sidecar.name));
   fs.rmSync(packageDir, { force: true, recursive: true });
   if (sidecar.recipeOnly) {
-    await verifySidecar(path.basename(sidecar.root), {
-      materializeTo: packageDir,
-    });
+    if (sidecar.reviewedRecipe) await reconstructSidecarRecipe(sidecar.reviewedRecipe, { materializeTo: packageDir });
+    else await verifySidecar(path.basename(sidecar.root), { materializeTo: packageDir });
   } else {
     fs.mkdirSync(packageDir, { recursive: true });
     fs.cpSync(sidecar.dir, packageDir, {

@@ -1,0 +1,731 @@
+[
+  {
+    "id": "tanstack-redact",
+    "upstream": {
+      "name": "@tanstack/redact",
+      "version": "0.3.1",
+      "tarball": "https://registry.npmjs.org/@tanstack/redact/-/redact-0.3.1.tgz",
+      "integrity": "sha512-8A4SWi2RluvHj5j3/mifSPkUrhvmBLvvVXzM2DU7eTafvcWRXFLA/8cMe7ivZAbL7W1FMKZjitnIoP0sYIAWJA=="
+    },
+    "fork": {
+      "name": "@bleedingdev/tanstack-redact",
+      "version": "0.3.2"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": {
+      "path": "patches/@tanstack__redact@0.3.1.patch",
+      "sha256": "eb9fe1549ef0b71454b287bf57affb4f819e60ee5b26f7b8826a98bb915e9f61"
+    },
+    "manifestChanges": {},
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "0.0.0-stage",
+          "publishedAt": "2026-10-28T23:44:23.507Z",
+          "integrity": "sha512-O2lJVu5WmLaAjC9njVTrbXkbywYKN1ScFVD4RGIV7iJra13PxmjgUv6i86OjuarGJIC4K0fS8AGBBIQDKBN9CA=="
+        },
+        {
+          "version": "0.0.0-bootstrap",
+          "publishedAt": "2026-10-28T23:44:58.304Z",
+          "integrity": "sha512-vXq2yWHar3WlXXvKF6ij7O2G+GZCsWmmxlsnBbeB8V/oWOUX+76T0cMgkGpQPgVm2wxZ4293s0Fq3PnAaYdptA=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-bridge-react",
+    "upstream": {
+      "name": "@module-federation/bridge-react",
+      "version": "2.9.3",
+      "tarball": "https://registry.npmjs.org/@module-federation/bridge-react/-/bridge-react-2.9.3.tgz",
+      "integrity": "sha512-HtKOudUjlL6n/8re01Ck4PNz4YBRrCQ62cSsz5qABVMIpy9fPo5b3AlfEh6nwx8ToYUTLdHN3xC/a/P49Lj53A=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-bridge-react",
+      "version": "2.9.5"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": {
+      "path": "patches/@module-federation__bridge-react@2.9.3.patch",
+      "sha256": "a30452867e1ce11c9bab1b7ca921a02d0e4ef8578d313b19bd795436f3139205"
+    },
+    "manifestChanges": {
+      "devDependencies": {
+        "@module-federation/runtime": "npm:@bleedingdev/mf-runtime@2.9.5",
+        "@module-federation/runtime-core": "npm:@bleedingdev/mf-runtime-core@2.9.5"
+      },
+      "dependencies": {
+        "@module-federation/sdk": "npm:@bleedingdev/mf-sdk@2.9.5"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "2.9.1",
+          "publishedAt": "2026-09-25T11:28:45.731Z",
+          "integrity": "sha512-wyswUS/uQ7O2ucEcWfrMpSlR795VrQ1k8aCd1bwuajVG0y+cpSk2PR3NuCiBpPgyXGq0asbqL9aPvtZLXRFe+Q=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-cli",
+    "upstream": {
+      "name": "@module-federation/cli",
+      "version": "2.9.3",
+      "tarball": "https://registry.npmjs.org/@module-federation/cli/-/cli-2.9.3.tgz",
+      "integrity": "sha512-KWDd/2tjV1hlGGGh1AwV1SvkpKhhlhNHberYk2C2q4kZ5fJfVvEOOc9Wu00WEfmr8I+qB7SrWRWKpvzFzf9HDw=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-cli",
+      "version": "2.9.5"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": null,
+    "manifestChanges": {
+      "dependencies": {
+        "@module-federation/dts-plugin": "npm:@bleedingdev/mf-dts-plugin@2.9.5",
+        "@module-federation/sdk": "npm:@bleedingdev/mf-sdk@2.9.5"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "2.9.1",
+          "publishedAt": "2026-09-25T11:39:58.220Z",
+          "integrity": "sha512-OXLaNENxfvztrmTXEkoCbdmXzSpvgF2gMDZtubTCmsd93au2YxNlrs115qJYLC4GV8Q/4Nb+QmuXgUN9fMRbsw=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-dts-plugin",
+    "upstream": {
+      "name": "@module-federation/dts-plugin",
+      "version": "2.9.3",
+      "tarball": "https://registry.npmjs.org/@module-federation/dts-plugin/-/dts-plugin-2.9.3.tgz",
+      "integrity": "sha512-U5H8D36rLuCTS7ZPEAfvqIp6b5OZms3PComHPzFQcg12xlUr31PPi1gd3FbjKVFFvlqyDpEiDZ355fKi9ba5zA=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-dts-plugin",
+      "version": "2.9.5"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": {
+      "path": "patches/@module-federation__dts-plugin@2.9.3.patch",
+      "sha256": "e744a60a5c7ffd856e11a90de9c3e776e065b12aac3a94b97ed16026ce42aa03"
+    },
+    "manifestChanges": {
+      "devDependencies": {
+        "@module-federation/runtime": "npm:@bleedingdev/mf-runtime@2.9.5"
+      },
+      "dependencies": {
+        "@module-federation/sdk": "npm:@bleedingdev/mf-sdk@2.9.5"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "2.9.1",
+          "publishedAt": "2026-09-25T11:34:10.861Z",
+          "integrity": "sha512-6+H1IpiFlAgV2k2zTRMhJXCFdmGhy9H16EN3t99MReJ5/PJMS2iZBDscqeOd61dlC+/KqZakjPS2kCh8ZUwZjA=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-enhanced",
+    "upstream": {
+      "name": "@module-federation/enhanced",
+      "version": "2.9.3",
+      "tarball": "https://registry.npmjs.org/@module-federation/enhanced/-/enhanced-2.9.3.tgz",
+      "integrity": "sha512-xlkgjr/0yELp9WfzUFUGs++Cuv6oMf+0QuYyCb3H1o9bwQ18AFzbmlks1We5cbACH9kyvP9k7vBcpitOvRcJCQ=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-enhanced",
+      "version": "2.9.5"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": {
+      "path": "patches/@module-federation__enhanced@2.9.3.patch",
+      "sha256": "fc6db194bd963fdcb30e5e13d75c894a6dd42d21e711e07760ea64420a779478"
+    },
+    "manifestChanges": {
+      "dependencies": {
+        "@module-federation/webpack-bundler-runtime": "npm:@bleedingdev/mf-webpack-bundler-runtime@2.9.5",
+        "@module-federation/dts-plugin": "npm:@bleedingdev/mf-dts-plugin@2.9.5",
+        "@module-federation/manifest": "npm:@bleedingdev/mf-manifest@2.9.5",
+        "@module-federation/rspack": "npm:@bleedingdev/mf-rspack@2.9.5",
+        "@module-federation/runtime-tools": "npm:@bleedingdev/mf-runtime-tools@2.9.5",
+        "@module-federation/cli": "npm:@bleedingdev/mf-cli@2.9.5",
+        "@module-federation/sdk": "npm:@bleedingdev/mf-sdk@2.9.5"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "2.9.1",
+          "publishedAt": "2026-09-25T12:19:54.880Z",
+          "integrity": "sha512-+giFaQdPVzIutQ8C0a2tGJOpPhWk+roKfrfKypV6jy96mk4TgEttfNUMrRpj1ZyoBpeCA1xmHPcrAw+UY9aBJA=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-manifest",
+    "upstream": {
+      "name": "@module-federation/manifest",
+      "version": "2.9.3",
+      "tarball": "https://registry.npmjs.org/@module-federation/manifest/-/manifest-2.9.3.tgz",
+      "integrity": "sha512-Kt6Xr0pe5IHIahsz/q1e1Y7TvQ7AVnx9y3L0N+A7cIn/dTTytmV1WLgviNlbx3MgYoB4dFZJBelTUcRS2a+TiQ=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-manifest",
+      "version": "2.9.5"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": {
+      "path": "patches/@module-federation__manifest@2.9.3.patch",
+      "sha256": "550b30fe76e14f48cc64fb77c3a7920db36121dbca0d24c94227a27afe2e6b4f"
+    },
+    "manifestChanges": {
+      "dependencies": {
+        "@module-federation/dts-plugin": "npm:@bleedingdev/mf-dts-plugin@2.9.5",
+        "@module-federation/sdk": "npm:@bleedingdev/mf-sdk@2.9.5"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "2.9.1",
+          "publishedAt": "2026-09-25T11:51:54.673Z",
+          "integrity": "sha512-TU9eyG6EHi4NjE06E1BIEpXEf0pChvWuCXkWm5PFp30z0B9fXasfpah/9/jVlLc24ppt4xa47CSTBX5pj/VcPw=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-modern-js-v3",
+    "upstream": {
+      "name": "@module-federation/modern-js-v3",
+      "version": "2.9.3",
+      "tarball": "https://registry.npmjs.org/@module-federation/modern-js-v3/-/modern-js-v3-2.9.3.tgz",
+      "integrity": "sha512-8+bwQeStUO0pJM7+hvBxMEZY60Dsn0AC+H1/Al4SBiF8ds/gyZg33N/VaQoMLNJS16uFHb4ysrxBMDhrbtMUJg=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-modern-js-v3",
+      "version": "2.9.5"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": {
+      "path": "patches/@module-federation__modern-js-v3@2.9.3.patch",
+      "sha256": "b9f885924b8c0b4c7d368a12d0d49257c1c38e6df867ee6eb7931490fd22c46c"
+    },
+    "manifestChanges": {
+      "dependencies": {
+        "@module-federation/rsbuild-plugin": "npm:@bleedingdev/mf-rsbuild-plugin@2.9.5",
+        "@module-federation/bridge-react": "npm:@bleedingdev/mf-bridge-react@2.9.5",
+        "@module-federation/enhanced": "npm:@bleedingdev/mf-enhanced@2.9.5",
+        "@module-federation/runtime": "npm:@bleedingdev/mf-runtime@2.9.5",
+        "@module-federation/node": "npm:@bleedingdev/mf-node@2.7.54",
+        "@module-federation/cli": "npm:@bleedingdev/mf-cli@2.9.5",
+        "@module-federation/sdk": "npm:@bleedingdev/mf-sdk@2.9.5"
+      },
+      "devDependencies": {
+        "@module-federation/manifest": "npm:@bleedingdev/mf-manifest@2.9.5"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "2.9.1",
+          "publishedAt": "2026-09-25T12:37:57.875Z",
+          "integrity": "sha512-/wTnhdTNp+5ARhaHuVAMUe4d8JX6jYzdAf1G1BxBHfS024ZAkFM5xXoeeIC5gxBncv4rj+eyEv/KeNUrGTvVNA=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-node",
+    "upstream": {
+      "name": "@module-federation/node",
+      "version": "2.7.53",
+      "tarball": "https://registry.npmjs.org/@module-federation/node/-/node-2.7.53.tgz",
+      "integrity": "sha512-ogAEORxBfNtLo8H6yXWUgSOxpZ6ZQS7u8v1XYFaAO3A36gLF7Bt4+FHtHGOPDyovw2fWjUusm5XbGl1J+muoXA=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-node",
+      "version": "2.7.54"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": {
+      "path": "patches/@module-federation__node@2.7.53.patch",
+      "sha256": "7e201915b4b0cfff63c20fd1a6980e16946ef76792ea8c707cd09d9fcd8a4809"
+    },
+    "manifestChanges": {
+      "dependencies": {
+        "@module-federation/enhanced": "npm:@bleedingdev/mf-enhanced@2.9.5",
+        "@module-federation/runtime": "npm:@bleedingdev/mf-runtime@2.9.5",
+        "@module-federation/sdk": "npm:@bleedingdev/mf-sdk@2.9.5"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "2.7.51",
+          "publishedAt": "2026-09-25T12:27:16.233Z",
+          "integrity": "sha512-Z2t17pkLP11CUkIVYYRvERh8Jt9elv+WJk0kqw2G432JUYqsd1ElO+IwUt/N1ZOer+EOjylWWY/6Ng7BZNoY/Q=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-rsbuild-plugin",
+    "upstream": {
+      "name": "@module-federation/rsbuild-plugin",
+      "version": "2.9.3",
+      "tarball": "https://registry.npmjs.org/@module-federation/rsbuild-plugin/-/rsbuild-plugin-2.9.3.tgz",
+      "integrity": "sha512-bkOI4vIUFipudXwGcxby0CTZ+fjVHqUuYjQX/jU64ONTtc+FK4ybO9HVVjuzHQuyMbtMm+5hC0yBqDh7xnnNNA=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-rsbuild-plugin",
+      "version": "2.9.5"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": null,
+    "manifestChanges": {
+      "dependencies": {
+        "@module-federation/enhanced": "npm:@bleedingdev/mf-enhanced@2.9.5",
+        "@module-federation/node": "npm:@bleedingdev/mf-node@2.7.54",
+        "@module-federation/sdk": "npm:@bleedingdev/mf-sdk@2.9.5"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "2.9.1",
+          "publishedAt": "2026-09-25T12:32:35.118Z",
+          "integrity": "sha512-N15QLGC6h6djAhMWOwt3Xh3qkVGITI+DO+2bYX9UTIrlD+GxPYJjfuFoSBqjzqFO+DqHI+KsU/OABq5KFDQ6Pw=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-rspack",
+    "upstream": {
+      "name": "@module-federation/rspack",
+      "version": "2.9.3",
+      "tarball": "https://registry.npmjs.org/@module-federation/rspack/-/rspack-2.9.3.tgz",
+      "integrity": "sha512-U9esBi4sO28W5UB5xnH1P6AbfWc69jqipMrcjhRvCNnxLt1cnzVAQFBTv1XnzDkJqwWte1ijU5Q5bVPky2w9Zw=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-rspack",
+      "version": "2.9.5"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": {
+      "path": "patches/@module-federation__rspack@2.9.3.patch",
+      "sha256": "ffab46cc34e8d63543dfaf46c13a54f5393724b41da706dd0dc3777ae543fcf4"
+    },
+    "manifestChanges": {
+      "dependencies": {
+        "@module-federation/dts-plugin": "npm:@bleedingdev/mf-dts-plugin@2.9.5",
+        "@module-federation/manifest": "npm:@bleedingdev/mf-manifest@2.9.5",
+        "@module-federation/runtime-tools": "npm:@bleedingdev/mf-runtime-tools@2.9.5",
+        "@module-federation/sdk": "npm:@bleedingdev/mf-sdk@2.9.5"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "2.9.1",
+          "publishedAt": "2026-09-25T12:17:56.591Z",
+          "integrity": "sha512-GvbYNOWEmFLePII75LiN3lLJxNnhNfDGThAYtJYZ+kpz7J2SCDRQI6AHTMuIANiZHAEiSv4Db9pg96VqrMx3+Q=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-runtime",
+    "upstream": {
+      "name": "@module-federation/runtime",
+      "version": "2.9.3",
+      "tarball": "https://registry.npmjs.org/@module-federation/runtime/-/runtime-2.9.3.tgz",
+      "integrity": "sha512-VCJV1VzKk+jvt+1CcTrslbl3LAKScHFpPxKSviafpMIqeHDWIDEY7ZEbVVJl/GuUjA36R7j0QhOPEjihPcz9/A=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-runtime",
+      "version": "2.9.5"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": null,
+    "manifestChanges": {
+      "dependencies": {
+        "@module-federation/runtime-core": "npm:@bleedingdev/mf-runtime-core@2.9.5",
+        "@module-federation/sdk": "npm:@bleedingdev/mf-sdk@2.9.5"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "2.9.1",
+          "publishedAt": "2026-09-25T11:23:18.335Z",
+          "integrity": "sha512-Uu0bb76a7E7gyJjPSQUYzyYtAkYU3I7WVpxBxrED5BklYg8y/BJBWAjmTGAKKxjDe2Unx40KP2RUsOqDBg+VAA=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-runtime-core",
+    "upstream": {
+      "name": "@module-federation/runtime-core",
+      "version": "2.9.3",
+      "tarball": "https://registry.npmjs.org/@module-federation/runtime-core/-/runtime-core-2.9.3.tgz",
+      "integrity": "sha512-E6AjfIWFgZOEATxf+GzBIg54Ejp7QFNTxtVzwnnhEEu01dErBo7qLjJvEPXGiN5sJTNf2a4HIW/wZTM23skouQ=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-runtime-core",
+      "version": "2.9.5"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": {
+      "path": "patches/@module-federation__runtime-core@2.9.3.patch",
+      "sha256": "adb0e091fad6816d03f1d1786df07835d0650a1f44ae97c6b3f2223c4259dec9"
+    },
+    "manifestChanges": {
+      "dependencies": {
+        "@module-federation/sdk": "npm:@bleedingdev/mf-sdk@2.9.5"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "2.9.1",
+          "publishedAt": "2026-09-25T11:17:45.181Z",
+          "integrity": "sha512-fA167mov5mjrhwMlQx0xWFW0SrLsAp5010XgFX3hmbIlWgI9LiAE9NCwlyx19fUMaVHkiA5TdyFfNGyV6+v0AA=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-runtime-tools",
+    "upstream": {
+      "name": "@module-federation/runtime-tools",
+      "version": "2.9.3",
+      "tarball": "https://registry.npmjs.org/@module-federation/runtime-tools/-/runtime-tools-2.9.3.tgz",
+      "integrity": "sha512-TGvMRiPAo1h0JCDluSAK90iPbjtGP/+SUDtndseDg6dIXMfcPEKrGJo4HS4waWN+34NDEf5Mn4ixF2F3Jer1pg=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-runtime-tools",
+      "version": "2.9.5"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": null,
+    "manifestChanges": {
+      "dependencies": {
+        "@module-federation/webpack-bundler-runtime": "npm:@bleedingdev/mf-webpack-bundler-runtime@2.9.5",
+        "@module-federation/runtime": "npm:@bleedingdev/mf-runtime@2.9.5"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "2.9.1",
+          "publishedAt": "2026-09-25T11:57:19.891Z",
+          "integrity": "sha512-RScNeF2z3PtzYlbTR7+rgqvohz18tFAKbDMPOvbLPYWqmXbX6upxymQH3ZI7QdYsRNKRrO2dA8rc3wmX465WCA=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-sdk",
+    "upstream": {
+      "name": "@module-federation/sdk",
+      "version": "2.9.3",
+      "tarball": "https://registry.npmjs.org/@module-federation/sdk/-/sdk-2.9.3.tgz",
+      "integrity": "sha512-cT5ko/JDzGrKe8N+MFPgwb07G8fzmpnZbKZjGjXvT9phagQpiOfV6WQZhu1j+HtO152Frv1vjv/1Hhg2wMUL8g=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-sdk",
+      "version": "2.9.5"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": {
+      "path": "patches/@module-federation__sdk@2.9.3.patch",
+      "sha256": "fb4b0dfd33a0588ad3821f1d56e2316044ae0b721c515a69080d7d9d9de72e3e"
+    },
+    "manifestChanges": {},
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "0.0.0-stage",
+          "publishedAt": "2026-10-11T22:50:37.736Z",
+          "integrity": "sha512-wU6deymL1rA/g7Bafhpi8Fapo2tv1LOvM0zF9Fv/XxGaTMrFQ4+CTdGwfa612Rav39snYxCfTN8PdZe8o4YN0Q=="
+        },
+        {
+          "version": "0.0.0-bootstrap",
+          "publishedAt": "2026-10-11T22:52:44.118Z",
+          "integrity": "sha512-w7s0htCV+el/sZYevmEMA+/JAhwTqYKR2l9FqWypcpW2yhhB6H7zaeIyg0o/55NUT0KmmCL+4Rf96N43p1lLSw=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "mf-webpack-bundler-runtime",
+    "upstream": {
+      "name": "@module-federation/webpack-bundler-runtime",
+      "version": "2.9.3",
+      "tarball": "https://registry.npmjs.org/@module-federation/webpack-bundler-runtime/-/webpack-bundler-runtime-2.9.3.tgz",
+      "integrity": "sha512-SdoOmG85OE7zpX3PUrvckR5GuCVT+Mak340getX6D5ALXsCxM2uU7nrYV9BFfjaRq1c4qlcU1cBfP/dHR06J7Q=="
+    },
+    "fork": {
+      "name": "@bleedingdev/mf-webpack-bundler-runtime",
+      "version": "2.9.5"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": null,
+    "manifestChanges": {
+      "dependencies": {
+        "@module-federation/runtime": "npm:@bleedingdev/mf-runtime@2.9.5",
+        "@module-federation/sdk": "npm:@bleedingdev/mf-sdk@2.9.5"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "2.9.1",
+          "publishedAt": "2026-09-25T11:46:02.927Z",
+          "integrity": "sha512-S7kPsK4XcYD7xjbf4pE0imBZx+aWu8X0GcvZqZESoQr22AGHOWlufVDZGw69uaePAAQ8fI74eA/fcyq16IP1PA=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "braces",
+    "upstream": {
+      "name": "braces",
+      "version": "3.0.3",
+      "tarball": "https://registry.npmjs.org/braces/-/braces-3.0.3.tgz",
+      "integrity": "sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA=="
+    },
+    "fork": {
+      "name": "@bleedingdev/braces",
+      "version": "3.0.4"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": {
+      "path": "patches/braces@3.0.3.patch",
+      "sha256": "e14af28f138a243a283deed5e9f26275891ad6eedc02e964d8ec7ae7efc6783a"
+    },
+    "manifestChanges": {},
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "0.0.0-stage",
+          "publishedAt": "2026-10-11T22:51:21.166Z",
+          "integrity": "sha512-S+VGKF6lt8+F3LtLgLtGYBJBiGjCtsOJIfUnDy4pssPphOSYbpLk+QHHV/9D4eDeWecgY1Mj+trz6pUDDng5Vw=="
+        },
+        {
+          "version": "0.0.0-bootstrap",
+          "publishedAt": "2026-10-11T22:52:16.841Z",
+          "integrity": "sha512-V2MzwrhbgwzNyAtHaEnBkJj3CcNizoO3wKHTIffh/c6d43LZKbQANME1Zvn/MayXLj50h8soeW11VYP/QKrswQ=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "micromatch",
+    "upstream": {
+      "name": "micromatch",
+      "version": "4.0.8",
+      "tarball": "https://registry.npmjs.org/micromatch/-/micromatch-4.0.8.tgz",
+      "integrity": "sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA=="
+    },
+    "fork": {
+      "name": "@bleedingdev/micromatch",
+      "version": "4.0.8"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": null,
+    "manifestChanges": {
+      "dependencies": {
+        "braces": "npm:@bleedingdev/braces@3.0.4"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "0.0.0-stage",
+          "publishedAt": "2026-10-11T22:51:23.907Z",
+          "integrity": "sha512-EhzAY4gw/rVYQB0EsZasM/4WU8nkjCErGY/3QIMNNcOoHkv3EqQVLEwoM5QaevOjjhfFUkH4h1EIycYRZapAxg=="
+        },
+        {
+          "version": "0.0.0-bootstrap",
+          "publishedAt": "2026-10-11T22:53:31.032Z",
+          "integrity": "sha512-mhi1vGRnlnaZPtrbMBY0IER43jGrnJ8dX/OfGxVrVDRaRkW0xIxZ/VKichzRPvdEBX0UXSF3JNY5LkWtVyc13g=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "fast-glob",
+    "upstream": {
+      "name": "fast-glob",
+      "version": "3.3.3",
+      "tarball": "https://registry.npmjs.org/fast-glob/-/fast-glob-3.3.3.tgz",
+      "integrity": "sha512-7MptL8U0cqcFdzIzwOTHoilX9x5BrNqye7Z/LuC7kCMRio1EMSyqRK3BEAUD7sXRq4iT4AzTVuZdhgQ2TCvYLg=="
+    },
+    "fork": {
+      "name": "@bleedingdev/fast-glob",
+      "version": "3.3.3"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": null,
+    "manifestChanges": {
+      "dependencies": {
+        "micromatch": "npm:@bleedingdev/micromatch@4.0.8"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "0.0.0-stage",
+          "publishedAt": "2026-10-11T22:51:27.173Z",
+          "integrity": "sha512-pVG7+5eB+4FoFHj1tYcQHtejwl0RWHYf3YwbQWS5na1JqIOOryiRYft5uK7CGm0nkzPpfyL878y8mWziLtzGOg=="
+        },
+        {
+          "version": "0.0.0-bootstrap",
+          "publishedAt": "2026-10-11T22:53:02.836Z",
+          "integrity": "sha512-rY8+6BvfQlNs7BuAFNA+5+7ipYSNXtU51olvHInAfsHBCWZ6v6VLMwBrQDpnabsg58wATPw2ktWeX16zd1lAfw=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "rsbuild-plugin-source-build",
+    "upstream": {
+      "name": "@rsbuild/plugin-source-build",
+      "version": "1.0.7",
+      "tarball": "https://registry.npmjs.org/@rsbuild/plugin-source-build/-/plugin-source-build-1.0.7.tgz",
+      "integrity": "sha512-nsTWZSIU7fJfwrdCJKijL0XzWTyOXDsfCP6S3d01X3tRhejn3Xv4NjKbTpfwPyN7932YFkawQHWnAyBTKA1ADg=="
+    },
+    "fork": {
+      "name": "@bleedingdev/rsbuild-plugin-source-build",
+      "version": "1.0.7"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": null,
+    "manifestChanges": {
+      "dependencies": {
+        "fast-glob": "npm:@bleedingdev/fast-glob@3.3.3"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "0.0.0-stage",
+          "publishedAt": "2026-10-11T22:51:37.200Z",
+          "integrity": "sha512-3otDfPRRa0DLabDPu4MkL6LLtZNJU5WVanrldUOsWpIEAhxjmcvf74FBG6pAftplJ5zyjxpI95VP2Am4X57FNg=="
+        },
+        {
+          "version": "0.0.0-bootstrap",
+          "publishedAt": "2026-10-11T22:55:46.176Z",
+          "integrity": "sha512-scowZx4PSPpT49/p+hJLFs1rSMYIbkr5+vZSbIn0HnAhzExRVpbCsT3q5NOF2mlXV2i1erSLjF+p96Eojp6q2Q=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "find-workspaces",
+    "upstream": {
+      "name": "find-workspaces",
+      "version": "0.3.1",
+      "tarball": "https://registry.npmjs.org/find-workspaces/-/find-workspaces-0.3.1.tgz",
+      "integrity": "sha512-UDkGILGJSA1LN5Aa7McxCid4sqW3/e+UYsVwyxki3dDT0F8+ym0rAfnCkEfkL0rO7M+8/mvkim4t/s3IPHmg+w=="
+    },
+    "fork": {
+      "name": "@bleedingdev/find-workspaces",
+      "version": "0.3.1"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": null,
+    "manifestChanges": {
+      "dependencies": {
+        "fast-glob": "npm:@bleedingdev/fast-glob@3.3.3"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "0.0.0-stage",
+          "publishedAt": "2026-10-11T22:51:39.470Z",
+          "integrity": "sha512-S396td4/wGNzw28M7BgHI0aO1zEMaVpiBzJn8+Xla9km+derE+zxnoEz8LhEkAOZJefeGOxcjWIEiMuyAzWgXw=="
+        },
+        {
+          "version": "0.0.0-bootstrap",
+          "publishedAt": "2026-10-11T22:52:13.994Z",
+          "integrity": "sha512-byH9gtPKBgfs0QtpQHeqvAlacb4OECWWppYqiz4+vzNlZRtqOgxCNceMtcoIASi+tSxwvfoeS+AnINlL4mH/nw=="
+        }
+      ]
+    }
+  },
+  {
+    "id": "ultracite",
+    "upstream": {
+      "name": "ultracite",
+      "version": "8.2.1",
+      "tarball": "https://registry.npmjs.org/ultracite/-/ultracite-8.2.1.tgz",
+      "integrity": "sha512-+HAwOkdpdNaf6Fr+JEh0YkikJU4vjRO977kMAvtOsk8YWk+VG3rdy7gyFLgbO1Edv+k5hhL/3CKAiEmUlvt3ow=="
+    },
+    "fork": {
+      "name": "@bleedingdev/ultracite",
+      "version": "8.2.2"
+    },
+    "license": "MIT",
+    "artifacts": ["*"],
+    "patch": {
+      "path": "patches/ultracite@8.2.1.patch",
+      "sha256": "5d81abe0bb21b38a7c6dd92a8770f1be6446ef07a291b4091b91fd137f690a2c"
+    },
+    "manifestChanges": {
+      "dependencies": {
+        "fast-glob": "npm:@bleedingdev/fast-glob@3.3.3",
+        "find-workspaces": "npm:@bleedingdev/find-workspaces@0.3.1"
+      }
+    },
+    "provenance": {
+      "grandfatheredVersions": [
+        {
+          "version": "0.0.0-stage",
+          "publishedAt": "2026-10-11T22:51:41.607Z",
+          "integrity": "sha512-825Ln7EmtJ6ibnS/K0UHFEu93uixhZVj/yKrDwOhzd2gCvG3TOfsn9CXQQQ5B43Ixb08qgme3Eua9vj8yhfM7g=="
+        },
+        {
+          "version": "0.0.0-bootstrap",
+          "publishedAt": "2026-10-11T22:52:37.298Z",
+          "integrity": "sha512-/GE0kb4ibfHy0PtDYKdRg23IaFKC4SYxXLSX+Y8mwSE/xsFll5zVGl9QrXqmMcVKY14CAmslMdRn8IXX6yJgvQ=="
+        }
+      ]
+    }
+  }
+]

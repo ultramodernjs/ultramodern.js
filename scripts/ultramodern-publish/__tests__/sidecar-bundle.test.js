@@ -258,7 +258,7 @@ test('SDK profile admits only its exact package, canonical patch and installed A
   assert.equal(f.accepted.manifest.profile, 'mf-sdk');
   assert.deepEqual(
     f.accepted.sidecars.packages.map(item => [item.name, item.version]),
-    [['@bleedingdev/mf-sdk', '2.9.2']],
+    [['@bleedingdev/mf-sdk', '2.9.5']],
   );
   assert.equal(
     f.accepted.sidecars.manifest.publishBefore,
@@ -337,9 +337,9 @@ test('SDK profile admits only its exact package, canonical patch and installed A
   for (const packages of [
     [],
     [{ name: '@bleedingdev/mf-sdk', version: '2.9.3' }],
-    [{ name: '@module-federation/sdk', version: '2.9.2' }],
+    [{ name: '@module-federation/sdk', version: '2.9.5' }],
     [
-      { name: '@bleedingdev/mf-sdk', version: '2.9.2' },
+      { name: '@bleedingdev/mf-sdk', version: '2.9.5' },
       { name: '@bleedingdev/braces', version: '3.0.4' },
     ],
   ]) {
@@ -355,7 +355,7 @@ test('Redact profile admits only its exact package, canonical patch and placehol
   assert.equal(f.accepted.manifest.profile, 'tanstack-redact');
   assert.deepEqual(
     f.accepted.sidecars.packages.map(item => [item.name, item.version]),
-    [['@bleedingdev/tanstack-redact', '0.2.2']],
+    [['@bleedingdev/tanstack-redact', '0.3.2']],
   );
   assert.equal(
     f.accepted.sidecars.manifest.publishBefore,
@@ -363,7 +363,7 @@ test('Redact profile admits only its exact package, canonical patch and placehol
   );
   assert.equal(
     f.accepted.manifest.inputs[0].patch.sha256,
-    'b33e04434a8dd45c292a68b9c5d0bfe560f34bcf5517cfdeee39f10746ebd5bc',
+    'eb9fe1549ef0b71454b287bf57affb4f819e60ee5b26f7b8826a98bb915e9f61',
   );
   assert.deepEqual(f.probes, {
     'packed-install': true,
@@ -507,4 +507,29 @@ test('new bundles reject stale repository metadata even with authentic packed di
     }),
     /package repository does not match its producer source repository/,
   );
+});
+
+test('MF cohort receipt closes all 14 exact identities and cannot substitute a singleton receipt', async t => {
+  const f = await fixture(t, 'mf-cohort');
+  assert.equal(f.accepted.manifest.profile, 'mf-cohort');
+  assert.equal(f.accepted.sidecars.packages.length, 14);
+  assert.equal(f.accepted.manifest.inputs.length, 14);
+  assert.equal(
+    f.accepted.sidecars.packages.find(
+      item => item.name === '@bleedingdev/mf-node',
+    ).version,
+    '2.7.54',
+  );
+  const undo = f.rewrite(path.join(f.output, 'sidecar-bundle.json'), value => ({
+    ...value,
+    profile: 'mf-sdk',
+  }));
+  try {
+    assert.throws(
+      () => f.verifySidecarBundle(f.output, f.options),
+      /recipe|inputs|profile|closed/iu,
+    );
+  } finally {
+    undo();
+  }
 });

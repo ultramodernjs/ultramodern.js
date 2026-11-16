@@ -928,7 +928,7 @@ test('SDK registry preflight rejects recipe drift before any network read', asyn
   const { checkSidecarRegistry } = await importCli();
   const recipesPath = path.join(
     repoRoot,
-    'scripts/ultramodern-supply/sidecars.json',
+    'scripts/ultramodern-supply/sidecar-candidates-20261116.json',
   );
   const recipes = JSON.parse(fs.readFileSync(recipesPath, 'utf8'));
   const originalRead = fs.readFileSync;
@@ -957,7 +957,7 @@ test('SDK registry preflight rejects recipe drift before any network read', asyn
               }
             : recipe,
         ),
-      /dependencies differ from the closed profile/u,
+      /Closed mf-sdk recipe identity drift/u,
     ],
     [
       values =>
@@ -966,11 +966,11 @@ test('SDK registry preflight rejects recipe drift before any network read', asyn
             ? { ...recipe, fork: { ...recipe.fork, version: '2.9.3' } }
             : recipe,
         ),
-      /dependencies differ from the closed profile/u,
+      /Closed mf-sdk recipe identity drift/u,
     ],
     [
       values => values.filter(recipe => recipe.id !== 'mf-sdk'),
-      /Expected exactly one reviewed sidecar recipe mf-sdk/u,
+      /Closed mf-sdk recipe drift/u,
     ],
   ]) {
     selectedRecipes = mutate(structuredClone(recipes));

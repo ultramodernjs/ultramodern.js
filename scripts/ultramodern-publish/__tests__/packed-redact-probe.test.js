@@ -42,7 +42,7 @@ function packageFixture(
     path.join(directory, 'package.json'),
     JSON.stringify({
       name: '@bleedingdev/tanstack-redact',
-      version: '0.2.2',
+      version: '0.3.2',
       type: 'module',
       exports: {
         '.': './index.js',
@@ -140,11 +140,12 @@ test('a linked external Redact cannot satisfy clean installed qualification', as
 });
 
 test('the reconstructed sidecar passes the probe', async t => {
-  const { verifySidecar } = await import(
+  const { reconstructSidecarRecipe } = await import(
     '../../ultramodern-supply/verify-sidecars.mjs'
   );
   const { workspace } = fixture(t);
-  await verifySidecar('tanstack-redact', {
+  const { sidecarProfileRecipes } = await import('../sidecar-profiles.mjs');
+  await reconstructSidecarRecipe(sidecarProfileRecipes('tanstack-redact')[0], {
     materializeTo: installed(workspace),
   });
   const result = runProbe(workspace, await probeSource());

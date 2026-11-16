@@ -1,0 +1,621 @@
+diff --git a/dist/src/lib/container/ModuleFederationPlugin.js b/dist/src/lib/container/ModuleFederationPlugin.js
+--- a/dist/src/lib/container/ModuleFederationPlugin.js
++++ b/dist/src/lib/container/ModuleFederationPlugin.js
+@@ -89,7 +89,7 @@
+ 		const useContainerPlugin = hasExposes(options.exposes);
+ 		if (experiments?.provideExternalRuntime) {
+ 			if (useContainerPlugin) throw new Error("You can only set provideExternalRuntime: true in pure consumer which not expose modules.");
+-			options.runtimePlugins = (options.runtimePlugins || []).concat(require.resolve("@module-federation/inject-external-runtime-core-plugin"));
++			options.runtimePlugins = (options.runtimePlugins || []).concat(require.resolve("./runtime-plugins/inject-external-runtime-core-plugin"));
+ 		}
+ 		if (experiments?.externalRuntime === true) new (compiler.webpack.ExternalsPlugin || ExternalsPlugin)(compiler.options.externalsType || "global", { "@module-federation/runtime-core": "_FEDERATION_RUNTIME_CORE" }).apply(compiler);
+ 		new require_lib_container_runtime_FederationModulesPlugin.default().apply(compiler);
+diff --git a/dist/src/lib/container/ModuleFederationPlugin.js.map b/dist/src/lib/container/ModuleFederationPlugin.js.map
+--- a/dist/src/lib/container/ModuleFederationPlugin.js.map
++++ b/dist/src/lib/container/ModuleFederationPlugin.js.map
+@@ -1 +1 @@
+-{"version":3,"file":"ModuleFederationPlugin.js","names":["createSchemaValidation","path","fs","utils","infrastructureLogger","RemoteEntryPlugin","FederationModulesPlugin","StartupChunkDependenciesPlugin","DtsPlugin","FederationRuntimePlugin","ContainerManager","ContainerPlugin","ContainerReferencePlugin","TreeShakingSharedPlugin","SharePlugin","StatsPlugin"],"sources":["../../../../src/lib/container/ModuleFederationPlugin.ts"],"sourcesContent":["/*\n  MIT License http://www.opensource.org/licenses/mit-license.php\n  Author Tobias Koppers @sokra and Zackary Jackson @ScriptedAlchemy\n*/\n\n'use strict';\nimport { DtsPlugin } from '@module-federation/dts-plugin';\nimport { ContainerManager, utils } from '@module-federation/managers';\nimport { StatsPlugin } from '@module-federation/manifest';\nimport {\n  bindLoggerToCompiler,\n  composeKeyWithSeparator,\n  type moduleFederationPlugin,\n  infrastructureLogger,\n} from '@module-federation/sdk';\nimport { normalizeWebpackPath } from '@module-federation/sdk/normalize-webpack-path';\nimport type { Compiler, WebpackPluginInstance } from 'webpack';\nimport fs from 'node:fs';\nimport path from 'node:path';\nimport SharePlugin from '../sharing/SharePlugin';\nimport ContainerPlugin from './ContainerPlugin';\nimport ContainerReferencePlugin from './ContainerReferencePlugin';\nimport FederationRuntimePlugin from './runtime/FederationRuntimePlugin';\nimport { RemoteEntryPlugin } from '@module-federation/rspack/remote-entry-plugin';\nimport StartupChunkDependenciesPlugin from '../startup/MfStartupChunkDependenciesPlugin';\nimport FederationModulesPlugin from './runtime/FederationModulesPlugin';\nimport { createSchemaValidation } from '../../utils';\nimport TreeShakingSharedPlugin from '../sharing/tree-shaking/TreeShakingSharedPlugin';\n\nconst isValidExternalsType = require(\n  normalizeWebpackPath(\n    'webpack/schemas/plugins/container/ExternalsType.check.js',\n  ),\n) as typeof import('webpack/schemas/plugins/container/ExternalsType.check.js');\n\nconst { ExternalsPlugin } = require(\n  normalizeWebpackPath('webpack'),\n) as typeof import('webpack');\n\nconst validate = createSchemaValidation(\n  //eslint-disable-next-line\n  require('../../schemas/container/ModuleFederationPlugin.check.js').validate,\n  () => require('../../schemas/container/ModuleFederationPlugin').default,\n  {\n    name: 'Module Federation Plugin',\n    baseDataPath: 'options',\n  },\n);\n\nfunction hasExposes(\n  exposes: moduleFederationPlugin.ModuleFederationPluginOptions['exposes'],\n): boolean {\n  return Boolean(\n    exposes &&\n    (Array.isArray(exposes)\n      ? exposes.length > 0\n      : Object.keys(exposes).length > 0),\n  );\n}\n\nfunction getEnhancedPackageVersion(): string {\n  let currentDir = __dirname;\n\n  while (true) {\n    const packageJsonPath = path.join(currentDir, 'package.json');\n\n    if (fs.existsSync(packageJsonPath)) {\n      const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as {\n        name?: string;\n        version?: string;\n      };\n\n      if (pkg.name === '@module-federation/enhanced' && pkg.version) {\n        return pkg.version;\n      }\n    }\n\n    const parentDir = path.dirname(currentDir);\n    if (parentDir === currentDir) {\n      break;\n    }\n    currentDir = parentDir;\n  }\n\n  throw new Error('Unable to resolve @module-federation/enhanced package.json');\n}\n\nclass ModuleFederationPlugin implements WebpackPluginInstance {\n  private _options: moduleFederationPlugin.ModuleFederationPluginOptions;\n  private _statsPlugin?: StatsPlugin;\n  /**\n   * @param {moduleFederationPlugin.ModuleFederationPluginOptions} options options\n   */\n  constructor(options: moduleFederationPlugin.ModuleFederationPluginOptions) {\n    validate(options);\n    this._options = options;\n  }\n\n  private _patchBundlerConfig(compiler: Compiler): void {\n    const { name, experiments, exposes } = this._options;\n    const definePluginOptions: Record<string, string | boolean> = {};\n\n    const MFPluginNum = compiler.options.plugins.filter(\n      (p): p is WebpackPluginInstance =>\n        !!p && (p as any).name === 'ModuleFederationPlugin',\n    ).length;\n\n    if (name && MFPluginNum < 2) {\n      definePluginOptions['FEDERATION_BUILD_IDENTIFIER'] = JSON.stringify(\n        composeKeyWithSeparator(name, utils.getBuildVersion()),\n      );\n    }\n\n    const disableSnapshot = experiments?.optimization?.disableSnapshot ?? false;\n    definePluginOptions['FEDERATION_OPTIMIZE_NO_SNAPSHOT_PLUGIN'] =\n      disableSnapshot;\n    definePluginOptions['FEDERATION_OPTIMIZE_NO_REMOTE'] =\n      experiments?.optimization?.disableRemote ?? false;\n    definePluginOptions['FEDERATION_OPTIMIZE_NO_SHARED'] =\n      experiments?.optimization?.disableShared ?? false;\n    definePluginOptions['FEDERATION_HAS_EXPOSES'] =\n      hasExposes(exposes) ||\n      compiler.options.plugins.some((plugin) => {\n        if (!plugin || typeof plugin !== 'object') {\n          return false;\n        }\n\n        const namedPlugin = plugin as WebpackPluginInstance & {\n          name?: string;\n          _options?: moduleFederationPlugin.ModuleFederationPluginOptions;\n        };\n        if (namedPlugin.name !== 'ModuleFederationPlugin') {\n          return false;\n        }\n\n        return hasExposes(namedPlugin._options?.exposes);\n      });\n\n    // Determine ENV_TARGET: only if manually specified in experiments.optimization.target\n    if (\n      experiments?.optimization &&\n      typeof experiments.optimization === 'object' &&\n      experiments.optimization !== null &&\n      'target' in experiments.optimization\n    ) {\n      const manualTarget = experiments.optimization.target as\n        | 'web'\n        | 'node'\n        | undefined;\n      // Ensure the target is one of the expected values before setting\n      if (manualTarget === 'web' || manualTarget === 'node') {\n        definePluginOptions['ENV_TARGET'] = JSON.stringify(manualTarget);\n      }\n    }\n    // No inference for ENV_TARGET. If not manually set and valid, it's not defined.\n\n    new compiler.webpack.DefinePlugin(definePluginOptions).apply(compiler);\n  }\n\n  /**\n   * Apply the plugin\n   * @param {Compiler} compiler the compiler instance\n   * @returns {void}\n   */\n  apply(compiler: Compiler): void {\n    bindLoggerToCompiler(\n      infrastructureLogger,\n      compiler,\n      'EnhancedModuleFederationPlugin',\n    );\n    const { _options: options } = this;\n    const { name, experiments, dts, remotes, shared, shareScope } = options;\n    if (!name) {\n      throw new Error('ModuleFederationPlugin name is required');\n    }\n    // must before ModuleFederationPlugin\n    (new RemoteEntryPlugin(options) as unknown as WebpackPluginInstance).apply(\n      compiler,\n    );\n    const useContainerPlugin = hasExposes(options.exposes);\n\n    if (experiments?.provideExternalRuntime) {\n      if (useContainerPlugin) {\n        throw new Error(\n          'You can only set provideExternalRuntime: true in pure consumer which not expose modules.',\n        );\n      }\n      const runtimePlugins = options.runtimePlugins || [];\n      options.runtimePlugins = runtimePlugins.concat(\n        require.resolve('@module-federation/inject-external-runtime-core-plugin'),\n      );\n    }\n\n    if (experiments?.externalRuntime === true) {\n      const Externals = compiler.webpack.ExternalsPlugin || ExternalsPlugin;\n      new Externals(compiler.options.externalsType || 'global', {\n        '@module-federation/runtime-core': '_FEDERATION_RUNTIME_CORE',\n      }).apply(compiler);\n    }\n\n    // federation hooks\n    new FederationModulesPlugin().apply(compiler);\n\n    if (experiments?.asyncStartup) {\n      new StartupChunkDependenciesPlugin({\n        asyncChunkLoading: true,\n      }).apply(compiler);\n    }\n\n    if (dts !== false) {\n      const dtsPlugin = new DtsPlugin(options);\n      dtsPlugin.apply(compiler);\n      dtsPlugin.addRuntimePlugins();\n    }\n    new FederationRuntimePlugin(options).apply(compiler);\n\n    const library = options.library || { type: 'var', name: name };\n    const remoteType =\n      options.remoteType ||\n      (options.library && isValidExternalsType(options.library.type)\n        ? (options.library.type as moduleFederationPlugin.ExternalsType)\n        : ('script' as moduleFederationPlugin.ExternalsType));\n    const containerRemoteType =\n      remoteType as moduleFederationPlugin.ExternalsType;\n\n    let disableManifest = options.manifest === false;\n    if (useContainerPlugin) {\n      ContainerPlugin.patchChunkSplit(compiler, name);\n    }\n    this._patchBundlerConfig(compiler);\n    if (!disableManifest && useContainerPlugin) {\n      try {\n        const containerManager = new ContainerManager();\n        containerManager.init(options);\n        options.exposes = containerManager.containerPluginExposesOptions;\n      } catch (err) {\n        if (err instanceof Error) {\n          err.message = `[ ModuleFederationPlugin ]: Manifest will not generate, because: ${err.message}`;\n        }\n        infrastructureLogger.warn(err);\n        disableManifest = true;\n      }\n    }\n\n    if (\n      library &&\n      !compiler.options.output.enabledLibraryTypes?.includes(library.type)\n    ) {\n      compiler.options.output.enabledLibraryTypes?.push(library.type);\n    }\n\n    compiler.hooks.afterPlugins.tap('ModuleFederationPlugin', () => {\n      if (useContainerPlugin) {\n        new ContainerPlugin({\n          name,\n          library,\n          filename: options.filename,\n          runtime: options.runtime,\n          shareScope: options.shareScope,\n          exposes: options.exposes!,\n          runtimePlugins: options.runtimePlugins,\n        }).apply(compiler);\n      }\n      if (\n        remotes &&\n        (Array.isArray(remotes)\n          ? remotes.length > 0\n          : Object.keys(remotes).length > 0)\n      ) {\n        new ContainerReferencePlugin({\n          remoteType: containerRemoteType,\n          shareScope,\n          remotes,\n        }).apply(compiler);\n      }\n      if (shared) {\n        new TreeShakingSharedPlugin({\n          mfConfig: options,\n        }).apply(compiler);\n        new SharePlugin({\n          shared,\n          shareScope,\n        }).apply(compiler);\n      }\n    });\n\n    if (!disableManifest) {\n      this._statsPlugin = new StatsPlugin(options, {\n        pluginVersion: getEnhancedPackageVersion(),\n        bundler: 'webpack',\n      });\n      this._statsPlugin.apply(compiler);\n    }\n  }\n}\n\nexport default ModuleFederationPlugin;\n"],"mappings":"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"}
+\ No newline at end of file
++{"version":3,"file":"ModuleFederationPlugin.js","names":["createSchemaValidation","path","fs","utils","infrastructureLogger","RemoteEntryPlugin","FederationModulesPlugin","StartupChunkDependenciesPlugin","DtsPlugin","FederationRuntimePlugin","ContainerManager","ContainerPlugin","ContainerReferencePlugin","TreeShakingSharedPlugin","SharePlugin","StatsPlugin"],"sources":["../../../../src/lib/container/ModuleFederationPlugin.ts"],"sourcesContent":["/*\n  MIT License http://www.opensource.org/licenses/mit-license.php\n  Author Tobias Koppers @sokra and Zackary Jackson @ScriptedAlchemy\n*/\n\n'use strict';\nimport { DtsPlugin } from '@module-federation/dts-plugin';\nimport { ContainerManager, utils } from '@module-federation/managers';\nimport { StatsPlugin } from '@module-federation/manifest';\nimport {\n  bindLoggerToCompiler,\n  composeKeyWithSeparator,\n  type moduleFederationPlugin,\n  infrastructureLogger,\n} from '@module-federation/sdk';\nimport { normalizeWebpackPath } from '@module-federation/sdk/normalize-webpack-path';\nimport type { Compiler, WebpackPluginInstance } from 'webpack';\nimport fs from 'node:fs';\nimport path from 'node:path';\nimport SharePlugin from '../sharing/SharePlugin';\nimport ContainerPlugin from './ContainerPlugin';\nimport ContainerReferencePlugin from './ContainerReferencePlugin';\nimport FederationRuntimePlugin from './runtime/FederationRuntimePlugin';\nimport { RemoteEntryPlugin } from '@module-federation/rspack/remote-entry-plugin';\nimport StartupChunkDependenciesPlugin from '../startup/MfStartupChunkDependenciesPlugin';\nimport FederationModulesPlugin from './runtime/FederationModulesPlugin';\nimport { createSchemaValidation } from '../../utils';\nimport TreeShakingSharedPlugin from '../sharing/tree-shaking/TreeShakingSharedPlugin';\n\nconst isValidExternalsType = require(\n  normalizeWebpackPath(\n    'webpack/schemas/plugins/container/ExternalsType.check.js',\n  ),\n) as typeof import('webpack/schemas/plugins/container/ExternalsType.check.js');\n\nconst { ExternalsPlugin } = require(\n  normalizeWebpackPath('webpack'),\n) as typeof import('webpack');\n\nconst validate = createSchemaValidation(\n  //eslint-disable-next-line\n  require('../../schemas/container/ModuleFederationPlugin.check.js').validate,\n  () => require('../../schemas/container/ModuleFederationPlugin').default,\n  {\n    name: 'Module Federation Plugin',\n    baseDataPath: 'options',\n  },\n);\n\nfunction hasExposes(\n  exposes: moduleFederationPlugin.ModuleFederationPluginOptions['exposes'],\n): boolean {\n  return Boolean(\n    exposes &&\n    (Array.isArray(exposes)\n      ? exposes.length > 0\n      : Object.keys(exposes).length > 0),\n  );\n}\n\nfunction getEnhancedPackageVersion(): string {\n  let currentDir = __dirname;\n\n  while (true) {\n    const packageJsonPath = path.join(currentDir, 'package.json');\n\n    if (fs.existsSync(packageJsonPath)) {\n      const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as {\n        name?: string;\n        version?: string;\n      };\n\n      if (pkg.name === '@module-federation/enhanced' && pkg.version) {\n        return pkg.version;\n      }\n    }\n\n    const parentDir = path.dirname(currentDir);\n    if (parentDir === currentDir) {\n      break;\n    }\n    currentDir = parentDir;\n  }\n\n  throw new Error('Unable to resolve @module-federation/enhanced package.json');\n}\n\nclass ModuleFederationPlugin implements WebpackPluginInstance {\n  private _options: moduleFederationPlugin.ModuleFederationPluginOptions;\n  private _statsPlugin?: StatsPlugin;\n  /**\n   * @param {moduleFederationPlugin.ModuleFederationPluginOptions} options options\n   */\n  constructor(options: moduleFederationPlugin.ModuleFederationPluginOptions) {\n    validate(options);\n    this._options = options;\n  }\n\n  private _patchBundlerConfig(compiler: Compiler): void {\n    const { name, experiments, exposes } = this._options;\n    const definePluginOptions: Record<string, string | boolean> = {};\n\n    const MFPluginNum = compiler.options.plugins.filter(\n      (p): p is WebpackPluginInstance =>\n        !!p && (p as any).name === 'ModuleFederationPlugin',\n    ).length;\n\n    if (name && MFPluginNum < 2) {\n      definePluginOptions['FEDERATION_BUILD_IDENTIFIER'] = JSON.stringify(\n        composeKeyWithSeparator(name, utils.getBuildVersion()),\n      );\n    }\n\n    const disableSnapshot = experiments?.optimization?.disableSnapshot ?? false;\n    definePluginOptions['FEDERATION_OPTIMIZE_NO_SNAPSHOT_PLUGIN'] =\n      disableSnapshot;\n    definePluginOptions['FEDERATION_OPTIMIZE_NO_REMOTE'] =\n      experiments?.optimization?.disableRemote ?? false;\n    definePluginOptions['FEDERATION_OPTIMIZE_NO_SHARED'] =\n      experiments?.optimization?.disableShared ?? false;\n    definePluginOptions['FEDERATION_HAS_EXPOSES'] =\n      hasExposes(exposes) ||\n      compiler.options.plugins.some((plugin) => {\n        if (!plugin || typeof plugin !== 'object') {\n          return false;\n        }\n\n        const namedPlugin = plugin as WebpackPluginInstance & {\n          name?: string;\n          _options?: moduleFederationPlugin.ModuleFederationPluginOptions;\n        };\n        if (namedPlugin.name !== 'ModuleFederationPlugin') {\n          return false;\n        }\n\n        return hasExposes(namedPlugin._options?.exposes);\n      });\n\n    // Determine ENV_TARGET: only if manually specified in experiments.optimization.target\n    if (\n      experiments?.optimization &&\n      typeof experiments.optimization === 'object' &&\n      experiments.optimization !== null &&\n      'target' in experiments.optimization\n    ) {\n      const manualTarget = experiments.optimization.target as\n        | 'web'\n        | 'node'\n        | undefined;\n      // Ensure the target is one of the expected values before setting\n      if (manualTarget === 'web' || manualTarget === 'node') {\n        definePluginOptions['ENV_TARGET'] = JSON.stringify(manualTarget);\n      }\n    }\n    // No inference for ENV_TARGET. If not manually set and valid, it's not defined.\n\n    new compiler.webpack.DefinePlugin(definePluginOptions).apply(compiler);\n  }\n\n  /**\n   * Apply the plugin\n   * @param {Compiler} compiler the compiler instance\n   * @returns {void}\n   */\n  apply(compiler: Compiler): void {\n    bindLoggerToCompiler(\n      infrastructureLogger,\n      compiler,\n      'EnhancedModuleFederationPlugin',\n    );\n    const { _options: options } = this;\n    const { name, experiments, dts, remotes, shared, shareScope } = options;\n    if (!name) {\n      throw new Error('ModuleFederationPlugin name is required');\n    }\n    // must before ModuleFederationPlugin\n    (new RemoteEntryPlugin(options) as unknown as WebpackPluginInstance).apply(\n      compiler,\n    );\n    const useContainerPlugin = hasExposes(options.exposes);\n\n    if (experiments?.provideExternalRuntime) {\n      if (useContainerPlugin) {\n        throw new Error(\n          'You can only set provideExternalRuntime: true in pure consumer which not expose modules.',\n        );\n      }\n      const runtimePlugins = options.runtimePlugins || [];\n      options.runtimePlugins = runtimePlugins.concat(\n        require.resolve('./runtime-plugins/inject-external-runtime-core-plugin'),\n      );\n    }\n\n    if (experiments?.externalRuntime === true) {\n      const Externals = compiler.webpack.ExternalsPlugin || ExternalsPlugin;\n      new Externals(compiler.options.externalsType || 'global', {\n        '@module-federation/runtime-core': '_FEDERATION_RUNTIME_CORE',\n      }).apply(compiler);\n    }\n\n    // federation hooks\n    new FederationModulesPlugin().apply(compiler);\n\n    if (experiments?.asyncStartup) {\n      new StartupChunkDependenciesPlugin({\n        asyncChunkLoading: true,\n      }).apply(compiler);\n    }\n\n    if (dts !== false) {\n      const dtsPlugin = new DtsPlugin(options);\n      dtsPlugin.apply(compiler);\n      dtsPlugin.addRuntimePlugins();\n    }\n    new FederationRuntimePlugin(options).apply(compiler);\n\n    const library = options.library || { type: 'var', name: name };\n    const remoteType =\n      options.remoteType ||\n      (options.library && isValidExternalsType(options.library.type)\n        ? (options.library.type as moduleFederationPlugin.ExternalsType)\n        : ('script' as moduleFederationPlugin.ExternalsType));\n    const containerRemoteType =\n      remoteType as moduleFederationPlugin.ExternalsType;\n\n    let disableManifest = options.manifest === false;\n    if (useContainerPlugin) {\n      ContainerPlugin.patchChunkSplit(compiler, name);\n    }\n    this._patchBundlerConfig(compiler);\n    if (!disableManifest && useContainerPlugin) {\n      try {\n        const containerManager = new ContainerManager();\n        containerManager.init(options);\n        options.exposes = containerManager.containerPluginExposesOptions;\n      } catch (err) {\n        if (err instanceof Error) {\n          err.message = `[ ModuleFederationPlugin ]: Manifest will not generate, because: ${err.message}`;\n        }\n        infrastructureLogger.warn(err);\n        disableManifest = true;\n      }\n    }\n\n    if (\n      library &&\n      !compiler.options.output.enabledLibraryTypes?.includes(library.type)\n    ) {\n      compiler.options.output.enabledLibraryTypes?.push(library.type);\n    }\n\n    compiler.hooks.afterPlugins.tap('ModuleFederationPlugin', () => {\n      if (useContainerPlugin) {\n        new ContainerPlugin({\n          name,\n          library,\n          filename: options.filename,\n          runtime: options.runtime,\n          shareScope: options.shareScope,\n          exposes: options.exposes!,\n          runtimePlugins: options.runtimePlugins,\n        }).apply(compiler);\n      }\n      if (\n        remotes &&\n        (Array.isArray(remotes)\n          ? remotes.length > 0\n          : Object.keys(remotes).length > 0)\n      ) {\n        new ContainerReferencePlugin({\n          remoteType: containerRemoteType,\n          shareScope,\n          remotes,\n        }).apply(compiler);\n      }\n      if (shared) {\n        new TreeShakingSharedPlugin({\n          mfConfig: options,\n        }).apply(compiler);\n        new SharePlugin({\n          shared,\n          shareScope,\n        }).apply(compiler);\n      }\n    });\n\n    if (!disableManifest) {\n      this._statsPlugin = new StatsPlugin(options, {\n        pluginVersion: getEnhancedPackageVersion(),\n        bundler: 'webpack',\n      });\n      this._statsPlugin.apply(compiler);\n    }\n  }\n}\n\nexport default ModuleFederationPlugin;\n"],"mappings":"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"}
+\ No newline at end of file
+diff --git a/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/LICENSE b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/LICENSE
+new file mode 100644
+--- /dev/null
++++ b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/LICENSE
+@@ -0,0 +1,21 @@
++MIT License
++
++Copyright (c) 2024-present zhanghang(2heal1)
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/README.md b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/README.md
+new file mode 100644
+--- /dev/null
++++ b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/README.md
+@@ -0,0 +1,7 @@
++# `@module-federation/inject-external-runtime-core-plugin`
++
++This runtime plugin will inject `@module-federation/runtime-core` .
++
++And the plugin will be automatic applied when set `experiments.externalRuntime: 'provide'` by build plugin.
++
++The provider can use host's runtime when set `experiments.externalRuntime: true`.
+diff --git a/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/LICENSE b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/LICENSE
+new file mode 100644
+--- /dev/null
++++ b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/LICENSE
+@@ -0,0 +1,21 @@
++MIT License
++
++Copyright (c) 2024-present zhanghang(2heal1)
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/_virtual/_rolldown/runtime.cjs b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/_virtual/_rolldown/runtime.cjs
+new file mode 100644
+--- /dev/null
++++ b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/_virtual/_rolldown/runtime.cjs
+@@ -0,0 +1,29 @@
++//#region \0rolldown/runtime.js
++var __create = Object.create;
++var __defProp = Object.defineProperty;
++var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
++var __getOwnPropNames = Object.getOwnPropertyNames;
++var __getProtoOf = Object.getPrototypeOf;
++var __hasOwnProp = Object.prototype.hasOwnProperty;
++var __copyProps = (to, from, except, desc) => {
++	if (from && typeof from === "object" || typeof from === "function") {
++		for (var keys = __getOwnPropNames(from), i = 0, n = keys.length, key; i < n; i++) {
++			key = keys[i];
++			if (!__hasOwnProp.call(to, key) && key !== except) {
++				__defProp(to, key, {
++					get: ((k) => from[k]).bind(null, key),
++					enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
++				});
++			}
++		}
++	}
++	return to;
++};
++var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", {
++	value: mod,
++	enumerable: true
++}) : target, mod));
++
++//#endregion
++
++exports.__toESM = __toESM;
+\ No newline at end of file
+diff --git a/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.cjs b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.cjs
+new file mode 100644
+--- /dev/null
++++ b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.cjs
+@@ -0,0 +1,31 @@
++const require_runtime = require('./_virtual/_rolldown/runtime.cjs');
++let _module_federation_runtime_tools_runtime_core = require("@module-federation/runtime-tools/runtime-core");
++_module_federation_runtime_tools_runtime_core = require_runtime.__toESM(_module_federation_runtime_tools_runtime_core);
++
++//#region src/index.ts
++function injectExternalRuntimeCorePlugin() {
++	return {
++		name: "inject-external-runtime-core-plugin",
++		version: "2.9.3",
++		beforeInit(args) {
++			const globalRef = _module_federation_runtime_tools_runtime_core.Global;
++			if (!globalRef || typeof globalRef !== "object") return args;
++			const name = args.options.name;
++			const version = "2.9.3";
++			if (globalRef._FEDERATION_RUNTIME_CORE && globalRef._FEDERATION_RUNTIME_CORE_FROM && (globalRef._FEDERATION_RUNTIME_CORE_FROM.name !== name || globalRef._FEDERATION_RUNTIME_CORE_FROM.version !== version)) {
++				console.warn(`Detect multiple module federation runtime! Injected runtime from ${globalRef._FEDERATION_RUNTIME_CORE_FROM.name}@${globalRef._FEDERATION_RUNTIME_CORE_FROM.version} and current is ${name}@${version}, pleasure ensure there is only one consumer to provider runtime!`);
++				return args;
++			}
++			globalRef._FEDERATION_RUNTIME_CORE = _module_federation_runtime_tools_runtime_core;
++			globalRef._FEDERATION_RUNTIME_CORE_FROM = {
++				version,
++				name
++			};
++			return args;
++		}
++	};
++}
++
++//#endregion
++module.exports = injectExternalRuntimeCorePlugin;
++//# sourceMappingURL=index.cjs.map
+\ No newline at end of file
+diff --git a/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.cjs.map b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.cjs.map
+new file mode 100644
+--- /dev/null
++++ b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.cjs.map
+@@ -0,0 +1 @@
++{"version":3,"file":"index.cjs","names":["runtimeCore"],"sources":["../src/index.ts"],"sourcesContent":["import * as runtimeCore from '@module-federation/runtime-tools/runtime-core';\n\nimport type { ModuleFederationRuntimePlugin } from '@module-federation/runtime-tools/runtime-core';\ndeclare global {\n  var __VERSION__: string;\n  var _FEDERATION_RUNTIME_CORE: typeof runtimeCore;\n  var _FEDERATION_RUNTIME_CORE_FROM: {\n    version: string;\n    name: string;\n  };\n}\n\nfunction injectExternalRuntimeCorePlugin(): ModuleFederationRuntimePlugin {\n  return {\n    name: 'inject-external-runtime-core-plugin',\n    version: __VERSION__,\n    beforeInit(args) {\n      const globalRef = (\n        runtimeCore as typeof runtimeCore & {\n          Global?: typeof runtimeCore.Global;\n        }\n      ).Global;\n      if (!globalRef || typeof globalRef !== 'object') {\n        return args;\n      }\n      const name = args.options.name;\n      const version = __VERSION__;\n      if (\n        globalRef._FEDERATION_RUNTIME_CORE &&\n        globalRef._FEDERATION_RUNTIME_CORE_FROM &&\n        (globalRef._FEDERATION_RUNTIME_CORE_FROM.name !== name ||\n          globalRef._FEDERATION_RUNTIME_CORE_FROM.version !== version)\n      ) {\n        console.warn(\n          `Detect multiple module federation runtime! Injected runtime from ${globalRef._FEDERATION_RUNTIME_CORE_FROM.name}@${globalRef._FEDERATION_RUNTIME_CORE_FROM.version} and current is ${name}@${version}, pleasure ensure there is only one consumer to provider runtime!`,\n        );\n        return args;\n      }\n      globalRef._FEDERATION_RUNTIME_CORE = runtimeCore;\n      globalRef._FEDERATION_RUNTIME_CORE_FROM = {\n        version,\n        name,\n      };\n      return args;\n    },\n  };\n}\n\nexport default injectExternalRuntimeCorePlugin;\n"],"mappings":";;;;;AAYA,SAAS,kCAAiE;AACxE,QAAO;EACL,MAAM;EACN;EACA,WAAW,MAAM;GACf,MAAM,YACJA,8CAGA;AACF,OAAI,CAAC,aAAa,OAAO,cAAc,SACrC,QAAO;GAET,MAAM,OAAO,KAAK,QAAQ;GAC1B,MAAM;AACN,OACE,UAAU,4BACV,UAAU,kCACT,UAAU,8BAA8B,SAAS,QAChD,UAAU,8BAA8B,YAAY,UACtD;AACA,YAAQ,KACN,oEAAoE,UAAU,8BAA8B,KAAK,GAAG,UAAU,8BAA8B,QAAQ,kBAAkB,KAAK,GAAG,QAAQ,mEACvM;AACD,WAAO;;AAET,aAAU,2BAA2BA;AACrC,aAAU,gCAAgC;IACxC;IACA;IACD;AACD,UAAO;;EAEV"}
+\ No newline at end of file
+diff --git a/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.d.cts b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.d.cts
+new file mode 100644
+--- /dev/null
++++ b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.d.cts
+@@ -0,0 +1,15 @@
++import * as runtimeCore from "@module-federation/runtime-tools/runtime-core";
++import { ModuleFederationRuntimePlugin } from "@module-federation/runtime-tools/runtime-core";
++
++//#region src/index.d.ts
++declare global {
++  var __VERSION__: string;
++  var _FEDERATION_RUNTIME_CORE: typeof runtimeCore;
++  var _FEDERATION_RUNTIME_CORE_FROM: {
++    version: string;
++    name: string;
++  };
++}
++declare function injectExternalRuntimeCorePlugin(): ModuleFederationRuntimePlugin;
++export = injectExternalRuntimeCorePlugin;
++//# sourceMappingURL=index.d.cts.map
+\ No newline at end of file
+diff --git a/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.d.ts b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.d.ts
+new file mode 100644
+--- /dev/null
++++ b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.d.ts
+@@ -0,0 +1,16 @@
++import * as runtimeCore from "@module-federation/runtime-tools/runtime-core";
++import { ModuleFederationRuntimePlugin } from "@module-federation/runtime-tools/runtime-core";
++
++//#region src/index.d.ts
++declare global {
++  var __VERSION__: string;
++  var _FEDERATION_RUNTIME_CORE: typeof runtimeCore;
++  var _FEDERATION_RUNTIME_CORE_FROM: {
++    version: string;
++    name: string;
++  };
++}
++declare function injectExternalRuntimeCorePlugin(): ModuleFederationRuntimePlugin;
++//#endregion
++export { injectExternalRuntimeCorePlugin as default };
++//# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
+diff --git a/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.js b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.js
+new file mode 100644
+--- /dev/null
++++ b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.js
+@@ -0,0 +1,29 @@
++import * as runtimeCore from "@module-federation/runtime-tools/runtime-core";
++
++//#region src/index.ts
++function injectExternalRuntimeCorePlugin() {
++	return {
++		name: "inject-external-runtime-core-plugin",
++		version: "2.9.3",
++		beforeInit(args) {
++			const globalRef = runtimeCore.Global;
++			if (!globalRef || typeof globalRef !== "object") return args;
++			const name = args.options.name;
++			const version = "2.9.3";
++			if (globalRef._FEDERATION_RUNTIME_CORE && globalRef._FEDERATION_RUNTIME_CORE_FROM && (globalRef._FEDERATION_RUNTIME_CORE_FROM.name !== name || globalRef._FEDERATION_RUNTIME_CORE_FROM.version !== version)) {
++				console.warn(`Detect multiple module federation runtime! Injected runtime from ${globalRef._FEDERATION_RUNTIME_CORE_FROM.name}@${globalRef._FEDERATION_RUNTIME_CORE_FROM.version} and current is ${name}@${version}, pleasure ensure there is only one consumer to provider runtime!`);
++				return args;
++			}
++			globalRef._FEDERATION_RUNTIME_CORE = runtimeCore;
++			globalRef._FEDERATION_RUNTIME_CORE_FROM = {
++				version,
++				name
++			};
++			return args;
++		}
++	};
++}
++
++//#endregion
++export { injectExternalRuntimeCorePlugin as default };
++//# sourceMappingURL=index.js.map
+\ No newline at end of file
+diff --git a/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.js.map b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.js.map
+new file mode 100644
+--- /dev/null
++++ b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/dist/index.js.map
+@@ -0,0 +1 @@
++{"version":3,"file":"index.js","names":[],"sources":["../src/index.ts"],"sourcesContent":["import * as runtimeCore from '@module-federation/runtime-tools/runtime-core';\n\nimport type { ModuleFederationRuntimePlugin } from '@module-federation/runtime-tools/runtime-core';\ndeclare global {\n  var __VERSION__: string;\n  var _FEDERATION_RUNTIME_CORE: typeof runtimeCore;\n  var _FEDERATION_RUNTIME_CORE_FROM: {\n    version: string;\n    name: string;\n  };\n}\n\nfunction injectExternalRuntimeCorePlugin(): ModuleFederationRuntimePlugin {\n  return {\n    name: 'inject-external-runtime-core-plugin',\n    version: __VERSION__,\n    beforeInit(args) {\n      const globalRef = (\n        runtimeCore as typeof runtimeCore & {\n          Global?: typeof runtimeCore.Global;\n        }\n      ).Global;\n      if (!globalRef || typeof globalRef !== 'object') {\n        return args;\n      }\n      const name = args.options.name;\n      const version = __VERSION__;\n      if (\n        globalRef._FEDERATION_RUNTIME_CORE &&\n        globalRef._FEDERATION_RUNTIME_CORE_FROM &&\n        (globalRef._FEDERATION_RUNTIME_CORE_FROM.name !== name ||\n          globalRef._FEDERATION_RUNTIME_CORE_FROM.version !== version)\n      ) {\n        console.warn(\n          `Detect multiple module federation runtime! Injected runtime from ${globalRef._FEDERATION_RUNTIME_CORE_FROM.name}@${globalRef._FEDERATION_RUNTIME_CORE_FROM.version} and current is ${name}@${version}, pleasure ensure there is only one consumer to provider runtime!`,\n        );\n        return args;\n      }\n      globalRef._FEDERATION_RUNTIME_CORE = runtimeCore;\n      globalRef._FEDERATION_RUNTIME_CORE_FROM = {\n        version,\n        name,\n      };\n      return args;\n    },\n  };\n}\n\nexport default injectExternalRuntimeCorePlugin;\n"],"mappings":";;;AAYA,SAAS,kCAAiE;AACxE,QAAO;EACL,MAAM;EACN;EACA,WAAW,MAAM;GACf,MAAM,YACJ,YAGA;AACF,OAAI,CAAC,aAAa,OAAO,cAAc,SACrC,QAAO;GAET,MAAM,OAAO,KAAK,QAAQ;GAC1B,MAAM;AACN,OACE,UAAU,4BACV,UAAU,kCACT,UAAU,8BAA8B,SAAS,QAChD,UAAU,8BAA8B,YAAY,UACtD;AACA,YAAQ,KACN,oEAAoE,UAAU,8BAA8B,KAAK,GAAG,UAAU,8BAA8B,QAAQ,kBAAkB,KAAK,GAAG,QAAQ,mEACvM;AACD,WAAO;;AAET,aAAU,2BAA2B;AACrC,aAAU,gCAAgC;IACxC;IACA;IACD;AACD,UAAO;;EAEV"}
+\ No newline at end of file
+diff --git a/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/package.json b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/package.json
+new file mode 100644
+--- /dev/null
++++ b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/package.json
+@@ -0,0 +1 @@
++{"private":true,"type":"module","main":"./dist/index.cjs"}
+diff --git a/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/src/index.ts b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/src/index.ts
+new file mode 100644
+--- /dev/null
++++ b/dist/src/lib/container/runtime-plugins/inject-external-runtime-core-plugin/src/index.ts
+@@ -0,0 +1,49 @@
++import * as runtimeCore from '@module-federation/runtime-tools/runtime-core';
++
++import type { ModuleFederationRuntimePlugin } from '@module-federation/runtime-tools/runtime-core';
++declare global {
++  var __VERSION__: string;
++  var _FEDERATION_RUNTIME_CORE: typeof runtimeCore;
++  var _FEDERATION_RUNTIME_CORE_FROM: {
++    version: string;
++    name: string;
++  };
++}
++
++function injectExternalRuntimeCorePlugin(): ModuleFederationRuntimePlugin {
++  return {
++    name: 'inject-external-runtime-core-plugin',
++    version: __VERSION__,
++    beforeInit(args) {
++      const globalRef = (
++        runtimeCore as typeof runtimeCore & {
++          Global?: typeof runtimeCore.Global;
++        }
++      ).Global;
++      if (!globalRef || typeof globalRef !== 'object') {
++        return args;
++      }
++      const name = args.options.name;
++      const version = __VERSION__;
++      if (
++        globalRef._FEDERATION_RUNTIME_CORE &&
++        globalRef._FEDERATION_RUNTIME_CORE_FROM &&
++        (globalRef._FEDERATION_RUNTIME_CORE_FROM.name !== name ||
++          globalRef._FEDERATION_RUNTIME_CORE_FROM.version !== version)
++      ) {
++        console.warn(
++          `Detect multiple module federation runtime! Injected runtime from ${globalRef._FEDERATION_RUNTIME_CORE_FROM.name}@${globalRef._FEDERATION_RUNTIME_CORE_FROM.version} and current is ${name}@${version}, pleasure ensure there is only one consumer to provider runtime!`,
++        );
++        return args;
++      }
++      globalRef._FEDERATION_RUNTIME_CORE = runtimeCore;
++      globalRef._FEDERATION_RUNTIME_CORE_FROM = {
++        version,
++        name,
++      };
++      return args;
++    },
++  };
++}
++
++export default injectExternalRuntimeCorePlugin;
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -88,7 +88,6 @@
+     "@module-federation/webpack-bundler-runtime": "2.9.3",
+     "@module-federation/bridge-react-webpack-plugin": "2.9.3",
+     "@module-federation/dts-plugin": "2.9.3",
+-    "@module-federation/inject-external-runtime-core-plugin": "2.9.3",
+     "@module-federation/error-codes": "2.9.3",
+     "@module-federation/managers": "2.9.3",
+     "@module-federation/manifest": "2.9.3",
+diff --git a/src/lib/container/ModuleFederationPlugin.ts b/src/lib/container/ModuleFederationPlugin.ts
+new file mode 100644
+--- /dev/null
++++ b/src/lib/container/ModuleFederationPlugin.ts
+@@ -0,0 +1,297 @@
++/*
++  MIT License http://www.opensource.org/licenses/mit-license.php
++  Author Tobias Koppers @sokra and Zackary Jackson @ScriptedAlchemy
++*/
++
++'use strict';
++import { DtsPlugin } from '@module-federation/dts-plugin';
++import { ContainerManager, utils } from '@module-federation/managers';
++import { StatsPlugin } from '@module-federation/manifest';
++import {
++  bindLoggerToCompiler,
++  composeKeyWithSeparator,
++  type moduleFederationPlugin,
++  infrastructureLogger,
++} from '@module-federation/sdk';
++import { normalizeWebpackPath } from '@module-federation/sdk/normalize-webpack-path';
++import type { Compiler, WebpackPluginInstance } from 'webpack';
++import fs from 'node:fs';
++import path from 'node:path';
++import SharePlugin from '../sharing/SharePlugin';
++import ContainerPlugin from './ContainerPlugin';
++import ContainerReferencePlugin from './ContainerReferencePlugin';
++import FederationRuntimePlugin from './runtime/FederationRuntimePlugin';
++import { RemoteEntryPlugin } from '@module-federation/rspack/remote-entry-plugin';
++import StartupChunkDependenciesPlugin from '../startup/MfStartupChunkDependenciesPlugin';
++import FederationModulesPlugin from './runtime/FederationModulesPlugin';
++import { createSchemaValidation } from '../../utils';
++import TreeShakingSharedPlugin from '../sharing/tree-shaking/TreeShakingSharedPlugin';
++
++const isValidExternalsType = require(
++  normalizeWebpackPath(
++    'webpack/schemas/plugins/container/ExternalsType.check.js',
++  ),
++) as typeof import('webpack/schemas/plugins/container/ExternalsType.check.js');
++
++const { ExternalsPlugin } = require(
++  normalizeWebpackPath('webpack'),
++) as typeof import('webpack');
++
++const validate = createSchemaValidation(
++  //eslint-disable-next-line
++  require('../../schemas/container/ModuleFederationPlugin.check.js').validate,
++  () => require('../../schemas/container/ModuleFederationPlugin').default,
++  {
++    name: 'Module Federation Plugin',
++    baseDataPath: 'options',
++  },
++);
++
++function hasExposes(
++  exposes: moduleFederationPlugin.ModuleFederationPluginOptions['exposes'],
++): boolean {
++  return Boolean(
++    exposes &&
++    (Array.isArray(exposes)
++      ? exposes.length > 0
++      : Object.keys(exposes).length > 0),
++  );
++}
++
++function getEnhancedPackageVersion(): string {
++  let currentDir = __dirname;
++
++  while (true) {
++    const packageJsonPath = path.join(currentDir, 'package.json');
++
++    if (fs.existsSync(packageJsonPath)) {
++      const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as {
++        name?: string;
++        version?: string;
++      };
++
++      if (pkg.name === '@module-federation/enhanced' && pkg.version) {
++        return pkg.version;
++      }
++    }
++
++    const parentDir = path.dirname(currentDir);
++    if (parentDir === currentDir) {
++      break;
++    }
++    currentDir = parentDir;
++  }
++
++  throw new Error('Unable to resolve @module-federation/enhanced package.json');
++}
++
++class ModuleFederationPlugin implements WebpackPluginInstance {
++  private _options: moduleFederationPlugin.ModuleFederationPluginOptions;
++  private _statsPlugin?: StatsPlugin;
++  /**
++   * @param {moduleFederationPlugin.ModuleFederationPluginOptions} options options
++   */
++  constructor(options: moduleFederationPlugin.ModuleFederationPluginOptions) {
++    validate(options);
++    this._options = options;
++  }
++
++  private _patchBundlerConfig(compiler: Compiler): void {
++    const { name, experiments, exposes } = this._options;
++    const definePluginOptions: Record<string, string | boolean> = {};
++
++    const MFPluginNum = compiler.options.plugins.filter(
++      (p): p is WebpackPluginInstance =>
++        !!p && (p as any).name === 'ModuleFederationPlugin',
++    ).length;
++
++    if (name && MFPluginNum < 2) {
++      definePluginOptions['FEDERATION_BUILD_IDENTIFIER'] = JSON.stringify(
++        composeKeyWithSeparator(name, utils.getBuildVersion()),
++      );
++    }
++
++    const disableSnapshot = experiments?.optimization?.disableSnapshot ?? false;
++    definePluginOptions['FEDERATION_OPTIMIZE_NO_SNAPSHOT_PLUGIN'] =
++      disableSnapshot;
++    definePluginOptions['FEDERATION_OPTIMIZE_NO_REMOTE'] =
++      experiments?.optimization?.disableRemote ?? false;
++    definePluginOptions['FEDERATION_OPTIMIZE_NO_SHARED'] =
++      experiments?.optimization?.disableShared ?? false;
++    definePluginOptions['FEDERATION_HAS_EXPOSES'] =
++      hasExposes(exposes) ||
++      compiler.options.plugins.some((plugin) => {
++        if (!plugin || typeof plugin !== 'object') {
++          return false;
++        }
++
++        const namedPlugin = plugin as WebpackPluginInstance & {
++          name?: string;
++          _options?: moduleFederationPlugin.ModuleFederationPluginOptions;
++        };
++        if (namedPlugin.name !== 'ModuleFederationPlugin') {
++          return false;
++        }
++
++        return hasExposes(namedPlugin._options?.exposes);
++      });
++
++    // Determine ENV_TARGET: only if manually specified in experiments.optimization.target
++    if (
++      experiments?.optimization &&
++      typeof experiments.optimization === 'object' &&
++      experiments.optimization !== null &&
++      'target' in experiments.optimization
++    ) {
++      const manualTarget = experiments.optimization.target as
++        | 'web'
++        | 'node'
++        | undefined;
++      // Ensure the target is one of the expected values before setting
++      if (manualTarget === 'web' || manualTarget === 'node') {
++        definePluginOptions['ENV_TARGET'] = JSON.stringify(manualTarget);
++      }
++    }
++    // No inference for ENV_TARGET. If not manually set and valid, it's not defined.
++
++    new compiler.webpack.DefinePlugin(definePluginOptions).apply(compiler);
++  }
++
++  /**
++   * Apply the plugin
++   * @param {Compiler} compiler the compiler instance
++   * @returns {void}
++   */
++  apply(compiler: Compiler): void {
++    bindLoggerToCompiler(
++      infrastructureLogger,
++      compiler,
++      'EnhancedModuleFederationPlugin',
++    );
++    const { _options: options } = this;
++    const { name, experiments, dts, remotes, shared, shareScope } = options;
++    if (!name) {
++      throw new Error('ModuleFederationPlugin name is required');
++    }
++    // must before ModuleFederationPlugin
++    (new RemoteEntryPlugin(options) as unknown as WebpackPluginInstance).apply(
++      compiler,
++    );
++    const useContainerPlugin = hasExposes(options.exposes);
++
++    if (experiments?.provideExternalRuntime) {
++      if (useContainerPlugin) {
++        throw new Error(
++          'You can only set provideExternalRuntime: true in pure consumer which not expose modules.',
++        );
++      }
++      const runtimePlugins = options.runtimePlugins || [];
++      options.runtimePlugins = runtimePlugins.concat(
++        require.resolve('./runtime-plugins/inject-external-runtime-core-plugin'),
++      );
++    }
++
++    if (experiments?.externalRuntime === true) {
++      const Externals = compiler.webpack.ExternalsPlugin || ExternalsPlugin;
++      new Externals(compiler.options.externalsType || 'global', {
++        '@module-federation/runtime-core': '_FEDERATION_RUNTIME_CORE',
++      }).apply(compiler);
++    }
++
++    // federation hooks
++    new FederationModulesPlugin().apply(compiler);
++
++    if (experiments?.asyncStartup) {
++      new StartupChunkDependenciesPlugin({
++        asyncChunkLoading: true,
++      }).apply(compiler);
++    }
++
++    if (dts !== false) {
++      const dtsPlugin = new DtsPlugin(options);
++      dtsPlugin.apply(compiler);
++      dtsPlugin.addRuntimePlugins();
++    }
++    new FederationRuntimePlugin(options).apply(compiler);
++
++    const library = options.library || { type: 'var', name: name };
++    const remoteType =
++      options.remoteType ||
++      (options.library && isValidExternalsType(options.library.type)
++        ? (options.library.type as moduleFederationPlugin.ExternalsType)
++        : ('script' as moduleFederationPlugin.ExternalsType));
++    const containerRemoteType =
++      remoteType as moduleFederationPlugin.ExternalsType;
++
++    let disableManifest = options.manifest === false;
++    if (useContainerPlugin) {
++      ContainerPlugin.patchChunkSplit(compiler, name);
++    }
++    this._patchBundlerConfig(compiler);
++    if (!disableManifest && useContainerPlugin) {
++      try {
++        const containerManager = new ContainerManager();
++        containerManager.init(options);
++        options.exposes = containerManager.containerPluginExposesOptions;
++      } catch (err) {
++        if (err instanceof Error) {
++          err.message = `[ ModuleFederationPlugin ]: Manifest will not generate, because: ${err.message}`;
++        }
++        infrastructureLogger.warn(err);
++        disableManifest = true;
++      }
++    }
++
++    if (
++      library &&
++      !compiler.options.output.enabledLibraryTypes?.includes(library.type)
++    ) {
++      compiler.options.output.enabledLibraryTypes?.push(library.type);
++    }
++
++    compiler.hooks.afterPlugins.tap('ModuleFederationPlugin', () => {
++      if (useContainerPlugin) {
++        new ContainerPlugin({
++          name,
++          library,
++          filename: options.filename,
++          runtime: options.runtime,
++          shareScope: options.shareScope,
++          exposes: options.exposes!,
++          runtimePlugins: options.runtimePlugins,
++        }).apply(compiler);
++      }
++      if (
++        remotes &&
++        (Array.isArray(remotes)
++          ? remotes.length > 0
++          : Object.keys(remotes).length > 0)
++      ) {
++        new ContainerReferencePlugin({
++          remoteType: containerRemoteType,
++          shareScope,
++          remotes,
++        }).apply(compiler);
++      }
++      if (shared) {
++        new TreeShakingSharedPlugin({
++          mfConfig: options,
++        }).apply(compiler);
++        new SharePlugin({
++          shared,
++          shareScope,
++        }).apply(compiler);
++      }
++    });
++
++    if (!disableManifest) {
++      this._statsPlugin = new StatsPlugin(options, {
++        pluginVersion: getEnhancedPackageVersion(),
++        bundler: 'webpack',
++      });
++      this._statsPlugin.apply(compiler);
++    }
++  }
++}
++
++export default ModuleFederationPlugin;

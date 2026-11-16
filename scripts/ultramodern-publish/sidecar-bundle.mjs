@@ -2,7 +2,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import inventory from '../../packages/toolkit/ultramodern-create/src/ultramodern-workspace/patch-inventory.ts';
 import {
   isTrustedPublishRepository,
   isTrustedPublishRepositoryContext,
@@ -26,6 +25,7 @@ import { validateAliasConsistency } from './lib/prepare-bleedingdev-packages/sid
 import {
   assertSidecarProfileDependencies,
   sidecarProfile,
+  sidecarProfileRecipes,
 } from './sidecar-profiles.mjs';
 
 export const sidecarBundleFile = 'sidecar-bundle.json';
@@ -99,29 +99,16 @@ export function resolveSidecarOutput(value) {
 }
 
 export function readSidecarBundleInputs(profile = 'parser') {
-  const recipes = JSON.parse(
-    fs.readFileSync(
-      new URL('../ultramodern-supply/sidecars.json', import.meta.url),
-      'utf8',
-    ),
-  );
-  const inputs = sidecarProfile(profile).recipeIds.map(id => {
-    const matches = recipes.filter(recipe => recipe.id === id);
-    if (matches.length !== 1)
-      throw new Error(`Expected exactly one reviewed sidecar recipe ${id}`);
-    const [recipe] = matches;
+  const inputs = sidecarProfileRecipes(profile).map(recipe => {
+    const { id } = recipe;
     let patch = null;
     if (recipe.patch) {
-      const rows = inventory.filter(
-        row => `${row.packageName}@${row.version}` === recipe.patch.inventory,
+      const digest = sha256(
+        readRegularFile(path.join(repoRoot, recipe.patch.path)),
       );
-      if (rows.length !== 1)
-        throw new Error(`Missing canonical patch inventory for ${id}`);
-      const [row] = rows;
-      const digest = sha256(readRegularFile(path.join(repoRoot, row.path)));
-      if (digest !== row.sha256)
-        throw new Error(`Canonical patch hash drift for ${id}`);
-      patch = { path: row.path, sha256: digest };
+      if (digest !== recipe.patch.sha256)
+        throw new Error(`Canonical candidate patch hash drift for ${id}`);
+      patch = { path: recipe.patch.path, sha256: digest };
     }
     return {
       id,

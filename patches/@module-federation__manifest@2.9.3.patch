@@ -1,0 +1,77 @@
+diff --git a/dist/utils.js b/dist/utils.js
+--- a/dist/utils.js
++++ b/dist/utils.js
+@@ -71,15 +71,12 @@
+ var external_path_default = /*#__PURE__*/__webpack_require__.n(external_path_namespaceObject);
+ ;// CONCATENATED MODULE: external "@module-federation/sdk"
+ const sdk_namespaceObject = require("@module-federation/sdk");
+-;// CONCATENATED MODULE: external "@module-federation/dts-plugin/core"
+-const core_namespaceObject = require("@module-federation/dts-plugin/core");
+ ;// CONCATENATED MODULE: external "./constants.js"
+ const external_constants_js_namespaceObject = require("./constants.js");
+ ;// CONCATENATED MODULE: external "./logger.js"
+ const external_logger_js_namespaceObject = require("./logger.js");
+ var external_logger_js_default = /*#__PURE__*/__webpack_require__.n(external_logger_js_namespaceObject);
+ ;// CONCATENATED MODULE: ./src/utils.ts
+-
+ 
+ 
+ 
+@@ -251,8 +248,15 @@
+         zip: '',
+         api: ''
+     };
++    if (pluginOptions.dts === false) {
++        return defaultTypesMetaInfo;
++    }
+     try {
+-        const normalizedDtsOptions = (0,sdk_namespaceObject.normalizeOptions)((0,core_namespaceObject.isTSProject)(pluginOptions.dts, context), {
++        // Load the DTS core lazily so builds with `dts: false` never pull in
++        // dts-plugin (and its TypeScript toolchain). `__non_webpack_require__`
++        // keeps the ESM build from hoisting this into a static import.
++        const { isTSProject, retrieveTypesAssetsInfo } = (typeof require === 'function' ? require : require)('@module-federation/dts-plugin/core');
++        const normalizedDtsOptions = (0,sdk_namespaceObject.normalizeOptions)(isTSProject(pluginOptions.dts, context), {
+             generateTypes: defaultRemoteOptions,
+             consumeTypes: {}
+         }, 'mfOptions.dts')(pluginOptions.dts);
+@@ -263,7 +267,7 @@
+         if (normalizedRemote === false) {
+             return defaultTypesMetaInfo;
+         }
+-        const { apiFileName, zipName } = (0,core_namespaceObject.retrieveTypesAssetsInfo)({
++        const { apiFileName, zipName } = retrieveTypesAssetsInfo({
+             ...normalizedRemote,
+             context,
+             moduleFederationConfig: pluginOptions
+diff --git a/dist/utils.mjs b/dist/utils.mjs
+--- a/dist/utils.mjs
++++ b/dist/utils.mjs
+@@ -1,11 +1,10 @@
+ import path from "path";
+ import { normalizeOptions } from "@module-federation/sdk";
+-import { isTSProject, retrieveTypesAssetsInfo } from "@module-federation/dts-plugin/core";
+ import { HOT_UPDATE_SUFFIX, PLUGIN_IDENTIFIER } from "./constants.mjs";
+ import logger from "./logger.mjs";
+ 
+-
+-
++import { createRequire as __rspack_createRequire } from "node:module";
++const __rspack_createRequire_require = __rspack_createRequire(import.meta.url);
+ 
+ 
+ 
+@@ -181,7 +180,14 @@
+         zip: '',
+         api: ''
+     };
++    if (pluginOptions.dts === false) {
++        return defaultTypesMetaInfo;
++    }
+     try {
++        // Load the DTS core lazily so builds with `dts: false` never pull in
++        // dts-plugin (and its TypeScript toolchain). `__non_webpack_require__`
++        // keeps the ESM build from hoisting this into a static import.
++        const { isTSProject, retrieveTypesAssetsInfo } = (typeof __rspack_createRequire_require === 'function' ? __rspack_createRequire_require : require)('@module-federation/dts-plugin/core');
+         const normalizedDtsOptions = normalizeOptions(isTSProject(pluginOptions.dts, context), {
+             generateTypes: defaultRemoteOptions,
+             consumeTypes: {}
