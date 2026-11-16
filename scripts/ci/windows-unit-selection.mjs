@@ -12,7 +12,16 @@ export const generatorFiles = [
 // was 255 s and ordinary lanes reached 219 s. Split the generator pair and
 // spread ordinary work across eight runners; keep one file worker because
 // these files launch nested compilers and package installs.
-export const windowsOrdinaryLanes = ['1/8', '2/8', '3/8', '4/8', '5/8', '6/8', '7/8', '8/8'];
+export const windowsOrdinaryLanes = [
+  '1/8',
+  '2/8',
+  '3/8',
+  '4/8',
+  '5/8',
+  '6/8',
+  '7/8',
+  '8/8',
+];
 export const windowsGeneratorLanes = ['generator-shell', 'generator-workspace'];
 export const windowsLanes = [...windowsOrdinaryLanes, ...windowsGeneratorLanes];
 
@@ -262,7 +271,9 @@ export function selectWindowsUnitFiles(root, baseline, lane) {
   }
   if (windowsGeneratorLanes.includes(lane)) {
     const file = generatorFiles[windowsGeneratorLanes.indexOf(lane)];
-    return baseline.filter(entry => relativeFile(root, entry.testPath) === file);
+    return baseline.filter(
+      entry => relativeFile(root, entry.testPath) === file,
+    );
   }
   return assignWindowsOrdinaryLanes(
     root,

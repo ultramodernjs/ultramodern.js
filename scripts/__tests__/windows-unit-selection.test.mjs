@@ -10,9 +10,9 @@ import {
   generatorFiles,
   selectWindowsUnitFiles,
   windowsFileSeconds,
+  windowsGeneratorLanes,
   windowsLaneSeconds,
   windowsLanes,
-  windowsGeneratorLanes,
   windowsOrdinaryLanes,
   windowsUnitConfig,
   windowsUnitTimings,
@@ -74,7 +74,9 @@ test('only the exact measured files leave the ordinary lanes', t => {
   };
   const all = [...baseline, similar];
   assert.deepEqual(
-    windowsGeneratorLanes.flatMap(lane => selectWindowsUnitFiles(root, all, lane)),
+    windowsGeneratorLanes.flatMap(lane =>
+      selectWindowsUnitFiles(root, all, lane),
+    ),
     baseline.slice(0, 2),
   );
   const ordinary = windowsOrdinaryLanes.flatMap(lane =>
@@ -82,7 +84,8 @@ test('only the exact measured files leave the ordinary lanes', t => {
   );
   assert.deepEqual(new Set(ordinary), new Set([...baseline.slice(2), similar]));
   assert.throws(
-    () => selectWindowsUnitFiles(root, baseline.slice(1), windowsGeneratorLanes[0]),
+    () =>
+      selectWindowsUnitFiles(root, baseline.slice(1), windowsGeneratorLanes[0]),
     /missing/u,
   );
   assert.throws(
@@ -95,7 +98,9 @@ test('each generator has a dedicated lane', t => {
   const { root, baseline } = fixture(t);
   assert.equal(windowsGeneratorLanes.length, generatorFiles.length);
   for (const [index, lane] of windowsGeneratorLanes.entries()) {
-    assert.deepEqual(selectWindowsUnitFiles(root, baseline, lane), [baseline[index]]);
+    assert.deepEqual(selectWindowsUnitFiles(root, baseline, lane), [
+      baseline[index],
+    ]);
   }
 });
 
@@ -253,7 +258,12 @@ test('native nested project options and extension objects survive every lane', a
     assert.deepEqual(
       new Set(extras),
       new Set(
-        baseline.filter(entry => !selectWindowsUnitFiles(root, baseline, lane).includes(entry)).map(file => file.testPath.split(path.sep).join('/')),
+        baseline
+          .filter(
+            entry =>
+              !selectWindowsUnitFiles(root, baseline, lane).includes(entry),
+          )
+          .map(file => file.testPath.split(path.sep).join('/')),
       ),
     );
   }
@@ -367,7 +377,7 @@ test('the Windows unit matrix dispatches exactly these lanes', () => {
   assert.deepEqual(
     dispatched.map(lane => lane.trim().replace(/^'|'$/gu, '')),
     windowsLanes,
-  windowsGeneratorLanes,
+    windowsGeneratorLanes,
   );
   assert.ok(
     workflow.includes(`if: matrix.lane == '${firstLane}'`),

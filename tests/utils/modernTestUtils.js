@@ -34,7 +34,6 @@ const kTestPortStatePath = path.join(
 const kTestPortRangeStart = 20_000;
 const kTestPortRangeEnd = 59_999;
 
-
 function resolvePortAllocatorLockDir(packageDir) {
   const digest = crypto
     .createHash('sha1')
@@ -867,7 +866,6 @@ async function getPort() {
     await releaseLock();
   }
 }
-
 
 function sleep(t) {
   return new Promise(resolve => setTimeout(resolve, t));

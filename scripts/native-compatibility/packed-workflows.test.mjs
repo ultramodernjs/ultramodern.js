@@ -19,6 +19,19 @@ const workflow = readWorkflow('native-compatibility');
 // that stayed.
 const required = ['native-framework-contracts', 'pack-candidate'];
 
+test('publication tooling qualifies inside the release gate, not only in a separate push run', () => {
+  const { jobs } = readWorkflow('publish-bleedingdev');
+  const tooling = jobs['qualify-source-compute'].steps.find(
+    step => step.name === 'Qualify the release publication tooling',
+  );
+  assert.equal(tooling.if, undefined);
+  assert.equal(tooling['continue-on-error'], undefined);
+  assert.match(tooling.run, /mise exec -- pnpm run test:publish-tooling/u);
+  assert.ok(jobs['qualify-source'].needs.includes('qualify-source-compute'));
+  for (const job of ['publish', 'publish-sidecars', 'validate-release'])
+    assert.ok(jobs[job].needs.includes('qualify-source'));
+});
+
 test('required native compatibility rejects every unsuccessful or missing consumer lane', () => {
   const aggregate = workflow.jobs['native-compatibility'];
   assert.equal(aggregate.name, 'native-compatibility');
