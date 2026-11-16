@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     permissions:
       contents: read
     steps:
@@ -56,7 +56,7 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     permissions:
       pages: write
       id-token: write

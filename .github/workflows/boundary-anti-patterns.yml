@@ -33,7 +33,7 @@ jobs:
   boundary-anti-pattern-checks:
     # External-fork PR code receives the complete validation job on a hosted
     # runner selected by this trusted base-branch workflow.
-    runs-on: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.DEPOT_LINUX_RUNNER || fromJSON(vars.SELF_LINUX_LABELS || '"ubuntu-latest"') }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
