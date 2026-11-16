@@ -72,22 +72,20 @@ test('compiler matrix uses four Depot builds without Intel Mac or Ubuntu 22.04',
       rust_target: 'aarch64-apple-darwin',
       runner: expression("vars.DEPOT_MACOS_RUNNER || 'depot-macos-26'"),
     },
-    // The Rust legs take 16 cores and literal labels: a repository variable
-    // must not be able to move the shipped glibc baseline or the cache key.
     {
       target: 'linux-x64',
       rust_target: 'x86_64-unknown-linux-gnu',
-      runner: 'depot-ubuntu-24.04-16',
+      runner: 'depot-ubuntu-24.04-8',
     },
     {
       target: 'linux-arm64',
       rust_target: 'aarch64-unknown-linux-gnu',
-      runner: 'depot-ubuntu-24.04-arm-16',
+      runner: 'depot-ubuntu-24.04-arm-8',
     },
     {
       target: 'win32-x64',
       rust_target: 'x86_64-pc-windows-msvc',
-      runner: 'depot-windows-2025-16',
+      runner: expression("vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8'"),
     },
   ]);
   const source = JSON.parse(
