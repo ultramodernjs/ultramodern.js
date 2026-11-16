@@ -2,7 +2,7 @@
 """Measure GitHub trigger-to-last-required-check time, including runner queues.
 
 Requires an authenticated gh CLI, not a token argument. No CI work runs locally.
-Example: python3 scripts/ci/measure-run-set.py --sha HEAD_SHA --attempt 2
+Example: python3 .github/workflows/scripts/measure-run-set.py --sha HEAD_SHA --attempt 2
 Use --event push for the main-branch run set, or --history 20 for Mac queues.
 """
 
