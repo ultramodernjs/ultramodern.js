@@ -116,10 +116,21 @@ above. Trial availability does not establish that sponsored billing is disabled.
    build caches. Call this "project-cache cold": provider image caches may remain
    warm. For warm runs, seed both providers at the frozen commit and verify hits
    in the logs for every cache used, including prepared-build validation. A fast
-   run alone does not prove a hit. The current cache seed writes only from
-   `main-ultramodern`; use it when that branch contains the frozen commit, without
-   pretending a feature branch is the default branch. Use `mixed` or `unknown`
-   when evidence is missing.
+   run alone does not prove a hit. Which ref may write an entry differs by
+   cache, and the difference is deliberate: `ci-cache.yml`'s `seed` leg writes
+   only from `main-ultramodern`, because every key it owns already exists there
+   and a branch copy would park a duplicate ~1 GB per branch. The Effect
+   compiler payload and the linked Windows dependency tree also write from a
+   branch ref, because a branch is where a new cache lever is introduced and
+   GitHub lets a run read only its own ref and the default branch — a lever
+   gated on the default branch alone cannot be measured until after it merges.
+   Neither ever writes from a `pull_request` or `merge_group` ref, whose refs
+   are discarded after the run. A branch-ref warm run therefore models a
+   post-merge pull request faithfully, because in both cases the consuming run
+   restores the same key from a ref it is allowed to read; it is not the same
+   thing as pretending a feature branch is the default branch, and a
+   measurement that needs the default branch's own entries still waits for the
+   merge. Use `mixed` or `unknown` when evidence is missing.
 3. Collect at least five successful pairs per workload and cache condition.
    Alternate launch order between GitHub first and Depot first, keeping each pair
    close together. Avoid overlapping runs that the workflow's concurrency rule
