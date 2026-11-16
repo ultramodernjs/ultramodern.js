@@ -1,5 +1,5 @@
-name: Restore Windows dependencies
-description: Restore regular installed files, rebuild native junctions and restore pnpm verification before frozen install
+name: Restore installed dependencies
+description: Restore regular installed files, rebuild native links and restore pnpm verification before frozen install
 inputs:
   store-required:
     description: Fresh fixture installations need the pnpm store in addition to installed files
@@ -11,28 +11,26 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Identify Windows dependency snapshot
+    - name: Identify installed dependency snapshot
       id: identity
       shell: bash
-      run: node scripts/ci/windows-dependency-snapshot.mjs key
+      run: node scripts/ci/dependency-snapshot.mjs key
 
     # No NTFS reparse point crosses tar. The seed strips links into a relative
-    # manifest; restore recreates them through Node's native junction API.
-    - name: Restore installed Windows files
+    # manifest; restore creates junctions on Windows and symlinks on macOS.
+    - name: Restore installed files
       id: snapshot
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: .ci-windows-dependencies/snapshot
+        path: .ci-dependencies/snapshot
         key: ${{ steps.identity.outputs.key }}
 
-    - name: Rebuild native Windows dependency links
+    - name: Rebuild native dependency links
       if: steps.snapshot.outputs.cache-hit == 'true'
-      shell: pwsh
+      shell: bash
       run: |
-        node scripts/ci/windows-dependency-snapshot.mjs restore
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        node scripts/ci/dependency-snapshot.mjs restore
         node scripts/ultramodern-node-policy/check-node-version.mjs
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     # Generator/consumer tests install fresh applications. Keep their store
     # warm too; the installed-file snapshot replaces linking, not this store.

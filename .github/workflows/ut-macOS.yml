@@ -48,19 +48,12 @@ jobs:
           pnpm_version="$(pnpm --version)"
           node scripts/ci/check-test-toolchain.mjs "$pnpm_version"
 
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      # Restore only; ci-cache.yml seeds this key on main-ultramodern.
-      - name: Restore pnpm store cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Reuse installed native files, not the much larger content-addressed store.
+      # The unit fixtures that install packages use their own isolated stores.
+      - name: Restore installed dependencies
+        uses: ./.github/actions/installed-dependencies
         with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            pnpm-store-${{ runner.os }}-
+          store-required: 'false'
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
@@ -73,23 +66,19 @@ jobs:
         if: steps.build-cache.outputs.cache-hit != 'true'
         run: pnpm run build:required
 
-      # scripts/lib/browser-provisioning.js is the one browser provisioner: it
-      # reads the playwright the frozen install resolved for these runtimes,
-      # and that version keys the browser cache.
-      - name: Resolve Playwright runtime
-        id: browser-runtime
-        run: node scripts/lib/browser-provisioning.js --resolve --runtime tests/integration/rstest/basic-app-rstest-browser
+      # These projects run in Node or jsdom, never in a Playwright browser.
+      # Keep build outputs: public-bin and installed-declaration smokes use them.
+      - name: Verify installed dependency transport
+        run: node --test scripts/ci/__tests__/dependency-snapshot.test.mjs
 
-      - name: Restore Playwright browser cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.browser-runtime.outputs.cache_path }}
-          key: ${{ steps.browser-runtime.outputs.cache_key }}
-
-      - name: Install Playwright browsers
+      - name: Report unit test resources
         run: >-
-          node scripts/lib/browser-provisioning.js --install --runtime tests/integration/rstest/basic-app-rstest-browser
-          --version ${{ steps.browser-runtime.outputs.version }}
+          node --input-type=module --eval "import os from 'node:os';
+          console.log(JSON.stringify({platform:process.platform,
+          availableParallelism:os.availableParallelism(),cpuCount:os.cpus().length,
+          totalMemoryBytes:os.totalmem(),testFileWorkers:8}))"
 
       - name: Test
-        run: pnpm run test:ut:prepared --pool.maxWorkers=6
+        # macOS time includes user/system CPU for the full pnpm process tree.
+        # Compare their sum with elapsed seconds * eight, not elapsed alone.
+        run: /usr/bin/time -l pnpm run test:ut:prepared --pool.maxWorkers=8

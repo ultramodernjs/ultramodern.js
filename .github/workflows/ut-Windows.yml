@@ -59,7 +59,7 @@ jobs:
       # Junctions are rebuilt natively, never extracted from the archive.
       - name: Restore Windows dependencies
         id: dependencies
-        uses: ./.github/actions/windows-dependencies
+        uses: ./.github/actions/installed-dependencies
 
       - name: Install Dependencies
         # A fresh checkout changes patch mtimes even on an exact snapshot hit.
@@ -101,7 +101,7 @@ jobs:
         if: matrix.lane == '1/2'
         shell: pwsh
         run: |
-          node --test scripts/__tests__/windows-unit-selection.test.mjs scripts/ci/__tests__/windows-dependency-snapshot.test.mjs
+          node --test scripts/__tests__/windows-unit-selection.test.mjs scripts/ci/__tests__/dependency-snapshot.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/ci/windows-unit-selection.mjs --verify
 
