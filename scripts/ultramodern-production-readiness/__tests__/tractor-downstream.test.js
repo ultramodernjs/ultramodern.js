@@ -9,9 +9,24 @@ const { createProcessEnv, runCommand } = require('../../lib/process-kit');
 
 const cohortInstallPromise = import('../tractor-downstream/cohort-install.mjs');
 const runnerPromise = import('../tractor-downstream/main.mjs');
+const supportProtocolPromise = import(
+  '../../ultramodern-support-artifacts/protocol.mjs'
+);
+// The exact producer's support release: its descriptor, shipped inside the
+// packed create package, owns the OpenTelemetry artifact request.
+const supportProducer = {
+  repository: 'ultramodernjs/ultramodern.js',
+  repositoryId: 1151231350,
+  workflow: '.github/workflows/support-artifacts.yml',
+  source: 'd'.repeat(40),
+  runId: 43934193068,
+  runAttempt: 2,
+  tag: `support-artifacts-${'d'.repeat(40)}-43934193068-2`,
+};
+const supportReleaseUrl = `https://github.com/ultramodernjs/ultramodern.js/releases/download/${supportProducer.tag}/`;
 const producerEffectDependencies = {
-  effect: '4.0.0',
-  '@effect/opentelemetry': '4.0.0',
+  effect: '4.1.4',
+  '@effect/opentelemetry': `${supportReleaseUrl}effect-opentelemetry-4.1.4.tgz`,
   '@effect/tsgo': '0.69.0',
 };
 const producerReactDependencies = {
@@ -171,7 +186,35 @@ function writeAuthenticatedCohort(root) {
   );
 }
 
-async function writeCandidateCreatePackage(root, next, dependencies) {
+async function supportArtifactsDescriptor() {
+  const { inputs, supportProtocol } = await supportProtocolPromise;
+  return supportProtocol.descriptorFor({
+    protocol: supportProtocol.protocol,
+    producer: supportProducer,
+    packages: Object.fromEntries(
+      Object.entries(supportProtocol.cohort).map(([name, version]) => [
+        name,
+        {
+          version,
+          request: supportProtocol.releaseUrl(
+            supportProducer,
+            supportProtocol.assetFilename(name, version),
+          ),
+          integrity: `sha512-${Buffer.alloc(64, name.length).toString('base64')}`,
+          upstream: inputs[name].upstream,
+          patchSha256: 'e'.repeat(64),
+        },
+      ]),
+    ),
+  });
+}
+
+async function writeCandidateCreatePackage(
+  root,
+  next,
+  dependencies,
+  { supportArtifacts = true } = {},
+) {
   const { inspectNpmTarball } = await import(
     '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs'
   );
@@ -196,6 +239,13 @@ async function writeCandidateCreatePackage(root, next, dependencies) {
       version: next.release.version,
       publishConfig: { access: 'public' },
       dependencies,
+      ...(supportArtifacts
+        ? {
+            ultramodern: {
+              supportArtifacts: await supportArtifactsDescriptor(),
+            },
+          }
+        : {}),
     }),
   );
   const artifactPath = path.join(root, 'candidate.tgz');
@@ -1789,7 +1839,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
           'npm:@bleedingdev/mf-modern-js-v3@2.9.2',
         react: '19.3.0',
         'react-dom': '19.3.0',
-        effect: '4.0.0',
+        effect: producerEffectDependencies.effect,
         '@effect/opentelemetry': 'catalog:',
         '@modern-js/backend-federation-contracts': 'catalog:ultramodern',
       },
@@ -1804,7 +1854,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
     );
     for (const file of verticalManifests)
       assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).dependencies, {
-        effect: '4.0.0',
+        effect: producerEffectDependencies.effect,
         react: '19.3.0',
         'react-dom': '19.3.0',
         '@modern-js/backend-federation-contracts': 'catalog:ultramodern',
@@ -1884,7 +1934,22 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       undefined,
       {},
       { ...producerEffectDependencies, effect: '4.0.0-rc.117' },
-      { ...producerEffectDependencies, '@effect/opentelemetry': '4.0.1' },
+      { ...producerEffectDependencies, effect: '4.1.3' },
+      // The support artifact, never a registry version, is the admitted request.
+      { ...producerEffectDependencies, '@effect/opentelemetry': '4.1.4' },
+      {
+        ...producerEffectDependencies,
+        '@effect/opentelemetry': producerEffectDependencies[
+          '@effect/opentelemetry'
+        ].replace('ultramodernjs/ultramodern.js', 'attacker/fork'),
+      },
+      {
+        ...producerEffectDependencies,
+        '@effect/opentelemetry': producerEffectDependencies[
+          '@effect/opentelemetry'
+        ].replace('-43934193068-2/', '-43934193068-3/'),
+      },
+      { ...producerEffectDependencies, '@effect/tsgo': '0.68.0' },
       {
         ...producerEffectDependencies,
         '@effect/tsgo': 'npm:@bleedingdev/tsgo@0.53.1',
@@ -2042,6 +2107,25 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
     assert.throws(
       () => prepareTractorCohortInstallation(root, next, producerOptions),
       /absent from the release cohort/u,
+    );
+    assert.equal(
+      fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
+      beforeRejectedPolicy,
+    );
+    fs.writeFileSync(path.join(root, 'package.json'), beforeManifest);
+    await writeCandidateCreatePackage(
+      root,
+      next,
+      {
+        '@effect/tsgo': '0.69.0',
+        tsrs: '0.25.0-ts7.1.0-beta',
+        'unrelated-compiler': '9.9.9',
+      },
+      { supportArtifacts: false },
+    );
+    assert.throws(
+      () => prepareTractorCohortInstallation(root, next, producerOptions),
+      /valid support artifact descriptor/u,
     );
     assert.equal(
       fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),

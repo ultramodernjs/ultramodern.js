@@ -6,6 +6,7 @@ import {
   inspectNpmTarball,
   readVerifiedPackageArtifactBytes,
 } from '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs';
+import { supportProtocol } from '../../ultramodern-support-artifacts/protocol.mjs';
 import {
   compilerBootstrapSelectors,
   expectedReleaseCohort,
@@ -53,23 +54,47 @@ export function assertTractorReactDependencies(dependencies) {
   return dependencies;
 }
 
-export function assertTractorEffectDependencies(dependencies) {
-  if (
-    !dependencies ||
-    typeof dependencies !== 'object' ||
-    Object.keys(dependencies).length !== tractorEffectPackages.length ||
-    tractorEffectPackages.some(
-      name =>
-        typeof dependencies[name] !== 'string' ||
-        !/^\d+\.\d+\.\d+$/u.test(dependencies[name]),
-    ) ||
-    dependencies.effect !== dependencies['@effect/opentelemetry']
-  ) {
+// The authenticated packed producer owns these selections: its support
+// descriptor pins the OpenTelemetry artifact (and with it the paired Effect
+// release), and its exact bootstrap compiler selector pins @effect/tsgo. The
+// generated workspace must reproduce exactly that, never a value of its own.
+function admitTractorEffectDependencies(
+  dependencies,
+  compilerSelectors,
+  packedManifest,
+) {
+  const descriptor = packedManifest.ultramodern?.supportArtifacts;
+  try {
+    supportProtocol.validateDescriptor(descriptor);
+  } catch (cause) {
     throw new Error(
-      'Exact producer Effect dependencies must select native stable Effect, OpenTelemetry and compiler versions',
+      'Release create package must ship a valid support artifact descriptor for its Effect selection',
+      { cause },
     );
   }
-  return dependencies;
+  const telemetry = descriptor.packages['@effect/opentelemetry'];
+  const compilerPrefix = '@effect/tsgo@';
+  const compiler = compilerSelectors.filter(selector =>
+    selector.startsWith(compilerPrefix),
+  );
+  const admitted = {
+    effect: telemetry.version,
+    '@effect/opentelemetry': telemetry.request,
+    '@effect/tsgo':
+      compiler.length === 1
+        ? compiler[0].slice(compilerPrefix.length)
+        : undefined,
+  };
+  if (
+    !/^\d+\.\d+\.\d+$/u.test(admitted.effect) ||
+    !/^\d+\.\d+\.\d+$/u.test(admitted['@effect/tsgo'] ?? '') ||
+    !isDeepStrictEqual(dependencies, admitted)
+  ) {
+    throw new Error(
+      'Exact producer Effect dependencies must select native stable Effect, the authenticated support-descriptor OpenTelemetry artifact and the packed producer compiler version',
+    );
+  }
+  return admitted;
 }
 
 /** Select the exact supplied bundle through the consumer's native pnpm catalog. */
@@ -86,14 +111,9 @@ export function prepareTractorCohortInstallation(
     producerReactDependencies,
   } = {},
 ) {
-  const effectDependencies = assertTractorEffectDependencies(
-    producerEffectDependencies,
-  );
   const reactDependencies = assertTractorReactDependencies(
     producerReactDependencies,
   );
-  const nativeDependencies = { ...effectDependencies, ...reactDependencies };
-  const nativePackages = [...tractorEffectPackages, ...tractorReactPackages];
   const cohort = expectedReleaseCohort(release);
   const version = release.release.version;
   const create = release.createPackage;
@@ -142,6 +162,15 @@ export function prepareTractorCohortInstallation(
     'Producer pnpm minimumReleaseAgeExclude',
   );
   const compilerSelectors = compilerBootstrapSelectors(packed.packageJson);
+  const nativeDependencies = {
+    ...admitTractorEffectDependencies(
+      producerEffectDependencies,
+      compilerSelectors,
+      packed.packageJson,
+    ),
+    ...reactDependencies,
+  };
+  const nativePackages = [...tractorEffectPackages, ...tractorReactPackages];
   const expectedExclusions = [
     ...cohort.targetNames.map(name => `${name}@${version}`),
     ...Array.from(
