@@ -2,6 +2,7 @@
 const assert = require('node:assert/strict');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { promisify } = require('node:util');
@@ -11,9 +12,8 @@ for (const profile of ['mf-cohort', 'tanstack-redact', 'parser']) {
   test(`${profile}: authenticated sidecars pass real packed strict installation and canonical API probes`, {
     timeout: 240_000,
   }, async t => {
-    assert.ok(process.env.OWNED_TEMP_DIR, 'Run with owned-temp-dir --run');
     const root = fs.mkdtempSync(
-      path.join(process.env.OWNED_TEMP_DIR, 'mf-cohort-proof-'),
+      path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'mf-cohort-proof-'),
     );
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     const {
