@@ -725,7 +725,12 @@ test('one propagation deadline bounds the tarball wait of a whole publish set', 
   }
 });
 
-test('the published cohort verifies every member against one shared deadline', async () => {
+test('the published cohort verifies every member against one shared deadline', async t => {
+  // validateRegistryCohort builds the real provenance expectation before it
+  // fans out, so this test must run in a release context: the environment of
+  // the pull-request job running this file names a repository the fixture
+  // manifest does not.
+  mockTrustedWorkflowEnvironment(t);
   const { validateRegistryCohort } = await import(
     '../prepare-bleedingdev-packages.mjs'
   );
