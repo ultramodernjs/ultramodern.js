@@ -44,8 +44,8 @@ jobs:
           cache_save: false
           install_args: node@26.13.1
 
-      - name: Install workflow parser and publication test dependencies
-        run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts --filter @scripts/prebundle --filter @scripts/ultramodern-production-readiness
+      - name: Install the workspace used by parser and publication commands
+        run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Generate workflow parser
         run: mise exec -- pnpm --filter @scripts/prebundle start js-yaml
