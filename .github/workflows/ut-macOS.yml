@@ -20,15 +20,12 @@ permissions:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  ut-mac-shards:
-    # Every job of this repository runs on Depot, so there is no GitHub-hosted
-    # macOS escape: a blocked Depot macOS pool blocks this required check
-    # instead of silently moving it to different hardware.
+  # Keep the required context on the tests themselves. One 8-core M4 runs the
+  # entire suite, installs dependencies once, and requests one scarce Mac slot.
+  # There is no upstream build job: prepared outputs are an optional cache.
+  ut-mac:
     runs-on: ${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
+    timeout-minutes: 15
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -95,21 +92,4 @@ jobs:
           --version ${{ steps.browser-runtime.outputs.version }}
 
       - name: Test
-        run: pnpm run test:ut:prepared --shard=${{ matrix.shard }}/3
-
-  # Keep the original check name and fail it if any shard fails or is cancelled.
-  ut-mac:
-    if: ${{ always() }}
-    needs: ut-mac-shards
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
-    timeout-minutes: 5
-    steps:
-      - name: Verify all unit test shards passed
-        shell: bash
-        env:
-          SHARD_RESULT: ${{ needs.ut-mac-shards.result }}
-        run: |
-          if [[ "$SHARD_RESULT" != "success" ]]; then
-            echo "::error::macOS unit test shards finished with $SHARD_RESULT"
-            exit 1
-          fi
+        run: pnpm run test:ut:prepared --pool.maxWorkers=6
