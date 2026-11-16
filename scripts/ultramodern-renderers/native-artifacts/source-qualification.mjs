@@ -148,7 +148,10 @@ export async function ownedQualification(
       // Owning suites predate portable CI; retain their install semantics but
       // never use their workstation-specific store paths or a per-worktree store.
       args = args.filter(
-        (arg, i) => arg !== '--store-dir' && args[i - 1] !== '--store-dir',
+        (arg, i) =>
+          arg !== '--store-dir' &&
+          args[i - 1] !== '--store-dir' &&
+          !arg.startsWith('--config.package-import-method='),
       );
       args = [
         ...args,
@@ -157,7 +160,21 @@ export async function ownedQualification(
         '--config.package-import-method=clone-or-copy',
       ];
     }
-    return execute(command, args, { cwd, env, stdio: 'inherit', ...options });
+    try {
+      return execute(command, args, { cwd, env, stdio: 'inherit', ...options });
+    } finally {
+      if (command === pnpmBinary && args[0] === 'install') {
+        // pnpm may replace an empty registered node_modules directory. Renew
+        // this operation's ownership against the actual resulting identity.
+        for (const directory of registered)
+          if (
+            directory.startsWith(`${cwd}${path.sep}`) &&
+            path.basename(directory) === 'node_modules' &&
+            fs.existsSync(directory)
+          )
+            register(directory, 'dependencies');
+      }
+    }
   };
   const disk = () => {
     let stats = fs.statfsSync(root);
@@ -179,7 +196,7 @@ export async function ownedQualification(
       'Only this qualification owns its outputs',
     );
     fs.mkdirSync(directory, { recursive: true });
-    if (process.platform === 'darwin' && !registered.has(directory)) {
+    if (process.platform === 'darwin') {
       run('/Users/satan/bin/disk-guardian-artifacts', [
         'register',
         directory,
@@ -532,6 +549,9 @@ export async function qualifyAdapterSource({
   fetchArtifact = fetch,
 }) {
   assertOwningLicense('@octanejs/tanstack-router', item.upstream.licenseSha256);
+  const { assertSharedCoreManifest, sharedCoreManifest } = await import(
+    '../octane-corrections/shared-core-peer.mjs'
+  );
   return ownedQualification(
     workDirectory,
     'adapter',
@@ -572,7 +592,12 @@ export async function qualifyAdapterSource({
         corrected,
         root,
       });
+      assertSharedCoreManifest(
+        JSON.parse(fs.readFileSync(path.join(actual, 'package.json'))),
+      );
       await qualifyAdapter({
+        packedDirectory,
+        assertSameLayout,
         work: root,
         sourceRoot,
         corrected: actual,
@@ -600,12 +625,9 @@ export async function qualifyAdapterSource({
       const emittedManifest = JSON.parse(
         fs.readFileSync(path.join(original, 'package.json')),
       );
-      Object.assign(emittedManifest.dependencies, {
-        '@tanstack/router-core': '1.171.39',
-        '@tanstack/history': '1.162.5',
-        '@tanstack/store': '0.11.2',
-      });
-      json(path.join(emitted, 'package.json'), emittedManifest);
+      const peerManifest = sharedCoreManifest(emittedManifest);
+      assertSharedCoreManifest(peerManifest);
+      json(path.join(emitted, 'package.json'), peerManifest);
       const actualBuiltPatch = builtPatch(original, emitted);
       assertPatch(item, actualBuiltPatch);
       return {

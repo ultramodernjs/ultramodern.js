@@ -49,7 +49,7 @@ test('completed recipes select actual reviewed router and adapter provenance and
   );
   assert.equal(
     packages['@octanejs/tanstack-router'].patchSha256,
-    'c82cc89c373d23b42b24cb9eb5d748940170b76895bd94139d538ceeebe6af9b',
+    'df6732ebcfc0af7cf274187c44596ac519abbc383ce30a796205b55c561bf688',
   );
   assert.equal(
     packages['@octanejs/tanstack-router'].upstream.commit,
@@ -77,7 +77,10 @@ test('completed recipes reject a changed canonical patch or provenance rather th
     );
   completedRecipes({ root: directory });
   fs.appendFileSync(
-    path.join(directory, 'patches/@octanejs__tanstack-router@0.3.4.patch'),
+    path.join(
+      directory,
+      'patches/@octanejs__tanstack-router@0.3.4.shared-core-peer.patch',
+    ),
     'tamper',
   );
   assert.throws(
@@ -734,4 +737,49 @@ test('Rspack adapter selects its own identity, license, expected patch and pnpm 
     ),
     /rspack-plugin: recipe differs/u,
   );
+});
+
+test('owning installs normalize clone-or-copy once and renew replaced dependency output identities', async t => {
+  const directory = root(t);
+  const calls = [];
+  await ownedQualification(
+    directory,
+    'install-policy',
+    ({ root: work, run, register }) => {
+      const dependencies = path.join(work, 'dependencies');
+      fs.mkdirSync(dependencies);
+      register(path.join(dependencies, 'node_modules'), 'dependencies');
+      run(
+        'pnpm',
+        [
+          'install',
+          '--store-dir',
+          '/foreign/store',
+          '--config.package-import-method=clone-or-copy',
+        ],
+        dependencies,
+      );
+    },
+    {
+      execute(command, args, options) {
+        calls.push({ command, args });
+        if (args[0] === '--version') return '11.21.0\n';
+        if (args[0] === 'install') {
+          assert.deepEqual(
+            args.filter(arg =>
+              arg.startsWith('--config.package-import-method='),
+            ),
+            ['--config.package-import-method=clone-or-copy'],
+          );
+          assert(!args.includes('/foreign/store'));
+          const modules = path.join(options.cwd, 'node_modules');
+          fs.rmSync(modules, { recursive: true });
+          fs.mkdirSync(modules);
+        }
+        return '';
+      },
+    },
+  );
+  if (process.platform === 'darwin')
+    assert.equal(calls.filter(call => call.args[0] === 'register').length, 2);
 });

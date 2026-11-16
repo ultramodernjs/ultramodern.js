@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { assetFilename } from '../native-artifacts/protocol.mjs';
+import { packFiles } from '../native-artifacts/reconstruct.mjs';
 import { cohort, references } from './inputs.mjs';
 
 export function installRouterRenderSnapshot({ here, sourcePackage }) {
@@ -27,6 +29,8 @@ export async function qualify({
   register,
   applyExactPatch,
   verifyIntegrity,
+  packedDirectory,
+  assertSameLayout,
 }) {
   const repository = path.resolve(here, '../../..');
   const corePatch = path.join(
@@ -56,6 +60,60 @@ export async function qualify({
     work,
   );
   applyExactPatch(core, corePatch);
+  const pack = directory =>
+    packFiles(
+      new Map(
+        fs
+          .readdirSync(directory, { recursive: true })
+          .filter(file => fs.lstatSync(path.join(directory, file)).isFile())
+          .map(file => [
+            file,
+            {
+              bytes: fs.readFileSync(path.join(directory, file)),
+              mode: fs.statSync(path.join(directory, file)).mode,
+            },
+          ]),
+      ),
+    );
+  let correctedCoreBytes = pack(core);
+  if (packedDirectory) {
+    correctedCoreBytes = fs.readFileSync(
+      path.join(
+        packedDirectory,
+        assetFilename('@tanstack/router-core', '1.171.39'),
+      ),
+    );
+    const transported = path.join(work, 'transported-core');
+    fs.mkdirSync(transported);
+    const archive = path.join(work, 'transported-core.tgz');
+    fs.writeFileSync(archive, correctedCoreBytes);
+    run(
+      'tar',
+      ['-xzf', archive, '--strip-components=1', '-C', transported],
+      work,
+    );
+    assertSameLayout(transported, core);
+  }
+  const adapterBytes = packedDirectory
+    ? fs.readFileSync(
+        path.join(
+          packedDirectory,
+          assetFilename('@octanejs/tanstack-router', '0.3.4'),
+        ),
+      )
+    : pack(corrected);
+  const { qualifySharedCorePeer } = await import(
+    './qualify-shared-core-peer.mjs'
+  );
+  qualifySharedCorePeer({
+    work,
+    adapterBytes,
+    coreBytes: correctedCoreBytes,
+    run: (command, args, cwd, options = {}) =>
+      run(command, args, cwd, { ...options, stdio: 'pipe', encoding: 'utf8' }),
+    disk,
+    register,
+  });
   const deps = path.join(work, 'dependencies');
   fs.mkdirSync(deps);
   fs.writeFileSync(
