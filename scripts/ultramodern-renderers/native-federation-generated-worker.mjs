@@ -323,7 +323,8 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
   });
   const dependencies = generatedWorkerDependencies(context);
   // The three origins are compiled into the Worker bundles, so the ports stay
-  // bound from here until the statement before the proof binds them.
+  // bound from here until the statement before compilation, which serves each
+  // remote's emitted assets on its origin.
   const portLease = await leasePorts(3);
   const origins = portLease.ports.map(port => `http://127.0.0.1:${port}`);
   const binding = (remote, index) => ({
@@ -506,6 +507,7 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
     return { id: app.id, services: authored.deploy?.worker?.services ?? [] };
   });
   verifyGeneratedWorkerServices(generation.workerServices);
+  await portLease.release();
   const compiled = await buildCompiledWorkerApplications({
     applications,
     context,
@@ -580,7 +582,6 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
       browserExecutable: context.browserExecutable,
     }),
   );
-  await portLease.release();
   const proof = await runWorkerFixtureProof(readWorkerFixturePlan(planPath), {
     signal,
   });

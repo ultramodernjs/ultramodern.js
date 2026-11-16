@@ -24,6 +24,7 @@ import {
   openWorkerFixtureBrowser,
   readWorkerFixturePlan,
   verifyWorkerCompositionRoutes,
+  verifyWorkerFixtureBrowser,
   waitForWorkerSsrCompletion,
 } from './proof.mjs';
 import { sourceWorkerGitignore } from './source.mjs';
@@ -164,6 +165,80 @@ for (const inspectionFails of [false, true]) {
     }
   });
 }
+
+test('Worker fixture failures report the streamed remote markers and keep the original error and cleanup', async t => {
+  const original = new Error('Original remote b visibility timeout');
+  const logs = [];
+  const cleanup = [];
+  t.mock.method(console, 'error', (...args) => logs.push(args));
+  const html =
+    '<html><body><p data-fallback="a"></p><template><section data-worker-remote="b"></section></template></body></html>';
+  const page = {
+    setDefaultTimeout() {},
+    on() {},
+    async route() {},
+    async goto() {
+      return { status: () => 200 };
+    },
+    locator(selector) {
+      return {
+        async waitFor() {
+          if (selector === '[data-worker-remote="b"]') throw original;
+        },
+      };
+    },
+    async evaluate(callback) {
+      return runInNewContext(`(${callback.toString()})()`, {
+        location: { href: 'http://127.0.0.1:9999/en' },
+        document: {
+          readyState: 'interactive',
+          documentElement: { outerHTML: html },
+          body: { innerHTML: html },
+          querySelectorAll: selector =>
+            selector === '[data-fallback="a"]' ? [{}] : [],
+        },
+        getComputedStyle: () => ({ display: 'block', visibility: 'visible' }),
+      });
+    },
+    async unrouteAll(options) {
+      cleanup.push(['unroute', options]);
+    },
+    async close() {
+      cleanup.push(['close']);
+    },
+  };
+  await assert.rejects(
+    verifyWorkerFixtureBrowser(
+      {
+        async newPage() {
+          return page;
+        },
+      },
+      'http://127.0.0.1:9999/en',
+      { failedRemote: 'a', hostAppId: 'host' },
+    ),
+    error => error === original,
+  );
+  assert.deepEqual(cleanup, [['unroute', { behavior: 'wait' }], ['close']]);
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0][0], 'Worker fixture failure diagnostic:');
+  const detail = JSON.parse(logs[0][1]);
+  assert.equal(detail.failedRemote, 'a');
+  assert.equal(detail.status, 200);
+  assert.deepEqual(detail.browser.markers.a, {
+    serializedSections: 0,
+    serializedFallbacks: 1,
+    sections: [],
+    fallbacks: 1,
+  });
+  assert.deepEqual(detail.browser.markers.b, {
+    serializedSections: 1,
+    serializedFallbacks: 0,
+    sections: [],
+    fallbacks: 0,
+  });
+  assert.equal(detail.browser.templates, 0);
+});
 
 for (const failurePhase of ['context', 'final errors']) {
   test(`Worker diagnostics report bounded context only during its actual wait (${failurePhase})`, async t => {

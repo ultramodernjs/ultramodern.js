@@ -193,10 +193,35 @@ export function readWorkerFixturePlan(
   return { ...plan, root, applications };
 }
 
-async function reportWorkerCompositionFailure(page, detail) {
+const boundedText = value => String(value ?? '').slice(0, 512);
+
+/**
+ * Observability only: a broken page or service cannot indefinitely delay the
+ * original failure or its existing browser/resource cleanup.
+ */
+async function reportBoundedDiagnostic(label, detail, key, inspect) {
   let timer;
   try {
-    const inspection = page.evaluate(
+    const observed = await Promise.race([
+      Promise.resolve()
+        .then(inspect)
+        .catch(error => ({ inspectionError: boundedText(error) })),
+      new Promise(resolve => {
+        timer = setTimeout(
+          () => resolve({ inspectionError: `${label} exceeded 1000ms.` }),
+          1000,
+        );
+      }),
+    ]);
+    console.error(`${label}:`, JSON.stringify({ ...detail, [key]: observed }));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function reportWorkerCompositionFailure(page, detail) {
+  const inspect = () =>
+    page.evaluate(
       ({ selector, contextSelector }) => {
         const bounded = value => String(value ?? '').slice(0, 512);
         const node = selector ? document.querySelector(selector) : null;
@@ -305,27 +330,54 @@ async function reportWorkerCompositionFailure(page, detail) {
         contextSelector: detail.expected?.contextSelector ?? null,
       },
     );
-    // Observability only: a broken page cannot indefinitely delay the original
-    // failure or its existing browser/resource cleanup.
-    const browser = await Promise.race([
-      inspection.catch(error => ({
-        inspectionError: String(error).slice(0, 512),
-      })),
-      new Promise(resolve => {
-        timer = setTimeout(
-          () =>
-            resolve({ inspectionError: 'Browser diagnostic exceeded 1000ms.' }),
-          1000,
-        );
+  return reportBoundedDiagnostic(
+    'Worker composition failure diagnostic',
+    detail,
+    'browser',
+    inspect,
+  );
+}
+
+/** Record which remote section or fallback the streamed document actually holds. */
+function reportWorkerFixtureFailure(page, detail) {
+  return reportBoundedDiagnostic(
+    'Worker fixture failure diagnostic',
+    detail,
+    'browser',
+    () =>
+      page.evaluate(() => {
+        const html = document.documentElement.outerHTML;
+        const count = marker => html.split(marker).length - 1;
+        return {
+          url: String(location.href).slice(0, 512),
+          readyState: document.readyState,
+          htmlLength: html.length,
+          markers: Object.fromEntries(
+            ['a', 'b', 'a-hop', 'b-hop'].map(id => [
+              id,
+              {
+                // Serialized counts include markup still held in templates.
+                serializedSections: count(`data-worker-remote="${id}"`),
+                serializedFallbacks: count(`data-fallback="${id}"`),
+                sections: [
+                  ...document.querySelectorAll(`[data-worker-remote="${id}"]`),
+                ]
+                  .slice(0, 4)
+                  .map(node => ({
+                    hidden: node.closest('[hidden]') !== null,
+                    display: getComputedStyle(node).display,
+                    visibility: getComputedStyle(node).visibility,
+                  })),
+                fallbacks: document.querySelectorAll(`[data-fallback="${id}"]`)
+                  .length,
+              },
+            ]),
+          ),
+          templates: document.querySelectorAll('template').length,
+          bodyTail: (document.body?.innerHTML ?? '').slice(-2048),
+        };
       }),
-    ]);
-    console.error(
-      'Worker composition failure diagnostic:',
-      JSON.stringify({ ...detail, browser }),
-    );
-  } finally {
-    clearTimeout(timer);
-  }
+  );
 }
 
 /** Each declared composition coordinate has its own direct server document. */
@@ -802,8 +854,9 @@ export async function verifyWorkerFixtureBrowser(
     if (route.request().resourceType() === 'script') await gate;
     await route.continue();
   });
+  let response;
   try {
-    const response = await page.goto(url, { waitUntil: 'commit' });
+    response = await page.goto(url, { waitUntil: 'commit' });
     assert.equal(response.status(), 200);
     for (const id of ['a', 'b']) {
       const selector =
@@ -1099,6 +1152,15 @@ export async function verifyWorkerFixtureBrowser(
       exactNodeAdoption,
       browserRecovery: Boolean(failedRemote),
     };
+  } catch (error) {
+    await reportWorkerFixtureFailure(page, {
+      url: boundedText(url),
+      failedRemote: failedRemote ?? null,
+      elapsedMs: Date.now() - started,
+      status: response?.status() ?? null,
+      errors: failures.slice(-16).map(boundedText),
+    });
+    throw error;
   } finally {
     releaseScripts();
     await page.unrouteAll({ behavior: 'wait' });
@@ -1543,6 +1605,32 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
       assert.equal(response.status, 200);
       return response.json();
     };
+    // Read each remote's service evidence without changing its fault mode.
+    const reportFaultFailure = mode =>
+      reportBoundedDiagnostic(
+        'Worker fault recovery failure diagnostic',
+        { mode },
+        'services',
+        () =>
+          Promise.all(
+            faults.map(async fault => {
+              const response = await fetch(
+                `${runtime.bridges.get(fault.name).url}/__proof/control`,
+                { signal },
+              );
+              assert.equal(response.status, 200);
+              const state = await response.json();
+              return {
+                target: fault.target,
+                mode: state.mode,
+                active: state.active,
+                cancellations: state.cancellations,
+                requests: state.requests.length,
+                recent: state.requests.slice(-8),
+              };
+            }),
+          ),
+      );
     result = {
       mode: plan.mode,
       positive: [],
@@ -1762,6 +1850,9 @@ export async function runWorkerFixtureProof(plan, { signal } = {}) {
           activeRequests: after.active,
           cancellations: after.cancellations - before.cancellations,
         });
+      } catch (error) {
+        await reportFaultFailure(mode);
+        throw error;
       } finally {
         await context.close();
         await control(faults[0], 'pass');
