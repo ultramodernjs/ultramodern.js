@@ -1,15 +1,202 @@
 name: Corrected Effect compiler payload
 
+# The payload is a pure function of the pinned identities this workflow asserts
+# (Effect base commit, tsrs and TypeScript source commits, the correction patch
+# digest, the component version and `--optimize none`). Those pins moved twice
+# in the last 2060 commits of main-ultramodern, so rebuilding four Rust
+# compilers per run rebuilt identical bytes. `resolve` restores the per-target
+# bytes the default branch already built, verified and staged; the build matrix
+# runs only when that restore misses or its recorded identity does not match.
 on:
   workflow_call:
+
+  # Seeds the four cache entries every consumer reads, and refreshes their
+  # last-access time so GitHub's 7-day eviction never empties them.
+  push:
+    branches: [main-ultramodern]
+
+  workflow_dispatch:
 
 permissions:
   actions: read
   contents: read
 
 jobs:
+  resolve:
+    name: Effect compiler (cached identity)
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      hit: ${{ steps.payload.outputs.hit }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js 26.12.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26.12.0'
+
+      # The epoch is the one key component no file digest can derive: a runner
+      # image can ship a new rustc under an unchanged label.
+      - name: Identify the cacheable payload key
+        id: cache-key
+        env:
+          EPOCH_FILE: .github/effect-compiler-cache-epoch
+        run: |
+          set -euo pipefail
+          epoch="$(grep -Ev '^[[:space:]]*(#|$)' "$EPOCH_FILE" | tr -d '[:space:]')"
+          case "$epoch" in
+            '' | *[!0-9]*)
+              echo "::error::$EPOCH_FILE must hold exactly one integer line"
+              exit 1
+              ;;
+          esac
+          echo "epoch=$epoch" >> "$GITHUB_OUTPUT"
+
+      # No restore-keys anywhere below: a prefix match would accept bytes built
+      # from a different pin set. enableCrossOsArchive keeps the Windows-saved
+      # entry readable here.
+      - name: Restore the cached darwin-arm64 compiler
+        id: cache-darwin-arm64
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .effect-compiler-cache/darwin-arm64
+          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-darwin-arm64-${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
+          enableCrossOsArchive: true
+
+      - name: Restore the cached linux-x64 compiler
+        id: cache-linux-x64
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .effect-compiler-cache/linux-x64
+          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-linux-x64-depot-ubuntu-24.04-8-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
+          enableCrossOsArchive: true
+
+      - name: Restore the cached linux-arm64 compiler
+        id: cache-linux-arm64
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .effect-compiler-cache/linux-arm64
+          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-linux-arm64-depot-ubuntu-24.04-arm-8-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
+          enableCrossOsArchive: true
+
+      - name: Restore the cached win32-x64 compiler
+        id: cache-win32-x64
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .effect-compiler-cache/win32-x64
+          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-win32-x64-${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
+          enableCrossOsArchive: true
+
+      # Fail closed on a wrong restore: a partial restore or bytes whose
+      # recorded identity differs from the committed source rebuilds the whole
+      # matrix instead of staging anything.
+      - name: Verify every restored target against the committed source identity
+        id: identity
+        env:
+          RESTORED: |
+            darwin-arm64 ${{ steps.cache-darwin-arm64.outputs.cache-hit }}
+            linux-x64 ${{ steps.cache-linux-x64.outputs.cache-hit }}
+            linux-arm64 ${{ steps.cache-linux-arm64.outputs.cache-hit }}
+            win32-x64 ${{ steps.cache-win32-x64.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          usable=true
+          while read -r target restored; do
+            [ -n "$target" ] || continue
+            if [ "$restored" != 'true' ]; then
+              echo "::warning::No cached Effect compiler for $target; building every target"
+              usable=false
+              continue
+            fi
+            if ! node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs verify-identity \
+              --input ".effect-compiler-cache/$target/source-identity.json" --target "$target"; then
+              echo "::warning::Cached $target does not match the committed compiler source identity; building every target"
+              usable=false
+            fi
+          done <<< "$RESTORED"
+          echo "usable=$usable" >> "$GITHUB_OUTPUT"
+
+      # The win32 and darwin smokes run only in the jobs that build those
+      # targets. Here the Linux binary proves the restored bytes execute and
+      # type-check with their own adjacent lib files; the Effect diagnostic leg
+      # needs the pinned tsgo fixture tree, which this job does not check out.
+      - name: Smoke the cached Linux release binary
+        if: steps.identity.outputs.usable == 'true'
+        timeout-minutes: 5
+        env:
+          ARTIFACT_DIR: .effect-compiler-cache/linux-x64/artifact
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { spawnSync } from 'node:child_process';
+          import fs from 'node:fs';
+          import os from 'node:os';
+          import path from 'node:path';
+          const directory = path.resolve(process.env.ARTIFACT_DIR);
+          const binary = path.join(directory, 'tsrs');
+          const run = args => {
+            const result = spawnSync(binary, args, { encoding: 'utf8', timeout: 120000 });
+            assert.ifError(result.error);
+            assert.equal(result.signal, null);
+            return result;
+          };
+          assert.ok(fs.statSync(path.join(directory, 'lib.d.ts')).isFile());
+          assert.ok(fs.readdirSync(directory).filter(name => name.endsWith('.d.ts')).length > 10);
+          const version = run(['--version']);
+          assert.equal(version.status, 0, version.stderr);
+          assert.equal(version.stdout.trim(), 'Version 7.1.0-beta+effect-tsgo.0.67.0 (tsrs 0.21.0-ts7.1.0-beta, microsoft/TypeScript@3e9236361fa9)');
+          const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-smoke-'));
+          try {
+            const config = { compilerOptions: { strict: true, target: 'ESNext', module: 'NodeNext', noEmit: true, skipLibCheck: true, types: [] }, files: ['index.ts'] };
+            fs.writeFileSync(path.join(root, 'tsconfig.json'), JSON.stringify(config));
+            fs.writeFileSync(path.join(root, 'index.ts'), 'const values: Array<number> = [1];\nconsole.log(values.length.toFixed(0));\n');
+            const checked = run(['--project', root, '--pretty', 'false']);
+            assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+            assert.doesNotMatch(checked.stdout, /error TS/);
+          } finally { fs.rmSync(root, { recursive: true, force: true }); }
+          JS
+
+      - name: Produce the target inventory and same-run receipt
+        if: steps.identity.outputs.usable == 'true'
+        env:
+          TARGETS: darwin-arm64 linux-x64 linux-arm64 win32-x64
+        run: |
+          set -euo pipefail
+          for target in $TARGETS; do
+            node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs produce \
+              --artifact-dir ".effect-compiler-cache/$target/artifact" --target "$target" \
+              --output ".modern/effect-compiler-targets/$target"
+          done
+
+      - name: Validate and stage the complete compiler payload
+        if: steps.identity.outputs.usable == 'true'
+        run: node scripts/ultramodern-publish/stage-effect-compiler-payload.mjs stage --input .modern/effect-compiler-targets
+
+      - name: Upload the complete staged payload
+        if: steps.identity.outputs.usable == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: effect-compiler-payload-${{ github.sha }}
+          path: packages/solutions/app-tools-extensions/compiler/payload
+          include-hidden-files: true
+          if-no-files-found: error
+
+      - name: Report the cached payload as this run's payload
+        id: payload
+        if: steps.identity.outputs.usable == 'true'
+        run: echo "hit=true" >> "$GITHUB_OUTPUT"
+
   build:
     name: Effect compiler (${{ matrix.target }})
+    needs: resolve
+    if: needs.resolve.outputs.hit != 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     defaults:
@@ -24,12 +211,14 @@ jobs:
             runner: ${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}
           - target: linux-x64
             rust_target: x86_64-unknown-linux-gnu
-            # Keep the compiler's glibc baseline on Ubuntu 22.04, not the
-            # general framework runner's configurable Ubuntu 24.04 image.
-            runner: depot-ubuntu-22.04-8
+            # Ubuntu 24.04 is the repository's minimum, so the compiler's glibc
+            # baseline is 2.39: these binaries do not run on older Linux. The
+            # label is literal, not the configurable framework runner, so the
+            # shipped baseline cannot move with a repository variable.
+            runner: depot-ubuntu-24.04-8
           - target: linux-arm64
             rust_target: aarch64-unknown-linux-gnu
-            runner: depot-ubuntu-22.04-arm-8
+            runner: depot-ubuntu-24.04-arm-8
           - target: win32-x64
             rust_target: x86_64-pc-windows-msvc
             runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
@@ -191,6 +380,44 @@ jobs:
           fs.writeFileSync(path.join(notices, 'THIRD-PARTY-NOTICES'), sections.join('\n\n========================================\n\n'));
           JS
 
+      # A byte-identical copy at a path that does not depend on the runner or
+      # the target: actions/cache keys its entry version on the literal paths,
+      # so the win32 save and the Linux restore must name the same directory.
+      # The receipt is deliberately not part of it; it is run-identity bound and
+      # is produced again in whichever run consumes these bytes.
+      - name: Copy the verified target directory and record its source identity
+        env:
+          ARTIFACT_DIR: ${{ steps.compiler.outputs.artifact_path }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const root = path.join('.effect-compiler-cache', process.env.TARGET);
+          const copy = path.join(root, 'artifact');
+          fs.mkdirSync(root, { recursive: true });
+          fs.cpSync(process.env.ARTIFACT_DIR, copy, { recursive: true, dereference: false, errorOnExist: true, force: false, preserveTimestamps: true });
+          const walk = (base, relative = '') => fs.readdirSync(path.join(base, relative), { withFileTypes: true }).sort((left, right) => left.name < right.name ? -1 : 1).flatMap(entry => {
+            const next = relative ? `${relative}/${entry.name}` : entry.name;
+            return entry.isDirectory() ? walk(base, next) : [next];
+          });
+          const sum = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+          const original = walk(process.env.ARTIFACT_DIR);
+          assert.deepEqual(walk(copy), original, 'cached copy does not list the built artifact');
+          let bytes = 0;
+          for (const file of original) {
+            const source = path.join(process.env.ARTIFACT_DIR, file);
+            assert.equal(sum(path.join(copy, file)), sum(source), `cached copy differs: ${file}`);
+            bytes += fs.statSync(source).size;
+          }
+          console.log(`Cacheable ${process.env.TARGET} directory: ${original.length} files, ${(bytes / 1024 / 1024).toFixed(2)} MB`);
+          JS
+          node harness/scripts/ultramodern-publish/stage-effect-compiler-payload.mjs write-identity \
+            --output ".effect-compiler-cache/$TARGET/source-identity.json" --target "$TARGET"
+
       - name: Produce the target inventory and same-run receipt
         env:
           ARTIFACT_DIR: ${{ steps.compiler.outputs.artifact_path }}
@@ -199,6 +426,36 @@ jobs:
           node harness/scripts/ultramodern-publish/stage-effect-compiler-payload.mjs produce
           --artifact-dir "$ARTIFACT_DIR" --target "$TARGET"
           --output .modern/effect-compiler-target
+
+      # hashFiles digests file contents, not paths, so the harness/ prefix here
+      # yields the same key `resolve` computes from the repository root. The key
+      # is printed on every run, including pull requests, so a drift between the
+      # two jobs is visible without waiting for a restore to miss.
+      - name: Identify the cacheable payload key
+        id: cache-key
+        env:
+          EPOCH_FILE: harness/.github/effect-compiler-cache-epoch
+        run: |
+          set -euo pipefail
+          epoch="$(grep -Ev '^[[:space:]]*(#|$)' "$EPOCH_FILE" | tr -d '[:space:]')"
+          case "$epoch" in
+            '' | *[!0-9]*)
+              echo "::error::$EPOCH_FILE must hold exactly one integer line"
+              exit 1
+              ;;
+          esac
+          echo "epoch=$epoch" >> "$GITHUB_OUTPUT"
+
+      # Saved after the stager accepted these exact bytes in this run, so a run
+      # that cannot produce a valid inventory never seeds the cache, and only
+      # the trusted default branch writes entries every ref can read.
+      - name: Save the verified target directory for identical future runs
+        if: github.ref == 'refs/heads/main-ultramodern'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .effect-compiler-cache/${{ matrix.target }}
+          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-${{ matrix.target }}-${{ matrix.runner }}-${{ hashFiles('harness/packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('harness/packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('harness/.github/workflows/effect-compiler-payload.yml') }}
+          enableCrossOsArchive: true
 
       - name: Upload the complete target directory and receipt
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -209,7 +466,8 @@ jobs:
           if-no-files-found: error
 
   aggregate:
-    needs: build
+    needs: [resolve, build]
+    if: needs.resolve.outputs.hit != 'true'
     runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 10
     steps:

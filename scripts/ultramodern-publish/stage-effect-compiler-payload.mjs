@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // CI producer/stager only. Installed consumers never copy or repair payloads.
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -50,6 +51,100 @@ function checkSource() {
     source.patchSha256
   )
     fail('committed correction does not match source.json');
+}
+
+/**
+ * The complete pinned identity the compiler bytes are a function of. CI caches
+ * a built target directory under a key derived from these same pins, and
+ * records this receipt beside the bytes so a restore that carries a different
+ * identity is rejected before anything is staged.
+ */
+const pinnedSourceIdentity = target => ({
+  schemaVersion: 1,
+  target,
+  distribution: source.distribution,
+  componentVersion: source.tsrs.version,
+  effectBaseCommit: source.effect.baseCommit,
+  tsrsSourceCommit: source.tsrs.sourceCommit,
+  typescriptSourceCommit: source.typescript.sourceCommit,
+  optimization: source.optimization,
+  patchSha256: source.patchSha256,
+});
+
+const toolchainPatterns = {
+  cargo: /^cargo \d+\.\d+/u,
+  rustc: /^rustc \d+\.\d+/u,
+};
+
+function checkToolchain(toolchain) {
+  if (
+    toolchain === null ||
+    typeof toolchain !== 'object' ||
+    Array.isArray(toolchain) ||
+    Object.keys(toolchain).sort().join(',') !== 'cargo,rustc' ||
+    !toolchainPatterns.cargo.test(toolchain.cargo) ||
+    !toolchainPatterns.rustc.test(toolchain.rustc)
+  )
+    fail('cached bytes must record the rustc and cargo that built them');
+}
+
+function checkTarget(target) {
+  if (!source.targets.includes(target)) fail(`unsupported target ${target}`);
+}
+
+export function writeCachedSourceIdentity({
+  target,
+  output,
+  env = process.env,
+  toolchainVersion = command =>
+    execFileSync(command, ['-V'], { encoding: 'utf8' }).trim(),
+}) {
+  checkSource();
+  checkTarget(target);
+  const identity = {
+    ...pinnedSourceIdentity(target),
+    toolchain: {
+      cargo: toolchainVersion('cargo'),
+      rustc: toolchainVersion('rustc'),
+    },
+    // Forensics only: the run that built these bytes is by definition not the
+    // run that stages them, so no consumer compares it.
+    producedBy: producerIdentity(env),
+  };
+  checkToolchain(identity.toolchain);
+  fs.mkdirSync(path.dirname(path.resolve(output)), { recursive: true });
+  fs.writeFileSync(output, `${JSON.stringify(identity, null, 2)}\n`, {
+    flag: 'wx',
+  });
+  return identity;
+}
+
+export function assertCachedSourceIdentity({ input, target }) {
+  checkSource();
+  checkTarget(target);
+  let identity;
+  try {
+    identity = json(input);
+  } catch {
+    fail(`cached source identity is missing or unreadable: ${input}`);
+  }
+  if (identity === null || typeof identity !== 'object')
+    fail(`cached source identity is not a receipt: ${input}`);
+  const { producedBy, toolchain, ...pinned } = identity;
+  if (!isDeepStrictEqual(pinned, pinnedSourceIdentity(target)))
+    fail('cached bytes were built from a different pinned source identity');
+  checkToolchain(toolchain);
+  if (
+    producedBy === null ||
+    typeof producedBy !== 'object' ||
+    producedBy.repository !== 'ultramodernjs/ultramodern.js' ||
+    producedBy.workflow !== 'effect-compiler-payload.yml' ||
+    !/^[1-9]\d*$/.test(producedBy.runId ?? '') ||
+    !/^[1-9]\d*$/.test(producedBy.runAttempt ?? '') ||
+    !/^[a-f0-9]{40}$/.test(producedBy.sourceCommit ?? '')
+  )
+    fail('cached bytes carry no usable producer receipt');
+  return identity;
 }
 
 function walk(root, relative = '') {
@@ -334,9 +429,19 @@ function main(args) {
   )
     produceTarget(options);
   else if (command === 'stage' && options.input) stagePayload(options);
-  else
+  else if (command === 'write-identity' && options.target && options.output) {
+    const identity = writeCachedSourceIdentity(options);
+    console.log(
+      `Recorded ${identity.target} source identity: tsrs ${identity.componentVersion}, ${identity.toolchain.rustc}`,
+    );
+  } else if (command === 'verify-identity' && options.target && options.input) {
+    const identity = assertCachedSourceIdentity(options);
+    console.log(
+      `Cached ${identity.target} matches the committed source identity; built by run ${identity.producedBy.runId}/${identity.producedBy.runAttempt} of ${identity.producedBy.sourceCommit} with ${identity.toolchain.rustc}`,
+    );
+  } else
     fail(
-      'use produce --artifact-dir DIR --target TARGET --output DIR, or stage --input DIR [--complete-manifest]',
+      'use produce --artifact-dir DIR --target TARGET --output DIR, stage --input DIR [--complete-manifest], write-identity --target TARGET --output FILE, or verify-identity --target TARGET --input FILE',
     );
 }
 

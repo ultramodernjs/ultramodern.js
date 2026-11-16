@@ -5,10 +5,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  assertCachedSourceIdentity,
   assertReleaseCompilerPayload,
   producerIdentity,
   produceTarget,
   stagePayload,
+  writeCachedSourceIdentity,
 } from '../stage-effect-compiler-payload.mjs';
 
 const source = JSON.parse(
@@ -26,6 +28,11 @@ const env = {
   GITHUB_SHA: 'a'.repeat(40),
 };
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+const toolchain = {
+  cargo: 'cargo 1.95.0 (04f5b22a1 2026-09-20)',
+  rustc: 'rustc 1.95.0 (6e4b7bbf5 2026-10-01)',
+};
+const toolchainVersion = command => toolchain[command];
 function fixture(t) {
   const root = fs.mkdtempSync(
     path.join(
@@ -217,6 +224,193 @@ test('target producer preserves adjacent libraries and notices', t => {
     fs.readFileSync(path.join(output, 'linux-x64/lib.d.ts'), 'utf8'),
     'declare const fixture: unique symbol;',
   );
+});
+
+// A restored cache entry is the built target directory plus the identity
+// receipt beside it; the same-run inventory receipt is never cached.
+function restored(root) {
+  const input = matrix(root);
+  const cache = path.join(root, 'cache');
+  for (const target of source.targets) {
+    fs.cpSync(
+      path.join(input, target, target),
+      path.join(cache, target, 'artifact'),
+      { recursive: true },
+    );
+    writeCachedSourceIdentity({
+      target,
+      output: path.join(cache, target, 'source-identity.json'),
+      env,
+      toolchainVersion,
+    });
+  }
+  return cache;
+}
+
+test('cached bytes record the pinned identity and are accepted once, not twice', t => {
+  const root = fixture(t);
+  const output = path.join(root, 'cache/linux-x64/source-identity.json');
+  const identity = writeCachedSourceIdentity({
+    target: 'linux-x64',
+    output,
+    env,
+    toolchainVersion,
+  });
+  assert.equal(identity.effectBaseCommit, source.effect.baseCommit);
+  assert.equal(identity.tsrsSourceCommit, source.tsrs.sourceCommit);
+  assert.equal(identity.typescriptSourceCommit, source.typescript.sourceCommit);
+  assert.equal(identity.componentVersion, source.tsrs.version);
+  assert.equal(identity.optimization, source.optimization);
+  assert.equal(identity.patchSha256, source.patchSha256);
+  assert.equal(identity.producedBy.sourceCommit, env.GITHUB_SHA);
+  assert.deepEqual(
+    assertCachedSourceIdentity({ input: output, target: 'linux-x64' }),
+    identity,
+  );
+  assert.throws(
+    () =>
+      writeCachedSourceIdentity({
+        target: 'linux-x64',
+        output,
+        env,
+        toolchainVersion,
+      }),
+    /EEXIST/,
+  );
+  assert.throws(
+    () =>
+      writeCachedSourceIdentity({
+        target: 'darwin-x64',
+        output: path.join(root, 'unsupported.json'),
+        env,
+        toolchainVersion,
+      }),
+    /unsupported target/,
+  );
+  assert.equal(fs.existsSync(path.join(root, 'unsupported.json')), false);
+});
+
+for (const [name, mutate] of [
+  ['another target', identity => ({ ...identity, target: 'linux-arm64' })],
+  [
+    'another TypeScript source',
+    identity => ({ ...identity, typescriptSourceCommit: 'f'.repeat(40) }),
+  ],
+  [
+    'another correction patch',
+    identity => ({ ...identity, patchSha256: 'f'.repeat(64) }),
+  ],
+  [
+    'another component version',
+    identity => ({ ...identity, componentVersion: '0.22.0-ts7.1.0-beta' }),
+  ],
+  ['an optimized build', identity => ({ ...identity, optimization: 'speed' })],
+  ['an unknown field', identity => ({ ...identity, embedded: true })],
+  ['no toolchain', ({ toolchain: _ignored, ...rest }) => rest],
+  [
+    'an unusable rustc',
+    identity => ({
+      ...identity,
+      toolchain: { ...identity.toolchain, rustc: 'unknown' },
+    }),
+  ],
+  [
+    'no producer receipt',
+    identity => ({ ...identity, producedBy: { runId: '1' } }),
+  ],
+  ['a bare array', () => []],
+]) {
+  test(`a restore carrying ${name} is rejected before anything is staged`, t => {
+    const root = fixture(t);
+    const output = path.join(root, 'source-identity.json');
+    const identity = writeCachedSourceIdentity({
+      target: 'linux-x64',
+      output,
+      env,
+      toolchainVersion,
+    });
+    fs.writeFileSync(output, JSON.stringify(mutate(identity)));
+    assert.throws(
+      () => assertCachedSourceIdentity({ input: output, target: 'linux-x64' }),
+      /different pinned source identity|rustc and cargo|producer receipt|not a receipt/,
+    );
+  });
+}
+
+for (const [name, write] of [
+  ['A missing', () => {}],
+  ['An unparsable', output => fs.writeFileSync(output, '{ not json')],
+]) {
+  test(`${name} identity receipt is a cache miss, not a staged payload`, t => {
+    const root = fixture(t);
+    const output = path.join(root, 'source-identity.json');
+    write(output);
+    assert.throws(
+      () => assertCachedSourceIdentity({ input: output, target: 'linux-x64' }),
+      /missing or unreadable/,
+    );
+  });
+}
+
+test('the hit path stages restored bytes and rejects tampering after produce', t => {
+  const root = fixture(t);
+  const cache = restored(root);
+  const produced = path.join(root, 'produced');
+  for (const target of source.targets) {
+    assertCachedSourceIdentity({
+      input: path.join(cache, target, 'source-identity.json'),
+      target,
+    });
+    produceTarget({
+      artifactDir: path.join(cache, target, 'artifact'),
+      target,
+      output: path.join(produced, target),
+      env,
+    });
+  }
+  const payload = path.join(root, 'payload');
+  const manifest = stagePayload({ input: produced, output: payload, env });
+  assert.deepEqual(
+    Object.keys(manifest.targets).sort(),
+    [...source.targets].sort(),
+  );
+  // The identity receipt sits beside the cached bytes, never inside them.
+  assert.equal(
+    fs.existsSync(path.join(payload, 'linux-x64/source-identity.json')),
+    false,
+  );
+  assert.equal(
+    fs.readFileSync(path.join(payload, 'linux-x64/tsrs'), 'utf8'),
+    'fake compiler bytes; never execute',
+  );
+  // Digests bind the produced inventory to the staged bytes within one run.
+  // Substituted cache bytes are caught by the identity receipt and the release
+  // smoke in `resolve`, not here: produce re-digests whatever it is given.
+  fs.appendFileSync(path.join(produced, 'linux-x64/linux-x64/tsrs'), 'tamper');
+  assert.throws(
+    () =>
+      stagePayload({ input: produced, output: path.join(root, 'retry'), env }),
+    /digest\/size mismatch/,
+  );
+  assert.equal(fs.existsSync(path.join(root, 'retry')), false);
+});
+
+test('a cached directory without its compiler binary never reaches staging', t => {
+  const root = fixture(t);
+  const cache = restored(root);
+  fs.rmSync(path.join(cache, 'linux-x64/artifact/tsrs'));
+  const output = path.join(root, 'produced/linux-x64');
+  assert.throws(
+    () =>
+      produceTarget({
+        artifactDir: path.join(cache, 'linux-x64/artifact'),
+        target: 'linux-x64',
+        output,
+        env,
+      }),
+    /expected one tsrs/,
+  );
+  assert.equal(fs.existsSync(output), false);
 });
 
 const canonicalCompiler = new URL(
