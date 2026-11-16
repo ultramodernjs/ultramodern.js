@@ -1,8 +1,10 @@
 // A cache saved on any ref but the default branch is readable only by that
 // ref, so every PR that saved its own pnpm store, mise tools and browsers
 // parked ~1 GB per OS that no other run could reuse, and the repository blew
-// its 10 GB cache quota. Only jobs pinned to main-ultramodern may save;
-// ci-cache.yml seeds the keys everything else restores.
+// its 10 GB cache quota. Only saves pinned to main-ultramodern are allowed;
+// ci-cache.yml seeds the keys everything else restores. The pin may sit on the
+// job or on the save step itself, because a job that must also run on pull
+// requests (the Effect compiler build) can only guard the write at step level.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -67,7 +69,7 @@ test('only jobs pinned to main-ultramodern save caches', () => {
       }
       writers.push(file);
       assert.ok(
-        pinnedToMain(entry.condition),
+        pinnedToMain(entry.condition) || pinnedToMain(entry.step.if ?? ''),
         `${where(file, entry.job, entry.step)} can save a cache on a branch-scoped ref; restore only (actions/cache/restore, mise cache_save: false) and let ${seedWorkflow} seed the key`,
       );
     }

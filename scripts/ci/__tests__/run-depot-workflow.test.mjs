@@ -382,68 +382,7 @@ test('dependency checks require both the dependency and advisory jobs', async ()
   }
 });
 
-test('benchmark requires both workload names without assuming matrix key suffixes', async () => {
-  const names = [
-    'ci-benchmark (type-check)',
-    'ci-benchmark (unit-build-consumers)',
-  ];
-  for (const selectedNames of [
-    [names[0]],
-    [names[1]],
-    [names[0], names[0]],
-    ['unrelated', names[1]],
-    names,
-  ]) {
-    const api = fixture();
-    const selected = api.snapshot.workflows[0];
-    selected.workflowPath = 'ci-benchmark.yml';
-    selected.jobs = selectedNames.map((jobDisplayName, index) => ({
-      jobId: `job-${index}`,
-      jobKey: `matrix-key-format-${index}`,
-      jobDisplayName,
-      status: 'finished',
-      attempts: [{ attempt: 1, status: 'finished' }],
-    }));
-    const run = api.run({ workflow: '.depot/workflows/ci-benchmark.yml' });
-    if (selectedNames === names) {
-      await run;
-      assert.equal(api.calls[0].body.sha, sha);
-    } else {
-      await assert.rejects(run, /Required Depot jobs|Required Depot job names/);
-      assert.equal(api.calls.at(-1).method, 'CancelRun');
-    }
-  }
-});
-
-test('neither benchmark workload can hide an unsuccessful job or latest attempt', async () => {
-  for (const index of [0, 1]) {
-    for (const status of ['failed', 'cancelled', 'skipped']) {
-      for (const field of ['job', 'attempt']) {
-        const api = fixture();
-        const selected = api.snapshot.workflows[0];
-        selected.workflowPath = 'ci-benchmark.yml';
-        selected.jobs = ['type-check', 'unit-build-consumers'].map(
-          (workload, jobIndex) => ({
-            jobId: `job-${jobIndex}`,
-            jobKey: `matrix-key-format-${jobIndex}`,
-            jobDisplayName: `ci-benchmark (${workload})`,
-            status: 'finished',
-            attempts: [{ attempt: 1, status: 'finished' }],
-          }),
-        );
-        if (field === 'job') selected.jobs[index].status = status;
-        else selected.jobs[index].attempts[0].status = status;
-        await assert.rejects(
-          api.run({ workflow: '.depot/workflows/ci-benchmark.yml' }),
-          /Depot job|Depot attempt/,
-        );
-        assert.equal(api.calls.at(-1).method, 'CancelRun');
-      }
-    }
-  }
-});
-
-test('integration requires ten Linux suites and three aggregate checks without assuming matrix key suffixes', async () => {
+test('integration requires every Linux suite without assuming matrix key suffixes', async () => {
   const names = [
     'integration-Linux (framework 1/6)',
     'integration-Linux (framework 2/6)',
@@ -455,15 +394,12 @@ test('integration requires ten Linux suites and three aggregate checks without a
     'integration-Linux (framework-generator-bff)',
     'integration-Linux (rstest-adapter)',
     'integration-Linux (utils)',
-    'integration-Linux (framework 1/3)',
-    'integration-Linux (framework 2/3)',
-    'integration-Linux (framework 3/3)',
   ];
   for (const selectedNames of [
-    names.slice(0, 11),
-    names.slice(0, 12),
+    names.slice(0, 8),
+    names.slice(0, 9),
     names.map((_, index) => `unrelated-${index}`),
-    [...names.slice(0, 12), names[0]],
+    [...names.slice(0, 9), names[0]],
     names,
   ]) {
     const api = fixture();

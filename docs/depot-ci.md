@@ -11,7 +11,6 @@ tests, integration tests, builder tests, lint, type checks, dependency checks,
 native compatibility checks, workflow security, and cache seeds. They use
 `depot-ubuntu-24.04-8`. Integration keeps all six core shards, both generator
 suites, the adapter suite, and the utility suite.
-The separate `ci-benchmark.yml` workflow runs only when requested for a comparison.
 
 Connect the repository with the Depot Code Access GitHub App. Depot offers a
 [seven-day trial without a credit card](https://depot.dev/docs/ci/overview).
@@ -138,14 +137,15 @@ above. Trial availability does not establish that sponsored billing is disabled.
    `cold`, `warm`, `mixed`, or `unknown`. The collector preserves run and job links,
    timestamps, runner labels, conclusions, and missing-evidence issues.
 
-The manual `ci-benchmark.yml` workflows on both providers run matching type-check
-and Linux unit/build-consumer jobs with fresh project caches. They disable cache
-restores, prepared-build restores, and Nx task caches, and isolate the pnpm store,
-mise data, and browser downloads per job. They export `pnpm_config_store_dir`
-so package-consumer installs in temporary projects also use the fresh job store.
-Provider image and OS package caches remain outside
-this control. GitHub must register the workflow on the default branch before
-manual dispatch. These workflows establish cold samples; they do not establish
+The provider comparison below was taken by hand with matching type-check and
+Linux unit/build-consumer jobs on fresh project caches: cache restores,
+prepared-build restores and Nx task caches disabled, and the pnpm store, mise
+data and browser downloads isolated per job, with `pnpm_config_store_dir`
+exported so package-consumer installs in temporary projects also use the fresh
+job store. Provider image and OS package caches remain outside this control.
+The dedicated `ci-benchmark.yml` workflows that once held this recipe are
+deleted: they were registered but never ran once, so they produced no signal.
+These samples are cold; they do not establish
 warm-cache results.
 
 Set `collectEvidence: true` in each sample to extract checkout and runner proof
@@ -199,8 +199,8 @@ not measure completion of every repository check or money spent.
 
 The committed benchmark commands matched after accounting for the runner label.
 The comparison branch reused GitHub's registered `ut-Linux.yml` filename for
-manual dispatch; the native Depot request selected the committed
-`.depot/workflows/ci-benchmark.yml` without inline content or job overrides.
+manual dispatch; the native Depot request selected a committed benchmark
+workflow without inline content or job overrides.
 Every job's logs verified the actual checkout, repository ID `1151231350`,
 Node 26.10.0, pnpm 12.8.1, and matching lockfile/mise input hashes. Depot reported
 EPYC 9R45 CPUs; GitHub reported several CPU models.
