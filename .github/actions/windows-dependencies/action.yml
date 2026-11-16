@@ -30,14 +30,14 @@ runs:
         node scripts/ultramodern-node-policy/check-node-version.mjs
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+    # Generator/consumer tests install fresh applications. Keep their store
+    # warm too; the installed-file snapshot replaces linking, not this store.
     - name: Resolve pnpm store path
       id: pnpm-store
-      if: steps.snapshot.outputs.cache-hit != 'true'
       shell: bash
       run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
     - name: Restore pnpm store cache
-      if: steps.snapshot.outputs.cache-hit != 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.pnpm-store.outputs.path }}
