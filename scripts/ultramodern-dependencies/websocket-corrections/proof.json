@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-16T05:32:45.312Z",
+  "generatedAt": "2026-11-16T09:47:52.888Z",
   "node": "v26.13.1",
   "pnpm": "12.21.0",
   "policies": {
@@ -131,7 +131,7 @@
       },
       "strictPeerDependencies": false,
       "status": 0,
-      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +7\n+++++++\nProgress: resolved 7, reused 4, downloaded 0, added 7, done\n[WARN] Issues with peer dependencies found. Run \"pnpm peers check\" to list them.\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n+ ws 8.21.3\n\nDone in 120ms using pnpm v12.21.0\n",
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +7\n+++++++\nProgress: resolved 7, reused 4, downloaded 0, added 7, done\n[WARN] Issues with peer dependencies found. Run \"pnpm peers check\" to list them.\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n+ ws 8.21.3\n\nDone in 111ms using pnpm v12.21.0\n",
       "peer": "7.5.11",
       "peerCheck": {
         "status": 1,
@@ -195,7 +195,7 @@
       },
       "strictPeerDependencies": true,
       "status": 0,
-      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +6\n++++++\nProgress: resolved 6, reused 3, downloaded 0, added 6, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n+ ws 8.23.0\n\nDone in 83ms using pnpm v12.21.0\n",
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +6\n++++++\nProgress: resolved 6, reused 3, downloaded 0, added 6, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n+ ws 8.23.0\n\nDone in 137ms using pnpm v12.21.0\n",
       "peer": "*",
       "peerCheck": {
         "status": 0,
@@ -247,7 +247,7 @@
       },
       "strictPeerDependencies": true,
       "status": 0,
-      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +7\n+++++++\nProgress: resolved 7, reused 4, downloaded 0, added 7, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n\ndevDependencies:\n+ ws 8.21.3\n\nDone in 84ms using pnpm v12.21.0\n",
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +7\n+++++++\nProgress: resolved 7, reused 4, downloaded 0, added 7, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n\ndevDependencies:\n+ ws 8.21.3\n\nDone in 103ms using pnpm v12.21.0\n",
       "peer": "*",
       "peerCheck": {
         "status": 0,
@@ -289,7 +289,7 @@
       },
       "strictPeerDependencies": true,
       "status": 0,
-      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +6\n++++++\nProgress: resolved 6, reused 3, downloaded 0, added 6, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n+ ws 8.23.0\n\nDone in 87ms using pnpm v12.21.0\n",
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +6\n++++++\nProgress: resolved 6, reused 3, downloaded 0, added 6, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n+ ws 8.23.0\n\nDone in 128ms using pnpm v12.21.0\n",
       "peer": "*",
       "peerCheck": {
         "status": 0,
@@ -340,7 +340,7 @@
       },
       "strictPeerDependencies": true,
       "status": 0,
-      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +6\n++++++\nProgress: resolved 6, reused 3, downloaded 0, added 6, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n\ndevDependencies:\n+ ws 8.23.0\n\nDone in 82ms using pnpm v12.21.0\n",
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +6\n++++++\nProgress: resolved 6, reused 3, downloaded 0, added 6, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ probe-seven file:seven\n\ndevDependencies:\n+ ws 8.23.0\n\nDone in 84ms using pnpm v12.21.0\n",
       "peer": "*",
       "peerCheck": {
         "status": 0,
@@ -389,7 +389,7 @@
       },
       "strictPeerDependencies": true,
       "status": 0,
-      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +4\n++++\nProgress: resolved 4, reused 2, downloaded 0, added 4, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ ws 8.23.0\n\nDone in 83ms using pnpm v12.21.0\n",
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +4\n++++\nProgress: resolved 4, reused 2, downloaded 0, added 4, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ ws 8.23.0\n\nDone in 82ms using pnpm v12.21.0\n",
       "peer": "8.23.0",
       "peerCheck": {
         "status": 0,
@@ -434,7 +434,7 @@
       },
       "strictPeerDependencies": true,
       "status": 0,
-      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +4\n++++\nProgress: resolved 4, reused 2, downloaded 0, added 4, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ ws 8.23.0\n\nDone in 81ms using pnpm v12.21.0\n",
+      "output": "Progress: resolved 0, reused 1, downloaded 0, added 0\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: /Users/satan/.pnpm-store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +4\n++++\nProgress: resolved 4, reused 2, downloaded 0, added 4, done\n\ndependencies:\n+ isomorphic-ws 5.0.0\n+ probe-eight file:eight\n+ probe-optional file:optional\n+ ws 8.23.0\n\nDone in 134ms using pnpm v12.21.0\n",
       "peer": "*",
       "peerCheck": {
         "status": 0,
