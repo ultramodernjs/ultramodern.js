@@ -46,6 +46,8 @@ const compilerRequire = createRequire(
 const octaneRequire = createRequire(
   path.resolve(__dirname, '../../../renderer-octane/package.json'),
 );
+// Octane's hydratable server HTML opens with its hydration protocol mark.
+const octaneHydrationProtocolMark = '<!--3-->';
 
 const tuple: RendererFederationCompatibility = {
   profile: {
@@ -248,7 +250,9 @@ test('refreshing a native remote preserves Octane server hook providers retained
     const first = await host.loadRemote('store/Widget');
     const retainedRenderer = first.server;
     expect(retainedRenderer.version).toBe(version);
-    expect(retainedRenderer.renderToString(first.default).html).toBe('v1');
+    expect(retainedRenderer.renderToString(first.default).html).toBe(
+      `${octaneHydrationProtocolMark}v1`,
+    );
     const providers = shared.map(
       key => host.shareScopeMap.default[key][version],
     );
@@ -261,7 +265,9 @@ test('refreshing a native remote preserves Octane server hook providers retained
     value = 'v2';
     const refreshed = await host.loadRemote('store/Widget');
     expect(entries).toBe(2);
-    expect(retainedRenderer.renderToString(refreshed.default).html).toBe('v2');
+    expect(retainedRenderer.renderToString(refreshed.default).html).toBe(
+      `${octaneHydrationProtocolMark}v2`,
+    );
     expect(refreshed.server).toBe(retainedRenderer);
     expect(refreshed.internal).toBe(first.internal);
     expect(refreshed.signals).toBe(first.signals);

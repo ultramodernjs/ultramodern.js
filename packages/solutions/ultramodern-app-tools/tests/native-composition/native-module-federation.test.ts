@@ -426,12 +426,13 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
     );
     internal.enableServerSignalBindings();
     const slot = server.hookSlots(1);
+    // Octane's hydratable server HTML opens with its hydration protocol mark.
     expect(
       server.renderToString(() => {
         internal.beginNativeReadScope(undefined, 1);
         return signals.useSignal$('selected-native-owner', slot).get();
       }).html,
-    ).toBe('selected-native-owner');
+    ).toBe('<!--3-->selected-native-owner');
     const client = resolveNativeSharedBindings(
       'octane',
       path.resolve(__dirname, '../..'),
