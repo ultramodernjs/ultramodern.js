@@ -262,7 +262,7 @@ test('one selected runtime: real full archive bytes and physical owner peer; imm
   fs.appendFileSync(file, '\n ');
   await assert.rejects(verifySupportConsumer(f), /installed bytes differ/);
 });
-test('all six or dev-only tools do not force public Redis/rstest peers', async () => {
+test('the complete cohort or dev-only tools do not force public Redis/rstest peers', async () => {
   const f = fixture(Object.keys(p.cohort));
   f.framework(
     '@synthetic/renderer',
@@ -279,8 +279,19 @@ test('all six or dev-only tools do not force public Redis/rstest peers', async (
     { '@effect/opentelemetry': p.cohort['@effect/opentelemetry'] },
     { peerDependenciesMeta: { '@effect/opentelemetry': { optional: true } } },
   );
+  const compiler = f.framework('@synthetic/compiler', {
+    'rsbuild-plugin-dts': p.cohort['rsbuild-plugin-dts'],
+  });
   const receipt = await verifySupportConsumer(f);
-  assert.equal(receipt.packages.length, 6);
+  assert.deepEqual(
+    receipt.packages.map(item => item.name).sort(),
+    Object.keys(p.cohort).sort(),
+  );
+  assert(
+    receipt.resolutions.some(
+      item => item.name === 'rsbuild-plugin-dts' && item.owner === compiler,
+    ),
+  );
   assert(
     receipt.packages
       .find(item => item.name === '@types/ioredis-mock')
@@ -296,8 +307,17 @@ test('all six or dev-only tools do not force public Redis/rstest peers', async (
     '@rstest/core',
     'ioredis-mock',
     '@types/ioredis-mock',
+    'rsbuild-plugin-dts',
   ]);
-  assert.equal((await verifySupportConsumer(tools)).packages.length, 3);
+  assert.deepEqual(
+    (await verifySupportConsumer(tools)).packages.map(item => item.name).sort(),
+    [
+      '@rstest/core',
+      '@types/ioredis-mock',
+      'ioredis-mock',
+      'rsbuild-plugin-dts',
+    ],
+  );
 });
 test('correct bytes in a private duplicate still reject physical peer mismatch', async () => {
   const f = fixture();

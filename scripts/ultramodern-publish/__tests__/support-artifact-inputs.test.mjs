@@ -594,10 +594,11 @@ test('root-direct accepts exact dev authority without imposing framework peers',
     delete manifest.dependencies;
     delete manifest.peerDependencies;
   });
-  assert.equal(
-    Object.keys(await verifySupportInputs({ ...f, owningPackages: [root] }))
-      .length,
-    6,
+  assert.deepEqual(
+    Object.keys(
+      await verifySupportInputs({ ...f, owningPackages: [root] }),
+    ).sort(),
+    Object.keys(p.cohort).sort(),
   );
 });
 
