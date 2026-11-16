@@ -271,8 +271,8 @@ importers:
         specifier: workspace:*
         version: link:packages/toolkit/ultramodern-create
       '@rstest/core':
-        specifier: 0.12.6
-        version: 0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@scripts/build':
         specifier: workspace:*
         version: link:scripts/build
@@ -1052,7 +1052,7 @@ importers:
         version: link:../../solutions/app-tools
       '@rstest/adapter-rsbuild':
         specifier: ^0.12.6
-        version: 0.12.6(@rsbuild/core@2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0))(@rstest/core@0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))
+        version: 0.12.6(@rsbuild/core@2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0))(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))
     devDependencies:
       '@modern-js/rslib':
         specifier: workspace:*
@@ -1070,8 +1070,8 @@ importers:
         specifier: 1.0.7
         version: 1.0.7(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(typescript@7.0.2)
       '@rstest/core':
-        specifier: 0.12.6
-        version: 0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
@@ -1331,8 +1331,8 @@ importers:
         version: 1.16.22(@swc/helpers@0.5.24)
     devDependencies:
       '@effect/opentelemetry':
-        specifier: 4.1.4
-        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/app-tools':
         specifier: workspace:*
         version: link:../../solutions/app-tools
@@ -1416,8 +1416,8 @@ importers:
         version: 0.28.2
     devDependencies:
       '@effect/opentelemetry':
-        specifier: 4.1.4
-        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/plugin':
         specifier: workspace:*
         version: link:../../toolkit/plugin
@@ -1830,8 +1830,8 @@ importers:
         specifier: 1.0.7
         version: 1.0.7(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(typescript@7.0.2)
       '@rstest/core':
-        specifier: 0.12.6
-        version: 0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
@@ -2161,11 +2161,11 @@ importers:
         specifier: 1.162.5
         version: 1.162.5
       '@tanstack/react-router':
-        specifier: 1.170.46
-        version: 1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@tanstack/router-core':
-        specifier: 1.171.39
-        version: 1.171.39(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8)
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -2348,11 +2348,11 @@ importers:
         specifier: workspace:*
         version: link:../../tsconfig
       '@octanejs/rspack-plugin':
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.3.2(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-rspack-plugin-0.2.10.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-rspack-plugin-0.2.10.tgz(@rspack/core@2.3.2(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@octanejs/tanstack-router':
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz(@tanstack/router-core@https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz)(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-tanstack-router-0.3.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-tanstack-router-0.3.4.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@rsbuild/core':
         specifier: 2.3.2
         version: 2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)
@@ -2363,8 +2363,8 @@ importers:
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
       '@tanstack/router-core':
-        specifier: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
-        version: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8)
       '@tsrx/oxc':
         specifier: 0.24.0
         version: 0.24.0
@@ -2387,8 +2387,8 @@ importers:
         specifier: 31.0.1
         version: 31.0.1(@noble/hashes@2.4.0)
       octane:
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -2409,7 +2409,7 @@ importers:
         version: 2.0.0-rc.22
       '@solidjs/web':
         specifier: 2.0.0-rc.22
-        version: 2.0.0-rc.22(solid-js@2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745))
+        version: 2.0.0-rc.22(solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745))
       '@tanstack/history':
         specifier: 1.162.5
         version: 1.162.5
@@ -2439,14 +2439,14 @@ importers:
         specifier: 2.0.0-rc.22
         version: 2.0.0-rc.22
       '@tanstack/router-core':
-        specifier: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
-        version: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8)
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
       solid-js:
-        specifier: 2.0.0-rc.22
-        version: 2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745)
 
   packages/runtime/runtime-extensions:
     dependencies:
@@ -2595,8 +2595,8 @@ importers:
         version: 1.45.0
     devDependencies:
       '@effect/opentelemetry':
-        specifier: 4.1.4
-        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/rslib':
         specifier: workspace:*
         version: link:../../../scripts/rslib
@@ -3354,8 +3354,8 @@ importers:
         specifier: workspace:*
         version: link:../../tsconfig
       '@octanejs/rspack-plugin':
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.3.2(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-rspack-plugin-0.2.10.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-rspack-plugin-0.2.10.tgz(@rspack/core@2.3.2(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@rsbuild/plugin-svgr':
         specifier: 2.0.5
         version: 2.0.5(@rsbuild/core@2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0))(@rspack/core@2.3.2(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(supports-color@10.2.2)(typescript@7.0.2)
@@ -3378,8 +3378,8 @@ importers:
         specifier: ^0.28.2
         version: 0.28.2
       octane:
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -3396,8 +3396,8 @@ importers:
         specifier: 1.0.7
         version: 1.0.7(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(typescript@7.0.2)
       '@rstest/core':
-        specifier: 0.12.6
-        version: 0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
@@ -3596,8 +3596,8 @@ importers:
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
       '@types/ioredis-mock':
-        specifier: 8.2.8
-        version: 8.2.8(ioredis@6.0.0(supports-color@10.2.2))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2))
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
@@ -3608,8 +3608,8 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0(supports-color@10.2.2)
       ioredis-mock:
-        specifier: 8.13.1
-        version: 8.13.1(@types/ioredis-mock@8.2.8(ioredis@6.0.0(supports-color@10.2.2)))(ioredis@6.0.0(supports-color@10.2.2))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/ioredis-mock-8.13.1.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/ioredis-mock-8.13.1.tgz(@types/ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2)))(ioredis@6.0.0(supports-color@10.2.2))
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -3694,8 +3694,8 @@ importers:
         specifier: 1.0.7
         version: 1.0.7(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(typescript@7.0.2)
       '@rstest/core':
-        specifier: 0.12.6
-        version: 0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
@@ -3834,8 +3834,8 @@ importers:
         specifier: workspace:*
         version: link:../../../scripts/rslib
       '@octanejs/rspack-plugin':
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.3.2(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-rspack-plugin-0.2.10.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-rspack-plugin-0.2.10.tgz(@rspack/core@2.3.2(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@rslib/core':
         specifier: 1.0.7
         version: 1.0.7(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(typescript@7.0.2)
@@ -3855,8 +3855,8 @@ importers:
         specifier: 5.5.0
         version: 5.5.0
       octane:
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/toolkit/ultramodern-sandpack-profile:
     devDependencies:
@@ -4316,8 +4316,8 @@ importers:
         specifier: workspace:*
         version: link:../packages/toolkit/utils
       '@rstest/core':
-        specifier: 0.12.6
-        version: 0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../scripts/rstest-config
@@ -4580,8 +4580,8 @@ importers:
   tests/integration/bff-cross-project/bff-api-app:
     dependencies:
       '@effect/opentelemetry':
-        specifier: 4.1.4
-        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -4772,8 +4772,8 @@ importers:
   tests/integration/bff-effect:
     dependencies:
       '@effect/opentelemetry':
-        specifier: 4.1.4
-        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../packages/server/bff-effect
@@ -5631,8 +5631,8 @@ importers:
   tests/integration/i18n/routes-localised-urls:
     dependencies:
       '@effect/opentelemetry':
-        specifier: 4.1.4
-        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -6034,17 +6034,17 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/runtime/renderer-octane
       '@octanejs/tanstack-router':
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz(@tanstack/router-core@https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz)(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-tanstack-router-0.3.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-tanstack-router-0.3.4.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@tanstack/router-core':
-        specifier: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
-        version: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8)
       '@tsrx/oxc':
         specifier: 0.24.0
         version: 0.24.0
       octane:
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       seroval:
         specifier: 1.8.1
         version: 1.8.1
@@ -6056,8 +6056,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/solutions/ultramodern-app-tools
       '@octanejs/rspack-plugin':
-        specifier: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz
-        version: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.3.2(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-rspack-plugin-0.2.10.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-rspack-plugin-0.2.10.tgz(@rspack/core@2.3.2(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
@@ -6112,10 +6112,10 @@ importers:
         version: 2.0.0-rc.22
       '@solidjs/web':
         specifier: 2.0.0-rc.22
-        version: 2.0.0-rc.22(solid-js@2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745))
+        version: 2.0.0-rc.22(solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745))
       solid-js:
-        specifier: 2.0.0-rc.22
-        version: 2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745)
     devDependencies:
       '@modern-js/ultramodern-app-tools':
         specifier: workspace:*
@@ -6269,8 +6269,8 @@ importers:
   tests/integration/routes-tanstack-mf/mf-host:
     dependencies:
       '@effect/opentelemetry':
-        specifier: 4.1.4
-        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -6296,8 +6296,8 @@ importers:
         specifier: npm:@bleedingdev/mf-runtime@2.9.5
         version: '@bleedingdev/mf-runtime@2.9.5'
       '@tanstack/react-router':
-        specifier: 1.170.46
-        version: 1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 4.1.4
         version: 4.1.4
@@ -6336,8 +6336,8 @@ importers:
   tests/integration/routes-tanstack-mf/mf-remote:
     dependencies:
       '@effect/opentelemetry':
-        specifier: 4.1.4
-        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -6357,8 +6357,8 @@ importers:
         specifier: npm:@bleedingdev/mf-runtime@2.9.5
         version: '@bleedingdev/mf-runtime@2.9.5'
       '@tanstack/react-router':
-        specifier: 1.170.46
-        version: 1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 4.1.4
         version: 4.1.4
@@ -6391,8 +6391,8 @@ importers:
   tests/integration/routes-tanstack-mf/mf-remote-2:
     dependencies:
       '@effect/opentelemetry':
-        specifier: 4.1.4
-        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../../packages/server/bff-effect
@@ -6412,8 +6412,8 @@ importers:
         specifier: npm:@bleedingdev/mf-runtime@2.9.5
         version: '@bleedingdev/mf-runtime@2.9.5'
       '@tanstack/react-router':
-        specifier: 1.170.46
-        version: 1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 4.1.4
         version: 4.1.4
@@ -6701,8 +6701,8 @@ importers:
         specifier: workspace:*
         version: link:../../../../packages/cli/plugin-bff
       '@rstest/core':
-        specifier: 0.12.6
-        version: 0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@testing-library/jest-dom':
         specifier: ^7.0.1
         version: 7.0.1(@testing-library/dom@10.4.2)(vitest@5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
@@ -6745,13 +6745,13 @@ importers:
         version: link:../../../../packages/solutions/app-tools
       '@rstest/browser':
         specifier: 0.12.6
-        version: 0.12.6(@rstest/core@0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(bufferutil@4.1.0)(playwright@1.65.1)(utf-8-validate@5.0.10)
+        version: 0.12.6(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(bufferutil@4.1.0)(playwright@1.65.1)(utf-8-validate@5.0.10)
       '@rstest/browser-react':
         specifier: 0.12.6
-        version: 0.12.6(@rstest/core@0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.12.6(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@rstest/core':
-        specifier: 0.12.6
-        version: 0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
@@ -7618,8 +7618,8 @@ importers:
   tests/integration/superapp-portfolio:
     dependencies:
       '@effect/opentelemetry':
-        specifier: 4.1.4
-        version: 4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)
       '@modern-js/bff-effect':
         specifier: workspace:*
         version: link:../../../packages/server/bff-effect
@@ -8884,18 +8884,17 @@ packages:
     peerDependencies:
       postcss: ^8.4
 
-  '@effect/opentelemetry@4.1.4':
-    resolution: {integrity: sha512-VJnookNrIWk0ZHl51DYMTRHXZrogR13kSSOJzcDxGhyUNDHvgWg217OY4R6bOrtdgM3mrPQiLRGNZ0a7bGyAJg==}
+  '@effect/opentelemetry@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz':
+    resolution: {integrity: sha512-PR6ZoYhufvmTJCTRgtEDhlJimW9sm9sPv2Fw42nLAzPJRK1v8KnfkCQVR5GocrwdR39JzS45pygUKdY/gfy5Aw==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz}
+    version: 4.1.4
     engines: {node: '>=22.19.0'}
     peerDependencies:
       '@opentelemetry/api': '>=1.9.0 <2.0.0'
       '@opentelemetry/api-logs': '>=0.203.0 <0.300.0'
-      '@opentelemetry/resources': '>=2.0.0 <3.0.0'
-      '@opentelemetry/sdk-logs': '>=0.203.0 <0.300.0'
-      '@opentelemetry/sdk-metrics': '>=2.0.0 <3.0.0'
-      '@opentelemetry/sdk-trace-base': '>=2.0.0 <3.0.0'
-      '@opentelemetry/sdk-trace-node': '>=2.0.0 <3.0.0'
-      '@opentelemetry/sdk-trace-web': '>=2.0.0 <3.0.0'
+      '@opentelemetry/resources': ^3.1.1
+      '@opentelemetry/sdk-logs': ^3.1.1
+      '@opentelemetry/sdk-metrics': ^3.1.1
+      '@opentelemetry/sdk-trace': ^3.1.1
       '@opentelemetry/semantic-conventions': '>=1.33.0 <2.0.0'
       effect: ^4.1.4
     peerDependenciesMeta:
@@ -8909,11 +8908,7 @@ packages:
         optional: true
       '@opentelemetry/sdk-metrics':
         optional: true
-      '@opentelemetry/sdk-trace-base':
-        optional: true
-      '@opentelemetry/sdk-trace-node':
-        optional: true
-      '@opentelemetry/sdk-trace-web':
+      '@opentelemetry/sdk-trace':
         optional: true
 
   '@effect/tsgo-darwin-arm64@0.69.0':
@@ -9961,21 +9956,21 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@octanejs/rspack-plugin@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz':
-    resolution: {integrity: sha512-I8m/d/oj3Qh8nG5nqkWD90m8qgNwlPK9oNh5tlVvGNdSYCTLddRG7Og8wpYKFAGxe2D+0zOIhYGarC0ZKZgSzw==, tarball: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz}
-    version: 0.2.4
-    engines: {node: '>=22.22.2'}
-    peerDependencies:
-      '@rspack/core': ^2.0.0
-      octane: ^0.13.8
-
-  '@octanejs/tanstack-router@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz':
-    resolution: {integrity: sha512-wdnPhVZSQqZg2DDllUyz4RZufn7I0GEnPKrb/CB21Z8JYKnunAtZn41Dma/+xhg5xvN/USnIg9Eyyf2nbJgxMQ==, tarball: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz}
+  '@octanejs/rspack-plugin@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-rspack-plugin-0.2.10.tgz':
+    resolution: {integrity: sha512-xXUksloBK6lTMdmkZ7jsujFNPT3Vt29lvRnPkdvkPN8aNAtKqoNpoQxDJw5Jo2IO0A7/OE6dUfzNaz1B1Oy7DQ==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-rspack-plugin-0.2.10.tgz}
     version: 0.2.10
     engines: {node: '>=22.22.2'}
     peerDependencies:
-      '@tanstack/router-core': 1.171.38
-      octane: ^0.13.8
+      '@rspack/core': ^2.0.0
+      octane: ^0.18.0
+
+  '@octanejs/tanstack-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-tanstack-router-0.3.4.tgz':
+    resolution: {integrity: sha512-uNGEXIgreF0QFFDycQ39cx+CkSzDI0t5eys/sfZfKRnZY2S+KQdmcCvUJywuuKBo4CqRqQxl2M8gepKjy1Ky4A==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-tanstack-router-0.3.4.tgz}
+    version: 0.3.4
+    engines: {node: '>=22.22.2'}
+    peerDependencies:
+      '@tanstack/router-core': 1.171.39
+      octane: ^0.18.0
 
   '@open-draft/deferred-promise@2.2.0':
     resolution: {integrity: sha512-CecwLWx3rhxVQF6V4bAgPS5t+So2sTbPgAzafKkVizyi7tlwpcFpdFqq+wqF2OwNBmqFuu6tOyouTuxgpMfzmA==}
@@ -11876,12 +11871,14 @@ packages:
 
   '@rstest/adapter-rsbuild@0.12.6':
     resolution: {integrity: sha512-Dj4i3h8ttF3Aq8U+ZotlNMK0Od4CN7SUJyHkQvwnjBP3Q/czGmgS1fDN5jlwFqDgkUTrpkQAjrhhi/m7fD4H7w==}
+    version: 0.12.6
     peerDependencies:
       '@rsbuild/core': ^1.0.0 || ^2.0.0
       '@rstest/core': ^0.12.0
 
   '@rstest/browser-react@0.12.6':
     resolution: {integrity: sha512-j2lEEIhg4nXb3rIZJcdIEkgu/VCFm2F/N2l37jtY7SOphlpPIvUx0rGcxfnQrkToKkluAeWTV3+2fA0fchhl8A==}
+    version: 0.12.6
     engines: {node: ^20.19.0 || >=22.12.0}
     peerDependencies:
       '@rstest/core': ^0.12.0
@@ -11890,6 +11887,7 @@ packages:
 
   '@rstest/browser@0.12.6':
     resolution: {integrity: sha512-QnU6e52qV+zC2fA3iJC4KbmEYPG5A/a4qt6s61FhGEyicUVxkNiicb0US1KV8GNrc2JmFBViXKp8vB9hFFSG2Q==}
+    version: 0.12.6
     engines: {node: ^20.19.0 || >=22.12.0}
     peerDependencies:
       '@rstest/core': 0.12.6
@@ -11898,12 +11896,13 @@ packages:
       playwright:
         optional: true
 
-  '@rstest/core@0.12.6':
-    resolution: {integrity: sha512-pOOij4Gj7h9fOJiRhcQ7zmVK+l3wSINpocwlsgq34ri60UOl9FACf5qyu7LMS2A3P4feqPdKmwS7QAT3vPk5ww==}
+  '@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz':
+    resolution: {integrity: sha512-eNAi0XHVaK4xszz622KgNCem2JMBLEyET6owEqzqeTIFlfoNH0ENpkAx+FYWklykfTG0bA22IHYGPPgzkuhdGA==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz}
+    version: 0.12.6
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
-      happy-dom: ^20.8.3
+      happy-dom: ^20.8.3 || ^21.0.4
       jsdom: '>=15.0.0'
     peerDependenciesMeta:
       happy-dom:
@@ -12030,6 +12029,7 @@ packages:
 
   '@solidjs/web@2.0.0-rc.22':
     resolution: {integrity: sha512-m2HvRD0jqes659bGjuCtXVbz4TChP0aO4lRLmbRYgEbmCnh7UUPI564jgbq/b4mbcp0gVwHDmi7uoSGeLaUuZA==}
+    version: 2.0.0-rc.22
     engines: {node: '>=22.12.0'}
     peerDependencies:
       solid-js: ^2.0.0-rc.22
@@ -12484,10 +12484,12 @@ packages:
     resolution: {integrity: sha512-w1+YvwmTkwt5n8yUqEH3IWZ9DsmorCZW/EQ3KYHnqEgIkOZpH54NvW6/Epq3Dzb8H0ifIeYX8PExvrNLIH5FIA==}
     engines: {node: '>=20.19'}
 
-  '@tanstack/react-router@1.170.46':
-    resolution: {integrity: sha512-ez1iNIhsPjGlaDHg3BXWs67EWVIYzB2tbopEHYDESdkO7owgkGb5de52+5Kv2v1fxdkggcNzo35bdk4arTVGQw==}
+  '@tanstack/react-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz':
+    resolution: {integrity: sha512-BsG4WmzfgPUgboR/IdQBGkvQauDMAAXUcorqritojyWv8tjIZaJh1aLvDOZ8ryLUsd4ZEQlEoTpMLFm9lkVyrg==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz}
+    version: 1.170.46
     engines: {node: '>=20.19'}
     peerDependencies:
+      '@tanstack/router-core': 1.171.39
       react: '>=18.0.0 || >=19.0.0'
       react-dom: '>=18.0.0 || >=19.0.0'
 
@@ -12497,20 +12499,13 @@ packages:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  '@tanstack/router-core@1.171.39':
-    resolution: {integrity: sha512-qUhoJ0meuSUqGYQbHbcJYdASr06YtK+bulbj6vtrhKYFkLgkSsZ6tXmMyym7sFxiSJSPYgasgozrL01LyyR/6A==}
-    engines: {node: '>=20.19'}
-
-  '@tanstack/router-core@https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz':
-    resolution: {integrity: sha512-d/aGvcyEVwDh2Cn9MuZM1n1dqTIqkFYi7AHY2Na/6x/a0jVSDVTNVVVY7QEsuKFXktaJF9zjVwetaRm/0MALZg==, tarball: https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz}
-    version: 1.171.38
+  '@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz':
+    resolution: {integrity: sha512-771YrGPEoDTYz2g/eROmQhQtWgDNUAGUk0NKP2EcBP8JWypOb4k7eudK1YnavdL81YZ6yEY85yqy696rKUcBcA==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz}
+    version: 1.171.39
     engines: {node: '>=20.19'}
 
   '@tanstack/store@0.11.2':
     resolution: {integrity: sha512-sJ4mjol8uQsHV0gOJzzjwXfh2Fwm+Sz0+8deqiTm4jGbMdjzNSW+xZCFm0kUa870uhd8yi+DpKnZb5Kc4apa0Q==}
-
-  '@tanstack/store@0.9.3':
-    resolution: {integrity: sha512-8reSzl/qGWGGVKhBoxXPMWzATSbZLZFWhwBAFO9NAyp0TxzfBP0mIrGb8CP8KrQTmvzXlR/vFPPUrHTLBGyFyw==}
 
   '@testing-library/dom@10.4.2':
     resolution: {integrity: sha512-yzr2S9HyAIdhz2/6qHgbs665Q7PKVcDF05vsOlHPxG1mo36gKVesdYVeDLnXgfjJ03CrKRk08knc6+E/9m8v2Q==}
@@ -12621,8 +12616,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@tsrx/core@0.5.5':
-    resolution: {integrity: sha512-22Eym4Dtxm1d4INJHT560WQC9cxKT/YWXKztM7utjzHLtVB8egSycFmFt3D9g01Tb6G4g7GiF5YpgCOexx15uA==}
+  '@tsrx/core@0.6.1':
+    resolution: {integrity: sha512-ZVtkf9bfQrLAyL+ecj6yv95OF/8r5U7VJQs5pbcMrgMj8Zf88Mcgj4Bt8HWgPgKi0ovsrcwkGwsHubki/sRRjg==}
 
   '@tsrx/oxc-darwin-arm64@0.24.0':
     resolution: {integrity: sha512-WJ8JRjojNOnS6QbcWCZnpfS1ZGVCEGbfNAM1sV7dn2Nt3owAO4eswhFrE2hM1TUhAuIZ0qFiZhfmvxfij5QnPA==}
@@ -12681,8 +12676,8 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
 
-  '@tsrx/runtime@0.2.4':
-    resolution: {integrity: sha512-rLwKYml/Qbb1D9LtB+NE5bcJDs/SowSKaL+lMR0m6Mr61lKZNuK43IFK+jxFmLvRlG+7ico1kOszMyhA5rObNA==}
+  '@tsrx/runtime@0.2.5':
+    resolution: {integrity: sha512-ueNjgjxe+LhLehJm46c4WeOsaiVKFV36DXwGRK4XGQUUMMto4zyxNp4LB/nLAmLhOed9CcIq/WMzHXvny+WPHA==}
 
   '@tybys/wasm-util@0.10.4':
     resolution: {integrity: sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A==}
@@ -12891,10 +12886,11 @@ packages:
   '@types/invariant@2.2.37':
     resolution: {integrity: sha512-IwpIMieE55oGWiXkQPSBY1nw1nFs6bsKXTFskNY8sdS17K24vyEBRQZEwlRS7ZmXCWnJcQtbxWzly+cODWGs2A==}
 
-  '@types/ioredis-mock@8.2.8':
-    resolution: {integrity: sha512-Nxr1CXk8NtGVzWQ8WoGCOyo+HARd4CFc/Nt2+ITt3WWLNlj1InW38SzZwOJNqzA38iplrpBFp6Ny4KjPfeI+bA==}
+  '@types/ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz':
+    resolution: {integrity: sha512-dvblb9YJYPaDWkHdAFsOrS48uQbUzQtKYc/FRRoIPlpCWFVQOWoLJo6Nt6niZemoWQEFq+do6OnqXwPhKwbQqQ==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz}
+    version: 8.2.8
     peerDependencies:
-      ioredis: ^5
+      ioredis: ^5 || ^6.0.0
 
   '@types/istanbul-lib-coverage@2.0.6':
     resolution: {integrity: sha512-2QF/t/auWm0lsy8XtKVPG19v3sSOQlJe/YHZgfjb/KBBHOGSV+J2q/S671rcq9uTBrLAXmZpqJiaQbMT+zNU1w==}
@@ -14576,8 +14572,9 @@ packages:
     engines: {node: '>=0.8.0'}
     hasBin: true
 
-  devalue@5.9.3:
-    resolution: {integrity: sha512-xRumYOCUZN/EesqHEU3WOXanOZNvfZFZ/o1AHVFDX1yI0UAkZkOgDXt341CzKoBVIkgQba55/+DjGBKrIoKcHw==}
+  devalue@6.0.3:
+    resolution: {integrity: sha512-3woMEITftG1wKeO/4d/QXH1DVKctTSZg3jNGPpjp9hNr5Hos8MCFF5McTML5ZtgKDObm2R591B0spRp2IVernA==}
+    engines: {node: '>=18'}
 
   devlop@1.1.0:
     resolution: {integrity: sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==}
@@ -15605,12 +15602,13 @@ packages:
   invariant@2.2.4:
     resolution: {integrity: sha512-phJfQVBuaJM5raOpJjSfkiD6BpbCE4Ns//LaXl6wGYtUBY83nWS6Rf9tXm2e8VaK60JEjYldbPif/A2B1C2gNA==}
 
-  ioredis-mock@8.13.1:
-    resolution: {integrity: sha512-Wsi50AU+cMiI32nAgfwpUaJVBtb4iQdVsOHl9M6R3tePCO/8vGsToCVIG82XWAxN4Se55TZoOzVseu+QngFLyw==}
+  ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/ioredis-mock-8.13.1.tgz:
+    resolution: {integrity: sha512-PxNq8ZR0ERihJ8Q0zilv2scRisnrfftBD+Kwn2H8Ph3Vc39nDadJufLaGmgBghTkUoHCkONZCKsgQQo0l68a5A==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/ioredis-mock-8.13.1.tgz}
+    version: 8.13.1
     engines: {node: '>=12.22'}
     peerDependencies:
       '@types/ioredis-mock': ^8
-      ioredis: ^5
+      ioredis: ^5 || ^6.0.0
 
   ioredis@6.0.0:
     resolution: {integrity: sha512-f+Dtubxfpf6KYFq7WVXJoOLn0bk4TJrMrN9SzeE+jrWrCWj7XX3fA6vkryafhADX+GMymRxgDJDOI33COkJc0w==}
@@ -16918,15 +16916,15 @@ packages:
     resolution: {integrity: sha512-5vvB5+W7ePv+p3uqxi+RcW1XAzLW0/hxt3/4X4Lc4qHudzOhmBiBwOY6DRob4WnanAEGvNcLjF+KNOufrUoEQw==}
     engines: {node: '>=12.20.0'}
 
-  octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz:
-    resolution: {integrity: sha512-ryNxtzX4pwMVHNhWyEYG8VnpRUByWUDhtVDpYlQkeqipTSF7s8cP86CzBl/miNCruE48D27mnR7E8UW6V1fEnA==, tarball: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz}
-    version: 0.13.8
+  octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz:
+    resolution: {integrity: sha512-4f1nn3MSOKVP70oW9go5WL7OAgieRvjzDaYzyzB/1ttymu/934jMW+Su0iemVIBE0lqU6zWnSoY9j1LWF/NO7A==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz}
+    version: 0.18.0
     engines: {node: '>=22.22.2'}
     peerDependencies:
-      '@tsrx/oxc': 0.20.0
+      '@tsrx/oxc': ^0.24.0
       react: ^19.0.0
       react-dom: ^19.0.0
-      typescript: ^5.9.3 || ^6.0.0 || >=7.1.0-0
+      typescript: ^5.9.3 || ^6.0.0 || ^7.0.2 || >=7.1.0-0
       vite: ^8.0.16
     peerDependenciesMeta:
       '@tsrx/oxc':
@@ -18501,8 +18499,9 @@ packages:
     resolution: {integrity: sha512-oZ7iUCxph8WYRHHcjBEc9unw3adt5CmSNlppj/5Q4k2RIrhl8Z5yY2Xr4j9zj0+wzVZ0bxmYoGSzKJnRl6A4yg==}
     engines: {node: '>=10.2.0'}
 
-  solid-js@2.0.0-rc.22:
-    resolution: {integrity: sha512-RGTA07/yyFoM0+ov1PlRPupSaCY6chQ/uFSDmlPwRewqN5TTkVsxIQqz/HJCG+UhtjsyxNoSoAQ9GLjGdlSpcQ==}
+  solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz:
+    resolution: {integrity: sha512-2FUA/PaO2AKrgYqS3RWJLhM3JlVwI/XnKjs6YZi9ps9vUyeoQWJilnzyesELe5bOCptSr/JpTYvCVblkLVj3tw==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz}
+    version: 2.0.0-rc.22
     engines: {node: '>=22.12.0'}
 
   source-map-js@1.2.2:
@@ -20813,7 +20812,7 @@ snapshots:
     dependencies:
       postcss: 8.5.33
 
-  '@effect/opentelemetry@4.1.4(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)':
+  '@effect/opentelemetry@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/effect-opentelemetry-4.1.4.tgz(patch_hash=41d00660534734d73420fe8f6ca1c8df6689445babba3adea61a417d3a20b804)(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.10.0)(@opentelemetry/resources@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/semantic-conventions@1.45.0)(effect@4.1.4)':
     dependencies:
       '@opentelemetry/semantic-conventions': 1.45.0
       effect: 4.1.4
@@ -20823,6 +20822,7 @@ snapshots:
       '@opentelemetry/resources': 3.1.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/sdk-logs': 3.1.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/sdk-metrics': 3.1.1(@opentelemetry/api@1.10.0)
+      '@opentelemetry/sdk-trace': 3.1.1(@opentelemetry/api@1.10.0)
 
   '@effect/tsgo-darwin-arm64@0.69.0':
     optional: true
@@ -21901,19 +21901,19 @@ snapshots:
   '@nx/nx-win32-x64-msvc@24.0.6':
     optional: true
 
-  '@octanejs/rspack-plugin@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-rspack-plugin-0.2.4.tgz(@rspack/core@2.3.2(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@octanejs/rspack-plugin@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-rspack-plugin-0.2.10.tgz(@rspack/core@2.3.2(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
       '@jridgewell/remapping': 2.3.5
       '@rspack/core': 2.3.2(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24)
-      octane: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      octane: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
-  '@octanejs/tanstack-router@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octanejs-tanstack-router-0.2.10.tgz(@tanstack/router-core@https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz)(octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@octanejs/tanstack-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octanejs-tanstack-router-0.3.4.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
       '@tanstack/history': 1.162.5
-      '@tanstack/router-core': https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz
-      '@tanstack/store': 0.9.3
+      '@tanstack/router-core': https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8)
+      '@tanstack/store': 0.11.2
       isbot: 5.2.3
-      octane: https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      octane: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@open-draft/deferred-promise@2.2.0': {}
 
@@ -23626,21 +23626,21 @@ snapshots:
       - core-js
       - supports-color
 
-  '@rstest/adapter-rsbuild@0.12.6(@rsbuild/core@2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0))(@rstest/core@0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))':
+  '@rstest/adapter-rsbuild@0.12.6(@rsbuild/core@2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0))(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))':
     dependencies:
       '@rsbuild/core': 2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)
-      '@rstest/core': 0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+      '@rstest/core': https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
 
-  '@rstest/browser-react@0.12.6(@rstest/core@0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@rstest/browser-react@0.12.6(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
-      '@rstest/core': 0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+      '@rstest/core': https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
 
-  '@rstest/browser@0.12.6(@rstest/core@0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(bufferutil@4.1.0)(playwright@1.65.1)(utf-8-validate@5.0.10)':
+  '@rstest/browser@0.12.6(@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0)))(bufferutil@4.1.0)(playwright@1.65.1)(utf-8-validate@5.0.10)':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
-      '@rstest/core': 0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
+      '@rstest/core': https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))
       convert-source-map: 2.0.0
       open-editor: 6.0.0
       pathe: 2.0.3
@@ -23654,7 +23654,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@rstest/core@0.12.6(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))':
+  '@rstest/core@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/rstest-core-0.12.6.tgz(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@5.0.10))(jsdom@31.0.1(@noble/hashes@2.4.0))':
     dependencies:
       '@rsbuild/core': 2.3.2(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)
       '@types/chai': 5.2.3
@@ -23790,11 +23790,11 @@ snapshots:
 
   '@solidjs/signals@2.0.0-rc.22': {}
 
-  '@solidjs/web@2.0.0-rc.22(solid-js@2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745))':
+  '@solidjs/web@2.0.0-rc.22(solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745))':
     dependencies:
       seroval: 1.8.1
       seroval-plugins: 1.8.0(seroval@1.8.1)
-      solid-js: 2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745)
+      solid-js: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745)
 
   '@speed-highlight/core@1.2.24': {}
 
@@ -24170,11 +24170,11 @@ snapshots:
 
   '@tanstack/history@1.162.5': {}
 
-  '@tanstack/react-router@1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@tanstack/react-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
       '@tanstack/history': 1.162.5
       '@tanstack/react-store': 0.11.2(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      '@tanstack/router-core': 1.171.39(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8)
+      '@tanstack/router-core': https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8)
       isbot: 5.2.3
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
@@ -24186,14 +24186,7 @@ snapshots:
       react-dom: 19.3.1(react@19.3.1)
       use-sync-external-store: 1.7.0(react@19.3.1)
 
-  '@tanstack/router-core@1.171.39(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8)':
-    dependencies:
-      '@tanstack/history': 1.162.5
-      cookie-es: 3.1.1
-      seroval: 1.8.1
-      seroval-plugins: 1.8.0(seroval@1.8.1)
-
-  '@tanstack/router-core@https://github.com/BleedingDev/router/releases/download/ultramodern-router-core-585d3233f7f5/tanstack-router-core-1.171.38.tgz':
+  '@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/tanstack-router-core-1.171.39.tgz(patch_hash=546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8)':
     dependencies:
       '@tanstack/history': 1.162.5
       cookie-es: 3.1.1
@@ -24201,8 +24194,6 @@ snapshots:
       seroval-plugins: 1.8.0(seroval@1.8.1)
 
   '@tanstack/store@0.11.2': {}
-
-  '@tanstack/store@0.9.3': {}
 
   '@testing-library/dom@10.4.2':
     dependencies:
@@ -24286,12 +24277,12 @@ snapshots:
   '@tsrs/win32-x64@0.25.0-ts7.1.0-beta':
     optional: true
 
-  '@tsrx/core@0.5.5':
+  '@tsrx/core@0.6.1':
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
       '@noble/hashes': 2.4.0
       '@sveltejs/acorn-typescript': 1.0.13(acorn@8.19.0)
-      '@tsrx/runtime': 0.2.4
+      '@tsrx/runtime': 0.2.5
       '@types/estree': 1.0.10
       '@types/estree-jsx': 1.0.5
       acorn: 8.19.0
@@ -24347,7 +24338,7 @@ snapshots:
       - svelte
       - vite-plus
 
-  '@tsrx/runtime@0.2.4': {}
+  '@tsrx/runtime@0.2.5': {}
 
   '@tybys/wasm-util@0.10.4':
     dependencies:
@@ -24605,7 +24596,7 @@ snapshots:
 
   '@types/invariant@2.2.37': {}
 
-  '@types/ioredis-mock@8.2.8(ioredis@6.0.0(supports-color@10.2.2))':
+  '@types/ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2))':
     dependencies:
       ioredis: 6.0.0(supports-color@10.2.2)
 
@@ -26335,7 +26326,7 @@ snapshots:
       defined: 1.0.1
       minimist: 1.2.8
 
-  devalue@5.9.3: {}
+  devalue@6.0.3: {}
 
   devlop@1.1.0:
     dependencies:
@@ -27562,11 +27553,11 @@ snapshots:
     dependencies:
       loose-envify: 1.4.0
 
-  ioredis-mock@8.13.1(@types/ioredis-mock@8.2.8(ioredis@6.0.0(supports-color@10.2.2)))(ioredis@6.0.0(supports-color@10.2.2)):
+  ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/ioredis-mock-8.13.1.tgz(@types/ioredis-mock@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2)))(ioredis@6.0.0(supports-color@10.2.2)):
     dependencies:
       '@ioredis/as-callback': 3.0.0
       '@ioredis/commands': 1.11.0
-      '@types/ioredis-mock': 8.2.8(ioredis@6.0.0(supports-color@10.2.2))
+      '@types/ioredis-mock': https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/types-ioredis-mock-8.2.8.tgz(ioredis@6.0.0(supports-color@10.2.2))
       fengari: 0.1.5
       fengari-interop: 0.1.4(fengari@0.1.5)
       ioredis: 6.0.0(supports-color@10.2.2)
@@ -29183,14 +29174,14 @@ snapshots:
 
   obug@3.0.0: {}
 
-  octane@https://github.com/BleedingDev/octane/releases/download/ultramodern-octane-2383d2ab1e70/octane-0.13.8.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)):
+  octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-48b9eef7067dbe35a1d905508b23deeec0f4535d-43904193604-1/octane-0.18.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)):
     dependencies:
-      '@tsrx/core': 0.5.5
+      '@tsrx/core': 0.6.1
       '@types/react': 19.3.0
       '@volar/language-core': 2.4.28
       '@volar/typescript': 2.4.28(typescript@7.0.2)
       csstype: 3.2.3
-      devalue: 5.9.3
+      devalue: 6.0.3
       es-module-lexer: 1.7.0
       esrap: 2.4.0
     optionalDependencies:
@@ -30979,7 +30970,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  solid-js@2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745):
+  solid-js@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-48b9eef7067dbe35a1d905508b23deeec0f4535d-43912289696-1/solid-js-2.0.0-rc.22.tgz(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745):
     dependencies:
       '@solidjs/signals': 2.0.0-rc.22
       csstype: 3.2.3
