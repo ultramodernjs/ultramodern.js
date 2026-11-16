@@ -1,0 +1,128 @@
+[
+  {
+    "name": "effect",
+    "version": "4.1.4",
+    "integrity": "sha512-Tgrv/9FN+TZYyOn8XSli+fVqAfwDrDAkiX5Uu9vztINb675VTQdhD0gWI5Kzvhlh9QqzjZvw72iugqw5pwoghQ==",
+    "tarball": "https://registry.npmjs.org/effect/-/effect-4.1.4.tgz"
+  },
+  {
+    "name": "@effect/opentelemetry",
+    "version": "4.1.4",
+    "integrity": "sha512-VJnookNrIWk0ZHl51DYMTRHXZrogR13kSSOJzcDxGhyUNDHvgWg217OY4R6bOrtdgM3mrPQiLRGNZ0a7bGyAJg==",
+    "tarball": "https://registry.npmjs.org/@effect/opentelemetry/-/opentelemetry-4.1.4.tgz"
+  },
+  {
+    "name": "@opentelemetry/api",
+    "version": "1.10.0",
+    "integrity": "sha512-lMkyes8iHrG+mk6WH7X70MdCLI2RS0FwNBY1PyQ8UemaijE2m5mv5A0Niy3HtbYTFrgkUEQjFMXmSAk2hQDuPQ==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/api/-/api-1.10.0.tgz"
+  },
+  {
+    "name": "@opentelemetry/api-logs",
+    "version": "0.223.0",
+    "integrity": "sha512-Oepm6etVPFCn0VWB1t833iOTgz1eYBDUPxcrOR/XvwzD1+Ag9VzSPSrrKAFNJ/haatj+8CXbG47pZXvdNQKDJw==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/api-logs/-/api-logs-0.223.0.tgz"
+  },
+  {
+    "name": "@opentelemetry/resources",
+    "version": "3.1.1",
+    "integrity": "sha512-dSd0FI1rfl+WHeaZxCTCEvwv6vcmUqkOHHTGWMkmyHg+PyL/wLbCqgsGKgI0wOwT0KGy9IMPAvY85hT8IPwApA==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/resources/-/resources-3.1.1.tgz"
+  },
+  {
+    "name": "@opentelemetry/sdk-logs",
+    "version": "3.1.1",
+    "integrity": "sha512-Z2V826tjNXRaCP7EtaJGzNuk16o8rq8OWnYBS60tfCkGyUv3Eugrz3GIj7AiXb5MAyeeOR2PJ9EC8WjeGeAgbg==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/sdk-logs/-/sdk-logs-3.1.1.tgz"
+  },
+  {
+    "name": "@opentelemetry/sdk-metrics",
+    "version": "3.1.1",
+    "integrity": "sha512-QBDkERTMERMxwtH7hHbE6esoo+5Tdb79MtF9lMh1EIFlij39prkSEWlfSD2flUGGv15b0GQ1X2jj/JqG9gQBTw==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/sdk-metrics/-/sdk-metrics-3.1.1.tgz"
+  },
+  {
+    "name": "@opentelemetry/sdk-trace",
+    "version": "3.1.1",
+    "integrity": "sha512-DJZXZJu1H3kek9Kh9SqJ46yN3faiNiabnqkEtl9eVnBvs4KuK+ynmk9jOyB0NfWAXWGZlTivCf46uwiXyr2PGA==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/sdk-trace/-/sdk-trace-3.1.1.tgz"
+  },
+  {
+    "name": "@opentelemetry/context-async-hooks",
+    "version": "3.1.1",
+    "integrity": "sha512-xOosgbes1+6bHPhVnYCd3EihFN8MpafEQwzmxeZ2zKXwWwV4F4780Pb097E326RZjCHTvUkwOYnXOALTfRfHVg==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/context-async-hooks/-/context-async-hooks-3.1.1.tgz"
+  },
+  {
+    "name": "@opentelemetry/core",
+    "version": "3.1.1",
+    "integrity": "sha512-6wc9r0zrTsAVOd/5UrZBsrHhXWNfwisolgWxd8o3Eu1HKIz8cAxQjOdGrrJB406ceFiGV+ckTcLdXzB+y/QVTA==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/core/-/core-3.1.1.tgz"
+  },
+  {
+    "name": "@opentelemetry/semantic-conventions",
+    "version": "1.45.0",
+    "integrity": "sha512-aOP45mbcOKbQVvFWfQmgoOPT8R2iwbbbgl83k4CujGV9BrJhFr3qG55MFpwFs4YLabpuW3HhzUY9eQxPlDqaZw==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/semantic-conventions/-/semantic-conventions-1.45.0.tgz"
+  },
+  {
+    "name": "typescript",
+    "version": "7.0.2",
+    "integrity": "sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==",
+    "tarball": "https://registry.npmjs.org/typescript/-/typescript-7.0.2.tgz"
+  },
+  {
+    "name": "@types/node",
+    "version": "26.6.6",
+    "integrity": "sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==",
+    "tarball": "https://registry.npmjs.org/@types/node/-/node-26.6.6.tgz"
+  },
+  {
+    "name": "@opentelemetry/sdk-trace-base",
+    "version": "2.12.1",
+    "integrity": "sha512-CMrcqFxTikYmYQCuHToBO4kQvWIseRk2ztzWidTd7VutIxj1rljvJZCZnFPJEGNOS7FvaSmRL21Jeuu3/wrCAQ==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/sdk-trace-base/-/sdk-trace-base-2.12.1.tgz"
+  },
+  {
+    "name": "@opentelemetry/sdk-trace-node",
+    "version": "2.12.1",
+    "integrity": "sha512-nRe0mimXZHknAEW2PKN9VbmML+93il5okotyDIUMhgYJ0QPM999fsh7djH6HDheyAbXO/C24t/B4fOQbNap8Vw==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/sdk-trace-node/-/sdk-trace-node-2.12.1.tgz"
+  },
+  {
+    "name": "@opentelemetry/sdk-trace-web",
+    "version": "2.12.1",
+    "integrity": "sha512-4X0e0VIch1Uk5dPcGZ3Lu/3RYrRSsEJTq5QwX01NQ61efG6qHAVwhOQoRgmKtqKL1x554JRtQJoAuxE5tEU/KA==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/sdk-trace-web/-/sdk-trace-web-2.12.1.tgz"
+  },
+  {
+    "name": "@opentelemetry/exporter-trace-otlp-http",
+    "version": "0.301.2",
+    "integrity": "sha512-mGyy0Jv/jgEnVdLME6SyxzPJgZml2vIZAJTF1/SKoM8baqDFsQSeFQ15vjo3qDxTOnbf04t2Y62oofsUy0ETDw==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/exporter-trace-otlp-http/-/exporter-trace-otlp-http-0.301.2.tgz"
+  },
+  {
+    "name": "@opentelemetry/exporter-metrics-otlp-http",
+    "version": "0.301.2",
+    "integrity": "sha512-DfnOIyttIFfw+P699WIUyinro4nZUvyYUulIvi/jYmOqNiMmj7FDTbSb0pKQqBvQmN2eXekLhMB11fMqc1RSNw==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/exporter-metrics-otlp-http/-/exporter-metrics-otlp-http-0.301.2.tgz"
+  },
+  {
+    "name": "@opentelemetry/exporter-logs-otlp-http",
+    "version": "0.301.2",
+    "integrity": "sha512-l3K1Fp2qaxAS8wKPyjVm7/QfnvJXZZfPuGXa+AYzNeoOk6qxcZwWZhLe9SYemWxDrtPTl3Mj82diLgVzbz54Hw==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/exporter-logs-otlp-http/-/exporter-logs-otlp-http-0.301.2.tgz"
+  },
+  {
+    "name": "@opentelemetry/exporter-prometheus",
+    "version": "0.301.2",
+    "integrity": "sha512-t3hz8uXV9kqKqL5jQkdwb+gN6KaMaEV8X8Xg0B/9P616j8zOG1CARyfD7Qv4ghzm+LT4jsCykqC0hd8eKuq92g==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/exporter-prometheus/-/exporter-prometheus-0.301.2.tgz"
+  },
+  {
+    "name": "@opentelemetry/otlp-exporter-base",
+    "version": "0.301.2",
+    "integrity": "sha512-XlC8Mqeqk5vY9/jXU2No4tAPDO4g7d3QqgxznctJrM1wzF/xKUiBvQwlQguGL98nEBweq2NCkXMGj4QIGSpplg==",
+    "tarball": "https://registry.npmjs.org/@opentelemetry/otlp-exporter-base/-/otlp-exporter-base-0.301.2.tgz"
+  }
+]

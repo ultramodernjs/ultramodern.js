@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "input": "Authenticated npm @effect/opentelemetry@4.1.4 tarball; exact identity in registry-identities.json",
+  "owningSource": "The complete src/**/*.ts tree shipped in that signed tarball, corrected by source.patch and checked against port.mjs",
+  "upstreamDeclaredBuild": {
+    "build": "tsc -b tsconfig.json && pnpm babel",
+    "babel": "babel dist --plugins annotate-pure-calls --out-dir dist --source-maps"
+  },
+  "upstreamBuildAvailability": "The npm tarball does not include its tsconfig and registry version metadata supplies no gitHead. This recipe does not claim upstream build byte identity or use an unverified branch as source.",
+  "canonicalCorrectedBuild": {
+    "node": "26.13.1",
+    "pnpm": "12.21.0",
+    "typescript": "7.0.2",
+    "configAuthority": "build.mjs compilerOptions",
+    "emission": "Remove only the operation-owned copied dist; compile the complete corrected owning src tree with strict library checking, JS maps, inlineSources and declaration maps.",
+    "mapCompletion": "For emitted declaration maps, embed exact source bytes as sourcesContent without changing mappings. Reject absolute or escaping sources, mismatched contents, missing map references or empty mappings. All base64 VLQ segments are decoded and checked against generated/source line and column bounds.",
+    "babel": "No Babel pass is used. This is an explicitly different deterministic corrected build, not a claim to reproduce upstream's Babel output or pure-call annotations."
+  },
+  "proof": [
+    "Two independently rebuilt package trees are byte-identical.",
+    "Canonical patch applied to pristine authenticated npm layout exactly reconstructs every corrected file.",
+    "npm pack and tar extraction preserve that complete layout.",
+    "Strict peers and frozen install, stable TS7 declaration consumer, NodeSdk/WebSdk runtime and real OTLP HTTP exporters execute from the reconstructed packed package.",
+    "The installed packed package tree is byte-identical to the reconstructed npm layout."
+  ],
+  "distribution": "Reusable intermediate only. No downstream distribution selected, activated or published.",
+  "commands": {
+    "qualify": "/Users/satan/bin/owned-temp-dir --run otel-packed -- node scripts/ultramodern-dependencies/otel-corrections/qualify.mjs",
+    "regenerate": "/Users/satan/bin/owned-temp-dir --run otel-packed -- node scripts/ultramodern-dependencies/otel-corrections/qualify.mjs --write-patch",
+    "tests": "/Users/satan/bin/owned-temp-dir --run otel-tests -- node --test scripts/ultramodern-dependencies/otel-corrections/*.test.mjs"
+  }
+}

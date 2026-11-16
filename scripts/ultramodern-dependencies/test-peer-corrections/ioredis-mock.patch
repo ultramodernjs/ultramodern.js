@@ -1,0 +1,12 @@
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -120,7 +120,7 @@
+   },
+   "peerDependencies": {
+     "@types/ioredis-mock": "^8",
+-    "ioredis": "^5"
++    "ioredis": "^5 || ^6.0.0"
+   },
+   "engines": {
+     "node": ">=12.22"

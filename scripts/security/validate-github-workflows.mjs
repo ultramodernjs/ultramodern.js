@@ -53,6 +53,7 @@ const workflowDirs = [
 
 const sensitiveWorkflowPaths = new Set([
   '.github/workflows/native-renderer-artifacts.yml',
+  '.github/workflows/support-artifacts.yml',
   '.github/workflows/publish-bleedingdev.yml',
   '.github/workflows/ultramodern-nightly.yml',
   '.github/workflows/workflow-security.yml',
@@ -2888,11 +2889,18 @@ const requiredSensitiveChecks = [
 ];
 
 function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
-  if (relativePath !== '.github/workflows/native-renderer-artifacts.yml')
+  const support = relativePath === '.github/workflows/support-artifacts.yml';
+  if (
+    !support &&
+    relativePath !== '.github/workflows/native-renderer-artifacts.yml'
+  )
     return [];
+  const writer = support ? 'publish' : 'release';
   const errors = [];
   const fail = reason =>
-    errors.push(`${relativePath} native artifact workflow ${reason}`);
+    errors.push(
+      `${relativePath} ${support ? 'support' : 'native'} artifact workflow ${reason}`,
+    );
   const sameKeys = (value, keys) =>
     isObject(value) &&
     JSON.stringify(Object.keys(value).sort()) ===
@@ -2912,8 +2920,8 @@ function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
   )
     fail('must be a read-only, non-cancelling manual dispatch');
   const jobs = workflow.jobs ?? {};
-  if (!sameKeys(jobs, ['produce', 'qualify', 'release']))
-    fail('must have exactly produce, qualify and release jobs');
+  if (!sameKeys(jobs, ['produce', 'qualify', writer]))
+    fail(`must have exactly produce, qualify and ${writer} jobs`);
   const guard =
     "github.repository == 'ultramodernjs/ultramodern.js' && github.repository_id == '1151231350' && github.ref == 'refs/heads/main-ultramodern' && github.actor == 'BleedingDev' && github.triggering_actor == 'BleedingDev'";
   if (String(jobs.produce?.if).replace(/\s+/gu, ' ').trim() !== guard)
@@ -2921,13 +2929,13 @@ function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
   for (const [id, expectedNeeds, phase] of [
     ['produce', [], 'produce'],
     ['qualify', ['produce'], 'qualify'],
-    ['release', ['produce', 'qualify'], 'publish'],
+    [writer, ['produce', 'qualify'], 'publish'],
   ]) {
     const job = jobs[id];
     if (
       !isObject(job) ||
       JSON.stringify(needs(job)) !== JSON.stringify(expectedNeeds) ||
-      !permissions(job.permissions, id === 'release' ? 'write' : 'read') ||
+      !permissions(job.permissions, id === writer ? 'write' : 'read') ||
       Object.hasOwn(job, 'continue-on-error') ||
       (id !== 'produce' && job.if !== undefined) ||
       !Number.isInteger(job['timeout-minutes']) ||
@@ -2951,17 +2959,26 @@ function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
     )
       fail(`${id} must select the exact owning Node without root pins`);
     const prefix =
-      id === 'release'
+      id === writer
         ? ''
-        : [
-            'NATIVE_ROUTER_PNPM="$(mise which pnpm --tool pnpm@11.21.0)"',
-            'NATIVE_RUNTIME_PNPM="$(mise which pnpm --tool pnpm@12.21.0)"',
-            'export NATIVE_ROUTER_PNPM NATIVE_RUNTIME_PNPM',
-            'mise exec node@26.13.1 -- ',
-          ].join('\n');
-    const command = `${prefix}node scripts/ultramodern-renderers/native-artifacts/main.mjs ${phase} "$RUNNER_TEMP/native-artifacts"`;
+        : support
+          ? [
+              'SUPPORT_PNPM_BINARY="$(mise which pnpm --tool pnpm@12.21.0)"',
+              'export SUPPORT_PNPM_BINARY',
+              'mise exec node@26.13.1 -- ',
+            ].join('\n')
+          : [
+              'NATIVE_ROUTER_PNPM="$(mise which pnpm --tool pnpm@11.21.0)"',
+              'NATIVE_RUNTIME_PNPM="$(mise which pnpm --tool pnpm@12.21.0)"',
+              'export NATIVE_ROUTER_PNPM NATIVE_RUNTIME_PNPM',
+              'mise exec node@26.13.1 -- ',
+            ].join('\n');
+    const entry = support
+      ? 'scripts/ultramodern-support-artifacts/main.mjs'
+      : 'scripts/ultramodern-renderers/native-artifacts/main.mjs';
+    const command = `${prefix}node ${entry} ${phase} "$RUNNER_TEMP/${support ? 'support' : 'native'}-artifacts"`;
     const steps = (job.steps ?? []).filter(step =>
-      String(step.run ?? '').includes('native-artifacts/main.mjs'),
+      String(step.run ?? '').includes(entry),
     );
     if (
       steps.length !== 1 ||
@@ -2973,16 +2990,19 @@ function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
       fail(
         `${id} must execute its mandatory exact qualification or publication command`,
       );
-    if (id !== 'release') {
+    if (id !== writer) {
       const installer = (job.steps ?? []).filter(step =>
         actionMatches(step, 'jdx/mise-action'),
       );
       if (
         installer.length !== 1 ||
         installer[0].with?.install_args !==
-          'node@26.13.1 pnpm@11.21.0 pnpm@12.21.0' ||
+          (support
+            ? 'node@26.13.1 pnpm@12.21.0'
+            : 'node@26.13.1 pnpm@11.21.0 pnpm@12.21.0') ||
         installer[0].with?.version !== '2026.11.8' ||
         installer[0].with?.cache !== false ||
+        (support && installer[0].with?.cache_save !== false) ||
         installer[0].if !== undefined ||
         installer[0]['continue-on-error'] !== undefined ||
         job.steps.indexOf(installer[0]) >= job.steps.indexOf(steps[0])

@@ -1,0 +1,21 @@
+// Registry identities are refreshed explicitly; qualifier verifies exact tarball bytes.
+export const versions = {
+  effect: '4.1.4',
+  '@effect/opentelemetry': '4.1.4',
+  '@opentelemetry/api': '1.10.0',
+  '@opentelemetry/api-logs': '0.223.0',
+  '@opentelemetry/resources': '3.1.1',
+  '@opentelemetry/sdk-logs': '3.1.1',
+  '@opentelemetry/sdk-metrics': '3.1.1',
+  '@opentelemetry/sdk-trace': '3.1.1',
+  '@opentelemetry/context-async-hooks': '3.1.1',
+  '@opentelemetry/core': '3.1.1',
+  '@opentelemetry/semantic-conventions': '1.45.0',
+  '@opentelemetry/exporter-trace-otlp-http': '0.301.2',
+  '@opentelemetry/exporter-metrics-otlp-http': '0.301.2',
+  '@opentelemetry/exporter-logs-otlp-http': '0.301.2',
+  '@opentelemetry/exporter-prometheus': '0.301.2',
+  '@opentelemetry/otlp-exporter-base': '0.301.2',
+  typescript: '7.0.2',
+  '@types/node': '26.6.6',
+};

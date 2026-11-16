@@ -1,0 +1,259 @@
+--- a/src/NodeSdk.ts
++++ b/src/NodeSdk.ts
+@@ -12,10 +12,10 @@
+  * @since 4.0.0
+  */
+ import type * as Otel from "@opentelemetry/api"
+-import type { LoggerProviderConfig, LogRecordProcessor } from "@opentelemetry/sdk-logs"
++import type { LoggerProviderOptions, LogRecordProcessor } from "@opentelemetry/sdk-logs"
+ import type { MetricReader } from "@opentelemetry/sdk-metrics"
+-import type { SpanProcessor, TracerConfig } from "@opentelemetry/sdk-trace-base"
+-import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node"
++import type { SpanProcessor, TracerProviderOptions } from "@opentelemetry/sdk-trace"
++import { TracerProvider } from "@opentelemetry/sdk-trace"
+ import type { NonEmptyReadonlyArray } from "effect/Array"
+ import type * as Duration from "effect/Duration"
+ import * as Effect from "effect/Effect"
+@@ -36,11 +36,11 @@
+  */
+ export interface Configuration {
+   readonly spanProcessor?: SpanProcessor | ReadonlyArray<SpanProcessor> | undefined
+-  readonly tracerConfig?: Omit<TracerConfig, "resource"> | undefined
++  readonly tracerConfig?: Omit<TracerProviderOptions, "resource"> | undefined
+   readonly metricReader?: MetricReader | ReadonlyArray<MetricReader> | undefined
+   readonly metricTemporality?: Metrics.TemporalityPreference | undefined
+   readonly logRecordProcessor?: LogRecordProcessor | ReadonlyArray<LogRecordProcessor> | undefined
+-  readonly loggerProviderConfig?: Omit<LoggerProviderConfig, "resource"> | undefined
++  readonly loggerProviderConfig?: Omit<LoggerProviderOptions, "resource"> | undefined
+   readonly loggerMergeWithExisting?: boolean | undefined
+   readonly resource?: {
+     readonly serviceName: string
+@@ -59,7 +59,7 @@
+  */
+ export const layerTracerProvider = (
+   processor: SpanProcessor | NonEmptyReadonlyArray<SpanProcessor>,
+-  config?: Omit<TracerConfig, "resource"> & {
++  config?: Omit<TracerProviderOptions, "resource"> & {
+     readonly shutdownTimeout?: Duration.Input | undefined
+   }
+ ): Layer.Layer<Tracer.OtelTracerProvider, never, Resource.Resource> =>
+@@ -69,7 +69,7 @@
+       const resource = yield* Resource.Resource
+       return yield* Effect.acquireRelease(
+         Effect.sync(() => {
+-          const provider = new NodeTracerProvider({
++          const provider = new TracerProvider({
+             ...(config ?? undefined),
+             resource,
+             spanProcessors: Array.isArray(processor) ? (processor as any) : [processor]
+--- a/src/WebSdk.ts
++++ b/src/WebSdk.ts
+@@ -11,10 +11,10 @@
+  * @since 4.0.0
+  */
+ import type * as Otel from "@opentelemetry/api"
+-import type { LoggerProviderConfig, LogRecordProcessor } from "@opentelemetry/sdk-logs"
++import type { LoggerProviderOptions, LogRecordProcessor } from "@opentelemetry/sdk-logs"
+ import type { MetricReader } from "@opentelemetry/sdk-metrics"
+-import type { SpanProcessor, TracerConfig } from "@opentelemetry/sdk-trace-base"
+-import { WebTracerProvider } from "@opentelemetry/sdk-trace-web"
++import type { SpanProcessor, TracerProviderOptions } from "@opentelemetry/sdk-trace"
++import { TracerProvider } from "@opentelemetry/sdk-trace"
+ import type { NonEmptyReadonlyArray } from "effect/Array"
+ import * as Effect from "effect/Effect"
+ import { constant, type LazyArg } from "effect/Function"
+@@ -34,11 +34,11 @@
+  */
+ export interface Configuration {
+   readonly spanProcessor?: SpanProcessor | ReadonlyArray<SpanProcessor> | undefined
+-  readonly tracerConfig?: Omit<TracerConfig, "resource">
++  readonly tracerConfig?: Omit<TracerProviderOptions, "resource">
+   readonly metricReader?: MetricReader | ReadonlyArray<MetricReader> | undefined
+   readonly metricTemporality?: Metrics.TemporalityPreference | undefined
+   readonly logRecordProcessor?: LogRecordProcessor | ReadonlyArray<LogRecordProcessor> | undefined
+-  readonly loggerProviderConfig?: Omit<LoggerProviderConfig, "resource"> | undefined
++  readonly loggerProviderConfig?: Omit<LoggerProviderOptions, "resource"> | undefined
+   readonly loggerMergeWithExisting?: boolean | undefined
+   readonly resource: {
+     readonly serviceName: string
+@@ -56,7 +56,7 @@
+  */
+ export const layerTracerProvider = (
+   processor: SpanProcessor | NonEmptyReadonlyArray<SpanProcessor>,
+-  config?: Omit<TracerConfig, "resource">
++  config?: Omit<TracerProviderOptions, "resource">
+ ): Layer.Layer<Tracer.OtelTracerProvider, never, Resource.Resource> =>
+   Layer.effect(
+     Tracer.OtelTracerProvider,
+@@ -64,7 +64,7 @@
+       const resource = yield* Resource.Resource
+       return yield* Effect.acquireRelease(
+         Effect.sync(() => {
+-          const provider = new WebTracerProvider({
++          const provider = new TracerProvider({
+             ...(config ?? undefined),
+             resource,
+             spanProcessors: Array.isArray(processor) ? (processor as any) : [processor]
+--- a/src/OtelLogger.ts
++++ b/src/OtelLogger.ts
+@@ -190,7 +190,7 @@
+  */
+ export const layerLoggerProvider = (
+   processor: Otel.LogRecordProcessor | NonEmptyReadonlyArray<Otel.LogRecordProcessor>,
+-  config?: Omit<Otel.LoggerProviderConfig, "resource"> & {
++  config?: Omit<Otel.LoggerProviderOptions, "resource"> & {
+     readonly shutdownTimeout?: Duration.Input | undefined
+   }
+ ): Layer.Layer<OtelLoggerProvider, never, Resource> =>
+--- a/src/internal/metrics.ts
++++ b/src/internal/metrics.ts
+@@ -9,17 +9,19 @@
+   MetricProducer
+ } from "@opentelemetry/sdk-metrics"
+ import { AggregationTemporality, DataPointType, InstrumentType } from "@opentelemetry/sdk-metrics"
+-import type { InstrumentDescriptor } from "@opentelemetry/sdk-metrics/build/src/InstrumentDescriptor.js"
++import type { MetricDescriptor } from "@opentelemetry/sdk-metrics"
+ import * as Arr from "effect/Array"
+ import type * as Context from "effect/Context"
+ import * as Metric from "effect/Metric"
+ import * as Rec from "effect/Record"
+ import type * as Metrics from "../OtelMetrics.ts"
+ 
++type MetricDescriptorWithType = MetricDescriptor & { readonly type: InstrumentType }
++
+ const sdkName = "@effect/opentelemetry/Metrics"
+ 
+-type MetricDataWithInstrumentDescriptor = MetricData & {
+-  readonly descriptor: InstrumentDescriptor
++type MetricDataWithMetricDescriptorWithType = MetricData & {
++  readonly descriptor: MetricDescriptorWithType
+ }
+ 
+ interface PreviousHistogramState {
+@@ -90,7 +92,7 @@
+     this.previousSummaryState = new Map()
+     const metricData: Array<MetricData> = []
+     const metricDataByName = new Map<string, MetricData>()
+-    const addMetricData = (data: MetricDataWithInstrumentDescriptor) => {
++    const addMetricData = (data: MetricDataWithMetricDescriptorWithType) => {
+       metricData.push(data)
+       metricDataByName.set(data.descriptor.name, data)
+     }
+@@ -374,8 +376,7 @@
+                 description: state.description ?? "",
+                 unit: "1",
+                 type: InstrumentType.COUNTER,
+-                valueType: ValueType.INT,
+-                advice: {}
++                valueType: ValueType.INT
+               },
+               aggregationTemporality,
+               isMonotonic: true,
+@@ -388,8 +389,7 @@
+                 description: state.description ?? "",
+                 unit: "1",
+                 type: InstrumentType.COUNTER,
+-                valueType: ValueType.DOUBLE,
+-                advice: {}
++                valueType: ValueType.DOUBLE
+               },
+               aggregationTemporality,
+               isMonotonic: true,
+@@ -436,15 +436,14 @@
+ const descriptorFromState = (
+   state: Metric.Metric.Snapshot,
+   attributes: Record<string, string>
+-): InstrumentDescriptor => {
++): MetricDescriptorWithType => {
+   const unit = attributes.unit ?? attributes.time_unit ?? "1"
+   return {
+     name: state.id,
+     description: state.description ?? "",
+     unit,
+     type: instrumentTypeFromSnapshot(state),
+-    valueType: determineValueType(state),
+-    advice: {}
++    valueType: determineValueType(state)
+   }
+ }
+ 
+--- a/package.json
++++ b/package.json
+@@ -60,14 +60,12 @@
+   "peerDependencies": {
+     "@opentelemetry/api": ">=1.9.0 <2.0.0",
+     "@opentelemetry/api-logs": ">=0.203.0 <0.300.0",
+-    "@opentelemetry/resources": ">=2.0.0 <3.0.0",
+-    "@opentelemetry/sdk-logs": ">=0.203.0 <0.300.0",
+-    "@opentelemetry/sdk-metrics": ">=2.0.0 <3.0.0",
+-    "@opentelemetry/sdk-trace-base": ">=2.0.0 <3.0.0",
+-    "@opentelemetry/sdk-trace-node": ">=2.0.0 <3.0.0",
+-    "@opentelemetry/sdk-trace-web": ">=2.0.0 <3.0.0",
++    "@opentelemetry/resources": "^3.1.1",
++    "@opentelemetry/sdk-logs": "^3.1.1",
++    "@opentelemetry/sdk-metrics": "^3.1.1",
+     "@opentelemetry/semantic-conventions": ">=1.33.0 <2.0.0",
+-    "effect": "^4.1.4"
++    "effect": "^4.1.4",
++    "@opentelemetry/sdk-trace": "^3.1.1"
+   },
+   "peerDependenciesMeta": {
+     "@opentelemetry/api": {
+@@ -79,37 +77,29 @@
+     "@opentelemetry/sdk-metrics": {
+       "optional": true
+     },
+-    "@opentelemetry/sdk-trace-base": {
+-      "optional": true
+-    },
+-    "@opentelemetry/sdk-trace-node": {
+-      "optional": true
+-    },
+-    "@opentelemetry/sdk-trace-web": {
+-      "optional": true
+-    },
+     "@opentelemetry/sdk-logs": {
+       "optional": true
+     },
+     "@opentelemetry/api-logs": {
+       "optional": true
++    },
++    "@opentelemetry/sdk-trace": {
++      "optional": true
+     }
+   },
+   "devDependencies": {
+     "@opentelemetry/api": "^1.10.0",
+     "@opentelemetry/api-logs": "^0.223.0",
+-    "@opentelemetry/context-async-hooks": "^2.12.0",
+-    "@opentelemetry/exporter-metrics-otlp-http": "0.223.0",
+-    "@opentelemetry/exporter-prometheus": "^0.223.0",
+-    "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
+-    "@opentelemetry/otlp-exporter-base": "^0.223.0",
+-    "@opentelemetry/resources": "^2.12.0",
+-    "@opentelemetry/sdk-logs": "^0.223.0",
+-    "@opentelemetry/sdk-metrics": "^2.12.0",
+-    "@opentelemetry/sdk-trace-base": "^2.12.0",
+-    "@opentelemetry/sdk-trace-node": "^2.12.0",
+-    "@opentelemetry/sdk-trace-web": "^2.12.0",
+-    "@opentelemetry/semantic-conventions": "^1.45.0"
++    "@opentelemetry/context-async-hooks": "^3.1.1",
++    "@opentelemetry/exporter-metrics-otlp-http": "^0.301.2",
++    "@opentelemetry/exporter-prometheus": "^0.301.2",
++    "@opentelemetry/exporter-trace-otlp-http": "^0.301.2",
++    "@opentelemetry/otlp-exporter-base": "^0.301.2",
++    "@opentelemetry/resources": "^3.1.1",
++    "@opentelemetry/sdk-logs": "^3.1.1",
++    "@opentelemetry/sdk-metrics": "^3.1.1",
++    "@opentelemetry/semantic-conventions": "^1.45.0",
++    "@opentelemetry/sdk-trace": "^3.1.1"
+   },
+   "scripts": {
+     "codegen": "effect-utils codegen",
+@@ -117,4 +107,4 @@
+     "babel": "babel dist --plugins annotate-pure-calls --out-dir dist --source-maps",
+     "check": "tsc -b tsconfig.json"
+   }
+-}
+\ No newline at end of file
++}

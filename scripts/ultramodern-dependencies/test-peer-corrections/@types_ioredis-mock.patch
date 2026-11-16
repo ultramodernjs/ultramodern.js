@@ -1,0 +1,12 @@
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -21,7 +21,7 @@
+     "scripts": {},
+     "dependencies": {},
+     "peerDependencies": {
+-        "ioredis": "^5"
++        "ioredis": "^5 || ^6.0.0"
+     },
+     "typesPublisherContentHash": "26a7b997c863cbfff988aa10e0d789dc4d52c17ab2b1b036c7f774f03c7861ae",
+     "typeScriptVersion": "5.6"

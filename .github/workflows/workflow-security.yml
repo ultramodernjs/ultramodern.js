@@ -67,3 +67,9 @@ jobs:
 
       - name: Validate workflow security
         run: node scripts/security/validate-github-workflows.mjs
+
+      - name: Run support archive control tests
+        run: |
+          work="$(mktemp -d "$RUNNER_TEMP/support-controls.XXXXXX")"
+          trap 'rm -rf "$work"' EXIT
+          OWNED_TEMP_DIR="$work" mise exec node@26.13.1 -- node --test scripts/ultramodern-artifacts/*.test.mjs scripts/ultramodern-support-artifacts/*.test.mjs
