@@ -13,12 +13,11 @@ const readWorkflow = name =>
     ),
   );
 const workflow = readWorkflow('native-compatibility');
-const required = [
-  'native-framework-contracts',
-  'pack-candidate',
-  'packed-erp',
-  'packed-tractor',
-];
+// The clean-room ERP acceptance and the Tractor rehearsal left the pull
+// request: the release lane runs the identical reusable workflows on the real
+// bundle and both still block every publish, so this gate covers the two lanes
+// that stayed.
+const required = ['native-framework-contracts', 'pack-candidate'];
 
 test('required native compatibility rejects every unsuccessful or missing consumer lane', () => {
   const aggregate = workflow.jobs['native-compatibility'];
@@ -50,26 +49,42 @@ test('required native compatibility rejects every unsuccessful or missing consum
 
 test('ERP and Tractor consume the same once-packed cohort through the release owners', () => {
   const jobs = workflow.jobs;
+  const release = readWorkflow('publish-bleedingdev');
   const identity = [
     '${{',
-    'needs.pack-candidate.outputs.producer_artifact_identity',
+    'needs.prepare-release.outputs.producer_artifact_identity',
     '}}',
   ].join(' ');
-  assert.equal(jobs['packed-erp'].needs, 'pack-candidate');
+  // Both rehearsals now live only in the release lane, and both are required
+  // by the job that reaches npm, so nothing can publish without them.
   assert.equal(
-    jobs['packed-erp'].uses,
+    release.jobs['accept-release'].uses,
     './.github/workflows/ultramodern-release-acceptance.yml',
   );
-  assert.equal(jobs['packed-erp'].with.producer_artifact_identity, identity);
-  assert.equal(jobs['packed-tractor'].needs, 'pack-candidate');
   assert.equal(
-    jobs['packed-tractor'].uses,
+    release.jobs['accept-release'].with.producer_artifact_identity,
+    identity,
+  );
+  assert.equal(
+    release.jobs['accept-release'].with.required_renderer_features,
+    true,
+  );
+  assert.equal(
+    release.jobs['rehearse-tractor'].uses,
     './.github/workflows/ultramodern-tractor-downstream.yml',
   );
-  assert.deepEqual(jobs['packed-tractor'].with, {
+  assert.deepEqual(release.jobs['rehearse-tractor'].with, {
     mode: 'source',
     release_bundle_artifact: `bleedingdev-release-bundle-${identity}`,
   });
+  for (const gate of ['accept-release', 'rehearse-tractor']) {
+    assert.ok(
+      release.jobs.publish.needs.includes(gate),
+      `publish must stay blocked on ${gate}`,
+    );
+  }
+  assert.equal(jobs['packed-erp'], undefined);
+  assert.equal(jobs['packed-tractor'], undefined);
   const commands = jobs['pack-candidate'].steps
     .map(step => step.run ?? '')
     .join('\n');
@@ -83,8 +98,6 @@ test('ERP and Tractor consume the same once-packed cohort through the release ow
     commands,
     /--publish|publish-sidecars|qualify-source|test:scripts/,
   );
-  const release = readWorkflow('publish-bleedingdev');
-  assert.equal(release.jobs['accept-release'].uses, jobs['packed-erp'].uses);
   const acceptance = readWorkflow('ultramodern-release-acceptance');
   assert.deepEqual(acceptance.permissions, {
     actions: 'read',
@@ -239,8 +252,10 @@ test('retained Tractor adoption requires a successful live publication and exact
 });
 
 test('both required feature workflows stage verified native inputs before consumer execution', () => {
+  // The source leg runs the feature rows in its own `renderer-features` job,
+  // concurrently with the ERP acceptance; `seal` binds the two receipts.
   const source = readWorkflow('ultramodern-release-acceptance').jobs[
-    'accept-release'
+    'renderer-features'
   ];
   const published = readWorkflow('publish-bleedingdev').jobs[
     'accept-published'
@@ -252,7 +267,10 @@ test('both required feature workflows stage verified native inputs before consum
     assert(step, 'The required installed feature step must exist');
     const command = step.run;
     assert.match(command, /export OWNED_TEMP_DIR="\$feature_work"/u);
-    assert.match(command, /feature_work="\$\(realpath "\$feature_work"\)"/u);
+    // The source leg uses a fixed $RUNNER_TEMP/renderer-features so `seal`
+    // reconstructs the identical evidence root; the published leg still
+    // mktemp's one. Either way the root the proofs own is canonicalised.
+    assert.match(command, /feature_work="\$\(realpath "[^"\n]+"\)"/u);
     assert.match(
       command,
       /trap 'rm -rf -- "\$feature_work\/native-inputs"' EXIT/u,
@@ -301,60 +319,56 @@ test('required native PR checks run focused renderer acceptance controls', () =>
   assert.match(controls.run, /trap 'rm -rf -- "\$controls_work"' EXIT/u);
 });
 
-test('feature proofs use Depot for owned jobs and retain GitHub-hosted fork isolation', () => {
+test('feature proofs select Depot on every event, with no GitHub-hosted branch', () => {
   const source = readWorkflow('ultramodern-release-acceptance').jobs[
     'accept-release'
   ];
   const published = readWorkflow('publish-bleedingdev').jobs[
     'accept-published'
   ];
-  const expression = source['runs-on'].slice(3, -3);
-  const select = (required, vars = {}, foreign = false) =>
-    runInNewContext(expression, {
-      inputs: { required_renderer_features: required },
-      github: {
-        event_name: 'pull_request',
-        repository: 'owner/repo',
-        event: {
-          pull_request: {
-            head: {
-              repo: { full_name: foreign ? 'contributor/repo' : 'owner/repo' },
+  // Every job of this repository runs on Depot, so no event and no repository
+  // variable may resolve either leg to a GitHub-hosted label.
+  for (const job of [source, published]) {
+    const expression = job['runs-on'].slice(3, -3);
+    const select = (vars = {}, foreign = false, required = true) =>
+      runInNewContext(expression, {
+        inputs: { required_renderer_features: required },
+        github: {
+          event_name: 'pull_request',
+          repository: 'owner/repo',
+          event: {
+            pull_request: {
+              head: {
+                repo: {
+                  full_name: foreign ? 'contributor/repo' : 'owner/repo',
+                },
+              },
             },
           },
         },
-      },
-      vars,
-      fromJSON: JSON.parse,
-    });
-  for (const required of [false, true]) {
-    assert.equal(
-      select(required, { DEPOT_LINUX_RUNNER: 'depot-linux' }),
-      'depot-linux',
-    );
-    assert.equal(
-      select(required, { DEPOT_LINUX_RUNNER: 'depot-linux' }, true),
-      'ubuntu-latest',
-    );
-    assert.equal(
-      select(required, {
-        BLEEDINGDEV_ACCEPT_RUNNER_LABELS: '["self-hosted","linux"]',
-      }),
-      'depot-ubuntu-24.04-8',
-    );
-    assert.equal(select(required), 'depot-ubuntu-24.04-8');
+        vars,
+        fromJSON: JSON.parse,
+      });
+    for (const required of [false, true]) {
+      for (const foreign of [false, true]) {
+        assert.equal(
+          select({ DEPOT_LINUX_RUNNER: 'depot-linux' }, foreign, required),
+          'depot-linux',
+        );
+        assert.equal(
+          select(
+            { BLEEDINGDEV_ACCEPT_RUNNER_LABELS: '["self-hosted","linux"]' },
+            foreign,
+            required,
+          ),
+          'depot-ubuntu-24.04-8',
+        );
+        assert.equal(select({}, foreign, required), 'depot-ubuntu-24.04-8');
+      }
+    }
   }
-  const publishedRunner = published['runs-on'].slice(3, -3);
-  assert.equal(
-    runInNewContext(publishedRunner, {
-      vars: { DEPOT_LINUX_RUNNER: 'depot-linux' },
-    }),
-    'depot-linux',
-  );
-  assert.equal(
-    runInNewContext(publishedRunner, { vars: {} }),
-    'depot-ubuntu-24.04-8',
-  );
-  for (const job of [source, published]) {
+  const acceptance = readWorkflow('ultramodern-release-acceptance').jobs;
+  for (const job of [...Object.values(acceptance), published]) {
     for (const env of [job.env, ...job.steps.map(step => step.env)]) {
       assert.equal(env?.RUNNER_ENVIRONMENT, undefined);
       assert.equal(env?.GITHUB_ACTIONS, undefined);
@@ -365,7 +379,7 @@ test('feature proofs use Depot for owned jobs and retain GitHub-hosted fork isol
 
 test('renderer evidence is required after execution, not when upstream failure skipped the feature step', () => {
   const job = readWorkflow('ultramodern-release-acceptance').jobs[
-    'accept-release'
+    'renderer-features'
   ];
   const execution = job.steps.find(
     step => step.name === 'Run exact-bundle installed renderer features',

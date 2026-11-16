@@ -1922,14 +1922,15 @@ function expandIntegrationMatrix(matrix) {
 }
 
 function collectFrameworkPartitionErrors(workflow, relativePath) {
+  // Every integration job runs on Depot, fallback included.
   const linuxRunner = [
     '${{',
-    "vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04'",
+    "vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'",
     '}}',
   ].join(' ');
   const windowsRunner = [
     '${{',
-    "vars.DEPOT_WINDOWS_RUNNER || 'windows-latest'",
+    "vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8'",
     '}}',
   ].join(' ');
   const job = workflow.jobs?.integration;
@@ -2038,64 +2039,8 @@ function collectFrameworkPartitionErrors(workflow, relativePath) {
       `${relativePath} integration must select each framework partition from matrix.framework_suite and run both generator jobs without sharding, selector overrides or continue-on-error`,
     );
   }
-  const aggregate = workflow.jobs?.['required-framework'];
-  const aggregateCombinations = expandIntegrationMatrix(
-    aggregate?.strategy?.matrix,
-  );
-  const aggregateMatrixComplete =
-    aggregateCombinations.length === 6 &&
-    platforms.every(platform =>
-      [1, 2, 3].every(
-        shard =>
-          aggregateCombinations.filter(
-            combination =>
-              combination.platform === platform &&
-              String(combination.required_shard) === String(shard),
-          ).length === 1,
-      ),
-    );
-  const aggregateSteps = Array.isArray(aggregate?.steps) ? aggregate.steps : [];
-  const resultSteps = aggregateSteps.filter(
-    step =>
-      isObject(step) &&
-      /^\s*test\s+"\$INTEGRATION_RESULT"\s*=\s*success\s*$/u.test(
-        String(step.run ?? ''),
-      ) &&
-      /^\s*\$\{\{\s*needs\.integration\.result\s*\}\}\s*$/u.test(
-        String(step.env?.INTEGRATION_RESULT ?? ''),
-      ) &&
-      step.if === undefined &&
-      !step['continue-on-error'],
-  );
-  const schedulesAggregate = [
-    'success',
-    'failure',
-    'cancelled',
-    'skipped',
-  ].every(result =>
-    evaluateJobSchedule({
-      workflow,
-      jobId: 'required-framework',
-      results: { integration: result },
-      context: {},
-    }),
-  );
-  const aggregateName =
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions check name.
-    'integration-${{ matrix.platform }} (framework ${{ matrix.required_shard }}/3)';
-  if (
-    !aggregateMatrixComplete ||
-    aggregate?.name !== aggregateName ||
-    JSON.stringify(normalizeNeeds(aggregate)) !==
-      JSON.stringify(['integration']) ||
-    aggregate?.['continue-on-error'] ||
-    !schedulesAggregate ||
-    resultSteps.length !== 1
-  ) {
-    errors.push(
-      `${relativePath} required-framework must preserve all six protected check names and fail unless the entire integration matrix succeeds, including failed, cancelled or skipped generator jobs`,
-    );
-  }
+  // No aggregate gate: the ruleset requires the real shard and generator
+  // contexts above directly, so every integration job is its own protection.
   return errors;
 }
 

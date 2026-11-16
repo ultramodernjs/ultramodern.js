@@ -2037,8 +2037,7 @@ const integrationPartitionErrors = mutate => {
       error.includes('integration must select each framework partition') ||
       error.includes(
         'integration concurrency must cancel only direct pull requests',
-      ) ||
-      error.includes('required-framework must preserve all six'),
+      ),
   );
 };
 
@@ -2063,10 +2062,13 @@ test('integration include-only matrix runs every core, generator and side suite 
     ]);
   const expected = [];
   for (const [platform, runner] of [
-    ['Linux', githubExpression("vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04'")],
+    [
+      'Linux',
+      githubExpression("vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'"),
+    ],
     [
       'Windows',
-      githubExpression("vars.DEPOT_WINDOWS_RUNNER || 'windows-latest'"),
+      githubExpression("vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8'"),
     ],
   ]) {
     for (let shard = 1; shard <= 6; shard++) {
@@ -2090,7 +2092,9 @@ test('integration include-only matrix runs every core, generator and side suite 
   }
   expected.push({
     platform: 'Linux',
-    runner: githubExpression("vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04'"),
+    runner: githubExpression(
+      "vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'",
+    ),
     suite: 'utils',
   });
   assert.equal(matrix.include.length, 19);
@@ -2129,8 +2133,12 @@ test('integration include-only matrix runs every core, generator and side suite 
       [
         'runner',
         entry.platform === 'Linux'
-          ? githubExpression("vars.DEPOT_WINDOWS_RUNNER || 'windows-latest'")
-          : githubExpression("vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04'"),
+          ? githubExpression(
+              "vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8'",
+            )
+          : githubExpression(
+              "vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'",
+            ),
       ],
       ['platform', 'macOS'],
       ['framework_suite', 'full'],
@@ -2147,17 +2155,23 @@ test('integration include-only matrix runs every core, generator and side suite 
   for (const extra of [
     {
       platform: 'Linux',
-      runner: githubExpression("vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04'"),
+      runner: githubExpression(
+        "vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'",
+      ),
       suite: 'unrecognized',
     },
     {
       platform: 'Windows',
-      runner: githubExpression("vars.DEPOT_WINDOWS_RUNNER || 'windows-latest'"),
+      runner: githubExpression(
+        "vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8'",
+      ),
       suite: 'utils',
     },
     {
       platform: 'Linux',
-      runner: githubExpression("vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04'"),
+      runner: githubExpression(
+        "vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'",
+      ),
       suite: 'framework',
       framework_suite: 'core',
       shard: '7/6',
@@ -2405,60 +2419,6 @@ test('integration generator commands cannot override their partition or shard a 
     ]) {
       assert.equal(commandErrors(mutateStep(mutate)).length, 1, suite);
     }
-  }
-});
-
-test('protected integration checks fail closed over every generator and core matrix job', () => {
-  const aggregateErrors = mutate =>
-    integrationPartitionErrors(mutate).filter(error =>
-      error.includes('required-framework must preserve all six'),
-    );
-  assert.deepEqual(aggregateErrors(), []);
-  for (const mutate of [
-    workflow => {
-      delete workflow.jobs['required-framework'];
-    },
-    workflow => {
-      workflow.jobs['required-framework'].strategy.matrix.platform = ['Linux'];
-    },
-    workflow => {
-      workflow.jobs['required-framework'].strategy.matrix.required_shard = [
-        1, 2,
-      ];
-    },
-    workflow => {
-      workflow.jobs['required-framework'].strategy.matrix.required_shard = [
-        1, 2, 3, 3,
-      ];
-    },
-    workflow => {
-      workflow.jobs['required-framework'].name = 'Integration passed';
-    },
-    workflow => {
-      workflow.jobs['required-framework'].needs = [];
-    },
-    workflow => {
-      workflow.jobs['required-framework'].if = 'success()';
-    },
-    workflow => {
-      workflow.jobs['required-framework']['continue-on-error'] = true;
-    },
-    workflow => {
-      workflow.jobs['required-framework'].steps[0].if =
-        "needs.integration.result == 'success'";
-    },
-    workflow => {
-      workflow.jobs['required-framework'].steps[0].run = 'echo success';
-    },
-    workflow => {
-      workflow.jobs['required-framework'].steps[0].env.INTEGRATION_RESULT =
-        'success';
-    },
-    workflow => {
-      workflow.jobs['required-framework'].steps[0]['continue-on-error'] = true;
-    },
-  ]) {
-    assert.equal(aggregateErrors(mutate).length, 1);
   }
 });
 

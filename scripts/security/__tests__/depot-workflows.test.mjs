@@ -17,7 +17,6 @@ test('Depot workflows keep pinned actions, read permissions, and Linux runners',
     .filter(name => name.endsWith('.yml'));
   assert.deepEqual(files.sort(), [
     'check-dependencies.yml',
-    'ci-benchmark.yml',
     'ci-cache.yml',
     'integration-test.yml',
     'lint-Linux.yml',
@@ -60,7 +59,7 @@ test('Depot workflows keep pinned actions, read permissions, and Linux runners',
   }
 });
 
-test('Depot integration retains every Linux suite and required framework gate', () => {
+test('Depot integration retains every Linux suite', () => {
   const depot = readWorkflow(workflowDirectory, 'integration-test.yml');
   const github = readWorkflow(
     new URL('../../../.github/workflows/', import.meta.url),
@@ -73,20 +72,5 @@ test('Depot integration retains every Linux suite and required framework gate', 
   assert.deepEqual(
     coverage(depot.jobs.integration.strategy.matrix.include),
     coverage(expected),
-  );
-  assert.deepEqual(
-    depot.jobs['required-framework'].needs,
-    github.jobs['required-framework'].needs,
-  );
-  assert.equal(
-    depot.jobs['required-framework'].if,
-    github.jobs['required-framework'].if,
-  );
-  assert.deepEqual(depot.jobs['required-framework'].strategy.matrix.platform, [
-    'Linux',
-  ]);
-  assert.deepEqual(
-    depot.jobs['required-framework'].steps,
-    github.jobs['required-framework'].steps,
   );
 });

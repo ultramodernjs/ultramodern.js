@@ -9,10 +9,13 @@ permissions:
   contents: read
 
 jobs:
-  superapp-certification-nightly:
-    name: Script, build-consumer and SuperApp acceptance
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || fromJSON(vars.SELF_LINUX_LABELS || '"ubuntu-latest"') }}
-    timeout-minutes: 180
+  # The three nightly subjects run as independent legs: a red script suite no
+  # longer hides the built-consumer and SuperApp results behind it, and the
+  # wall clock is the longest leg instead of their sum.
+  scripts:
+    name: Script test suites
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+    timeout-minutes: 60
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -57,8 +60,63 @@ jobs:
       - name: Build Packages
         run: pnpm run prepare-build
 
+      # test:scripts globs scripts/ultramodern-renderers/*.test.mjs, and those
+      # filesystem controls refuse to run outside an owned temporary directory.
       - name: Run script test suites
-        run: pnpm run test:scripts
+        shell: bash
+        run: |
+          scripts_work="$(mktemp -d "$RUNNER_TEMP/nightly-scripts-XXXXXX")"
+          trap 'rm -rf -- "$scripts_work"' EXIT
+          scripts_work="$(realpath "$scripts_work")"
+          OWNED_TEMP_DIR="$scripts_work" pnpm run test:scripts
+
+  build-consumers:
+    name: Built consumer acceptance
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+    timeout-minutes: 60
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup mise
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+        with:
+          version: 2026.9.18
+          cache_save: false
+          install: true
+
+      - name: Setup Node.js 26.x
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26.x'
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      # Restore only; ci-cache.yml seeds this key on main-ultramodern.
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Packages
+        run: pnpm run prepare-build
 
       # scripts/lib/browser-provisioning.js is the one browser provisioner: it
       # reads the playwright the frozen install resolved for these runtimes,
@@ -81,6 +139,72 @@ jobs:
       - name: Run built consumer acceptance
         run: pnpm run test:build-consumers
 
+  superapp:
+    name: SuperApp certification nightly
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+    timeout-minutes: 60
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup mise
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+        with:
+          version: 2026.9.18
+          cache_save: false
+          install: true
+
+      - name: Setup Node.js 26.x
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26.x'
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      # Restore only; ci-cache.yml seeds this key on main-ultramodern.
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Packages
+        run: pnpm run prepare-build
+
+      # scripts/lib/browser-provisioning.js is the one browser provisioner: it
+      # reads the playwright the frozen install resolved for these runtimes,
+      # and that version keys the browser cache.
+      - name: Resolve Playwright runtime
+        id: browser-runtime
+        run: node scripts/lib/browser-provisioning.js --resolve --runtime tests/integration/ultramodern-sandpack-profile-smoke --runtime tests
+
+      - name: Restore Playwright browser cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.browser-runtime.outputs.cache_path }}
+          key: ${{ steps.browser-runtime.outputs.cache_key }}
+
+      - name: Install Playwright browsers
+        run: >-
+          node scripts/lib/browser-provisioning.js --install --runtime tests/integration/ultramodern-sandpack-profile-smoke --runtime tests
+          --version ${{ steps.browser-runtime.outputs.version }}
+
       - name: Run SuperApp certification nightly
         run: pnpm run validate:superapp-certification:nightly
 
@@ -101,11 +225,13 @@ jobs:
 
   nightly-signal:
     name: Aggregate nightly signal
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || fromJSON(vars.SELF_LINUX_LABELS || '"ubuntu-latest"') }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 5
     if: always()
     needs:
-      - superapp-certification-nightly
+      - scripts
+      - build-consumers
+      - superapp
     steps:
       - name: Report signal job results
         env:
