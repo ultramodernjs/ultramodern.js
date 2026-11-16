@@ -14,9 +14,9 @@ import {
   owningLicenses,
   qualifyAdapterSource,
   qualifyRouterSource,
-  qualifyRspackSource,
-  qualifyRuntimeSource,
+  qualifyRuntimePairSource,
   runtimeHandoffFiles,
+  runtimePairNames,
   verifyRuntimeHandoff,
 } from './source-qualification.mjs';
 
@@ -188,14 +188,11 @@ export function composeRecipe({
 /** Production inputs from the explicit 53f0 handoff, not a successful-build receipt. */
 export function runtimeRecipes(
   { root = repo } = {},
-  {
-    runtimeQualifier = qualifyRuntimeSource,
-    rspackQualifier = qualifyRspackSource,
-  } = {},
+  { pairQualifier = qualifyRuntimePairSource } = {},
 ) {
   verifyRuntimeHandoff(root);
   const packages = Object.fromEntries(
-    ['octane', '@octanejs/rspack-plugin'].map(name => {
+    runtimePairNames.map(name => {
       const input = octaneInputs.find(item => item.name === name);
       assert.equal(input.version, cohort[name]);
       const relative =
@@ -219,20 +216,16 @@ export function runtimeRecipes(
       ];
     }),
   );
+  // One owning build qualifies both packages; running it per package repeated
+  // the entire source, build, packed and reconstruction pipeline.
   const qualify = async ({ directory, workDirectory }) => {
     verifyRuntimeHandoff(root);
-    const evidence = {};
-    for (const [name, qualifier] of [
-      ['octane', runtimeQualifier],
-      ['@octanejs/rspack-plugin', rspackQualifier],
-    ]) {
-      evidence[name] = await qualifier({
-        item: packages[name],
-        workDirectory,
-        packedDirectory: directory,
-      });
-      verifyRuntimeHandoff(root);
-    }
+    const evidence = await pairQualifier({
+      items: packages,
+      workDirectory,
+      packedDirectory: directory,
+    });
+    verifyRuntimeHandoff(root);
     return evidence;
   };
   return { packages, qualifySource: qualify, qualifyPacked: qualify };

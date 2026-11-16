@@ -7,8 +7,10 @@ import { compareHydrationTrees } from './compare-hydration.mjs';
 import {
   applyExact,
   assemblePackage,
+  assertSameBytes,
   buildEnvironment,
   packagePatch,
+  phaseTracker,
   qualifyRuntimeTree,
 } from './qualify-runtime.mjs';
 import {
@@ -295,4 +297,73 @@ test('npm layout reconstruction preserves identity and actual compiler/map/licen
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
+});
+
+test('patch-size byte mismatch fails promptly with offset and digests, never a rendered diff', () => {
+  const expected = Buffer.alloc(2 * 1024 ** 2, 'a');
+  const actual = Buffer.from(expected);
+  actual[1234567] = 0x62;
+  assertSameBytes(Buffer.from(expected), expected, 'equal control');
+  const started = Date.now();
+  assert.throws(
+    () => assertSameBytes(actual, expected, 'octane: expected patch'),
+    error =>
+      /^octane: expected patch: bytes differ from offset 1234567; actual 2097152 bytes sha256 [0-9a-f]{64}, expected 2097152 bytes sha256 [0-9a-f]{64}$/u.test(
+        error.message,
+      ),
+  );
+  assert.throws(
+    () => assertSameBytes(expected.subarray(0, 10), expected, 'prefix'),
+    /prefix: bytes differ from offset 10; actual 10 bytes/u,
+  );
+  assert(Date.now() - started < 5000, 'Mismatch report must stay bounded');
+});
+
+test('phase tracker reports the failed phase, last command and signal without replacing the error', () => {
+  const lines = [];
+  const phases = phaseTracker(line => lines.push(line));
+  const calls = [];
+  const execute = phases.trace((...args) => {
+    calls.push(args);
+    return 'ok';
+  });
+  phases.enter('install owning dependencies');
+  assert.equal(
+    execute('pnpm', ['install'], '/work/deps', { stdio: 'pipe' }),
+    'ok',
+  );
+  assert.deepEqual(calls, [
+    ['pnpm', ['install'], '/work/deps', { stdio: 'pipe' }],
+  ]);
+  phases.enter('packed hydration suites');
+  execute(
+    'node',
+    ['vitest.mjs', 'run', '--config', 'packed.mjs'],
+    '/work/source',
+  );
+  const failure = Object.assign(
+    new Error('Command failed: node vitest.mjs\nmore'),
+    {
+      status: null,
+      signal: 'SIGKILL',
+    },
+  );
+  phases.fail(failure);
+  assert.match(
+    lines[0],
+    /^\[octane-runtime\] install owning dependencies: started\n$/u,
+  );
+  assert.match(
+    lines[1],
+    /^\[octane-runtime\] install owning dependencies: passed in \d+\.\ds\n$/u,
+  );
+  assert.match(
+    lines[2],
+    /^\[octane-runtime\] packed hydration suites: started\n$/u,
+  );
+  assert.match(
+    lines[3],
+    /^\[octane-runtime\] packed hydration suites: FAILED after \d+\.\ds; last command: node vitest\.mjs run --config packed\.mjs \(cwd \/work\/source\); exit none; signal SIGKILL; Command failed: node vitest\.mjs\n$/u,
+  );
+  assert.equal(lines.length, 4);
 });
