@@ -75,7 +75,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .effect-compiler-cache/linux-x64
-          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-linux-x64-depot-ubuntu-24.04-8-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
+          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-linux-x64-depot-ubuntu-24.04-16-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
           enableCrossOsArchive: true
 
       - name: Restore the cached linux-arm64 compiler
@@ -83,7 +83,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .effect-compiler-cache/linux-arm64
-          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-linux-arm64-depot-ubuntu-24.04-arm-8-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
+          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-linux-arm64-depot-ubuntu-24.04-arm-16-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
           enableCrossOsArchive: true
 
       - name: Restore the cached win32-x64 compiler
@@ -91,7 +91,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .effect-compiler-cache/win32-x64
-          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-win32-x64-${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
+          key: effect-compiler-payload-v2-${{ steps.cache-key.outputs.epoch }}-win32-x64-depot-windows-2025-16-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/source.json') }}-${{ hashFiles('packages/solutions/app-tools-extensions/compiler/constraint.patch') }}-${{ hashFiles('.github/workflows/effect-compiler-payload.yml') }}
           enableCrossOsArchive: true
 
       # Fail closed on a wrong restore: a partial restore or bytes whose
@@ -209,19 +209,23 @@ jobs:
           - target: darwin-arm64
             rust_target: aarch64-apple-darwin
             runner: ${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}
+          # The three Rust legs take 16 cores, not 8: cargo builds crates in
+          # parallel and these are the measured long pole of every caller's
+          # cold path (win32-x64 8.1 min, linux-arm64 4.5, linux-x64 3.8 in run
+          # 43873444661). Every label here is literal, not the configurable
+          # framework runner, so neither the shipped glibc baseline nor the
+          # cache key can move with a repository variable.
           - target: linux-x64
             rust_target: x86_64-unknown-linux-gnu
             # Ubuntu 24.04 is the repository's minimum, so the compiler's glibc
-            # baseline is 2.39: these binaries do not run on older Linux. The
-            # label is literal, not the configurable framework runner, so the
-            # shipped baseline cannot move with a repository variable.
-            runner: depot-ubuntu-24.04-8
+            # baseline is 2.39: these binaries do not run on older Linux.
+            runner: depot-ubuntu-24.04-16
           - target: linux-arm64
             rust_target: aarch64-unknown-linux-gnu
-            runner: depot-ubuntu-24.04-arm-8
+            runner: depot-ubuntu-24.04-arm-16
           - target: win32-x64
             rust_target: x86_64-pc-windows-msvc
-            runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+            runner: depot-windows-2025-16
     steps:
       - name: Verify the supported Apple Silicon runner
         if: runner.os == 'macOS'
