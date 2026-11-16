@@ -3076,7 +3076,8 @@ five previously invalid advisory rows remain non-authorizing historical prose.
     {"path":"packages/runtime/plugin-runtime/tests/router/rsc-router.test.tsx","owner":"bleedingdev","reason":"2026-11-16: Render a real RSC static-router payload and require native router.match to resolve a different nested location with its basename; reproduces the missing-matcher failure before the owning fix.","dispositions":["inline-patch"]},
     {"path":"packages/toolkit/utils/tests/compatRequire.test.ts","owner":"bleedingdev","reason":"2026-11-16: Observe every native FSWatcher close from creation, including Chokidar 6 macOS temporary watcher closure during the first change; retain lazy imports, external-process change delivery and fail on leaked native handles.","dispositions":["inline-patch"]},
     {"path":"packages/runtime/plugin-runtime/tests/router/utils.test.ts","owner":"bleedingdev","reason":"2026-11-16: Verify React Router 8 infers boundaries from errorElement rather than the removed hasErrorBoundary input; query both object and JSX routes and require child loader errors to remain at the child boundary with HTTP 500.","dispositions":["inline-patch"]},
-    {"path":"packages/toolkit/create/tests/create.test.ts","owner":"bleedingdev","reason":"2026-11-16: Align the standalone and subproject engine assertion with the reviewed template minimum Node 26.13.1; preserve all generated-tooling and dependency-boundary assertions.","dispositions":["inline-patch"]}
+    {"path":"packages/toolkit/create/tests/create.test.ts","owner":"bleedingdev","reason":"2026-11-16: Align the standalone and subproject engine assertion with the reviewed template minimum Node 26.13.1; preserve all generated-tooling and dependency-boundary assertions.","dispositions":["inline-patch"]},
+    {"path":"packages/toolkit/create/tests/mcp.test.ts","owner":"bleedingdev","reason":"2026-11-16: Align the renamed upstream-owned MCP generator test with the reviewed official SDK 2.4.0 and TypeScript 7.0.2 template pins; retain SDK route, request context and generated dependency assertions.","dispositions":["inline-patch"]}
   ]
 }
 ```
@@ -5063,6 +5064,7 @@ five previously invalid advisory rows remain non-authorizing historical prose.
 | `packages/toolkit/utils/tests/compatRequire.test.ts` | bleedingdev | 2026-11-16: Observe every native FSWatcher close from creation, including Chokidar 6 macOS temporary watcher closure during the first change; retain lazy imports, external-process change delivery and fail on leaked native handles. | `inline-patch` |
 | `packages/runtime/plugin-runtime/tests/router/utils.test.ts` | bleedingdev | 2026-11-16: Verify React Router 8 infers boundaries from errorElement rather than the removed hasErrorBoundary input; query both object and JSX routes and require child loader errors to remain at the child boundary with HTTP 500. | `inline-patch` |
 | `packages/toolkit/create/tests/create.test.ts` | bleedingdev | 2026-11-16: Align the standalone and subproject engine assertion with the reviewed template minimum Node 26.13.1; preserve all generated-tooling and dependency-boundary assertions. | `inline-patch` |
+| `packages/toolkit/create/tests/mcp.test.ts` | bleedingdev | 2026-11-16: Align the renamed upstream-owned MCP generator test with the reviewed official SDK 2.4.0 and TypeScript 7.0.2 template pins; retain SDK route, request context and generated dependency assertions. | `inline-patch` |
 <!-- /fork-evidence:table -->
 
 ### 2026-10-11 published stable Modern.js v3.9.3 integration
