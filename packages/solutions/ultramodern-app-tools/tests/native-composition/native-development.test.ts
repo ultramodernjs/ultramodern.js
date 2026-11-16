@@ -515,6 +515,8 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
   let lastDoneCompiler: Rspack.Compiler | undefined;
   let clientCompiler: Rspack.Compiler | undefined;
   let heldClientNotifications: (() => void)[] | undefined;
+  let clientChangeReported = false;
+  let lastClientCompilation: Rspack.Compilation | undefined;
   let publishedClientCompilation: Rspack.Compilation | undefined;
   let nextClientPublication:
     | { readonly previous: Rspack.Compilation; readonly resolve: () => void }
@@ -588,6 +590,15 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
             (...args) => notifyClient(() => callback(...args)),
             (...args) => notifyClient(() => callbackUndelayed(...args)),
           );
+        // A watcher reports a change in two halves: the undelayed half fires
+        // `invalid`, and the aggregated half starts the rebuild.
+        clientCompiler?.hooks.invalid.tap('ReplacementCompilerControl', () => {
+          clientChangeReported = true;
+        });
+        clientCompiler?.hooks.done.tap('ReplacementCompilerControl', stats => {
+          clientChangeReported = false;
+          lastClientCompilation = stats.compilation;
+        });
         // Control the finished client before MultiCompiler's aggregate done.
         clientCompiler?.hooks.done.tapPromise(
           { name: 'ReplacementCompilerControl', stage: -Infinity },
@@ -922,7 +933,24 @@ ${federation ? 'export const privateLazy = () => import("./private-lazy.js");' :
       clientPublication = { marker, resolve: completed.resolve };
       return completed.promise;
     },
-    delayClientNotifications() {
+    /**
+     * Hold every later client watcher report. Rspack's watcher can replay an
+     * unchanged dependency after any compile, so first wait until no client
+     * report is in flight and its last compile is published: holding the
+     * second half of a report that already invalidated the client leaves no
+     * aggregate compile able to finish until the release.
+     */
+    async delayClientNotifications() {
+      const deadline = Date.now() + 90_000;
+      while (
+        clientChangeReported ||
+        !lastClientCompilation ||
+        publishedClientCompilation !== lastClientCompilation
+      ) {
+        if (Date.now() > deadline)
+          throw new Error('The client compiler never settled');
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
       heldClientNotifications = [];
       const release = () => {
         const pending = heldClientNotifications ?? [];
@@ -1861,20 +1889,23 @@ describe('native development', () => {
         await (await fetch(new URL(script.href, app.address))).arrayBuffer(),
       );
 
-      const releaseClient = app.delayClientNotifications();
+      const releaseClient = await app.delayClientNotifications();
+      // A replayed watcher report may have republished the client since
+      // `first`; from here the client stays held while the server compiles.
+      const held = await until(app, 'first:replacement-compiler');
       const clientPublished = app.nextClientPublication();
       app.edit('second');
       const serverOnly = await until(app, 'second:replacement-compiler');
       expect(serverOnly.snapshot.hydrationBuildId).toBe(
-        first.snapshot.hydrationBuildId,
+        held.snapshot.hydrationBuildId,
       );
-      expect(serverOnly.snapshot.assets).toEqual(first.snapshot.assets);
+      expect(serverOnly.snapshot.assets).toEqual(held.snapshot.assets);
       releaseClient();
       await clientPublished;
       const second = await untilHydratedBy(
         app,
         'second:replacement-compiler',
-        first.clientCompilationHash,
+        held.manifest.devCompilation.compilationHashes.client,
       );
       expect(second.manifest.devCompilation.generation).toBeGreaterThan(
         first.manifest.devCompilation.generation,
