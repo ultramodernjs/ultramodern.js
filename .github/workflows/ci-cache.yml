@@ -175,8 +175,15 @@ jobs:
   # on macOS. This leg saves that linked tree so the 15-19 Windows jobs of a
   # pull request restore it instead of rebuilding it each time. It is its own
   # job because the save must be conditioned on this platform's restore alone.
+  # Unlike the seed leg above, this key exists on no ref: it is new, and the
+  # repository has never held a linked Windows tree. A dispatch on a working
+  # branch therefore writes the one entry that branch's own Windows jobs can
+  # read, which is the only way to measure what the restore saves before the
+  # change reaches the default branch. The seed leg stays default-branch-only
+  # because its keys already exist there and every ref can read them, so a
+  # branch copy would be the duplicate ~1 GB per branch the header records.
   seed-windows-dependencies:
-    if: github.ref == 'refs/heads/main-ultramodern'
+    if: startsWith(github.ref, 'refs/heads/')
     runs-on: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
     timeout-minutes: 30
 
@@ -253,6 +260,24 @@ jobs:
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
+
+      # pnpm links the workspace with NTFS junctions into node_modules/.pnpm.
+      # Whether the archiver stores those as links or follows them decides
+      # whether this entry is a few hundred MB or several GB, and an oversized
+      # entry evicts the live default-branch entries every job reads. Record
+      # the real content size and the junction count next to the archive size
+      # actions/cache prints, so the first run that ever writes this key leaves
+      # the evidence instead of the next reader having to infer it.
+      - name: Measure the linked Windows dependency tree
+        if: steps.windows-dependencies.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          echo "Real content under node_modules (links not followed):"
+          du -sh node_modules
+          echo "Workspace link targets outside node_modules:"
+          find packages tests scripts -maxdepth 4 -name node_modules -type l 2>/dev/null | wc -l
+          echo "Reparse points inside node_modules:"
+          find node_modules -maxdepth 3 -type l 2>/dev/null | wc -l
 
       # Saved right after the install that pnpm's own policy verification
       # gated, and before anything builds or packs, so the entry holds exactly
