@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import { devNull } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { qualify } from './qualify.mjs';
@@ -230,24 +231,42 @@ export async function main() {
       [
         'diff',
         '--no-index',
+        '--diff-algorithm=histogram',
+        '--unified=3',
+        '--indent-heuristic',
+        '--abbrev=10',
+        '--no-ext-diff',
+        '--no-textconv',
+        '--no-renames',
+        '--no-color',
         '--src-prefix=a/',
         '--dst-prefix=b/',
         original,
         corrected,
       ],
-      { maxBuffer: 30 * 1024 ** 2, encoding: 'utf8' },
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+          GIT_CONFIG_GLOBAL: devNull,
+          GIT_CONFIG_NOSYSTEM: '1',
+        },
+        maxBuffer: 30 * 1024 ** 2,
+        encoding: 'utf8',
+      },
     );
     assert.equal(result.status, 1);
-    const diff = result.stdout
-      .replaceAll(`a/${original.slice(1)}/`, 'a/')
-      .replaceAll(`b/${corrected.slice(1)}/`, 'b/')
-      .replaceAll(`a/${corrected.slice(1)}/`, 'a/')
-      .replaceAll(`b/${original.slice(1)}/`, 'b/');
+    const diff = Buffer.from(
+      result.stdout
+        .replaceAll(`a/${original.slice(1)}/`, 'a/')
+        .replaceAll(`b/${corrected.slice(1)}/`, 'b/')
+        .replaceAll(`a/${corrected.slice(1)}/`, 'a/')
+        .replaceAll(`b/${original.slice(1)}/`, 'b/'),
+    );
     if (process.argv.includes('--write')) fs.writeFileSync(patchPath, diff);
     else
-      assert.equal(
-        fs.readFileSync(patchPath, 'utf8'),
-        diff,
+      assert(
+        fs.readFileSync(patchPath).equals(diff),
         'Owning build differs from canonical patch',
       );
     const reconstructed = path.join(root, 'reconstructed');

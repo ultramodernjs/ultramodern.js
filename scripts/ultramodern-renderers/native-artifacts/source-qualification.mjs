@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { devNull } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inspectNpmTarball } from '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs';
@@ -283,12 +284,16 @@ export function assertSameLayout(actual, expected) {
     );
   }
 }
+/** The reviewed canonical patches are histogram diffs; no git config may change their bytes. */
 export function builtPatch(original, corrected, abbreviation = 10) {
   const result = spawnSync(
     'git',
     [
       'diff',
       '--no-index',
+      '--diff-algorithm=histogram',
+      '--unified=3',
+      '--indent-heuristic',
       `--abbrev=${abbreviation}`,
       '--no-ext-diff',
       '--no-textconv',
@@ -299,7 +304,16 @@ export function builtPatch(original, corrected, abbreviation = 10) {
       original,
       corrected,
     ],
-    { env: buildEnvironment(), encoding: 'utf8', maxBuffer: 64 * 1024 ** 2 },
+    {
+      cwd: path.dirname(original),
+      env: {
+        ...buildEnvironment(),
+        GIT_CONFIG_GLOBAL: devNull,
+        GIT_CONFIG_NOSYSTEM: '1',
+      },
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 ** 2,
+    },
   );
   assert.equal(
     result.status,
