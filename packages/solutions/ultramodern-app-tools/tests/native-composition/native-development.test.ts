@@ -1183,6 +1183,7 @@ describe('native development', () => {
       NATIVE_FEDERATION_DEV_REVISION_HEADER,
     );
     expect(latestRevision).toMatch(/^[a-f0-9]{64}$/u);
+    expect(latestRevision).not.toBe(revision);
     expect(
       (await fetch(entryUrl)).headers.get(
         NATIVE_FEDERATION_DEV_REVISION_HEADER,
