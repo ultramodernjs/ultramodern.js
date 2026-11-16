@@ -21,6 +21,13 @@ import {
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const firstLane = windowsOrdinaryLanes[0];
 
+// These assertions run in the Windows unit lane, and git checks .yml out with
+// CRLF there: no .gitattributes entry declares workflow YAML as LF text. The
+// subject is the YAML these files declare, not how the checkout ended its
+// lines, so read them with the line endings normalised.
+const readRepoText = file =>
+  fs.readFileSync(path.join(repoRoot, file), 'utf8').replaceAll('\r\n', '\n');
+
 function fixture(t) {
   const root = fs.mkdtempSync(
     path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'windows-selection-'),
@@ -307,7 +314,7 @@ test('the Windows dependency cache names one path list and one key', () => {
     '.github/actions/windows-dependencies/action.yml',
     '.github/workflows/ci-cache.yml',
   ]) {
-    const content = fs.readFileSync(path.join(repoRoot, file), 'utf8');
+    const content = readRepoText(file);
     for (const match of content.matchAll(entry)) {
       const lines = match.groups.paths.trim().split('\n');
       declared.push({
@@ -335,10 +342,7 @@ test('the Windows dependency cache names one path list and one key', () => {
 // A lane this module assigns but the matrix never dispatches would skip its
 // files in silence, which is the one failure the coverage guard cannot see.
 test('the Windows unit matrix dispatches exactly these lanes', () => {
-  const workflow = fs.readFileSync(
-    path.join(repoRoot, '.github/workflows/ut-Windows.yml'),
-    'utf8',
-  );
+  const workflow = readRepoText('.github/workflows/ut-Windows.yml');
   const matrix = /^\s*lane:\s*\[(?<lanes>[^\]]*)\]\s*$/mu.exec(workflow);
   assert.ok(matrix, 'ut-Windows.yml must declare a one-line lane matrix');
   const dispatched = matrix.groups.lanes.split(',');
