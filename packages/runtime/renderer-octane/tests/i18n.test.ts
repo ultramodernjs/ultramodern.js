@@ -1,4 +1,7 @@
-import { createNativeI18n } from '@modern-js/i18n-runtime-extensions/native';
+import {
+  createNativeI18n,
+  createNativeI18nInstance,
+} from '@modern-js/i18n-runtime-extensions/native';
 import { createI18nUrlRewrite } from '@modern-js/i18n-runtime-extensions/urlRewrite';
 import { act, createElement, createRoot, flushSync } from 'octane';
 import { I18nProvider } from '../src/i18n/I18nProvider';
@@ -20,13 +23,18 @@ function createFakeI18nInstance(language: string): I18nInstanceLike & {
   emit: (lng: string) => void;
 } {
   const listeners = new Set<(lng: string) => void>();
-  const translations: Record<string, Record<string, string>> = {
-    en: { greeting: 'Hello' },
-    cs: { greeting: 'Ahoj' },
-  };
+  const translator = createNativeI18nInstance({
+    lng: language,
+    resources: {
+      en: { translation: { greeting: 'Hello' } },
+      cs: { translation: { greeting: 'Ahoj' } },
+    },
+  });
   const instance: I18nInstanceLike & { emit: (lng: string) => void } = {
     language,
-    t: key => translations[instance.language]?.[key as string] ?? String(key),
+    get t() {
+      return translator.getFixedT(instance.language);
+    },
     changeLanguage: async (lng?: string) => {
       if (!lng) return;
       instance.language = lng;

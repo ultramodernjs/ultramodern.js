@@ -222,6 +222,7 @@ patchedDependencies:
   '@tanstack/router-core@1.171.39': 546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8
   braces@3.0.3: e14af28f138a243a283deed5e9f26275891ad6eedc02e964d8ec7ae7efc6783a
   rsbuild-plugin-dts@1.0.7: bd0c8f1b4c4681eeb0d1ea0123c252ad41b17f01be1ca171bd8c42ca2d652e44
+  solid-js@2.0.0-rc.22: c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745
 
 importers:
 
@@ -2406,10 +2407,13 @@ importers:
         version: 2.0.0-rc.22
       '@solidjs/web':
         specifier: 2.0.0-rc.22
-        version: 2.0.0-rc.22(solid-js@2.0.0-rc.22)
+        version: 2.0.0-rc.22(solid-js@2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745))
       '@tanstack/history':
         specifier: 1.162.5
         version: 1.162.5
+      '@types/convert-source-map':
+        specifier: 2.0.3
+        version: 2.0.3
       isbot:
         specifier: 5.2.3
         version: 5.2.3
@@ -2440,7 +2444,7 @@ importers:
         version: 26.6.6
       solid-js:
         specifier: 2.0.0-rc.22
-        version: 2.0.0-rc.22
+        version: 2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745)
 
   packages/runtime/runtime-extensions:
     dependencies:
@@ -6109,10 +6113,10 @@ importers:
         version: 2.0.0-rc.22
       '@solidjs/web':
         specifier: 2.0.0-rc.22
-        version: 2.0.0-rc.22(solid-js@2.0.0-rc.22)
+        version: 2.0.0-rc.22(solid-js@2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745))
       solid-js:
         specifier: 2.0.0-rc.22
-        version: 2.0.0-rc.22
+        version: 2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745)
     devDependencies:
       '@modern-js/ultramodern-app-tools':
         specifier: workspace:*
@@ -12722,6 +12726,9 @@ packages:
 
   '@types/content-disposition@0.5.9':
     resolution: {integrity: sha512-8uYXI3Gw35MhiVYhG3s295oihrxRyytcRHjSjqnqZVDDy/xcGBRny7+Xj1Wgfhv5QzRtN2hB2dVRBUX9XW3UcQ==}
+
+  '@types/convert-source-map@2.0.3':
+    resolution: {integrity: sha512-ag0BfJLZf6CQz8VIuRIEYQ5Ggwk/82uvTQf27RcpyDNbY0Vw49LIPqAxk5tqYfrCs9xDaIMvl4aj7ZopnYL8bA==}
 
   '@types/cookiejar@2.1.5':
     resolution: {integrity: sha512-he+DHOWReW0nghN24E1WUqM0efK4kI9oTqDm6XmK8ZPe2djZ90BSNdGnIyCLzCPw7/pogPlGbzI2wHGGmi4O/Q==}
@@ -23754,11 +23761,11 @@ snapshots:
 
   '@solidjs/signals@2.0.0-rc.22': {}
 
-  '@solidjs/web@2.0.0-rc.22(solid-js@2.0.0-rc.22)':
+  '@solidjs/web@2.0.0-rc.22(solid-js@2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745))':
     dependencies:
       seroval: 1.8.1
       seroval-plugins: 1.8.0(seroval@1.8.1)
-      solid-js: 2.0.0-rc.22
+      solid-js: 2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745)
 
   '@speed-highlight/core@1.2.24': {}
 
@@ -24373,6 +24380,8 @@ snapshots:
       '@types/node': 26.6.6
 
   '@types/content-disposition@0.5.9': {}
+
+  '@types/convert-source-map@2.0.3': {}
 
   '@types/cookiejar@2.1.5': {}
 
@@ -30941,7 +30950,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  solid-js@2.0.0-rc.22:
+  solid-js@2.0.0-rc.22(patch_hash=c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745):
     dependencies:
       '@solidjs/signals': 2.0.0-rc.22
       csstype: 3.2.3

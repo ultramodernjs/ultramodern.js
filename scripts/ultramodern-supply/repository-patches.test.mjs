@@ -10,6 +10,38 @@ const read = file => fs.readFileSync(new URL(file, root));
 const recipes = JSON.parse(read('scripts/ultramodern-supply/sidecars.json'));
 const workspace = parse(read('pnpm-workspace.yaml').toString());
 
+test('repository Solid declarations use the exact reviewed support-producer correction', () => {
+  const support = JSON.parse(
+    read('scripts/ultramodern-support-artifacts/inputs.json'),
+  )['solid-js'];
+  const patch = inventory.find(
+    item => item.packageName === 'solid-js' && item.version === support.version,
+  );
+  assert.ok(patch);
+  assert.equal(patch.repository, true);
+  assert.equal(patch.workspace, null);
+  assert.equal(
+    workspace.patchedDependencies[`solid-js@${support.version}`],
+    patch.path,
+  );
+  const producerPatch = read(support.patchPath);
+  assert.equal(
+    createHash('sha256').update(producerPatch).digest('hex'),
+    support.patchSha256,
+  );
+  assert.deepEqual(
+    read(patch.path),
+    Buffer.concat([
+      Buffer.from('diff --git a/types/index.d.ts b/types/index.d.ts\n'),
+      producerPatch,
+    ]),
+  );
+  assert.equal(
+    createHash('sha256').update(read(patch.path)).digest('hex'),
+    patch.sha256,
+  );
+});
+
 test('published MF aliases retain their canonical corrections without unused upstream patch selectors', () => {
   for (const name of [
     'bridge-react',

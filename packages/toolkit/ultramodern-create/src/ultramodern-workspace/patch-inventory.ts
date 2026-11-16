@@ -60,6 +60,16 @@ export default [
       'Use the source-qualified router-core 1.171.39 correction for repository integration tests, including localized-mask search inheritance, loader lifecycle, SSR rewrites and public declarations. These exact canonical bytes also feed the native artifact producer. Generated workspaces remain patch-free and require the authenticated corrected archive.',
   },
   {
+    packageName: 'solid-js',
+    version: '2.0.0-rc.22',
+    path: 'patches/solid-js@2.0.0-rc.22.patch',
+    sha256: 'c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745',
+    repository: true,
+    workspace: null,
+    reason:
+      'Use the reviewed support-producer declaration correction for repository builds: re-export the existing heldRead runtime primitive required by @solidjs/web 2.0.0-rc.22. The reviewed hunk is unchanged, with only the Git diff header required by pnpm added; generated workspaces remain patch-free and require the authenticated corrected support archive.',
+  },
+  {
     packageName: 'ultracite',
     version: '8.2.1',
     path: 'patches/ultracite@8.2.1.patch',

@@ -75,7 +75,7 @@
   "scripts": {
     "build": "rslib build",
     "test": "rstest",
-    "test:types": "node ../../../scripts/with-effect-tsrs.mjs --project tests/types/tsconfig.json"
+    "test:types": "node ../../../scripts/with-effect-tsrs.mjs --project tests/types/tsconfig.json && node ../../../scripts/with-effect-tsrs.mjs --project tests/types/i18n/tsconfig.json"
   },
   "engines": {
     "node": ">=26.13.1"
@@ -87,6 +87,7 @@
     "@solidjs/signals": "2.0.0-rc.22",
     "@solidjs/web": "2.0.0-rc.22",
     "@tanstack/history": "1.162.5",
+    "@types/convert-source-map": "2.0.3",
     "isbot": "5.2.3"
   },
   "peerDependencies": {
