@@ -153,7 +153,7 @@
     "artifacts": ["*"],
     "patch": {
       "path": "patches/@module-federation__enhanced@2.9.3.patch",
-      "sha256": "fc6db194bd963fdcb30e5e13d75c894a6dd42d21e711e07760ea64420a779478"
+      "sha256": "835f79a6d45d3a1c52b6251d59369f0750e3bdac2dc9441bbafccf50c7d87122"
     },
     "manifestChanges": {
       "dependencies": {

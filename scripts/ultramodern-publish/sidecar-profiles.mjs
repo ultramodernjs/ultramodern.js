@@ -24,7 +24,7 @@ export const sidecarProfiles = Object.freeze({
     publishBefore: sidecarPublishBefore,
   }),
   'mf-cohort': Object.freeze({
-    qualificationDependencies: Object.freeze({ webpack: '5.105.4' }),
+    qualificationDependencies: Object.freeze({ webpack: '5.112.2' }),
     recipeIds: Object.freeze([
       'mf-bridge-react',
       'mf-cli',

@@ -20,6 +20,7 @@ test('closed MF cohort covers all 14 exact corrected identities and singleton pr
   } = await import('../sidecar-profiles.mjs');
   const { readSidecarBundleInputs } = await import('../sidecar-bundle.mjs');
   const profile = sidecarProfile('mf-cohort');
+  assert.deepEqual(profile.qualificationDependencies, { webpack: '5.112.2' });
   assert.equal(profile.recipeIds.length, 14);
   assert.equal(new Set(profile.recipeIds).size, 14);
   const packages = readSidecarBundleInputs('mf-cohort');

@@ -195,25 +195,110 @@ export async function packedMfCohortProbeMain(sdkProbe) {
   for (const owner of ['enhanced', 'rspack']) {
     const from = createRequire(path.join(roots.get(owner), 'package.json'));
     const bundler = from(owner === 'enhanced' ? 'webpack' : '@rspack/core');
+    if (owner === 'enhanced') {
+      assert.equal(bundler.version, '5.112.2', 'Latest Webpack qualification');
+      const Factory = from(
+        './dist/src/lib/container/FallbackModuleFactory.js',
+      ).default;
+      assert.equal(
+        Object.getPrototypeOf(Factory.prototype),
+        bundler.ModuleFactory.prototype,
+        'Enhanced factories must use the public Webpack class identity',
+      );
+      const Dependency = from(
+        './dist/src/lib/container/runtime/FederationRuntimeDependency.js',
+      ).default;
+      assert.ok(
+        new Dependency('./entry.js') instanceof
+          bundler.dependencies.ModuleDependency,
+      );
+      const utils = from('./dist/src/lib/container/runtime/utils.js');
+      assert.deepEqual(
+        utils.normalizeRuntimeInitOptionsWithOutShared({
+          name: 'remote_parser',
+          remotes: {
+            remote: 'container@https://example.invalid/entry.js?user=a@b',
+            relative: 'relativeContainer@/remoteEntry.js',
+            invalid: 'container@',
+          },
+        }).remotes,
+        [
+          {
+            alias: 'remote',
+            name: 'container',
+            entry: 'https://example.invalid/entry.js?user=a@b',
+            shareScope: 'default',
+            externalType: 'script',
+          },
+          {
+            alias: 'relative',
+            name: 'relativeContainer',
+            entry: '/remoteEntry.js',
+            shareScope: 'default',
+            externalType: 'script',
+          },
+          {
+            alias: 'invalid',
+            name: '',
+            entry: '',
+            shareScope: 'default',
+            externalType: 'unknown',
+          },
+        ],
+      );
+    }
     const Plugin = installedRequire(
       `@bleedingdev/mf-${owner}`,
     ).ModuleFederationPlugin;
     const plugin = new Plugin({
       name: `injection_${owner}`,
-      remotes: {},
+      remotes:
+        owner === 'enhanced'
+          ? { remote: 'remoteContainer@https://example.invalid/remoteEntry.js' }
+          : {},
+      shared:
+        owner === 'enhanced'
+          ? { react: { singleton: true, requiredVersion: '^19.0.0' } }
+          : {},
       dts: false,
       manifest: false,
       experiments: { provideExternalRuntime: true },
     });
+    const webpackEntry = path.join(root, 'webpack-compat-entry.js');
+    if (owner === 'enhanced')
+      fs.writeFileSync(
+        webpackEntry,
+        'import("remote/Button"); import("react");\n',
+      );
     const compile = owner === 'enhanced' ? bundler : bundler.rspack;
     const compiler = compile({
       mode: 'none',
       context: root,
-      entry: {},
+      entry: owner === 'enhanced' ? { main: webpackEntry } : {},
       output: { path: path.join(root, `unused-${owner}`) },
       plugins: [plugin],
     });
     try {
+      if (owner === 'enhanced') {
+        const stats = await new Promise((resolve, reject) =>
+          compiler.run((error, result) =>
+            error ? reject(error) : resolve(result),
+          ),
+        );
+        assert.equal(
+          stats.hasErrors(),
+          false,
+          stats.toString({ all: false, errors: true }),
+        );
+        const emitted = Object.keys(stats.compilation.assets)
+          .map(file =>
+            fs.readFileSync(path.join(compiler.outputPath, file), 'utf8'),
+          )
+          .join('\n');
+        assert.match(emitted, /remoteContainer/u);
+        assert.match(emitted, /https:\/\/example\.invalid\/remoteEntry\.js/u);
+        assert.match(emitted, /federation/u);
+      }
       const options = plugin._options;
       const registered = options.runtimePlugins.find(file =>
         file.includes('inject-external-runtime-core-plugin'),
