@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { gunzipSync, gzipSync } from 'node:zlib';
@@ -19,9 +20,12 @@ import {
 
 // Explicit synthetic GitHub producer/API evidence; never a hosted acceptance receipt.
 // Archive bytes are REAL pinned npm inputs + the actual reviewed canonical patches.
-// No installs/builds/qualification callbacks. Run under owned-temp-dir.
+// No installs/builds/qualification callbacks.
 let directory;
 let canonical;
+// The admission seam requires an owned scratch root in OWNED_TEMP_DIR. This
+// suite creates its own under the OS temp dir and restores the caller's env.
+const callerOwnedTempDir = process.env.OWNED_TEMP_DIR;
 const upstreamBytes = new Map();
 const source = 'a'.repeat(40);
 const producer = {
@@ -46,10 +50,8 @@ async function upstreamFetch(url) {
   return new Response(upstreamBytes.get(url));
 }
 before(async () => {
-  assert(process.env.OWNED_TEMP_DIR, 'Run tests under owned-temp-dir');
-  directory = fs.mkdtempSync(
-    path.join(process.env.OWNED_TEMP_DIR, 'support-test-'),
-  );
+  directory = fs.mkdtempSync(path.join(os.tmpdir(), 'support-test-'));
+  process.env.OWNED_TEMP_DIR = directory;
   canonical = await reconstruct({
     recipe: releaseRecipe(),
     producer,
@@ -59,6 +61,8 @@ before(async () => {
 });
 after(() => {
   if (directory) fs.rmSync(directory, { recursive: true, force: true });
+  if (callerOwnedTempDir === undefined) delete process.env.OWNED_TEMP_DIR;
+  else process.env.OWNED_TEMP_DIR = callerOwnedTempDir;
 });
 function fixture() {
   const manifest = structuredClone(canonical);

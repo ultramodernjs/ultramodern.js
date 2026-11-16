@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { gunzipSync, gzipSync } from 'node:zlib';
@@ -24,6 +25,9 @@ import {
 let directory;
 let canonical;
 const actualUpstream = new Map();
+// The admission seam requires an owned scratch root in OWNED_TEMP_DIR. This
+// suite creates its own under the OS temp dir and restores the caller's env.
+const callerOwnedTempDir = process.env.OWNED_TEMP_DIR;
 const upstreamContracts = [
   {
     name: '@solidjs/web',
@@ -64,10 +68,8 @@ async function npmFetch(url) {
   return new Response(upstream.get(url));
 }
 before(async () => {
-  assert(process.env.OWNED_TEMP_DIR, 'Run through owned-temp-dir');
-  directory = fs.mkdtempSync(
-    path.join(process.env.OWNED_TEMP_DIR, 'verify-support-'),
-  );
+  directory = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-support-'));
+  process.env.OWNED_TEMP_DIR = directory;
   canonical = await reconstruct({
     recipe: releaseRecipe(),
     producer,
@@ -87,6 +89,8 @@ before(async () => {
 });
 after(() => {
   if (directory) fs.rmSync(directory, { recursive: true, force: true });
+  if (callerOwnedTempDir === undefined) delete process.env.OWNED_TEMP_DIR;
+  else process.env.OWNED_TEMP_DIR = callerOwnedTempDir;
 });
 function writeManifest(dir, manifest) {
   fs.mkdirSync(dir, { recursive: true });

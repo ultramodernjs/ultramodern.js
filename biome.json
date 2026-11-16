@@ -155,7 +155,11 @@
         "tests/integration/**/type-tests/**"
       ],
       "linter": {
-        "rules": { "correctness": { "noUnusedVariables": "off" } }
+        "rules": {
+          "correctness": {
+            "noUnusedVariables": "off"
+          }
+        }
       }
     },
     {
@@ -164,26 +168,57 @@
         "tests/integration/tailwindcss/fixtures/tailwindcss-v3/src/**/*.css"
       ],
       "linter": {
-        "rules": { "suspicious": { "noUnknownAtRules": "off" } }
+        "rules": {
+          "suspicious": {
+            "noUnknownAtRules": "off"
+          }
+        }
       }
     },
     {
       "includes": [
         "packages/runtime/federation-runtime/src/module-federation/distributed-ssr.tsx",
-        "packages/runtime/i18n-extensions/src/router-navigation/adapter.tsx"
+        "packages/runtime/i18n-extensions/src/router-navigation/adapter.tsx",
+        "packages/runtime/plugin-runtime/src/core/browser/hydrate.tsx",
+        "packages/runtime/plugin-runtime/src/core/server/stream/shared.tsx",
+        "packages/runtime/plugin-runtime/src/router/runtime/utils.tsx",
+        "packages/toolkit/runtime-utils/src/universal/async_storage.server.ts",
+        "packages/runtime/plugin-tanstack/src/runtime/plugin.tsx",
+        "packages/runtime/plugin-tanstack/src/runtime/rsc/server.tsx",
+        "packages/runtime/renderer-extensions/src/runtimePlugin.ts",
+        "packages/runtime/runtime-extensions/src/headRuntime.tsx",
+        "packages/toolkit/mcp-apps/src/ui/mf.tsx"
       ],
       "linter": {
         "rules": {
-          "correctness": { "noComponentHookFactories": "off" }
+          "correctness": {
+            "noComponentHookFactories": "off"
+          }
         }
       }
     },
     {
       "includes": ["packages/**/src/**"],
       "plugins": ["./scripts/biome-plugins/no-resolve-filename-patch.grit"]
+    },
+    {
+      "includes": ["packages/**/tests/**/*.test.{ts,tsx}"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noComponentHookFactories": "off"
+          }
+        }
+      }
     }
   ],
-  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
   "files": {
     "ignoreUnknown": true,
     "includes": [

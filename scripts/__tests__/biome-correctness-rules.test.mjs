@@ -40,10 +40,18 @@ const biomePluginPaths = [
 
 // Lints probe files laid out at repository-relative paths so biome.json
 // overrides resolve exactly as they do for `pnpm lint`.
-const lintProbes = (relativePaths, source = PROBE_SOURCE) => {
+const lintProbes = (
+  relativePaths,
+  source = PROBE_SOURCE,
+  packageManifests = [],
+) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'biome-rules-'));
   try {
-    for (const relativePath of ['biome.json', ...biomePluginPaths]) {
+    for (const relativePath of [
+      'biome.json',
+      ...biomePluginPaths,
+      ...packageManifests,
+    ]) {
       const target = path.join(root, relativePath);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.copyFileSync(path.join(repoRoot, relativePath), target);
@@ -138,10 +146,20 @@ test('unused imports, unused variables and @ts-ignore fail lint in fork-owned co
   }
 });
 
-test('component-factory exceptions name only the two module-initialized implementations', () => {
+test('component-factory exceptions are limited to verified lifecycle factories and test setup', () => {
   const factories = [
     'packages/runtime/federation-runtime/src/module-federation/distributed-ssr.tsx',
     'packages/runtime/i18n-extensions/src/router-navigation/adapter.tsx',
+    'packages/runtime/plugin-runtime/src/core/browser/hydrate.tsx',
+    'packages/runtime/plugin-runtime/src/core/server/stream/shared.tsx',
+    'packages/runtime/plugin-runtime/src/router/runtime/utils.tsx',
+    'packages/toolkit/runtime-utils/src/universal/async_storage.server.ts',
+    'packages/runtime/plugin-tanstack/src/runtime/plugin.tsx',
+    'packages/runtime/plugin-tanstack/src/runtime/rsc/server.tsx',
+    'packages/runtime/renderer-extensions/src/runtimePlugin.ts',
+    'packages/runtime/runtime-extensions/src/headRuntime.tsx',
+    'packages/toolkit/mcp-apps/src/ui/mf.tsx',
+    'packages/**/tests/**/*.test.{ts,tsx}',
   ];
   const exceptions = biomeConfig.overrides.filter(
     override =>
@@ -155,6 +173,29 @@ test('component-factory exceptions name only the two module-initialized implemen
     biomeConfig.linter.rules.correctness?.noComponentHookFactories,
     'off',
   );
+});
+
+test('render-time component factories still fail in React source, not isolated test setup', () => {
+  const source = 'packages/runtime/runtime-extensions/src/probe.tsx';
+  const testSetup = 'packages/runtime/runtime-extensions/tests/probe.test.tsx';
+  const rulesByFile = lintProbes(
+    [source, testSetup],
+    `import { useState } from 'react';
+export const Parent = () => {
+  const Child = () => {
+    const [value] = useState(0);
+    return <p>{value}</p>;
+  };
+  return <Child />;
+};
+`,
+    ['packages/runtime/runtime-extensions/package.json'],
+  );
+  assert.deepEqual(
+    [...rulesByFile.get(source)],
+    ['lint/correctness/noComponentHookFactories'],
+  );
+  assert.deepEqual([...rulesByFile.get(testSetup)], []);
 });
 
 test('upstream-owned packages keep upstream lint rules to stay shrink-only', () => {
