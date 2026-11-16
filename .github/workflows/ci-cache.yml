@@ -32,9 +32,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
-          - runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'windows-latest' }}
-          - runner: ${{ vars.DEPOT_MACOS_RUNNER || 'macos-26' }}
+          - runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+          - runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+          - runner: ${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}
 
     runs-on: ${{ matrix.runner }}
 
@@ -168,3 +168,115 @@ jobs:
         with:
           path: .ci-build-cache/snapshot
           key: ${{ steps.build-cache-key.outputs.key }}
+
+  # Windows is the only platform where the frozen install is expensive after
+  # the store is warm: 132 of its 143 s go into linking 2218 packages into
+  # node_modules on NTFS (run 43825084105), against 3 s on Depot Linux and 6 s
+  # on macOS. This leg saves that linked tree so the 15-19 Windows jobs of a
+  # pull request restore it instead of rebuilding it each time. It is its own
+  # job because the save must be conditioned on this platform's restore alone.
+  seed-windows-dependencies:
+    if: github.ref == 'refs/heads/main-ultramodern'
+    runs-on: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup mise
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+        with:
+          version: 2026.9.18
+          cache_save: false
+          install: true
+
+      - name: Setup Node.js 26.12.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26.12.0'
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      # The seed leg above owns this key; restore only, so a save here can
+      # never race it.
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Restore pnpm verification
+        uses: ./.github/actions/restore-pnpm-verification
+
+      # Restoring first refreshes the entry's last-access time and skips the
+      # save, because saving an existing immutable key would do neither.
+      #
+      # Keep this path list and key byte-identical to
+      # .github/actions/windows-dependencies/action.yml: actions/cache hashes
+      # the literal path strings into the entry version, so any difference
+      # between them is a permanent miss rather than a visible error.
+      - name: Restore the linked Windows dependency tree
+        id: windows-dependencies
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            node_modules
+            packages/*/node_modules
+            packages/*/*/node_modules
+            packages/*/*/*/node_modules
+            scripts/*/node_modules
+            tests/node_modules
+            tests/integration/*/node_modules
+            tests/integration/*/*/node_modules
+            tests/integration/*/*/*/node_modules
+            tests/integration/*/*/*/*/node_modules
+            tests/e2e/*/node_modules
+            tests/e2e/*/*/node_modules
+            tests/e2e/*/*/*/node_modules
+            website/*/node_modules
+            benchmark/*/node_modules
+            examples/*/node_modules
+            examples/*/*/node_modules
+          key: windows-dependencies-v1-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', '.mise.toml') }}
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Saved right after the install that pnpm's own policy verification
+      # gated, and before anything builds or packs, so the entry holds exactly
+      # the resolved workspace tree and the .pnpm virtual store.
+      - name: Save the linked Windows dependency tree
+        if: steps.windows-dependencies.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            node_modules
+            packages/*/node_modules
+            packages/*/*/node_modules
+            packages/*/*/*/node_modules
+            scripts/*/node_modules
+            tests/node_modules
+            tests/integration/*/node_modules
+            tests/integration/*/*/node_modules
+            tests/integration/*/*/*/node_modules
+            tests/integration/*/*/*/*/node_modules
+            tests/e2e/*/node_modules
+            tests/e2e/*/*/node_modules
+            tests/e2e/*/*/*/node_modules
+            website/*/node_modules
+            benchmark/*/node_modules
+            examples/*/node_modules
+            examples/*/*/node_modules
+          key: windows-dependencies-v1-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', '.mise.toml') }}

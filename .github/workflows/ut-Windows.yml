@@ -22,21 +22,15 @@ permissions:
 jobs:
   ut-windows-shards:
     # The type of runner that the job will run on
-    runs-on: ${{ vars.DEPOT_WINDOWS_RUNNER || 'windows-latest' }}
+    runs-on: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - group: ordinary
-            shard: 1/4
-          - group: ordinary
-            shard: 2/4
-          - group: ordinary
-            shard: 3/4
-          - group: ordinary
-            shard: 4/4
-          - group: generators
-            shard: ''
+        # Cost-weighted lanes from the per-file measurement committed in
+        # scripts/ci/windows-unit-selection.mjs, which also owns the
+        # assignment. Keep this list equal to its windowsLanes: a lane that is
+        # assigned work but never dispatched would skip those files silently.
+        lane: ['1/6', '2/6', '3/6', '4/6', '5/6', '6/6', 'generators']
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -59,22 +53,11 @@ jobs:
           pnpm_version="$(pnpm --version)"
           node scripts/ci/check-test-toolchain.mjs "$pnpm_version"
 
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      # Restore only; ci-cache.yml seeds this key on main-ultramodern.
-      - name: Restore pnpm store cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            pnpm-store-${{ runner.os }}-
-
-      - name: Restore pnpm lockfile verification
-        uses: ./.github/actions/restore-pnpm-verification
+      # Restore only; ci-cache.yml seeds the linked tree and the store on
+      # main-ultramodern. The frozen install below stays the gate: it either
+      # confirms the restored tree or builds it.
+      - name: Restore Windows dependencies
+        uses: ./.github/actions/windows-dependencies
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
@@ -109,7 +92,7 @@ jobs:
         run: node --test --test-name-pattern="prebundle distinguishes" scripts/prebundle/ultramodern/packed-utils-consumer.test.mjs
 
       - name: Verify complete disjoint Windows test coverage
-        if: matrix.shard == '1/4'
+        if: matrix.lane == '1/6'
         run: |
           node --test scripts/__tests__/windows-unit-selection.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -123,26 +106,36 @@ jobs:
           totalMemoryBytes:os.totalmem(),testFileWorkers:1}))"
 
       # Give the two measured slow generator files their own runner. Remaining
-      # files also launch nested tools, so all five lanes keep one file worker.
+      # files also launch nested tools, so all seven lanes keep one file
+      # worker; with one worker a lane's cost is the sum of its files, which
+      # is what windows-unit-selection.mjs balances.
       - name: Test
         env:
-          WINDOWS_UNIT_GROUP: ${{ matrix.group }}
-          WINDOWS_UNIT_SHARD: ${{ matrix.shard }}
+          WINDOWS_UNIT_LANE: ${{ matrix.lane }}
         # Git Bash prepends GNU tar, which interprets Windows drive paths as
         # remote archive hosts. Keep the runner's native Windows tool lookup.
         shell: pwsh
-        run: |
-          $testArguments = @('--config=scripts/ci/rstest-windows.config.mts', '--pool.maxWorkers=1')
-          if ($env:WINDOWS_UNIT_SHARD) {
-            $testArguments += "--shard=$env:WINDOWS_UNIT_SHARD"
-          }
-          pnpm run test:ut:prepared @testArguments
+        run: >-
+          pnpm run test:ut:prepared --config=scripts/ci/rstest-windows.config.mts
+          --pool.maxWorkers=1 --reporters default --reporters blob
+
+      # Keep exact per-file timings for the next balancing pass, including red
+      # runs. Each lane writes its own blob on its isolated runner.
+      - name: Upload unit test timings
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ut-windows-${{ strategy.job-index }}
+          path: .rstest-reports/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
 
   # Keep the original check name and fail it if any shard fails or is cancelled.
   ut-windows:
     if: ${{ always() }}
     needs: ut-windows-shards
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 5
     steps:
       - name: Verify all unit test shards passed

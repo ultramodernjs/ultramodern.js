@@ -1,0 +1,65 @@
+name: Restore Windows dependencies
+description: Reuse the linked dependency tree from trusted default-branch CI so the frozen install confirms it instead of relinking it on NTFS
+runs:
+  using: composite
+  steps:
+    # Measured on Depot Windows in run 43825084105: `pnpm install
+    # --frozen-lockfile` reported "Lockfile is up to date, resolution step is
+    # skipped" after 5 s and then spent 132 of its remaining 138 s adding
+    # 2218 packages to node_modules with "reused 2218, downloaded 0" - the
+    # store was already warm, and restoring those same 558 MB took 29 s. The
+    # linked tree, not the download, is what Windows pays for, so ci-cache.yml
+    # saves the tree on main-ultramodern and every Windows job restores it.
+    #
+    # Keep this path list and key byte-identical to the restore and the save
+    # in .github/workflows/ci-cache.yml. actions/cache hashes the literal path
+    # strings into the entry version, so any difference between them is a
+    # permanent miss rather than a visible error.
+    - name: Restore the linked Windows dependency tree
+      id: dependencies
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          node_modules
+          packages/*/node_modules
+          packages/*/*/node_modules
+          packages/*/*/*/node_modules
+          scripts/*/node_modules
+          tests/node_modules
+          tests/integration/*/node_modules
+          tests/integration/*/*/node_modules
+          tests/integration/*/*/*/node_modules
+          tests/integration/*/*/*/*/node_modules
+          tests/e2e/*/node_modules
+          tests/e2e/*/*/node_modules
+          tests/e2e/*/*/*/node_modules
+          website/*/node_modules
+          benchmark/*/node_modules
+          examples/*/node_modules
+          examples/*/*/node_modules
+        key: windows-dependencies-v1-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', '.mise.toml') }}
+
+    # A miss falls through to the ordinary frozen install, which links from
+    # the store. .mise.toml pins node and pnpm, so its hash is part of the key
+    # above and a toolchain bump retires the tree with the store.
+    - name: Resolve pnpm store path
+      id: pnpm-store
+      if: steps.dependencies.outputs.cache-hit != 'true'
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore pnpm store cache
+      if: steps.dependencies.outputs.cache-hit != 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-store-${{ runner.os }}-
+
+    # pnpm checks the lockfile against its supply-chain policy on every
+    # install. A restored tree never skips that gate: the caller still runs
+    # `pnpm install --frozen-lockfile`, and this only lets pnpm reuse the
+    # verdict that trusted default-branch CI already recorded.
+    - name: Restore pnpm lockfile verification
+      uses: ./.github/actions/restore-pnpm-verification

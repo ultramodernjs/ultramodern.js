@@ -3,13 +3,23 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   assertWindowsCoverage,
   excludeUnselected,
   generatorFiles,
   selectWindowsUnitFiles,
+  windowsFileSeconds,
+  windowsLaneSeconds,
+  windowsLanes,
+  windowsOrdinaryLanes,
   windowsUnitConfig,
+  windowsUnitTimings,
+  windowsUnmeasuredFileSeconds,
 } from '../ci/windows-unit-selection.mjs';
+
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
+const firstLane = windowsOrdinaryLanes[0];
 
 function fixture(t) {
   const root = fs.mkdtempSync(
@@ -39,7 +49,16 @@ function fixture(t) {
   };
 }
 
-test('only the exact measured files leave the ordinary group', t => {
+// A baseline of the committed measurement itself: one project per measured
+// file, so the lanes this builds are the lanes CI builds.
+function measuredBaseline(root) {
+  return Object.keys(windowsUnitTimings).map(file => ({
+    project: 'measured',
+    testPath: path.join(root, file),
+  }));
+}
+
+test('only the exact measured files leave the ordinary lanes', t => {
   const { root, baseline } = fixture(t);
   const similar = {
     project: 'other',
@@ -50,15 +69,70 @@ test('only the exact measured files leave the ordinary group', t => {
     selectWindowsUnitFiles(root, all, 'generators'),
     baseline.slice(0, 2),
   );
-  assert.deepEqual(selectWindowsUnitFiles(root, all, '1/4'), [
-    ...baseline.slice(2),
-    similar,
-  ]);
+  const ordinary = windowsOrdinaryLanes.flatMap(lane =>
+    selectWindowsUnitFiles(root, all, lane),
+  );
+  assert.deepEqual(new Set(ordinary), new Set([...baseline.slice(2), similar]));
   assert.throws(
     () => selectWindowsUnitFiles(root, baseline.slice(1), 'generators'),
     /missing/u,
   );
-  assert.throws(() => selectWindowsUnitFiles(root, all, '5/4'), /Unknown/u);
+  assert.throws(
+    () => selectWindowsUnitFiles(root, all, `${windowsLanes.length}/6`),
+    /Unknown/u,
+  );
+});
+
+test('the lanes together run every identity exactly once', t => {
+  const { root, baseline } = fixture(t);
+  assertWindowsCoverage(
+    baseline,
+    windowsLanes.map(lane => selectWindowsUnitFiles(root, baseline, lane)),
+  );
+  // One file is one unit of work: a lane excludes paths, so both projects
+  // that discovered shared.test.ts must land in the same lane.
+  const shared = windowsOrdinaryLanes.filter(
+    lane => selectWindowsUnitFiles(root, baseline, lane).length > 0,
+  );
+  assert.equal(shared.length, 1);
+  assert.equal(selectWindowsUnitFiles(root, baseline, shared[0]).length, 2);
+});
+
+test('lanes balance measured cost instead of file count', t => {
+  const { root } = fixture(t);
+  const baseline = measuredBaseline(root);
+  const ordinary = windowsOrdinaryLanes.map(lane =>
+    windowsLaneSeconds(root, baseline, lane),
+  );
+  const total = ordinary.reduce((sum, seconds) => sum + seconds, 0);
+  const ideal = total / windowsOrdinaryLanes.length;
+  assert.ok(Math.max(...ordinary) <= ideal * 1.05, JSON.stringify(ordinary));
+  // Each lane computes its own share with no runner talking to another, so
+  // the assignment must not depend on the order rstest discovered the files.
+  const reversed = [...baseline].reverse();
+  for (const lane of windowsLanes) {
+    const forward = selectWindowsUnitFiles(root, baseline, lane);
+    const backward = selectWindowsUnitFiles(root, reversed, lane);
+    assert.deepEqual(
+      new Set(backward.map(entry => entry.testPath)),
+      new Set(forward.map(entry => entry.testPath)),
+    );
+  }
+  // Counting files instead would put the measured long poles together.
+  const counts = windowsOrdinaryLanes.map(
+    lane => selectWindowsUnitFiles(root, baseline, lane).length,
+  );
+  assert.ok(Math.max(...counts) > Math.min(...counts));
+});
+
+test('an unmeasured file costs the documented default', () => {
+  const measured = Object.entries(windowsUnitTimings)[0];
+  assert.equal(windowsFileSeconds(measured[0]), measured[1]);
+  assert.equal(
+    windowsFileSeconds('packages/example/tests/brand-new.test.ts'),
+    windowsUnmeasuredFileSeconds,
+  );
+  assert.ok(windowsUnmeasuredFileSeconds > 0);
 });
 
 test('coverage distinguishes projects for the same file and rejects missing, extra and duplicate work', t => {
@@ -119,7 +193,7 @@ test('selection retains native excludes and explicit default-override semantics 
   }
 });
 
-test('native nested project options and extension objects survive both test groups', async t => {
+test('native nested project options and extension objects survive every lane', async t => {
   const { root, projectRoot, baseline, base } = fixture(t);
   const plugin = () => 'native compiler';
   const child = {
@@ -137,12 +211,15 @@ test('native nested project options and extension objects survive both test grou
       projects: [child],
     },
   });
-  for (const group of ['ordinary', 'generators']) {
+  const shared = windowsOrdinaryLanes.find(
+    lane => selectWindowsUnitFiles(root, baseline, lane).length > 0,
+  );
+  for (const lane of [shared, 'generators']) {
     const config = await windowsUnitConfig(
       root,
       base,
       loadConfig,
-      group,
+      lane,
       baseline,
     );
     const actual = config.projects[0];
@@ -158,11 +235,13 @@ test('native nested project options and extension objects survive both test grou
     assert.equal(child.exclude.length, 1);
     const extras = actual.exclude.slice(1);
     assert.deepEqual(
-      extras,
-      (group === 'ordinary'
-        ? baseline.slice(0, 2).map(file => file.testPath)
-        : [baseline[2].testPath]
-      ).map(file => file.split(path.sep).join('/')),
+      new Set(extras),
+      new Set(
+        (lane === 'generators'
+          ? baseline.slice(2, 3)
+          : baseline.slice(0, 2)
+        ).map(file => file.testPath.split(path.sep).join('/')),
+      ),
     );
   }
 });
@@ -173,7 +252,7 @@ test('single-project configs retain their native name and source root', async t 
     root,
     base,
     async () => ({ content: { include: ['src/*.test.ts'], globals: true } }),
-    'ordinary',
+    firstLane,
     baseline,
   );
   assert.equal(config.projects[0].name, '@example/native');
@@ -189,7 +268,7 @@ test('unsupported future project shapes fail instead of silently losing coverage
       root,
       { projects: [{}] },
       async () => ({}),
-      'ordinary',
+      firstLane,
       baseline,
     ),
     /project config paths/u,
@@ -199,7 +278,7 @@ test('unsupported future project shapes fail instead of silently losing coverage
       root,
       base,
       async () => ({ content: { projects: ['nested.config.mts'] } }),
-      'ordinary',
+      firstLane,
       baseline,
     ),
     /Unsupported nested/u,
@@ -213,5 +292,62 @@ test('unsupported future project shapes fail instead of silently losing coverage
       baseline,
     ),
     /Unknown Windows/u,
+  );
+});
+
+// Every Windows lane and Windows integration job restores the dependency
+// tree instead of relinking it, and actions/cache hashes the literal path
+// strings into the entry version: a restore whose list drifts from the save
+// misses forever without reporting anything.
+test('the Windows dependency cache names one path list and one key', () => {
+  const entry =
+    /path: \|\n(?<paths>(?:[^\S\n]*\S+\n)+?)[^\S\n]*key: (?<key>windows-dependencies-.+)\n/gu;
+  const declared = [];
+  for (const file of [
+    '.github/actions/windows-dependencies/action.yml',
+    '.github/workflows/ci-cache.yml',
+  ]) {
+    const content = fs.readFileSync(path.join(repoRoot, file), 'utf8');
+    for (const match of content.matchAll(entry)) {
+      const lines = match.groups.paths.trim().split('\n');
+      declared.push({
+        file,
+        key: match.groups.key.trim(),
+        paths: lines.map(line => line.trim()),
+      });
+    }
+  }
+  // One restore in the action, one restore and one save in the seed workflow.
+  const files = declared.map(cache => cache.file);
+  assert.equal(declared.length, 3, JSON.stringify(files));
+  for (const cache of declared) {
+    assert.deepEqual(cache.paths, declared[0].paths, cache.file);
+    assert.equal(cache.key, declared[0].key, cache.file);
+  }
+  assert.ok(declared[0].paths.includes('node_modules'));
+  assert.ok(declared[0].paths.every(line => line.endsWith('node_modules')));
+  // The key must retire the tree with the lockfile and the pinned toolchain.
+  for (const input of [/runner\.os/u, /pnpm-lock\.yaml/u, /\.mise\.toml/u]) {
+    assert.match(declared[0].key, input);
+  }
+});
+
+// A lane this module assigns but the matrix never dispatches would skip its
+// files in silence, which is the one failure the coverage guard cannot see.
+test('the Windows unit matrix dispatches exactly these lanes', () => {
+  const workflow = fs.readFileSync(
+    path.join(repoRoot, '.github/workflows/ut-Windows.yml'),
+    'utf8',
+  );
+  const matrix = /^\s*lane:\s*\[(?<lanes>[^\]]*)\]\s*$/mu.exec(workflow);
+  assert.ok(matrix, 'ut-Windows.yml must declare a one-line lane matrix');
+  const dispatched = matrix.groups.lanes.split(',');
+  assert.deepEqual(
+    dispatched.map(lane => lane.trim().replace(/^'|'$/gu, '')),
+    windowsLanes,
+  );
+  assert.ok(
+    workflow.includes(`if: matrix.lane == '${firstLane}'`),
+    `the coverage verification must run on lane ${firstLane}`,
   );
 });
