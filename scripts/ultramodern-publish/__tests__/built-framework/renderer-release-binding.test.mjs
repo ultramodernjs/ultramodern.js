@@ -14,6 +14,15 @@ import {
   releaseEnvelopePayload,
 } from '../../lib/renderer-release-binding.mjs';
 
+// The fixture installs the Module Federation Rspack producer, so its version
+// must be the exact recipe the release gate verifies against.
+const mfRspackRecipe = JSON.parse(
+  fs.readFileSync(
+    new URL('../../../ultramodern-supply/sidecars.json', import.meta.url),
+    'utf8',
+  ),
+).find(recipe => recipe.id === 'mf-rspack');
+
 function rendererUi(renderer = 'react', buildId = 'release-build') {
   return {
     rendererIdentity: {
@@ -853,7 +862,7 @@ function runtimeFixture(
       path.join(rspackRoot, 'package.json'),
       JSON.stringify({
         name: '@module-federation/rspack',
-        version: '2.9.2',
+        version: mfRspackRecipe.upstream.version,
         exports: { './plugin': './plugin.js' },
       }),
     );
@@ -887,7 +896,7 @@ function runtimeFixture(
           'index.js': ['nodejs', 'export const ssr = true;'],
           'mf-manifest.json': [
             'browser',
-            JSON.stringify({ pluginVersion: '2.9.2' }),
+            JSON.stringify({ pluginVersion: mfRspackRecipe.upstream.version }),
           ],
           'static/main.js': ['browser', 'export const client = true;'],
         }),

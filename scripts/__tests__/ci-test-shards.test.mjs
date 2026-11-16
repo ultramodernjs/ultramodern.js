@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -113,6 +113,21 @@ test('adapter and package utility coverage still runs once per supported platfor
 });
 
 const run = promisify(execFile);
+
+// Generator suites run every `*.test.ts` in their fixture directory. Windows
+// excludes runtime fixtures in tests/rstest.config.mts, so mirror that rule.
+function generatorTestFiles(generator) {
+  const excludedOnWindows =
+    process.platform === 'win32' ? ['runtime.test.ts'] : [];
+  return readdirSync(
+    path.join(repoRoot, 'tests/integration', generator, 'tests'),
+  )
+    .filter(
+      name => name.endsWith('.test.ts') && !excludedOnWindows.includes(name),
+    )
+    .map(name => `${generator}/tests/${name}`)
+    .sort();
+}
 
 test('core integration jobs fetch the immutable native baseline before running tests', () => {
   const checkoutIndex = integration.steps.findIndex(
@@ -299,12 +314,16 @@ test('native core shards and generator runners run every discovered file exactly
   assert.ok(all.length >= coreShards.length, 'Every CI shard must have tests.');
   assert.ok(shards.every(files => files.length > 0));
   assert.deepEqual(
-    workspace.map(file => file.replaceAll('\\', '/').split('/integration/')[1]),
-    ['create-ultramodern-workspace/tests/index.test.ts'],
+    workspace
+      .map(file => file.replaceAll('\\', '/').split('/integration/')[1])
+      .sort(),
+    generatorTestFiles('create-ultramodern-workspace'),
   );
   assert.deepEqual(
-    bff.map(file => file.replaceAll('\\', '/').split('/integration/')[1]),
-    ['create-bff-runtime/tests/index.test.ts'],
+    bff
+      .map(file => file.replaceAll('\\', '/').split('/integration/')[1])
+      .sort(),
+    generatorTestFiles('create-bff-runtime'),
   );
   assert.equal(core.length, all.length - workspace.length - bff.length);
   assert.deepEqual(
