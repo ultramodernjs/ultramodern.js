@@ -31,7 +31,7 @@ const routerProvenancePath = path.join(
 const routerPatch =
   '546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8';
 const adapterPatch =
-  'c82cc89c373d23b42b24cb9eb5d748940170b76895bd94139d538ceeebe6af9b';
+  'df6732ebcfc0af7cf274187c44596ac519abbc383ce30a796205b55c561bf688';
 
 export function completedRecipes({ root = repo } = {}) {
   const provenance = JSON.parse(
@@ -76,7 +76,7 @@ export function completedRecipes({ root = repo } = {}) {
     '@octanejs/tanstack-router': {
       patchPath: path.join(
         root,
-        'patches/@octanejs__tanstack-router@0.3.4.patch',
+        'patches/@octanejs__tanstack-router@0.3.4.shared-core-peer.patch',
       ),
       patchSha256: adapterPatch,
       upstream: {
