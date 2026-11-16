@@ -30,6 +30,12 @@ function assertRunner(value, label, { npmOidc = false } = {}) {
     /depot-|vars\.DEPOT_/u,
     `${label}: use Depot; every runner label in this repository is a Depot label`,
   );
+  for (const [, release] of value.matchAll(/depot-ubuntu-(\d+\.\d+)/gu)) {
+    assert.ok(
+      Number(release) >= 24.04,
+      `${label}: Ubuntu 24.04 is the minimum`,
+    );
+  }
   const hosted = [
     ...value.matchAll(
       /(?<![\w-])(?:ubuntu|macos|windows)-(?:latest|\d[\w.-]*)/giu,
@@ -94,4 +100,12 @@ test('runner policy rejects the old compiler and acceptance defaults', () => {
     "${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}",
   ])
     assert.doesNotThrow(() => assertRunner(runner, 'owned'), runner);
+});
+
+test('Depot Linux images retain the Ubuntu 24.04 minimum', () => {
+  assert.throws(
+    () => assertRunner('depot-ubuntu-22.04-8', 'old'),
+    /24.04 is the minimum/u,
+  );
+  assert.doesNotThrow(() => assertRunner('depot-ubuntu-24.04-16', 'current'));
 });

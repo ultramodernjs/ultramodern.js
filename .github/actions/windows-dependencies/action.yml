@@ -1,44 +1,43 @@
 name: Restore Windows dependencies
-description: Restore the pnpm store and the lockfile verification verdict so the Windows frozen install links from a warm store
+description: Restore regular installed files and rebuild native junctions; install only on an exact snapshot miss
+outputs:
+  cache-hit:
+    description: True only when the exact installed-file snapshot was restored
+    value: ${{ steps.snapshot.outputs.cache-hit }}
 runs:
   using: composite
   steps:
-    # This action used to restore the resolved `node_modules` tree itself,
-    # because `pnpm install --frozen-lockfile` reports "Lockfile is up to date,
-    # resolution step is skipped" after 5 s and then spends 132 of its
-    # remaining 138 s adding 2218 packages to node_modules on NTFS with
-    # "reused 2218, downloaded 0" (run 43825084105). The linked tree, not the
-    # download, is what Windows pays for, so caching the tree looked like the
-    # obvious lever.
-    #
-    # It does not work, and the reason is not fixable from here. pnpm links an
-    # isolated layout with NTFS junctions - 1293 of them inside node_modules,
-    # measured in run 43888513585 - and the Actions cache archives with GNU
-    # tar. The archive is fine (2.1 GB of real content, 480 MB compressed,
-    # saved in 24 s, junctions stored as links rather than followed), but the
-    # restored reparse points are not traversable junctions, so the very next
-    # `pnpm install --frozen-lockfile` dies on one of them:
-    #
-    #   ERR_PNPM_PACKAGE_MANAGER_INSPECT_OPTIONAL_DEPENDENCY
-    #     Failed to inspect optional dependency at
-    #     "...\node_modules\.pnpm\react-i18next@17.0.18_...\node_modules\typescript":
-    #     Access is denied. (os error 5)
-    #
-    # That was all 7 lanes of run 43891404231, deterministically, not a flake.
-    # Restoring the 480 MB also cost 69 s against the 31 s store restore it
-    # replaced, so even a tree that survived the round trip would have returned
-    # about 1.5 min rather than the 2.4 min the install costs.
-    #
-    # Do not re-add it without changing the transport: the thing that would
-    # have to change is that an NTFS junction graph survives archiving, which
-    # actions/cache cannot promise. scripts/__tests__/windows-unit-selection.test.mjs
-    # fails if any workflow starts caching a node_modules tree again.
+    - name: Identify Windows dependency snapshot
+      id: identity
+      shell: bash
+      run: node scripts/ci/windows-dependency-snapshot.mjs key
+
+    # No NTFS reparse point crosses tar. The seed strips links into a relative
+    # manifest; restore recreates them through Node's native junction API.
+    - name: Restore installed Windows files
+      id: snapshot
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: .ci-windows-dependencies/snapshot
+        key: ${{ steps.identity.outputs.key }}
+
+    - name: Rebuild native Windows dependency links
+      if: steps.snapshot.outputs.cache-hit == 'true'
+      shell: pwsh
+      run: |
+        node scripts/ci/windows-dependency-snapshot.mjs restore
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        node scripts/ultramodern-node-policy/check-node-version.mjs
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
     - name: Resolve pnpm store path
       id: pnpm-store
+      if: steps.snapshot.outputs.cache-hit != 'true'
       shell: bash
       run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
     - name: Restore pnpm store cache
+      if: steps.snapshot.outputs.cache-hit != 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.pnpm-store.outputs.path }}
@@ -46,9 +45,7 @@ runs:
         restore-keys: |
           pnpm-store-${{ runner.os }}-
 
-    # pnpm checks the lockfile against its supply-chain policy on every
-    # install. This only lets pnpm reuse the verdict that trusted
-    # default-branch CI already recorded; the caller still runs
-    # `pnpm install --frozen-lockfile`.
     - name: Restore pnpm lockfile verification
+      if: steps.snapshot.outputs.cache-hit != 'true'
       uses: ./.github/actions/restore-pnpm-verification
+

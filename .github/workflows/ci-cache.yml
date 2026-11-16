@@ -12,7 +12,7 @@ on:
   # GitHub evicts entries nobody read for 7 days. A weekly refresh lands on
   # that boundary, so refresh twice a week to stay well inside it.
   schedule:
-    - cron: '17 3 * * 1,4'
+    - cron: "17 3 * * 1,4"
 
   workflow_dispatch:
 
@@ -40,7 +40,7 @@ jobs:
         include:
           - runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             compiler_payload: false
-          - runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+          - runner: depot-windows-2025-16
             compiler_payload: false
           - runner: ${{ vars.DEPOT_MACOS_RUNNER || 'depot-macos-26' }}
             compiler_payload: false
@@ -49,7 +49,7 @@ jobs:
           # there is no macOS integration consumer.
           - runner: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
             compiler_payload: true
-          - runner: ${{ vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8' }}
+          - runner: depot-windows-2025-16
             compiler_payload: true
 
     runs-on: ${{ matrix.runner }}
@@ -75,7 +75,20 @@ jobs:
       - name: Setup Node.js 26.12.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '26.12.0'
+          node-version: "26.12.0"
+
+      - name: Identify Windows dependency snapshot
+        id: windows-identity
+        if: runner.os == 'Windows' && matrix.compiler_payload == false
+        run: node scripts/ci/windows-dependency-snapshot.mjs key
+
+      - name: Restore Windows dependency snapshot
+        id: windows-snapshot
+        if: runner.os == 'Windows' && matrix.compiler_payload == false
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ci-windows-dependencies/snapshot
+          key: ${{ steps.windows-identity.outputs.key }}
 
       - name: Resolve pnpm store path
         id: pnpm-store
@@ -196,4 +209,32 @@ jobs:
         with:
           path: .ci-build-cache/snapshot
           key: ${{ steps.build-cache-key.outputs.key }}
+
+      # Snapshot last: moving regular trees avoids a second copy of 2 GB.
+      # Installation and all genuine native install hooks have already passed.
+      - name: Encode Windows dependency links and snapshot regular files
+        if: runner.os == 'Windows' && matrix.compiler_payload == false && steps.windows-snapshot.outputs.cache-hit != 'true'
+        run: node scripts/ci/windows-dependency-snapshot.mjs snapshot
+
+      # Prove the full real installation survives tar, not just a fixture.
+      - name: Verify Windows snapshot transport and native executables
+        if: runner.os == 'Windows' && matrix.compiler_payload == false && steps.windows-snapshot.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          node scripts/ci/windows-dependency-snapshot.mjs verify-transport
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm exec nx --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm exec rstest --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/prepare-effect-compiler.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/ci/windows-dependency-snapshot.mjs snapshot
+
+      - name: Save Windows dependency snapshot
+        if: runner.os == 'Windows' && matrix.compiler_payload == false && steps.windows-snapshot.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ci-windows-dependencies/snapshot
+          key: ${{ steps.windows-identity.outputs.key }}
 

@@ -2066,10 +2066,7 @@ test('integration include-only matrix runs every core, generator and side suite 
       'Linux',
       githubExpression("vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'"),
     ],
-    [
-      'Windows',
-      githubExpression("vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8'"),
-    ],
+    ['Windows', 'depot-windows-2025-16'],
   ]) {
     for (let shard = 1; shard <= 6; shard++) {
       expected.push({
@@ -2133,9 +2130,7 @@ test('integration include-only matrix runs every core, generator and side suite 
       [
         'runner',
         entry.platform === 'Linux'
-          ? githubExpression(
-              "vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8'",
-            )
+          ? 'depot-windows-2025-16'
           : githubExpression(
               "vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'",
             ),
@@ -2162,9 +2157,7 @@ test('integration include-only matrix runs every core, generator and side suite 
     },
     {
       platform: 'Windows',
-      runner: githubExpression(
-        "vars.DEPOT_WINDOWS_RUNNER || 'depot-windows-2025-8'",
-      ),
+      runner: 'depot-windows-2025-16',
       suite: 'utils',
     },
     {
