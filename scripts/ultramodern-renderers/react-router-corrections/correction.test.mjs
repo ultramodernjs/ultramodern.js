@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,7 +10,11 @@ import {
   readArchive,
 } from '../../ultramodern-dependencies/test-peer-corrections/archive.mjs';
 import { authenticateArchive } from '../../ultramodern-dependencies/test-peer-corrections/authenticate.mjs';
-import { correctReactArchive, verifyPayload } from './correction.mjs';
+import {
+  canonicalPatch,
+  correctReactArchive,
+  verifyPayload,
+} from './correction.mjs';
 import { isolatedEnvironment } from './proof.mjs';
 
 function fixture() {
@@ -159,4 +164,59 @@ test('subprocess environment drops ambient credentials and pnpm bypasses', () =>
   } finally {
     fs.rmSync(directory, { recursive: true });
   }
+});
+
+test('canonical patch bytes do not depend on the user git configuration', t => {
+  assert(process.env.OWNED_TEMP_DIR, 'Run tests inside owned-temp-dir');
+  const directory = fs.mkdtempSync(
+    path.join(process.env.OWNED_TEMP_DIR, 'patch-'),
+  );
+  const home = process.env.HOME;
+  t.after(() => {
+    process.env.HOME = home;
+    fs.rmSync(directory, { recursive: true });
+  });
+  const originalBytes = fixture();
+  const correctedBytes = correctReactArchive(originalBytes).archiveBytes;
+  const patches = [];
+  for (const [name, gitconfig] of [
+    ['clean', ''],
+    [
+      'adversarial',
+      '[diff]\n\talgorithm = patience\n\tindentHeuristic = false\n\tcontext = 1\n\tinterHunkContext = 4\n\tnoprefix = true\n[core]\n\tabbrev = 16\n[color]\n\tdiff = always\n',
+    ],
+  ]) {
+    const work = path.join(directory, name);
+    fs.mkdirSync(work);
+    fs.writeFileSync(path.join(work, '.gitconfig'), gitconfig);
+    process.env.HOME = work;
+    patches.push(
+      canonicalPatch({ work, originalBytes, correctedBytes }).toString(),
+    );
+  }
+  assert.equal(patches[1], patches[0]);
+  const control = path.join(directory, 'control');
+  fs.mkdirSync(control);
+  fs.writeFileSync(
+    path.join(control, 'before.json'),
+    readArchive(originalBytes).get('package.json'),
+  );
+  fs.writeFileSync(
+    path.join(control, 'after.json'),
+    readArchive(correctedBytes).get('package.json'),
+  );
+  const ambient = spawnSync(
+    'git',
+    ['diff', '--no-index', 'before.json', 'after.json'],
+    {
+      cwd: control,
+      env: { PATH: process.env.PATH, HOME: process.env.HOME },
+      encoding: 'utf8',
+    },
+  ).stdout;
+  assert.notEqual(
+    ambient.slice(ambient.indexOf('@@')),
+    patches[0].slice(patches[0].indexOf('@@')),
+    'control: an unpinned diff of this fixture has other hunks',
+  );
 });

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import { devNull } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { writeHydrationReporter } from './hydration-reporter.mjs';
@@ -151,6 +152,9 @@ export function packagePatch(pristine, built) {
       [
         'diff',
         '--no-index',
+        '--diff-algorithm=histogram',
+        '--unified=3',
+        '--indent-heuristic',
         '--no-ext-diff',
         '--no-textconv',
         '--no-renames',
@@ -160,7 +164,16 @@ export function packagePatch(pristine, built) {
         fs.existsSync(a) ? a : '/dev/null',
         fs.existsSync(b) ? b : '/dev/null',
       ],
-      { env: buildEnvironment(), encoding: 'utf8', maxBuffer: 128 * 1024 ** 2 },
+      {
+        cwd: pristine,
+        env: {
+          ...buildEnvironment(),
+          GIT_CONFIG_GLOBAL: devNull,
+          GIT_CONFIG_NOSYSTEM: '1',
+        },
+        encoding: 'utf8',
+        maxBuffer: 128 * 1024 ** 2,
+      },
     );
     assert(diff.status === 0 || diff.status === 1, diff.stderr);
     patch += diff.stdout

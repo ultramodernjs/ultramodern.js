@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { assertOwned, tree, validateMaps } from './build.mjs';
+import { assertOwned, createPatch, tree, validateMaps } from './build.mjs';
 
 const temporary = process.env.OWNED_TEMP_DIR;
 assert(temporary, 'Run tests through owned-temp-dir --run');
@@ -71,4 +72,47 @@ test('missing emitted map artifact is rejected', () => {
   const root = fixture('missing-map');
   fs.unlinkSync(path.join(root, 'dist/n.js.map'));
   assert.throws(() => validateMaps(root), /missing map/);
+});
+
+test('canonical patch bytes stay the reviewed myers diff under any user git configuration', t => {
+  const home = process.env.HOME;
+  t.after(() => {
+    process.env.HOME = home;
+  });
+  const expected =
+    'diff --git a/index.js b/index.js\nindex 410d0bfd9cf3c89b974414cfe9b9773f39127ca1..ea8dfbc8f57a8269e4e6f9daa8f2ce9c2706a305 100644\n--- a/index.js\n+++ b/index.js\n@@ -1,10 +1,8 @@\n+y\n+z\n x\n-x\n-{\n-}\n-{\n+z\n y\n-}\n 1\n 2\n 3\n@@ -12,4 +10,4 @@ y\n 5\n 6\n 7\n-old\n+new\n';
+  for (const [name, gitconfig] of [
+    ['clean', undefined],
+    [
+      'adversarial',
+      '[diff]\n\talgorithm = histogram\n\tindentHeuristic = false\n\tcontext = 1\n\tinterHunkContext = 4\n\tnoprefix = true\n[core]\n\tautocrlf = true\n[color]\n\tdiff = always\n',
+    ],
+  ]) {
+    const work = path.join(temporary, `patch-${name}`);
+    for (const [side, text] of [
+      ['a', 'x\nx\n{\n}\n{\ny\n}\n1\n2\n3\n4\n5\n6\n7\nold\n'],
+      ['b', 'y\nz\nx\nz\ny\n1\n2\n3\n4\n5\n6\n7\nnew\n'],
+      ['home', undefined],
+    ]) {
+      fs.mkdirSync(path.join(work, side), { recursive: true });
+      if (text) fs.writeFileSync(path.join(work, side, 'index.js'), text);
+    }
+    if (gitconfig)
+      fs.writeFileSync(path.join(work, 'home/.gitconfig'), gitconfig);
+    process.env.HOME = path.join(work, 'home');
+    const destination = path.join(work, 'canonical.patch');
+    createPatch(path.join(work, 'a'), path.join(work, 'b'), destination);
+    assert.equal(fs.readFileSync(destination, 'utf8'), expected);
+    if (!gitconfig) continue;
+    const ambient = spawnSync('git', ['diff', '--no-index', 'a', 'b'], {
+      cwd: work,
+      env: { PATH: process.env.PATH, HOME: process.env.HOME },
+      encoding: 'utf8',
+    }).stdout;
+    assert.notEqual(
+      ambient.slice(ambient.indexOf('@@')),
+      expected.slice(expected.indexOf('@@')),
+      'control: an unpinned diff of this fixture has other hunks',
+    );
+  }
 });
