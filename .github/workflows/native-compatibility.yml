@@ -16,6 +16,20 @@ permissions:
   actions: read
   contents: read
 
+# Reusable workflows inherit the caller's event and workflow identity. Only
+# direct PR runs share a cancellation group; release, merge-queue and manual
+# runs each retain their own run attempt, including pending runs.
+concurrency:
+  group: >-
+    ${{ format('native-compatibility-{0}-{1}', github.repository_id,
+      github.event_name == 'pull_request' &&
+      github.workflow_ref == format('{0}/.github/workflows/native-compatibility.yml@{1}', github.repository, github.ref) &&
+      format('pr-{0}', github.event.pull_request.number) ||
+      format('run-{0}-attempt-{1}', github.run_id, github.run_attempt)) }}
+  cancel-in-progress: >-
+    ${{ github.event_name == 'pull_request' &&
+      github.workflow_ref == format('{0}/.github/workflows/native-compatibility.yml@{1}', github.repository, github.ref) }}
+
 jobs:
   effect-compiler-payload:
     uses: ./.github/workflows/effect-compiler-payload.yml

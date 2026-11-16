@@ -704,3 +704,36 @@ test('native and release qualification run isolated fake contracts before native
       );
   }
 });
+
+test('only a direct PR native qualification cancels its superseded head', () => {
+  const workflow = {
+    jobs: { cancel: { if: native.concurrency['cancel-in-progress'] } },
+  };
+  const github = {
+    repository: 'ultramodernjs/ultramodern.js',
+    ref: 'refs/pull/312/merge',
+    event_name: 'pull_request',
+    workflow_ref:
+      'ultramodernjs/ultramodern.js/.github/workflows/native-compatibility.yml@refs/pull/312/merge',
+  };
+  const evaluates = values =>
+    evaluateJobSchedule({
+      workflow,
+      jobId: 'cancel',
+      context: { github: { ...github, ...values } },
+    });
+  assert.equal(evaluates({}), true);
+  for (const event_name of [
+    'merge_group',
+    'workflow_dispatch',
+    'workflow_call',
+  ])
+    assert.equal(evaluates({ event_name }), false, event_name);
+  assert.equal(
+    evaluates({
+      workflow_ref:
+        'ultramodernjs/ultramodern.js/.github/workflows/publish-bleedingdev.yml@refs/pull/312/merge',
+    }),
+    false,
+  );
+});
