@@ -83,6 +83,7 @@ jobs:
             suite: framework
             framework_suite: core
             shard: 3/6
+            fresh_consumers: true
           - platform: Windows
             runner: depot-windows-2025-16
             suite: framework
@@ -93,6 +94,7 @@ jobs:
             suite: framework
             framework_suite: core
             shard: 1/6
+            fresh_consumers: true
           - platform: Windows
             runner: depot-windows-2025-16
             suite: framework
@@ -227,7 +229,9 @@ jobs:
         if: runner.os == 'Windows'
         uses: ./.github/actions/windows-dependencies
         with:
-          store-required: ${{ startsWith(matrix.suite, 'framework-generator-') }}
+          # The measured upstream/fork native consumers install fresh packages
+          # on core 1/6 and 3/6. Other core lanes use the installed snapshot.
+          store-required: ${{ startsWith(matrix.suite, 'framework-generator-') || matrix.fresh_consumers == true }}
 
       - name: Install Dependencies
         shell: bash
