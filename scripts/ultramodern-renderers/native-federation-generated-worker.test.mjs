@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { registerHooks } from 'node:module';
+import net from 'node:net';
 import path from 'node:path';
 import test from 'node:test';
 import { generatedWorkerCoordinates } from '../../tests/ultramodern-renderers/octane-federation-workers/generated.mjs';
@@ -358,6 +359,20 @@ test('generated Worker compilation receives its generated sources and installed 
             git(['show', `HEAD:${coordinate.directory}/route.tsx`]),
             /generated Worker source/u,
           );
+        // Compilation serves each remote's emitted assets on its baked origin,
+        // so no origin may still be leased when compilation starts.
+        assert.deepEqual(
+          options.applications.map(application => application.origin),
+          generationInput.origins,
+        );
+        for (const { origin } of options.applications) {
+          const server = net.createServer();
+          await new Promise((resolve, reject) => {
+            server.once('error', reject);
+            server.listen(Number(new URL(origin).port), '127.0.0.1', resolve);
+          });
+          await new Promise(resolve => server.close(resolve));
+        }
         compiled = true;
         throw stopped;
       },

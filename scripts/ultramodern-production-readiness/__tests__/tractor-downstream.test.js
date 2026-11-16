@@ -9,9 +9,24 @@ const { createProcessEnv, runCommand } = require('../../lib/process-kit');
 
 const cohortInstallPromise = import('../tractor-downstream/cohort-install.mjs');
 const runnerPromise = import('../tractor-downstream/main.mjs');
+const supportProtocolPromise = import(
+  '../../ultramodern-support-artifacts/protocol.mjs'
+);
+// The exact producer's support release: its descriptor, shipped inside the
+// packed create package, owns the OpenTelemetry artifact request.
+const supportProducer = {
+  repository: 'ultramodernjs/ultramodern.js',
+  repositoryId: 1151231350,
+  workflow: '.github/workflows/support-artifacts.yml',
+  source: 'd'.repeat(40),
+  runId: 43934193068,
+  runAttempt: 2,
+  tag: `support-artifacts-${'d'.repeat(40)}-43934193068-2`,
+};
+const supportReleaseUrl = `https://github.com/ultramodernjs/ultramodern.js/releases/download/${supportProducer.tag}/`;
 const producerEffectDependencies = {
-  effect: '4.0.0',
-  '@effect/opentelemetry': '4.0.0',
+  effect: '4.1.4',
+  '@effect/opentelemetry': `${supportReleaseUrl}effect-opentelemetry-4.1.4.tgz`,
   '@effect/tsgo': '0.69.0',
 };
 const producerReactDependencies = {
@@ -171,7 +186,35 @@ function writeAuthenticatedCohort(root) {
   );
 }
 
-async function writeCandidateCreatePackage(root, next, dependencies) {
+async function supportArtifactsDescriptor() {
+  const { inputs, supportProtocol } = await supportProtocolPromise;
+  return supportProtocol.descriptorFor({
+    protocol: supportProtocol.protocol,
+    producer: supportProducer,
+    packages: Object.fromEntries(
+      Object.entries(supportProtocol.cohort).map(([name, version]) => [
+        name,
+        {
+          version,
+          request: supportProtocol.releaseUrl(
+            supportProducer,
+            supportProtocol.assetFilename(name, version),
+          ),
+          integrity: `sha512-${Buffer.alloc(64, name.length).toString('base64')}`,
+          upstream: inputs[name].upstream,
+          patchSha256: 'e'.repeat(64),
+        },
+      ]),
+    ),
+  });
+}
+
+async function writeCandidateCreatePackage(
+  root,
+  next,
+  dependencies,
+  { supportArtifacts = true } = {},
+) {
   const { inspectNpmTarball } = await import(
     '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs'
   );
@@ -196,6 +239,13 @@ async function writeCandidateCreatePackage(root, next, dependencies) {
       version: next.release.version,
       publishConfig: { access: 'public' },
       dependencies,
+      ...(supportArtifacts
+        ? {
+            ultramodern: {
+              supportArtifacts: await supportArtifactsDescriptor(),
+            },
+          }
+        : {}),
     }),
   );
   const artifactPath = path.join(root, 'candidate.tgz');
@@ -1553,6 +1603,14 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
     });
     const artifactPath = next.createPackage.artifactPath;
     const bytes = fs.readFileSync(artifactPath);
+    const supportArtifacts = await supportArtifactsDescriptor();
+    const hostSupport = Object.fromEntries(
+      [
+        '@effect/opentelemetry',
+        '@tanstack/react-router',
+        'rsbuild-plugin-dts',
+      ].map(name => [name, supportArtifacts.packages[name].request]),
+    );
     const uiFile = path.join(
       root,
       'apps/shell-super-app/locales/en/shell.json',
@@ -1561,11 +1619,14 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
     const rootManifestFile = path.join(root, 'package.json');
     const rootManifest = JSON.parse(fs.readFileSync(rootManifestFile, 'utf8'));
     rootManifest.devDependencies = {
+      '@acme/private-build-tool': '7.8.9',
+      'rsbuild-plugin-dts': '1.0.3',
       react: '19.2.8',
       'react-dom': '19.2.8',
       '@types/react': '^19.2.18',
       '@types/react-dom': '^19.2.7',
     };
+    rootManifest.ultramodern = { authored: 'preserved' };
     fs.writeFileSync(rootManifestFile, JSON.stringify(rootManifest));
     const beforeManifest = fs.readFileSync(
       path.join(root, 'package.json'),
@@ -1618,6 +1679,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
             'react-dom': '19.2.8',
             effect: '4.0.0-rc.117',
             '@effect/opentelemetry': 'catalog:',
+            '@tanstack/react-router': '1.170.44',
           },
           devDependencies: {
             '@effect/tsgo': '0.41.0',
@@ -1683,12 +1745,51 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       trustPolicyIgnoreAfter: 1440,
       trustPolicyExclude: ['tsrs@0.25.0-ts7.1.0-beta'],
     };
+    const beforeShell = fs.readFileSync(shellManifestFile, 'utf8');
+    const workspaceFile = path.join(root, 'pnpm-workspace.yaml');
+    const beforeWorkspace = fs.readFileSync(workspaceFile, 'utf8');
+    fs.writeFileSync(
+      shellManifestFile,
+      JSON.stringify({
+        ...JSON.parse(beforeShell),
+        optionalDependencies: { 'rsbuild-plugin-dts': '1.0.7' },
+      }),
+    );
+    const optionalShell = fs.readFileSync(shellManifestFile, 'utf8');
+    assert.throws(
+      () => prepareTractorCohortInstallation(root, next, producerOptions),
+      /support artifact rsbuild-plugin-dts must not be an optional dependency/u,
+    );
+    assert.equal(fs.readFileSync(rootManifestFile, 'utf8'), beforeManifest);
+    assert.equal(fs.readFileSync(workspaceFile, 'utf8'), beforeWorkspace);
+    assert.equal(fs.readFileSync(shellManifestFile, 'utf8'), optionalShell);
+    fs.writeFileSync(shellManifestFile, beforeShell);
     const result = prepareTractorCohortInstallation(
       root,
       next,
       producerOptions,
     );
     assert.equal(result.dependencyCount, 1);
+    const installedRoot = JSON.parse(fs.readFileSync(rootManifestFile, 'utf8'));
+    assert.equal(
+      installedRoot.devDependencies['rsbuild-plugin-dts'],
+      hostSupport['rsbuild-plugin-dts'],
+    );
+    assert.deepEqual(installedRoot.ultramodern, {
+      authored: 'preserved',
+      supportArtifacts,
+    });
+    assert.deepEqual(
+      Object.keys(installedRoot.devDependencies)
+        .filter(name => Object.hasOwn(supportArtifacts.packages, name))
+        .sort(),
+      Object.keys(hostSupport).sort(),
+      'Only required and already-selected support packages are installed at the root',
+    );
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(shellManifestFile, 'utf8')).ultramodern,
+      { supportArtifacts },
+    );
     const compilerFile = path.join(root, 'tsconfig.base.json');
     const compilerConfig = JSON.parse(fs.readFileSync(compilerFile, 'utf8'));
     assert.deepEqual(compilerConfig, {
@@ -1789,8 +1890,9 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
           'npm:@bleedingdev/mf-modern-js-v3@2.9.2',
         react: '19.3.0',
         'react-dom': '19.3.0',
-        effect: '4.0.0',
-        '@effect/opentelemetry': 'catalog:',
+        effect: producerEffectDependencies.effect,
+        '@effect/opentelemetry': hostSupport['@effect/opentelemetry'],
+        '@tanstack/react-router': hostSupport['@tanstack/react-router'],
         '@modern-js/backend-federation-contracts': 'catalog:ultramodern',
       },
     );
@@ -1804,7 +1906,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
     );
     for (const file of verticalManifests)
       assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).dependencies, {
-        effect: '4.0.0',
+        effect: producerEffectDependencies.effect,
         react: '19.3.0',
         'react-dom': '19.3.0',
         '@modern-js/backend-federation-contracts': 'catalog:ultramodern',
@@ -1820,7 +1922,12 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')),
       {
         ...JSON.parse(beforeManifest),
-        devDependencies: producerReactDependencies,
+        devDependencies: {
+          ...JSON.parse(beforeManifest).devDependencies,
+          ...producerReactDependencies,
+          ...hostSupport,
+        },
+        ultramodern: { authored: 'preserved', supportArtifacts },
         packageManager: 'pnpm@12.11.2',
       },
     );
@@ -1884,7 +1991,22 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       undefined,
       {},
       { ...producerEffectDependencies, effect: '4.0.0-rc.117' },
-      { ...producerEffectDependencies, '@effect/opentelemetry': '4.0.1' },
+      { ...producerEffectDependencies, effect: '4.1.3' },
+      // The support artifact, never a registry version, is the admitted request.
+      { ...producerEffectDependencies, '@effect/opentelemetry': '4.1.4' },
+      {
+        ...producerEffectDependencies,
+        '@effect/opentelemetry': producerEffectDependencies[
+          '@effect/opentelemetry'
+        ].replace('ultramodernjs/ultramodern.js', 'attacker/fork'),
+      },
+      {
+        ...producerEffectDependencies,
+        '@effect/opentelemetry': producerEffectDependencies[
+          '@effect/opentelemetry'
+        ].replace('-43934193068-2/', '-43934193068-3/'),
+      },
+      { ...producerEffectDependencies, '@effect/tsgo': '0.68.0' },
       {
         ...producerEffectDependencies,
         '@effect/tsgo': 'npm:@bleedingdev/tsgo@0.53.1',
@@ -2042,6 +2164,25 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
     assert.throws(
       () => prepareTractorCohortInstallation(root, next, producerOptions),
       /absent from the release cohort/u,
+    );
+    assert.equal(
+      fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
+      beforeRejectedPolicy,
+    );
+    fs.writeFileSync(path.join(root, 'package.json'), beforeManifest);
+    await writeCandidateCreatePackage(
+      root,
+      next,
+      {
+        '@effect/tsgo': '0.69.0',
+        tsrs: '0.25.0-ts7.1.0-beta',
+        'unrelated-compiler': '9.9.9',
+      },
+      { supportArtifacts: false },
+    );
+    assert.throws(
+      () => prepareTractorCohortInstallation(root, next, producerOptions),
+      /valid support artifact descriptor/u,
     );
     assert.equal(
       fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),

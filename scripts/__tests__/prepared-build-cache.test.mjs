@@ -12,6 +12,7 @@ import {
   snapshotBuild,
   verifyCurrentPreparedBuild,
 } from '../ci/prepared-build-cache.mjs';
+import { packFiles } from '../ultramodern-artifacts/reconstruct.mjs';
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prepared-build-cache-'));
@@ -41,15 +42,18 @@ test('packed prerequisites round-trip without the retired aggregate edge list', 
   write('packages/example/package.json', JSON.stringify(project));
   const baseline = inputs();
   write('packages/example/dist/index.js', 'compiled');
-  write('packed/package/package.json', JSON.stringify(project));
   const tarball = path.join(root, 'packed/example.tgz');
-  execFileSync('tar', [
-    '-czf',
-    tarball,
-    '-C',
-    path.join(root, 'packed'),
-    'package',
-  ]);
+  write(
+    'packed/example.tgz',
+    packFiles(
+      new Map([
+        [
+          'package.json',
+          { bytes: Buffer.from(JSON.stringify(project)), mode: 0o644 },
+        ],
+      ]),
+    ),
+  );
   const manifest = {
     packages: {
       [project.name]: {

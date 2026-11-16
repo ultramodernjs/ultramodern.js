@@ -6,6 +6,7 @@ import {
   inspectNpmTarball,
   readVerifiedPackageArtifactBytes,
 } from '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs';
+import { supportProtocol } from '../../ultramodern-support-artifacts/protocol.mjs';
 import {
   compilerBootstrapSelectors,
   expectedReleaseCohort,
@@ -53,23 +54,47 @@ export function assertTractorReactDependencies(dependencies) {
   return dependencies;
 }
 
-export function assertTractorEffectDependencies(dependencies) {
-  if (
-    !dependencies ||
-    typeof dependencies !== 'object' ||
-    Object.keys(dependencies).length !== tractorEffectPackages.length ||
-    tractorEffectPackages.some(
-      name =>
-        typeof dependencies[name] !== 'string' ||
-        !/^\d+\.\d+\.\d+$/u.test(dependencies[name]),
-    ) ||
-    dependencies.effect !== dependencies['@effect/opentelemetry']
-  ) {
+// The authenticated packed producer owns these selections: its support
+// descriptor pins the OpenTelemetry artifact (and with it the paired Effect
+// release), and its exact bootstrap compiler selector pins @effect/tsgo. The
+// generated workspace must reproduce exactly that, never a value of its own.
+function admitTractorEffectDependencies(
+  dependencies,
+  compilerSelectors,
+  packedManifest,
+) {
+  const descriptor = packedManifest.ultramodern?.supportArtifacts;
+  try {
+    supportProtocol.validateDescriptor(descriptor);
+  } catch (cause) {
     throw new Error(
-      'Exact producer Effect dependencies must select native stable Effect, OpenTelemetry and compiler versions',
+      'Release create package must ship a valid support artifact descriptor for its Effect selection',
+      { cause },
     );
   }
-  return dependencies;
+  const telemetry = descriptor.packages['@effect/opentelemetry'];
+  const compilerPrefix = '@effect/tsgo@';
+  const compiler = compilerSelectors.filter(selector =>
+    selector.startsWith(compilerPrefix),
+  );
+  const admitted = {
+    effect: telemetry.version,
+    '@effect/opentelemetry': telemetry.request,
+    '@effect/tsgo':
+      compiler.length === 1
+        ? compiler[0].slice(compilerPrefix.length)
+        : undefined,
+  };
+  if (
+    !/^\d+\.\d+\.\d+$/u.test(admitted.effect) ||
+    !/^\d+\.\d+\.\d+$/u.test(admitted['@effect/tsgo'] ?? '') ||
+    !isDeepStrictEqual(dependencies, admitted)
+  ) {
+    throw new Error(
+      'Exact producer Effect dependencies must select native stable Effect, the authenticated support-descriptor OpenTelemetry artifact and the packed producer compiler version',
+    );
+  }
+  return admitted;
 }
 
 /** Select the exact supplied bundle through the consumer's native pnpm catalog. */
@@ -86,14 +111,9 @@ export function prepareTractorCohortInstallation(
     producerReactDependencies,
   } = {},
 ) {
-  const effectDependencies = assertTractorEffectDependencies(
-    producerEffectDependencies,
-  );
   const reactDependencies = assertTractorReactDependencies(
     producerReactDependencies,
   );
-  const nativeDependencies = { ...effectDependencies, ...reactDependencies };
-  const nativePackages = [...tractorEffectPackages, ...tractorReactPackages];
   const cohort = expectedReleaseCohort(release);
   const version = release.release.version;
   const create = release.createPackage;
@@ -142,6 +162,23 @@ export function prepareTractorCohortInstallation(
     'Producer pnpm minimumReleaseAgeExclude',
   );
   const compilerSelectors = compilerBootstrapSelectors(packed.packageJson);
+  const nativeDependencies = {
+    ...admitTractorEffectDependencies(
+      producerEffectDependencies,
+      compilerSelectors,
+      packed.packageJson,
+    ),
+    ...reactDependencies,
+  };
+  const supportArtifacts = packed.packageJson.ultramodern.supportArtifacts;
+  const supportRequests = Object.fromEntries(
+    Object.entries(supportArtifacts.packages).map(([name, artifact]) => [
+      name,
+      artifact.request,
+    ]),
+  );
+  Object.assign(nativeDependencies, supportRequests);
+  const nativePackages = Object.keys(nativeDependencies);
   const expectedExclusions = [
     ...cohort.targetNames.map(name => `${name}@${version}`),
     ...Array.from(
@@ -192,11 +229,22 @@ export function prepareTractorCohortInstallation(
     throw new Error('Tractor requires a native catalogs.ultramodern entry');
   }
   const requested = new Set();
+  const supportHosts = new Set(['rsbuild-plugin-dts']);
+  const consumerManifests = collectPackageJsonFiles(workspace).map(file => ({
+    file,
+    manifest: JSON.parse(fs.readFileSync(file, 'utf8')),
+  }));
   let dependencyCount = 0;
-  for (const file of collectPackageJsonFiles(workspace)) {
-    const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+  for (const { file, manifest } of consumerManifests) {
     for (const block of dependencyBlocks) {
       for (const [name, specifier] of Object.entries(manifest[block] ?? {})) {
+        if (Object.hasOwn(supportRequests, name)) {
+          if (block === 'optionalDependencies')
+            throw new Error(
+              `Tractor support artifact ${name} must not be an optional dependency`,
+            );
+          supportHosts.add(name);
+        }
         if (!name.startsWith('@modern-js/')) continue;
         if (!cohort.aliases[name]) {
           throw new Error(
@@ -248,9 +296,9 @@ export function prepareTractorCohortInstallation(
           selections[name] = nativeDependencies[name];
       }
   }
-  const manifestUpdates = collectPackageJsonFiles(workspace).flatMap(file => {
-    const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const manifestUpdates = consumerManifests.flatMap(({ file, manifest }) => {
     let changed = false;
+    let ownsSupport = false;
     if (
       path.dirname(file) !== workspace &&
       ['ts', 'js', 'mjs'].some(extension =>
@@ -273,12 +321,36 @@ export function prepareTractorCohortInstallation(
       for (const name of nativePackages) {
         if (
           Object.hasOwn(manifest[block] ?? {}, name) &&
+          Object.hasOwn(supportRequests, name)
+        ) {
+          const selected =
+            block === 'peerDependencies'
+              ? supportArtifacts.packages[name].version
+              : supportRequests[name];
+          changed ||= manifest[block][name] !== selected;
+          manifest[block][name] = selected;
+          ownsSupport = true;
+        } else if (
+          Object.hasOwn(manifest[block] ?? {}, name) &&
           !manifest[block][name].startsWith('catalog:')
         ) {
           changed ||= manifest[block][name] !== nativeDependencies[name];
           manifest[block][name] = nativeDependencies[name];
         }
       }
+    }
+    if (path.dirname(file) === workspace) {
+      manifest.devDependencies ??= {};
+      for (const name of supportHosts)
+        manifest.devDependencies[name] = supportRequests[name];
+      ownsSupport = true;
+    }
+    if (ownsSupport) {
+      manifest.ultramodern = {
+        ...manifest.ultramodern,
+        supportArtifacts,
+      };
+      changed = true;
     }
     return changed ? [[file, manifest]] : [];
   });

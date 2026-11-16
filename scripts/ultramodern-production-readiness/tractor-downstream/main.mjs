@@ -45,7 +45,6 @@ import {
 import {
   assertAuthenticatedTractorCohort,
   assertExactModernDependencySpecifiers,
-  assertTractorEffectDependencies,
   assertTractorReactDependencies,
   prepareTractorCohortInstallation,
   tractorEffectPackages,
@@ -281,13 +280,13 @@ function readTractorProducerOverrides({
     );
     return {
       producerReactDependencies,
-      producerEffectDependencies: assertTractorEffectDependencies(
-        Object.fromEntries(
-          tractorEffectPackages.map(name => [
-            name,
-            producerManifest.devDependencies?.[name],
-          ]),
-        ),
+      // Admitted against the authenticated packed producer during cohort
+      // installation, which owns the exact support descriptor.
+      producerEffectDependencies: Object.fromEntries(
+        tractorEffectPackages.map(name => [
+          name,
+          producerManifest.devDependencies?.[name],
+        ]),
       ),
       pnpmOverrides: overrides,
       minimumReleaseAgeExclude: producerExclusions,
