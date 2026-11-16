@@ -281,19 +281,13 @@ jobs:
           trap 'rm -rf -- "$compiler_contracts"' EXIT
           OWNED_TEMP_DIR="$compiler_contracts" node scripts/ultramodern-publish/test-effect-compiler-contracts.mjs
 
-      # Lint is the only gate here that is not already proven on the bytes this
-      # dispatch publishes: lint-Linux.yml runs on pull_request, merge_group and
-      # workflow_dispatch only, so the merge or rebase commit that actually
-      # lands on main-ultramodern is never linted by it.
-      #
-      # test:publish-tooling used to run here as well. It is covered on the
-      # release commit itself: workflow-security.yml triggers on
-      # `push: branches: [main-ultramodern]` with no path filter and runs the
-      # identical `mise exec -- pnpm run test:publish-tooling` in its 'Run
-      # release publication tooling tests' step, so every commit this workflow
-      # can publish from has already executed that suite.
+      # A separate push workflow is not a dependency of this release: it may
+      # still be running or have failed when a maintainer dispatches publish.
+      # Qualify the publication tooling here before authorizing registry writes.
       - name: Qualify the release publication tooling
-        run: mise exec -- pnpm lint
+        run: |
+          mise exec -- pnpm lint
+          mise exec -- pnpm run test:publish-tooling
 
       # The source suites below are
       # skipped in the recovery lane: that dispatch publishes the recovered

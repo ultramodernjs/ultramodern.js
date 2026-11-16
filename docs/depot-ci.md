@@ -73,9 +73,11 @@ baseline must not move when a repository variable does. Sixteen cores were
 measured and rejected: the build does not parallelise past 8, so run
 43876712655 was slower than run 43873444661 on every target.
 
-Two jobs, `publish` and `publish-sidecars`, always use GitHub's `ubuntu-24.04`.
-[npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) requires
-GitHub-hosted runners, so these two are the repository's only exception.
+Two jobs, `publish` and `publish-sidecars`, still use GitHub's `ubuntu-24.04`.
+[npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) explicitly
+rejects self-hosted runners, including Depot. These are an unmet all-Depot
+requirement, not an approved exception; changing labels would break release
+publication. No token fallback or provenance relaxation is implemented.
 
 Release dispatches require both the actor and the triggering actor to be the
 maintainer `BleedingDev`, including after organization ownership changes.
@@ -94,7 +96,7 @@ names because npm organizations cannot be renamed.
 
 Run **Workflow Security**, Linux, Windows, macOS, and integration tests after
 activation. Run **CI Cache** on `main-ultramodern` to seed the new runner caches.
-Delete the three runner variables to return to GitHub-hosted compute.
+Deleting the three runner variables keeps the explicit Depot defaults.
 
 ## Compare CI times
 
@@ -120,11 +122,11 @@ above. Trial availability does not establish that sponsored billing is disabled.
    cache, and the difference is deliberate: `ci-cache.yml`'s `seed` leg writes
    only from `main-ultramodern`, because every key it owns already exists there
    and a branch copy would park a duplicate ~1 GB per branch. The Effect
-   compiler payload and the linked Windows dependency tree also write from a
+   compiler payload also writes from a
    branch ref, because a branch is where a new cache lever is introduced and
    GitHub lets a run read only its own ref and the default branch — a lever
    gated on the default branch alone cannot be measured until after it merges.
-   Neither ever writes from a `pull_request` or `merge_group` ref, whose refs
+   It never writes from a `pull_request` or `merge_group` ref, whose refs
    are discarded after the run. A branch-ref warm run therefore models a
    post-merge pull request faithfully, because in both cases the consuming run
    restores the same key from a ref it is allowed to read; it is not the same
