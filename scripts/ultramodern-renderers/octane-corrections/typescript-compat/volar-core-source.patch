@@ -1,0 +1,30 @@
+diff --git a/packages/octane/src/compiler/volar.js b/packages/octane/src/compiler/volar.js
+--- a/packages/octane/src/compiler/volar.js
++++ b/packages/octane/src/compiler/volar.js
+@@ -555,9 +555,10 @@
+ 	const start = ast.loc?.start ?? { line: 1, column: 0 };
+ 	return {
+ 		type: 'Block',
+-		// @tsrx/core's semantic-comment formatter turns this into the canonical
+-		// `/** @jsxImportSource … */` spelling during the one type-only print.
+-		value: `*@jsxImportSource ${typeIntrinsics === undefined && strong && intrinsics === DOM_RENDERER_MODULE ? 'octane/strong' : intrinsics}`,
++		// Comment values are the raw text between /* and */. Keep whitespace
++		// before the closing delimiter so TypeScript cannot read it as part
++		// of the module name; current @tsrx/core preserves this text verbatim.
++		value: `* @jsxImportSource ${typeIntrinsics === undefined && strong && intrinsics === DOM_RENDERER_MODULE ? 'octane/strong' : intrinsics} `,
+ 		start: ast.start ?? 0,
+ 		end: ast.start ?? 0,
+ 		loc: { start: { ...start }, end: { ...start } },
+@@ -771,10 +772,10 @@
+ 				type: options?.intrinsics !== undefined ? 'Block' : authoredPragma.type,
+ 				value:
+ 					options?.intrinsics !== undefined
+-						? `*@jsxImportSource ${options.intrinsics}`
++						? `* @jsxImportSource ${options.intrinsics} `
+ 						: authoredPragma.type === 'Line'
+ 							? ' @jsxImportSource octane/strong'
+-							: '*@jsxImportSource octane/strong',
++							: '* @jsxImportSource octane/strong ',
+ 			}
+ 		: null;
+ 	const printComments = typePragma

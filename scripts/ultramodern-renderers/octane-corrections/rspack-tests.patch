@@ -1,0 +1,1739 @@
+diff --git a/packages/rspack-plugin-octane/tests/loader.test.ts b/packages/rspack-plugin-octane/tests/loader.test.ts
+index 392182b..68fd848 100644
+--- a/packages/rspack-plugin-octane/tests/loader.test.ts
++++ b/packages/rspack-plugin-octane/tests/loader.test.ts
+@@ -149,6 +149,31 @@ function runParallelLoader({
+ }
+ 
+ describe('octane Rspack loader', () => {
++	it('carries an exact hot module recipe through serial and parallel metadata without retaining stale recipes', () => {
++		const recipe = {
++			version: 1,
++			moduleId: '/src/App.tsrx',
++			generation: 'source-revision',
++			declarations: [],
++			hookSlots: ['octane:/src/App.tsrx:App.useSignal$#0'],
++		};
++		mocks.transform.mockReturnValue({
++			kind: 'compile',
++			code: 'compiled',
++			streamedSignals: true,
++			hotSignalModule: recipe,
++		});
++		const serial = runLoader({ hot: true });
++		const parallel = runParallelLoader();
++		expect(serial.module.buildInfo.octane).toMatchObject({ hotSignalModule: recipe });
++		expect(parallel.module.buildInfo.octane).toMatchObject({ hotSignalModule: recipe });
++		mocks.transform.mockReturnValue({ kind: 'compile', code: 'ordinary' });
++		runLoader({ module: serial.module, hot: true });
++		runParallelLoader({ module: parallel.module });
++		expect(serial.module.buildInfo.octane).not.toHaveProperty('hotSignalModule');
++		expect(parallel.module.buildInfo.octane).not.toHaveProperty('hotSignalModule');
++	});
++
+ 	beforeEach(() => {
+ 		mocks.transform.mockReset();
+ 		mocks.canonicalModuleId.mockReset().mockReturnValue('/src/App.tsrx');
+diff --git a/packages/rspack-plugin-octane/tests/publisher-replacement.test.ts b/packages/rspack-plugin-octane/tests/publisher-replacement.test.ts
+new file mode 100644
+index 0000000..c95c17d
+--- /dev/null
++++ b/packages/rspack-plugin-octane/tests/publisher-replacement.test.ts
+@@ -0,0 +1,552 @@
++import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
++import { createRequire } from 'node:module';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { fileURLToPath } from 'node:url';
++import rspack, { type Compiler, type Stats } from '@rspack/core';
++import { expect, it } from 'vitest';
++import { OctaneRspackPlugin } from '../src/index.js';
++
++async function build(compiler: Compiler): Promise<Stats> {
++	return new Promise((resolve, reject) => {
++		compiler.run((error, stats) => {
++			compiler.close((closeError) => {
++				if (error || closeError) reject(error ?? closeError);
++				else if (!stats || stats.hasErrors())
++					reject(new Error(stats?.toString({ all: false, errors: true }) ?? 'Missing stats.'));
++				else resolve(stats);
++			});
++		});
++	});
++}
++
++it.each([
++	'normal',
++	'observer failure',
++	'late admission',
++	'failed candidate status',
++	'external with plain host child',
++	'external plain root with signal host child',
++	'external rejects foreign signal child',
++	'render-phase execution',
++	'outside-owner ABI change',
++])(
++	'transfers a fresh graph with %s',
++	async (scenario) => {
++		const observerFailure = scenario === 'observer failure';
++		const external = scenario.startsWith('external ');
++		const plainRoot =
++			scenario === 'external plain root with signal host child' ||
++			scenario === 'outside-owner ABI change';
++		const signalChild =
++			scenario === 'external plain root with signal host child' ||
++			scenario === 'external rejects foreign signal child';
++		const root = realpathSync(mkdtempSync(join(tmpdir(), 'octane-native-publisher-replacement-')));
++		const require = createRequire(import.meta.url);
++		const { JSDOM } = require('jsdom');
++		const dom = new JSDOM(
++			'<!doctype html><html><head></head><body><div id="app"></div></body></html>',
++			{
++				url: 'http://localhost/',
++				runScripts: 'outside-only',
++				pretendToBeVisual: true,
++			},
++		);
++		const names = [
++			'window',
++			'document',
++			'Node',
++			'Text',
++			'NodeFilter',
++			'HTMLElement',
++			'Element',
++			'Event',
++			'CustomEvent',
++			'MutationObserver',
++			'requestAnimationFrame',
++			'cancelAnimationFrame',
++			'location',
++		] as const;
++		const saved = new Map(
++			names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]),
++		);
++		let reloads = 0;
++		for (const name of names) {
++			const value =
++				name === 'location'
++					? {
++							reload() {
++								reloads++;
++							},
++						}
++					: name === 'requestAnimationFrame' || name === 'cancelAnimationFrame'
++						? dom.window[name].bind(dom.window)
++						: dom.window[name];
++			Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
++		}
++		let dispose: (() => void) | undefined;
++		try {
++			mkdirSync(join(root, 'node_modules'));
++			symlinkSync(
++				fileURLToPath(new URL('../../octane', import.meta.url)),
++				join(root, 'node_modules/octane'),
++			);
++			writeFileSync(
++				join(root, 'package.json'),
++				JSON.stringify({ private: true, dependencies: { octane: '*' } }),
++			);
++			writeFileSync(
++				join(root, 'host.tsrx'),
++				`
++import { useState } from 'octane';
++export function Host(props) @{
++  const [count, setCount] = useState(5);
++  const First = props.first;
++  const Second = props.second;
++  const Ordinary = props.ordinary;
++  if (props.duringRender) props.duringRender();
++  <main>
++    <button data-host onClick={() => setCount(count + 1)}>{count}</button>
++    <div data-first><First late={props.late} /></div>
++    <div data-second><Second late={props.late} /></div>
++    @if (Ordinary) { <aside data-ordinary-owner><Ordinary /></aside> }
++  </main>
++}
++`,
++			);
++			writeFileSync(
++				join(root, 'host.cjs'),
++				`
++const runtime = exports.runtime = require('octane');
++exports.signals = require('octane/signals');
++exports.hydration = require('octane/hydration');
++exports.streamedSignals = require('octane/hydration/streamed-signals');
++exports.internal = require('octane/internal/client');
++const { earlySignalBootstrapScript } = require('octane/server');
++exports.HostChild = require('./host-child.tsrx').HostChild;
++exports.errors = [];
++let mounted, ordinaryRoot, bridge, boundary, second;
++exports.mount = function(Remote, external = false, late) {
++  document.head.insertAdjacentHTML('beforeend', earlySignalBootstrapScript());
++  window.eval(document.querySelector('script[data-octane-stream]').textContent);
++  bridge = exports.streamedSignals.bootstrapStreamedSignalHydration({ buildId: 'host-stream', documentId: 'replacement-document', target: window });
++  const wrap = () => external ? runtime.externalSnapshotBoundary({
++    authority: { publisherBuildId: 'remote-stream', runtimeABI: 1 },
++    component: Remote,
++    snapshot() { throw new Error('Client rendering must not call server transport.'); }
++  }) : runtime.publisherBoundary(Remote, { publisherKey: 'remote/Widget' });
++  boundary = wrap();
++  second = wrap();
++  mounted = runtime.createRoot(document.querySelector('#app'), { signalOwner: bridge.signalOwner, externalSnapshots: { documentId: 'replacement-document' }, onUncaughtError(error) { exports.errors.push(error); } });
++  runtime.flushSync(() => mounted.render(require('./host.tsrx').Host, { first: boundary, second, late }));
++};
++exports.prepare = function() { return runtime.preparePublisherBoundaryReplacement(boundary); };
++exports.late = function(late) { runtime.flushSync(() => mounted.render(require('./host.tsrx').Host, { first: boundary, second, late })); };
++exports.ordinary = function(ordinary) { runtime.flushSync(() => mounted.render(require('./host.tsrx').Host, { first: boundary, second, ordinary })); };
++exports.outside = function(ordinary) {
++  const target = document.createElement('div');
++  target.setAttribute('data-ordinary-owner', '');
++  document.body.append(target);
++  ordinaryRoot = runtime.createRoot(target);
++  runtime.flushSync(() => ordinaryRoot.render(ordinary, {}));
++};
++exports.duringRender = function(duringRender) { runtime.flushSync(() => mounted.render(require('./host.tsrx').Host, { first: boundary, second, duringRender })); };
++exports.click = function(selector) { runtime.flushSync(() => document.querySelector(selector).click()); };
++exports.settle = function() { runtime.flushSync(() => {}); };
++exports.dispose = function() { ordinaryRoot?.unmount(); mounted?.unmount(); bridge?.dispose(); };
++`,
++			);
++			writeFileSync(
++				join(root, 'host-child.tsrx'),
++				`
++import { useState } from 'octane';
++${signalChild ? "import { signal$ } from 'octane/signals'; const child$ = signal$(31);" : ''}
++export function HostChild() @{
++  const [value, setValue] = useState(21);
++  <button data-host-child onClick={() => setValue(value + 1)}>{value}${signalChild ? ':{child$.get()}' : ''}</button>
++}
++`,
++			);
++			const plugins = () => [
++				new rspack.HotModuleReplacementPlugin(),
++				new OctaneRspackPlugin({ root, environment: 'client', parallel: false }),
++			];
++			await build(
++				rspack({
++					mode: 'development',
++					target: 'node',
++					context: root,
++					entry: './host.cjs',
++					devtool: false,
++					resolve: { extensionAlias: { '.js': ['.ts', '.js'] } },
++					output: {
++						path: join(root, 'host-dist'),
++						filename: 'host.cjs',
++						library: { type: 'commonjs2' },
++					},
++					plugins: plugins(),
++				})!,
++			);
++			const host = require(join(root, 'host-dist/host.cjs'));
++			dispose = host.dispose;
++			const externals: Record<string, string> = {};
++			for (const [request, property] of [
++				['octane', 'runtime'],
++				['octane/signals', 'signals'],
++				['octane/hydration', 'hydration'],
++				['octane/hydration/streamed-signals', 'streamedSignals'],
++				['octane/internal/client', 'internal'],
++			]) {
++				const file = join(root, `shared-${property}.cjs`);
++				writeFileSync(
++					file,
++					`module.exports = require(${JSON.stringify(join(root, 'host-dist/host.cjs'))}).${property};`,
++				);
++				externals[request!] = `commonjs ${file}`;
++			}
++			const source = (version: number, incompatible = false, fail = false) => `
++import { useState } from 'octane';
++import { signal$, derived$ } from 'octane/signals';
++const count$ = signal$(1);
++const result$ = derived$(() => count$.get() + ${version}, { key: 'result', sync: true });
++export function Remote(props) @{
++  ${incompatible ? 'const [added] = useState(99);' : ''}
++  const [hookCount, setHookCount] = useState(7);
++  const Late = props.late;
++  <section data-remote>
++    <button data-signal onClick={() => count$.set(count$.get() + 1)}>{count$.get()}</button>
++    <button data-hook onClick={() => setHookCount(hookCount + 1)}>{hookCount}</button>
++    <output data-result>{result$.get()}</output>
++    <button data-observe onClick={() => { globalThis.__octaneReplacementStop = result$.subscribe(() => { if (globalThis.__octaneReplacementObserverError) throw globalThis.__octaneReplacementObserverError; }); }}>observe</button>
++    ${incompatible ? '<output data-added>{added}</output>' : ''}
++    @if (Late) { <Late /> }
++  </section>
++}
++globalThis.__octaneReplacementExecutions.push(${version});
++${fail ? "throw new Error('replacement factory failed');" : ''}
++`;
++			const plainSource = (version: number, returned = false) => `
++import { useState } from 'octane';
++export function Remote(props) @{
++  ${returned ? 'if (props.returnNothing) return <aside>changed output</aside>;' : ''}
++  const [value, setValue] = useState(7);
++  const Child = props.late;
++  <section data-remote data-version="${version}">
++    <button data-hook onClick={() => setValue(value + 1)}>{value}</button>
++    @if (Child) { <Child /> }
++  </section>
++}
++globalThis.__octaneReplacementExecutions.push(${version});
++`;
++			writeFileSync(join(root, 'remote.tsrx'), plainRoot ? plainSource(1) : source(1));
++			writeFileSync(
++				join(root, 'late.tsrx'),
++				`
++import { signal$ } from 'octane/signals';
++const late$ = signal$(11);
++export function Late() @{
++  <output data-late>{late$.get()}</output>
++}
++`,
++			);
++			const ordinarySource = (version: number) => `
++import { useState } from 'octane';
++export function Ordinary() @{
++  const [count, setCount] = useState(9);
++  <button data-ordinary onClick={() => setCount(count + 1)}>{count}:{${version}}</button>
++}
++`;
++			writeFileSync(join(root, 'ordinary.tsrx'), ordinarySource(1));
++			writeFileSync(
++				join(root, 'control.cjs'),
++				`exports.update = () => module.hot.check(true); exports.runtime = () => __webpack_require__.__octaneHotSignalRuntime;`,
++			);
++			writeFileSync(join(root, 'empty.cjs'), '');
++			const remoteCompiler = (generation: string) =>
++				rspack({
++					mode: 'development',
++					target: 'node',
++					context: root,
++					entry: './empty.cjs',
++					devtool: false,
++					externals,
++					resolve: { extensionAlias: { '.js': ['.ts', '.js'] } },
++					output: {
++						path: join(root, generation),
++						filename: 'entry.cjs',
++						chunkFilename: '[name].cjs',
++						uniqueName: generation,
++						hashSalt: generation,
++					},
++					watchOptions: {
++						aggregateTimeout: 0,
++						poll: 20,
++						ignored:
++							/(?:[\\/](?:packages|node_modules)[\\/]octane[\\/]src|[\\/](?:first|second|failed|incompatible|host-dist))(?:[\\/]|$)/,
++					},
++					plugins: [
++						...plugins(),
++						// Rspack's built-in container exposes the actual init/get/factory
++						// boundary without installing the enhanced federation coordinator.
++						new rspack.container.ModuleFederationPluginV1({
++							name: generation,
++							filename: 'remote.cjs',
++							library: { type: 'commonjs2' },
++							exposes: {
++								'./Widget': './remote.tsrx',
++								'./Control': './control.cjs',
++								'./Ordinary': './ordinary.tsrx',
++								'./Late': './late.tsrx',
++							},
++						}),
++					],
++				})!;
++			const executions: number[] = [];
++			Object.assign(globalThis, { __octaneReplacementExecutions: executions });
++			await build(remoteCompiler('first'));
++			const first = require(join(root, 'first/remote.cjs'));
++			await first.init({});
++			const firstFactory = await first.get('./Widget');
++			expect(executions).toEqual([]);
++			const initial = firstFactory();
++			const firstControl = (await first.get('./Control'))();
++			expect(executions).toEqual([1]);
++			host.mount(initial.Remote, external, external ? host.HostChild : undefined);
++			const text = (selector: string) => dom.window.document.querySelector(selector)?.textContent;
++			if (scenario === 'external rejects foreign signal child') {
++				expect(host.errors).toHaveLength(1);
++				expect(host.errors[0]).toBeInstanceOf(TypeError);
++				expect(host.errors[0].message).toContain('External snapshot authority does not match');
++				return;
++			}
++			expect(host.errors).toEqual([]);
++			const hostButton = dom.window.document.querySelector('[data-host]');
++			host.click('[data-host]');
++			if (external) {
++				const child = dom.window.document.querySelector('[data-first] [data-host-child]');
++				host.click('[data-first] [data-host-child]');
++				host.click('[data-first] [data-hook]');
++				expect(text('[data-first] [data-host-child]')).toBe(signalChild ? '22:31' : '22');
++				expect(text('[data-first] [data-hook]')).toBe('8');
++				expect(dom.window.document.querySelector('[data-first] [data-host-child]')).toBe(child);
++				expect(dom.window.document.querySelector('[data-host]')).toBe(hostButton);
++				expect(text('[data-host]')).toBe('6');
++				expect(host.errors).toEqual([]);
++				expect(reloads).toBe(0);
++				return;
++			}
++			if (scenario === 'outside-owner ABI change') {
++				host.outside(initial.Remote);
++				host.click('[data-first] [data-hook]');
++				host.click('[data-ordinary-owner] [data-hook]');
++				const outside = dom.window.document.querySelector('[data-ordinary-owner] [data-hook]');
++				const capability = host.prepare();
++				writeFileSync(join(root, 'remote.tsrx'), plainSource(2, true));
++				await build(remoteCompiler('incompatible'));
++				const next = require(join(root, 'incompatible/remote.cjs'));
++				await next.init({});
++				const factory = await next.get('./Widget');
++				expect(() => capability.execute(factory)).toThrow();
++				expect(capability.commitStarted).toBe(false);
++				host.settle();
++				expect(text('[data-first] [data-hook]')).toBe('8');
++				expect(text('[data-ordinary-owner] [data-hook]')).toBe('8');
++				expect(dom.window.document.querySelector('[data-ordinary-owner] [data-hook]')).toBe(
++					outside,
++				);
++				expect(dom.window.document.querySelector('[data-host]')).toBe(hostButton);
++				expect(text('[data-host]')).toBe('6');
++				expect(host.errors).toEqual([]);
++				expect(reloads).toBe(0);
++				return;
++			}
++			host.click('[data-first] [data-signal]');
++			host.click('[data-first] [data-hook]');
++			host.click('[data-second] [data-hook]');
++			expect(text('[data-first] [data-signal]')).toBe('2');
++			expect(text('[data-first] [data-hook]')).toBe('8');
++			expect(text('[data-second] [data-signal]')).toBe('1');
++			if (scenario === 'render-phase execution') {
++				const capability = host.prepare();
++				let called = false;
++				let failure: unknown;
++				host.duringRender(() => {
++					try {
++						capability.execute(() => {
++							called = true;
++							return firstFactory();
++						});
++					} catch (error) {
++						failure = error;
++					}
++				});
++				expect(failure).toBeInstanceOf(TypeError);
++				expect(called).toBe(false);
++				expect(capability.commitStarted).toBe(false);
++				expect(text('[data-first] [data-hook]')).toBe('8');
++				expect(dom.window.document.querySelector('[data-host]')).toBe(hostButton);
++				expect(host.errors).toEqual([]);
++				expect(reloads).toBe(0);
++				return;
++			}
++			const asyncCapability = host.prepare();
++			expect(asyncCapability.commitStarted).toBe(false);
++			expect(() => asyncCapability.execute(async () => initial)).toThrow();
++			expect(asyncCapability.commitStarted).toBe(false);
++			expect(() => asyncCapability.execute(() => initial)).toThrow();
++			if (scenario === 'late admission') {
++				// Container loading may finish after another public component has
++				// joined the same native owner. Reject before evaluating its factory.
++				const stale = host.prepare();
++				host.late((await first.get('./Late'))().Late);
++				expect(text('[data-first] [data-late]')).toBe('11');
++				let called = false;
++				expect(() =>
++					stale.execute(() => {
++						called = true;
++						return firstFactory();
++					}),
++				).toThrow();
++				expect(called).toBe(false);
++				expect(stale.commitStarted).toBe(false);
++				expect(text('[data-first] [data-hook]')).toBe('8');
++				expect(text('[data-first] [data-late]')).toBe('11');
++				expect(dom.window.document.querySelector('[data-host]')).toBe(hostButton);
++				expect(reloads).toBe(0);
++				return;
++			}
++			writeFileSync(join(root, 'remote.tsrx'), source(2, false, true));
++			await build(remoteCompiler('failed'));
++			const failed = require(join(root, 'failed/remote.cjs'));
++			await failed.init({});
++			const failedFactory = await failed.get('./Widget');
++			expect(executions).toEqual([1]);
++			const failedCapability = host.prepare();
++			expect(() => failedCapability.execute(failedFactory)).toThrow('replacement factory failed');
++			expect(failedCapability.commitStarted).toBe(false);
++			host.settle();
++			expect(text('[data-first] [data-signal]')).toBe('2');
++			expect(text('[data-first] [data-hook]')).toBe('8');
++			expect(text('[data-first] [data-result]')).toBe('3');
++			if (scenario === 'failed candidate status') {
++				const control = (await failed.get('./Control'))();
++				expect(await control.update()).toBeNull();
++				expect(reloads).toBe(0);
++				expect(text('[data-first] [data-hook]')).toBe('8');
++				expect(text('[data-first] [data-result]')).toBe('3');
++				expect(dom.window.document.querySelector('[data-host]')).toBe(hostButton);
++				return;
++			}
++			writeFileSync(join(root, 'remote.tsrx'), source(3));
++			const compiler = remoteCompiler('second');
++			let completed: ((error: Error | null, stats?: Stats) => void) | undefined;
++			const next = () =>
++				new Promise<Stats>((resolve, reject) => {
++					completed = (error, stats) =>
++						error
++							? reject(error)
++							: !stats || stats.hasErrors()
++								? reject(
++										new Error(stats?.toString({ all: false, errors: true }) ?? 'Missing stats.'),
++									)
++								: resolve(stats);
++				});
++			const initialBuild = next();
++			const watching = compiler.watch(compiler.options.watchOptions, (error, stats) =>
++				completed?.(error, stats),
++			);
++			try {
++				await initialBuild;
++				const second = require(join(root, 'second/remote.cjs'));
++				await second.init({});
++				const control = (await second.get('./Control'))();
++				const factory = await second.get('./Widget');
++				expect(executions).toEqual([1, 2]);
++				const capability = host.prepare();
++				let replacement;
++				if (observerFailure) {
++					host.click('[data-first] [data-observe]');
++					const error = new Error('replacement observer failed');
++					Object.assign(globalThis, { __octaneReplacementObserverError: error });
++					expect(() => capability.execute(() => (replacement = factory()))).toThrow(error);
++					delete (globalThis as any).__octaneReplacementObserverError;
++					(globalThis as any).__octaneReplacementStop();
++				} else replacement = capability.execute(factory);
++				expect(capability.commitStarted).toBe(true);
++				expect(replacement.Remote).toBe(initial.Remote);
++				expect(() => capability.execute(factory)).toThrow();
++				// The retired container may still poll after reconnect. It has no
++				// remaining native owner to fence or reload the host document.
++				expect(await firstControl.update()).toBeNull();
++				host.settle();
++				expect(text('[data-first] [data-hook]')).toBe('8');
++				expect(text('[data-second] [data-hook]')).toBe('8');
++				expect(text('[data-first] [data-signal]')).toBe('2');
++				expect(text('[data-first] [data-result]')).toBe('5');
++				expect(text('[data-second] [data-result]')).toBe('4');
++				expect(() => host.prepare().execute(factory)).toThrow();
++				// An unadmitted pure-hook module in this same fresh runtime retains
++				// ordinary HMR; native publisher admission must not fence its factory.
++				host.ordinary((await second.get('./Ordinary'))().Ordinary);
++				host.click('[data-ordinary]');
++				expect(text('[data-ordinary]')).toBe('10:1');
++				const changed = next();
++				writeFileSync(join(root, 'remote.tsrx'), source(4));
++				writeFileSync(join(root, 'ordinary.tsrx'), ordinarySource(2));
++				const stats = await changed;
++				for (let attempt = 0; attempt < 10 && control.runtime().buildId !== stats.hash; attempt++)
++					await control.update();
++				expect(control.runtime().buildId).toBe(stats.hash);
++				host.settle();
++				expect(text('[data-first] [data-hook]')).toBe('8');
++				expect(text('[data-first] [data-signal]')).toBe('2');
++				expect(text('[data-first] [data-result]')).toBe('6');
++				expect(text('[data-ordinary]')).toBe('10:2');
++			} finally {
++				await new Promise<void>((resolve) => watching.close(resolve));
++				await new Promise<void>((resolve, reject) =>
++					compiler.close((error) => (error ? reject(error) : resolve())),
++				);
++			}
++			writeFileSync(join(root, 'remote.tsrx'), source(5, true));
++			await build(remoteCompiler('incompatible'));
++			const incompatible = require(join(root, 'incompatible/remote.cjs'));
++			await incompatible.init({});
++			host.prepare().execute(await incompatible.get('./Widget'));
++			host.settle();
++			expect(text('[data-first] [data-hook]')).toBe('7');
++			expect(text('[data-second] [data-hook]')).toBe('7');
++			expect(text('[data-first] [data-signal]')).toBe('1');
++			expect(text('[data-first] [data-added]')).toBe('99');
++			expect(dom.window.document.querySelector('[data-host]')).toBe(hostButton);
++			expect(text('[data-host]')).toBe('6');
++			expect(reloads).toBe(0);
++			const expired = host.prepare();
++			host.dispose();
++			dispose = undefined;
++			let called = false;
++			expect(() =>
++				expired.execute(() => {
++					called = true;
++					return initial;
++				}),
++			).toThrow();
++			expect(called).toBe(false);
++		} finally {
++			dispose?.();
++			for (const name of names) {
++				const descriptor = saved.get(name);
++				if (descriptor) Object.defineProperty(globalThis, name, descriptor);
++				else delete (globalThis as any)[name];
++			}
++			delete (globalThis as any).__octaneReplacementExecutions;
++			delete (globalThis as any).__octaneReplacementObserverError;
++			delete (globalThis as any).__octaneReplacementStop;
++			delete (globalThis as any)[Symbol.for('octane.hot-signals.bridge')];
++			delete (globalThis as any)[Symbol.for('octane.hot-signals.execution')];
++			dom.window.close();
++			rmSync(root, { recursive: true, force: true });
++		}
++	},
++	30_000,
++);
+diff --git a/packages/rspack-plugin-octane/tests/streamed-signals-hmr.test.ts b/packages/rspack-plugin-octane/tests/streamed-signals-hmr.test.ts
+index 784b65f..45ff63a 100644
+--- a/packages/rspack-plugin-octane/tests/streamed-signals-hmr.test.ts
++++ b/packages/rspack-plugin-octane/tests/streamed-signals-hmr.test.ts
+@@ -1,18 +1,1095 @@
+-import { mkdtempSync, writeFileSync, rmSync, realpathSync } from 'node:fs';
++import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, symlinkSync } from 'node:fs';
+ import { createRequire } from 'node:module';
+ import { tmpdir } from 'node:os';
+ import { join } from 'node:path';
+-import rspack, { type Compiler } from '@rspack/core';
++import { fileURLToPath } from 'node:url';
++import rspack, { type Compiler, type Stats } from '@rspack/core';
+ import { afterEach, expect, it } from 'vitest';
+ import { createStreamedSignalHmrRuntimeModule } from '../src/streamed-signals-hmr.js';
++import { OctaneRspackPlugin } from '../src/index.js';
++import { drainProducers } from '../../octane/tests/_fixtures/signals-async-controls.js';
+ 
+ const roots: string[] = [];
+ afterEach(() => {
+ 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+ 	delete (globalThis as any).__octaneNativeHmrEffects;
++	delete (globalThis as any).__octaneFailedHmrExports;
+ 	delete (globalThis as any).location;
++	delete (globalThis as any)[Symbol.for('octane.hot-signals.bridge')];
++	delete (globalThis as any)[Symbol.for('octane.hot-signals.execution')];
+ });
+ 
++async function withWatch(
++	compiler: Compiler,
++	run: (
++		first: Stats,
++		nextBuild: (accept?: (stats: Stats) => boolean) => Promise<Stats>,
++	) => Promise<void>,
++) {
++	let completed: (error: Error | null, stats?: Stats) => void;
++	const nextBuild = (accept: (stats: Stats) => boolean = () => true) =>
++		new Promise<Stats>((resolve, reject) => {
++			completed = (error, stats) => {
++				if (error) reject(error);
++				else if (stats && accept(stats)) resolve(stats);
++				else if (stats) return;
++				else reject(new Error('Rspack completed without stats.'));
++			};
++		});
++	const firstBuild = nextBuild();
++	const watching = compiler.watch(
++		{ ...compiler.options.watchOptions, aggregateTimeout: 0, poll: 20 },
++		(error, stats) => {
++			completed(
++				error ??
++					(stats?.hasErrors() ? new Error(stats.toString({ all: false, errors: true })) : null),
++				stats,
++			);
++		},
++	);
++	try {
++		await run(await firstBuild, nextBuild);
++	} finally {
++		await new Promise<void>((resolve) => watching.close(resolve));
++		await new Promise<void>((resolve, reject) =>
++			compiler.close((error) => (error ? reject(error) : resolve())),
++		);
++	}
++}
++
++function hasFactoryEffect(stats: Stats, effect: string): boolean {
++	return stats.compilation
++		.getAssets()
++		.some(
++			(asset) =>
++				asset.name.includes('.hot-update.') && String(asset.source.source()).includes(effect),
++		);
++}
++
++async function applyBuild(
++	entry: { runtime(): { buildId: string }; update(): Promise<unknown> },
++	stats: Stats,
++) {
++	for (let attempt = 0; attempt < 10; attempt++) {
++		expect(await entry.update()).not.toBeNull();
++		if (entry.runtime().buildId === stats.hash) return;
++	}
++	throw new Error(`Native HMR did not reach compilation ${stats.hash}.`);
++}
++
++function nativeCompiler(root: string, mode: 'development' | 'production' = 'development') {
++	mkdirSync(join(root, 'node_modules'));
++	symlinkSync(
++		fileURLToPath(new URL('../../octane', import.meta.url)),
++		join(root, 'node_modules/octane'),
++	);
++	writeFileSync(
++		join(root, 'package.json'),
++		JSON.stringify({ private: true, dependencies: { octane: '*' } }),
++	);
++	return rspack({
++		mode,
++		target: 'node',
++		context: root,
++		entry: './entry.cjs',
++		devtool: false,
++		resolve: { extensionAlias: { '.js': ['.ts', '.js'] } },
++		// Parallel native implementation edits are outside this app-update fixture.
++		watchOptions: {
++			ignored: /(?:[\\/](?:packages|node_modules)[\\/]octane[\\/]src|[\\/]dist)(?:[\\/]|$)/,
++		},
++		output: { path: join(root, 'dist'), filename: 'entry.cjs', library: { type: 'commonjs2' } },
++		plugins: [
++			...(mode === 'development' ? [new rspack.HotModuleReplacementPlugin()] : []),
++			new OctaneRspackPlugin({ root, environment: 'client', parallel: false }),
++		],
++	})!;
++}
++
++it.each([
++	['production', 'sharing'],
++	['development', 'sharing'],
++	['production', 'conflict'],
++	['development', 'conflict'],
++] as const)(
++	'preserves initial query ownership in %s for %s',
++	async (mode, scenario) => {
++		const root = realpathSync(mkdtempSync(join(tmpdir(), 'octane-native-initial-query-')));
++		roots.push(root);
++		writeFileSync(
++			join(root, 'shared.cjs'),
++			`
++exports.calls = 0;
++exports.load = function() { exports.calls++; return 'shared result'; };
++`,
++		);
++		const querySource = `
++import { query$ } from 'octane/signals';
++import { load } from './shared.cjs';
++const feed$ = query$(() => 'same', (argument, context) => load(argument, context), { key: 'feed', kind: 'promise' });
++export function Remote() @{ <output data-query>{feed$.get()}</output> }
++`;
++		writeFileSync(join(root, 'first.tsrx'), querySource);
++		writeFileSync(join(root, 'second.tsrx'), querySource);
++		writeFileSync(
++			join(root, 'host.tsrx'),
++			`
++import { First } from './components.cjs';
++import { Remote as Second } from './second.tsrx';
++export function Host() @{ <main><First />${scenario === 'sharing' ? '<Second />' : ''}</main> }
++`,
++		);
++		writeFileSync(join(root, 'components.cjs'), `exports.First = require('./first.tsrx').Remote;`);
++		writeFileSync(
++			join(root, 'entry.cjs'),
++			`
++const { createRoot, flushSync } = require('octane');
++const { createScope, createResource, query } = require('octane/signals');
++const shared = require('./shared.cjs');
++const owner = createScope({ scopeKey: 'initial-query-owner' });
++let mounted, retained;
++exports.originalCalls = 0;
++exports.errors = [];
++exports.prime = async function() {
++ ${
++		scenario === 'conflict'
++			? `
++ const request = query('g:feed', function() { exports.originalCalls++; return 'original result'; });
++ retained = createResource(owner, 'independent-consumer', () => request('same'));
++ try { retained.get(); } catch (pending) { if (typeof pending?.then !== 'function') throw pending; await pending; }
++ `
++			: ''
++ }
++};
++exports.retained = function() { return retained?.get(); };
++exports.mount = function() {
++ const { Host } = require('./host.tsrx');
++ mounted = createRoot(document.querySelector('#app'), { signalOwner: owner, onUncaughtError(error) { exports.errors.push(error); } });
++ flushSync(function() { mounted.render(Host, {}); });
++};
++exports.settle = function() { flushSync(function() {}); };
++exports.calls = function() { return shared.calls; };
++exports.dispose = function() { mounted?.unmount(); owner.dispose(); };
++`,
++		);
++		const { JSDOM } = createRequire(import.meta.url)('jsdom');
++		const dom = new JSDOM(
++			'<!doctype html><html><head></head><body><div id="app"></div></body></html>',
++			{
++				url: 'http://localhost/',
++				pretendToBeVisual: true,
++			},
++		);
++		const names = [
++			'window',
++			'document',
++			'Node',
++			'Text',
++			'NodeFilter',
++			'HTMLElement',
++			'Element',
++			'Event',
++			'CustomEvent',
++			'MutationObserver',
++			'requestAnimationFrame',
++			'cancelAnimationFrame',
++		] as const;
++		const previous = new Map(
++			names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]),
++		);
++		for (const name of names) {
++			const value =
++				name === 'requestAnimationFrame' || name === 'cancelAnimationFrame'
++					? dom.window[name].bind(dom.window)
++					: dom.window[name];
++			Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
++		}
++		try {
++			await withWatch(nativeCompiler(root, mode), async () => {
++				const entry = createRequire(import.meta.url)(join(root, 'dist/entry.cjs'));
++				try {
++					await entry.prime();
++					if (scenario === 'conflict') expect(entry.retained()).toBe('original result');
++					entry.mount();
++					await drainProducers();
++					entry.settle();
++					if (scenario === 'sharing') {
++						expect(entry.errors).toEqual([]);
++						expect(entry.calls()).toBe(1);
++						expect(
++							[...dom.window.document.querySelectorAll('[data-query]')].map(
++								(node) => node.textContent,
++							),
++						).toEqual(['shared result', 'shared result']);
++					} else {
++						expect(entry.errors).toHaveLength(1);
++						expect(entry.errors[0]).toBeInstanceOf(TypeError);
++						expect(String(entry.errors[0])).toMatch(
++							/[Ii]ncompatible query|Minified Octane error #202/,
++						);
++						expect(entry.calls()).toBe(0);
++						expect(entry.originalCalls).toBe(1);
++						expect(entry.retained()).toBe('original result');
++					}
++				} finally {
++					entry.dispose();
++				}
++			});
++		} finally {
++			for (const name of names) {
++				const descriptor = previous.get(name);
++				if (descriptor) Object.defineProperty(globalThis, name, descriptor);
++				else delete (globalThis as any)[name];
++			}
++			dom.window.close();
++		}
++	},
++	30_000,
++);
++
++it('uses ordinary query identity in a fresh publisher after an admitted query update', async () => {
++	const root = realpathSync(mkdtempSync(join(tmpdir(), 'octane-native-fresh-query-owner-')));
++	roots.push(root);
++	writeFileSync(
++		join(root, 'queries.cjs'),
++		`
++const { createResource, query, skip } = require('octane/signals');
++let fresh = false, firstOwner, freshOwner, retained, pending;
++const versions = [];
++exports.originalCalls = 0;
++exports.selection = function(owner) {
++ firstOwner ??= owner;
++ if (fresh) { freshOwner = owner; return skip; }
++ return 'same';
++};
++exports.load = function(version, argument, context) {
++ versions.push(version);
++ if (version === 1 && versions.length > 1) {
++  pending = context.signal;
++  return new Promise(function() {});
++ }
++ return 'query' + version;
++};
++exports.prepareFresh = function() { fresh = true; };
++exports.primeFresh = async function() {
++ const request = query('g:feed', function() { exports.originalCalls++; return 'ordinary result'; });
++ retained = createResource(freshOwner, 'independent-consumer', () => request('same'));
++ try { retained.get(); } catch (promise) { if (typeof promise?.then !== 'function') throw promise; await promise; }
++ fresh = false;
++ return retained.get();
++};
++exports.pending = function() { return pending; };
++exports.firstOwner = function() { return firstOwner; };
++exports.freshOwner = function() { return freshOwner; };
++exports.versions = function() { return versions; };
++`,
++	);
++	writeFileSync(
++		join(root, 'entry.cjs'),
++		`
++const { createRoot, flushSync } = require('octane');
++const { earlySignalBootstrapScript } = require('octane/server');
++const { bootstrapStreamedSignalHydration } = require('octane/hydration/streamed-signals');
++const queries = require('./queries.cjs');
++let mounted, bridge;
++exports.mount = function() {
++ document.head.insertAdjacentHTML('beforeend', earlySignalBootstrapScript());
++ window.eval(document.querySelector('script[data-octane-stream]').textContent);
++ bridge = bootstrapStreamedSignalHydration({ buildId: 'fresh-query-stream', documentId: 'fresh-query-document', target: window });
++ const { Host } = require('./host.tsrx');
++ mounted = createRoot(document.querySelector('#app'), { signalOwner: bridge.signalOwner });
++ flushSync(function() { mounted.render(Host, {}); });
++};
++exports.queries = queries;
++exports.click = function(selector) { flushSync(function() { document.querySelector(selector).click(); }); };
++exports.settle = function() { flushSync(function() {}); };
++exports.update = function() { return module.hot.check(true); };
++exports.runtime = function() { return __webpack_require__.__octaneHotSignalRuntime; };
++exports.dispose = function() { mounted?.unmount(); bridge?.dispose(); };
++`,
++	);
++	writeFileSync(
++		join(root, 'host.tsrx'),
++		`
++import { publisherBoundary, useState } from 'octane';
++import { Remote } from './remote.tsrx';
++const Publisher = publisherBoundary(Remote, { publisherKey: 'remote/query' });
++export function Host() @{
++ const [count, setCount] = useState(5);
++ const [shown, setShown] = useState(true);
++ <main>
++  <button data-host onClick={() => setCount(count + 1)}>{count}</button>
++  <button data-toggle onClick={() => setShown(!shown)}>toggle</button>
++  @try {
++   @if (shown) { <Publisher /> }
++  } @catch (error) {
++   <output data-error>{String(error)}</output>
++  }
++ </main>
++}
++`,
++	);
++	const source = (version: number) => `
++import { query$, signal$, currentSignalOwner } from 'octane/signals';
++import { selection, load } from './queries.cjs';
++const enabled$ = signal$(true);
++const feed$ = query$(() => selection(currentSignalOwner(), enabled$.get()), (argument, context) => load(${version}, argument, context), { key: 'feed', kind: 'promise' });
++export function Remote() @{
++ const state = feed$.snapshot();
++ if (state.status === 'error') throw state.error;
++ <section>
++  <button data-query-refresh onClick={() => feed$.refetch()}>refresh</button>
++  <button data-query-activate onClick={() => enabled$.set(!enabled$.get())}>activate</button>
++  <output data-query>{feed$.latest('waiting')}</output>
++ </section>
++}
++globalThis.__octaneNativeHmrEffects.push('query${version}');
++`;
++	writeFileSync(join(root, 'remote.tsrx'), source(1));
++	const { JSDOM } = createRequire(import.meta.url)('jsdom');
++	const dom = new JSDOM(
++		'<!doctype html><html><head></head><body><div id="app"></div></body></html>',
++		{
++			url: 'http://localhost/',
++			runScripts: 'outside-only',
++			pretendToBeVisual: true,
++		},
++	);
++	const names = [
++		'window',
++		'document',
++		'Node',
++		'Text',
++		'NodeFilter',
++		'HTMLElement',
++		'Element',
++		'Event',
++		'CustomEvent',
++		'MutationObserver',
++		'requestAnimationFrame',
++		'cancelAnimationFrame',
++	] as const;
++	const previous = new Map(
++		names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]),
++	);
++	for (const name of names) {
++		const value =
++			name === 'requestAnimationFrame' || name === 'cancelAnimationFrame'
++				? dom.window[name].bind(dom.window)
++				: dom.window[name];
++		Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
++	}
++	try {
++		await withWatch(nativeCompiler(root), async (_first, nextBuild) => {
++			(globalThis as any).__octaneNativeHmrEffects = [];
++			let reloads = 0;
++			(globalThis as any).location = {
++				reload() {
++					reloads++;
++				},
++			};
++			const entry = createRequire(import.meta.url)(join(root, 'dist/entry.cjs'));
++			const text = (selector: string) => dom.window.document.querySelector(selector)?.textContent;
++			try {
++				entry.mount();
++				await drainProducers();
++				entry.settle();
++				expect(text('[data-query]')).toBe('query1');
++				const host = dom.window.document.querySelector('[data-host]');
++				entry.click('[data-host]');
++				entry.click('[data-query-refresh]');
++				await drainProducers();
++				const pending = entry.queries.pending();
++				expect(pending).toBeInstanceOf(AbortSignal);
++				expect(pending.aborted).toBe(false);
++				const changedBuild = nextBuild((stats) => hasFactoryEffect(stats, 'query2'));
++				writeFileSync(join(root, 'remote.tsrx'), source(2));
++				await applyBuild(entry, await changedBuild);
++				await drainProducers();
++				entry.settle();
++				expect(pending.aborted).toBe(true);
++				expect(text('[data-query]')).toBe('query2');
++				expect(text('[data-error]')).toBeUndefined();
++				expect(entry.queries.versions()).toEqual([1, 1, 2]);
++				entry.queries.prepareFresh();
++				entry.click('[data-toggle]');
++				expect(dom.window.document.querySelector('[data-query]')).toBeNull();
++				expect(entry.queries.firstOwner().retired).toBe(true);
++				entry.click('[data-toggle]');
++				expect(text('[data-query]')).toBe('waiting');
++				expect(entry.queries.freshOwner()).not.toBe(entry.queries.firstOwner());
++				expect(entry.queries.freshOwner().retired).toBe(false);
++				expect(await entry.queries.primeFresh()).toBe('ordinary result');
++				entry.click('[data-query-activate]');
++				await drainProducers();
++				entry.settle();
++				expect(text('[data-error]')).toMatch(/[Ii]ncompatible query|Minified Octane error #202/);
++				expect(entry.queries.originalCalls).toBe(1);
++				expect(entry.queries.versions()).toEqual([1, 1, 2]);
++				expect(dom.window.document.querySelector('[data-host]')).toBe(host);
++				expect(text('[data-host]')).toBe('6');
++				expect(reloads).toBe(0);
++			} finally {
++				entry.dispose();
++			}
++		});
++	} finally {
++		for (const name of names) {
++			const descriptor = previous.get(name);
++			if (descriptor) Object.defineProperty(globalThis, name, descriptor);
++			else delete (globalThis as any)[name];
++		}
++		dom.window.close();
++	}
++}, 30_000);
++
++it('updates eligible ordinary modules repeatedly without signal-owner admission', async () => {
++	const root = realpathSync(mkdtempSync(join(tmpdir(), 'octane-native-ordinary-hmr-')));
++	roots.push(root);
++	writeFileSync(
++		join(root, 'entry.cjs'),
++		`
++require('./ordinary.tsrx');
++exports.update = function() { return module.hot.check(true); };
++exports.build = function() { return __webpack_hash__; };
++exports.runtime = function() { return __webpack_require__.__octaneHotSignalRuntime; };
++`,
++	);
++	const source = (version: number) => `
++export function Ordinary() @{ <span>ordinary</span> }
++globalThis.__octaneNativeHmrEffects.push(${version});
++`;
++	writeFileSync(join(root, 'ordinary.tsrx'), source(1));
++	await withWatch(nativeCompiler(root), async (first, nextBuild) => {
++		(globalThis as any).__octaneNativeHmrEffects = [];
++		let reloads = 0;
++		(globalThis as any).location = {
++			reload() {
++				reloads++;
++			},
++		};
++		const entry = createRequire(import.meta.url)(join(root, 'dist/entry.cjs'));
++		const runtime = entry.runtime();
++		expect(entry.build()).toBe(first.hash);
++		expect(runtime.executed.size).toBe(0);
++		for (const version of [2, 3]) {
++			const changedBuild = nextBuild();
++			writeFileSync(join(root, 'ordinary.tsrx'), source(version));
++			const stats = await changedBuild;
++			await applyBuild(entry, stats);
++			expect(entry.runtime()).toBe(runtime);
++			expect(runtime.buildId).toBe(stats.hash);
++			expect(runtime.executed.size).toBe(0);
++			expect(entry.build()).toBe(stats.hash);
++		}
++		expect(reloads).toBe(0);
++		expect((globalThis as any).__octaneNativeHmrEffects).toEqual([1, 2, 3]);
++		const failedBuild = nextBuild((stats) => hasFactoryEffect(stats, 'ordinary factory failed'));
++		writeFileSync(
++			join(root, 'ordinary.tsrx'),
++			`${source(4)}\nthrow new Error('ordinary factory failed');`,
++		);
++		await expect(applyBuild(entry, await failedBuild)).rejects.toThrow(/ordinary factory failed/);
++		expect(runtime.executed.size).toBe(0);
++		expect(reloads).toBe(0);
++		expect((globalThis as any).__octaneNativeHmrEffects).toEqual([1, 2, 3, 4]);
++		expect((globalThis as any)[Symbol.for('octane.hot-signals.execution')]).toBeUndefined();
++	});
++}, 30_000);
++
++it.each(['updated', 'released-owner', 'factory-error', 'rollback-error'] as const)(
++	'admits successive native feature generations and retains the fence for %s',
++	async (outcome) => {
++		const root = realpathSync(mkdtempSync(join(tmpdir(), 'octane-native-admitted-hmr-')));
++		roots.push(root);
++		const nativeOwner = fileURLToPath(
++			new URL('../../octane/src/signals/hot-declarations.js', import.meta.url),
++		);
++		const facade = fileURLToPath(new URL('../../octane/src/signals/facade.js', import.meta.url));
++		writeFileSync(
++			join(root, 'entry.cjs'),
++			`
++const { createScope, __signalAt } = require('octane/signals');
++const { admitHotSignalPublisher, createNativeHotSignalOwnerProof, getNativeHotSignalComponentBuild } = require(${JSON.stringify(nativeOwner)});
++const { resolveSignalHandleForScope } = require(${JSON.stringify(facade)});
++const feature = require('./feature.tsrx');
++require('./ordinary.cjs');
++module.hot.accept('./ordinary.cjs', function() { require('./ordinary.cjs'); });
++module.hot.accept('./feature.tsrx', function() { require('./feature.tsrx'); });
++let owner = createScope({ scopeKey: 'native:feature' });
++const sibling = createScope({ scopeKey: 'native:sibling' });
++const siblingCell = resolveSignalHandleForScope(__signalAt('g:sibling', 41), sibling);
++const writable = resolveSignalHandleForScope(feature.count$, owner);
++const derived = resolveSignalHandleForScope(feature.result$, owner);
++writable.set(7);
++exports.transitions = [];
++exports.remounts = 0;
++const proof = createNativeHotSignalOwnerProof({
++  publisherKey: 'native:publisher', documentId: 'native:document',
++  ownerKey: owner.scopeKey, buildId: __webpack_hash__,
++  acceptsComponent(component) { return component === feature.Feature; },
++  currentOwner() { return owner; },
++  suspendIngress() { exports.transitions.push('suspend'); },
++  rotateIngress(buildId) { exports.transitions.push(buildId); },
++  remount() {
++    if (exports.rejectRemount) throw new Error('native owner remount failed');
++    owner.dispose();
++    owner = createScope({ scopeKey: 'native:feature' });
++    exports.remounts++;
++  }
++});
++const release = admitHotSignalPublisher(feature.Feature, proof);
++exports.releaseAdmission = release;
++exports.update = function() { return module.hot.check(true); };
++exports.read = function() { return [writable.get(), derived.get(), siblingCell.get()]; };
++exports.current = function() {
++  return [resolveSignalHandleForScope(require('./feature.tsrx').count$, owner),
++          resolveSignalHandleForScope(require('./feature.tsrx').result$, owner)];
++};
++exports.handles = [writable, derived];
++exports.owner = function() { return owner; };
++exports.sibling = function() { return siblingCell.get(); };
++exports.runtime = function() { return __webpack_require__.__octaneHotSignalRuntime; };
++exports.componentBody = function() { return feature.Feature[Symbol.for('octane.hmr')].fn; };
++exports.componentBuild = function() { return getNativeHotSignalComponentBuild(feature.Feature); };
++exports.failedRead = function() { return resolveSignalHandleForScope(globalThis.__octaneFailedHmrExports.count$, owner).get(); };
++exports.status = function() { return module.hot.status(); };
++exports.dispose = function() { release(); owner.dispose(); sibling.dispose(); };
++`,
++		);
++		const source = (
++			version: number,
++			options: {
++				prefix?: string;
++				hook?: boolean;
++				general?: boolean;
++				removed?: boolean;
++				fail?: boolean;
++			} = {},
++		) => `${options.prefix ?? ''}
++import { useState } from 'octane';
++${
++	options.removed
++		? ''
++		: `
++import { signal$, derived$ } from 'octane/signals';
++export const count$ = signal$(1);
++export const result$ = derived$(() => count$.get() + ${version}, ${options.general ? "{ key: 'result', sync:false }" : "{ key: 'result', sync: true }"});
++`
++}
++export function Feature() @{ ${options.hook ? 'const [value] = useState(0);' : ''} <span>feature</span> }
++globalThis.__octaneNativeHmrEffects.push('feature${version}');
++${options.fail ? `globalThis.__octaneFailedHmrExports = { count$, result$ }; throw new Error('authored feature factory failed');` : ''}
++`;
++		writeFileSync(join(root, 'feature.tsrx'), source(1));
++		writeFileSync(
++			join(root, 'ordinary.cjs'),
++			'globalThis.__octaneNativeHmrEffects.push("ordinary1");',
++		);
++		await withWatch(nativeCompiler(root), async (first, nextBuild) => {
++			(globalThis as any).__octaneNativeHmrEffects = [];
++			let reloads = 0;
++			(globalThis as any).location = {
++				reload() {
++					reloads++;
++				},
++			};
++			const entry = createRequire(import.meta.url)(join(root, 'dist/entry.cjs'));
++			try {
++				const runtime = entry.runtime();
++				const manifest = () =>
++					[...runtime.modules.values()]
++						.flat()
++						.find((value: any) => value.moduleId === '/feature.tsrx');
++				expect(runtime.buildId).toBe(first.hash);
++				expect(entry.read()).toEqual([7, 8, 41]);
++				for (const version of [2, 3]) {
++					const priorBuild = runtime.buildId;
++					const changedBuild = nextBuild((stats) => hasFactoryEffect(stats, `feature${version}`));
++					writeFileSync(join(root, 'feature.tsrx'), source(version));
++					const stats = await changedBuild;
++					expect(stats.hash).not.toBe(priorBuild);
++					expect(hasFactoryEffect(stats, `feature${version}`)).toBe(true);
++					await applyBuild(entry, stats);
++					expect((globalThis as any).__octaneNativeHmrEffects.at(-1)).toBe(`feature${version}`);
++					expect(entry.runtime()).toBe(runtime);
++					expect(runtime.buildId).toBe(stats.hash);
++					expect(entry.current()[0]).toBe(entry.handles[0]);
++					expect(entry.current()[1]).toBe(entry.handles[1]);
++					expect(entry.read()).toEqual([7, 7 + version, 41]);
++					expect(entry.remounts).toBe(0);
++					expect(entry.transitions.slice(-2)).toEqual(['suspend', stats.hash]);
++					if (version === 2) {
++						const ordinaryBuild = nextBuild((stats) => hasFactoryEffect(stats, 'ordinary2'));
++						writeFileSync(
++							join(root, 'ordinary.cjs'),
++							'globalThis.__octaneNativeHmrEffects.push("ordinary2");',
++						);
++						const ordinaryStats = await ordinaryBuild;
++						await applyBuild(entry, ordinaryStats);
++						expect(runtime.buildId).toBe(ordinaryStats.hash);
++						expect(entry.read()).toEqual([7, 9, 41]);
++					}
++				}
++				if (outcome === 'released-owner') {
++					entry.releaseAdmission();
++					const refusedBuild = nextBuild((stats) => hasFactoryEffect(stats, 'feature4'));
++					writeFileSync(join(root, 'feature.tsrx'), source(4));
++					await refusedBuild;
++					await expect(Promise.resolve().then(() => entry.update())).rejects.toThrow(
++						/client build changed/,
++					);
++					expect(reloads).toBeGreaterThan(0);
++					expect((globalThis as any).__octaneNativeHmrEffects).not.toContain('feature4');
++					expect(entry.handles[0].get()).toBe(7);
++					expect(entry.sibling()).toBe(41);
++					return;
++				}
++				if (outcome === 'factory-error' || outcome === 'rollback-error') {
++					const oldOwner = entry.owner();
++					const oldBody = entry.componentBody();
++					const oldBuild = entry.componentBuild();
++					entry.rejectRemount = outcome === 'rollback-error';
++					const failedBuild = nextBuild((stats) => hasFactoryEffect(stats, 'feature4'));
++					writeFileSync(join(root, 'feature.tsrx'), source(4, { fail: true }));
++					const failedStats = await failedBuild;
++					await expect(applyBuild(entry, failedStats)).rejects.toThrow(
++						outcome === 'rollback-error'
++							? /client build changed/
++							: /authored feature factory failed/,
++					);
++					expect(runtime.buildId).toBe(failedStats.hash);
++					expect(() => entry.failedRead()).toThrow();
++					expect(entry.sibling()).toBe(41);
++					// Native plain self-acceptance stops in fail after a factory error.
++					// Registry rollback does not override the bundler's lifecycle.
++					expect(entry.status()).toBe('fail');
++					await expect(Promise.resolve().then(() => entry.update())).rejects.toThrow(
++						/check\(\) is only allowed in idle status/,
++					);
++					expect((globalThis as any)[Symbol.for('octane.hot-signals.execution')]).toBeUndefined();
++					if (outcome === 'rollback-error') {
++						expect(reloads).toBeGreaterThan(0);
++					} else {
++						expect(reloads).toBe(0);
++						expect(entry.componentBody()).toBe(oldBody);
++						expect(entry.componentBuild()).toBe(oldBuild);
++						expect(oldOwner.retired).toBe(true);
++						expect(entry.owner()).not.toBe(oldOwner);
++						expect(entry.remounts).toBe(1);
++						expect(() => entry.handles[0].get()).toThrow();
++					}
++					return;
++				}
++				const incompatible = [
++					{ version: 4, options: { prefix: '// shifted declaration sites\n' }, changed: 'site' },
++					{
++						version: 5,
++						options: { prefix: '// shifted declaration sites\n', hook: true },
++						changed: 'slot',
++					},
++					{
++						version: 6,
++						options: { prefix: '// shifted declaration sites\n', hook: true, general: true },
++						changed: 'factory',
++					},
++				] as const;
++				for (const { version, options, changed } of incompatible) {
++					const previous = manifest();
++					const oldOwner = entry.owner();
++					const oldHandles = entry.current();
++					const changedBuild = nextBuild((stats) => hasFactoryEffect(stats, `feature${version}`));
++					writeFileSync(join(root, 'feature.tsrx'), source(version, options));
++					const stats = await changedBuild;
++					await applyBuild(entry, stats);
++					const current = manifest();
++					const previousSites = previous.declarations.map((shape: any) => shape.site);
++					const currentSites = current.declarations.map((shape: any) => shape.site);
++					if (changed === 'site') expect(currentSites).not.toEqual(previousSites);
++					else expect(currentSites).toEqual(previousSites);
++					if (changed === 'slot') expect(current.hookSlots).not.toEqual(previous.hookSlots);
++					if (changed === 'factory') {
++						expect(current.hookSlots).toEqual(previous.hookSlots);
++						expect(previous.declarations[1].factory).toBe('__derivedScalarAt');
++						expect(current.declarations[1].factory).toBe('__derivedAt');
++					}
++					expect(oldOwner.retired).toBe(true);
++					expect(entry.owner()).not.toBe(oldOwner);
++					expect(() => oldHandles[0].get()).toThrow();
++					expect(entry.current().map((handle: any) => handle.get())).toEqual([1, 1 + version]);
++					expect(entry.sibling()).toBe(41);
++					expect(entry.remounts).toBe(version - 3);
++					expect(entry.transitions.slice(-2)).toEqual(['suspend', stats.hash]);
++				}
++				const finalOwner = entry.owner();
++				const removedBuild = nextBuild((stats) => hasFactoryEffect(stats, 'feature7'));
++				writeFileSync(join(root, 'feature.tsrx'), source(7, { removed: true, hook: true }));
++				const removedStats = await removedBuild;
++				await applyBuild(entry, removedStats);
++				expect(runtime.buildId).toBe(removedStats.hash);
++				expect(finalOwner.retired).toBe(true);
++				expect(entry.remounts).toBe(4);
++				expect(runtime.features.size).toBe(0);
++				expect(runtime.executed.size).toBe(0);
++				expect(manifest().declarations).toEqual([]);
++				expect(entry.sibling()).toBe(41);
++				const ordinaryBuild = nextBuild((stats) => hasFactoryEffect(stats, 'feature8'));
++				writeFileSync(join(root, 'feature.tsrx'), source(8, { removed: true, hook: true }));
++				const ordinaryStats = await ordinaryBuild;
++				await applyBuild(entry, ordinaryStats);
++				expect(runtime.buildId).toBe(ordinaryStats.hash);
++				expect(entry.remounts).toBe(4);
++				expect(runtime.executed.size).toBe(0);
++				expect(reloads).toBe(0);
++				const featureEffects = (globalThis as any).__octaneNativeHmrEffects.filter(
++					(effect: string) => effect.startsWith('feature'),
++				);
++				expect(
++					featureEffects.filter(
++						(effect: string, index: number) => effect !== featureEffects[index - 1],
++					),
++				).toEqual([
++					'feature1',
++					'feature2',
++					'feature3',
++					'feature4',
++					'feature5',
++					'feature6',
++					'feature7',
++					'feature8',
++				]);
++				expect((globalThis as any).__octaneNativeHmrEffects).toEqual(
++					expect.arrayContaining(['ordinary1', 'ordinary2']),
++				);
++				expect((globalThis as any)[Symbol.for('octane.hot-signals.execution')]).toBeUndefined();
++			} finally {
++				entry.dispose();
++			}
++		});
++	},
++	30_000,
++);
++
++it.each([
++	['bootstrapped', 'direct', 'local', 'mounted'],
++	['unbootstrapped', 'direct', 'local', 'mounted'],
++	['bootstrapped', 'default-memo', 'local', 'mounted'],
++	['unbootstrapped', 'default-memo', 'local', 'mounted'],
++	['bootstrapped', 'direct', 'external', 'mounted'],
++	['bootstrapped', 'default-memo', 'external', 'mounted'],
++	['bootstrapped', 'direct', 'local', 'retired'],
++] as const)(
++	'admits native publishers in the %s document through %s exports using %s boundary with %s ownership',
++	async (authority, exposure, boundary, ownership) => {
++		const memo = exposure === 'default-memo';
++		const root = realpathSync(mkdtempSync(join(tmpdir(), 'octane-native-publisher-hmr-')));
++		roots.push(root);
++		writeFileSync(
++			join(root, 'entry.cjs'),
++			`
++const { createRoot, flushSync } = require('octane');
++const { earlySignalBootstrapScript } = require('octane/server');
++const { bootstrapStreamedSignalHydration } = require('octane/hydration/streamed-signals');
++${
++	ownership === 'retired'
++		? `require('./ordinary.cjs');
++module.hot.accept('./ordinary.cjs', function() { require('./ordinary.cjs'); });`
++		: ''
++}
++let mounted, bridge;
++exports.mount = function(bootstrap) {
++  if (bootstrap) {
++    document.head.insertAdjacentHTML('beforeend', earlySignalBootstrapScript());
++    window.eval(document.querySelector('script[data-octane-stream]').textContent);
++    bridge = bootstrapStreamedSignalHydration({
++      buildId: 'native-host-stream', documentId: 'native-watch-document', target: window
++    });
++  }
++  const { Host } = require('./host.tsrx');
++  mounted = createRoot(document.querySelector('#app'), bridge ? {
++    signalOwner: bridge.signalOwner, externalSnapshots: { documentId: 'native-watch-document' }
++  } : {});
++  flushSync(function() { mounted.render(Host, {}); });
++};
++exports.click = function(selector) { flushSync(function() { document.querySelector(selector).click(); }); };
++exports.settle = function() { flushSync(function() {}); };
++exports.update = function() { return module.hot.check(true); };
++exports.runtime = function() { return __webpack_require__.__octaneHotSignalRuntime; };
++exports.remote = function() { return require('./remote-a.tsrx').default; };
++exports.dispose = function() { mounted?.unmount(); bridge?.dispose(); };
++`,
++		);
++		writeFileSync(
++			join(root, 'host.tsrx'),
++			`
++import { publisherBoundary, externalSnapshotBoundary, useState } from 'octane';
++import ${memo ? 'RemoteA' : '{ RemoteA }'} from './remote-a.tsrx';
++const Remote = ${
++				boundary === 'external'
++					? `externalSnapshotBoundary({
++  authority: { publisherBuildId: 'native-publisher-stream', runtimeABI: 1 },
++  component: RemoteA,
++  snapshot() { throw new Error('A client boundary must not call server transport.'); }
++})`
++					: `publisherBoundary(RemoteA, { publisherKey: 'remote/Widget' })`
++			};
++function Sibling() @{
++  const [value, setValue] = useState(41);
++  <button data-sibling onClick={() => setValue(value + 1)}>{value}</button>
++}
++export function Host() @{
++  const [value, setValue] = useState(5);
++  ${ownership === 'retired' ? 'const [shown, setShown] = useState(true);' : ''}
++  <main>
++    <button data-host onClick={() => setValue(value + 1)}>{value}</button>
++    <Sibling />
++    ${ownership === 'retired' ? '<button data-publisher-toggle onClick={() => setShown(!shown)}>toggle</button>@if (shown) { <Remote /> }' : '<Remote />'}
++  </main>
++}
++`,
++		);
++		writeFileSync(
++			join(root, 'remote-b.tsrx'),
++			`
++import { signal$ } from 'octane/signals';
++const count$ = signal$(100);
++export function RemoteB() @{
++  <button data-remote-b onClick={() => count$.set(count$.get() + 1)}>{count$.get()}</button>
++}
++globalThis.__octaneNativeHmrEffects.push('remoteB1');
++`,
++		);
++		const source = (
++			version: number,
++			incompatible = false,
++			failed = false,
++		) => `${incompatible ? '// changed native declaration sites\n' : ''}
++import { signal$, derived$ } from 'octane/signals';
++import { RemoteB } from './remote-b.tsrx';
++${memo ? "import { memo } from 'octane';" : ''}
++const count$ = signal$(1);
++const result$ = derived$(() => count$.get() + ${version}, { key: 'result', sync: true });
++${memo ? 'function PrivateRemoteA' : 'export function RemoteA'}() @{
++  <section data-remote-a>
++    <button data-remote-increment onClick={() => count$.set(count$.get() + 1)}>increment</button>
++    <output data-remote-count>{count$.get()}</output>
++    <output data-remote-result>{result$.get()}</output>
++    ${memo ? '<output data-remote-label>{label}</output>' : ''}
++    <RemoteB />
++  </section>
++}
++${
++	memo
++		? `const MemoRemote = memo(PrivateRemoteA);
++const RemoteExport = MemoRemote;
++export default RemoteExport;
++const label = 'label${version}';`
++		: ''
++}
++globalThis.__octaneNativeHmrEffects.push('remoteA${version}');
++${failed ? "throw new Error('native publisher factory failed');" : ''}
++`;
++		writeFileSync(join(root, 'remote-a.tsrx'), source(1));
++		if (ownership === 'retired')
++			writeFileSync(
++				join(root, 'ordinary.cjs'),
++				"globalThis.__octaneNativeHmrEffects.push('ordinary1');",
++			);
++		const { JSDOM } = createRequire(import.meta.url)('jsdom');
++		const dom = new JSDOM(
++			'<!doctype html><html><head></head><body><div id="app"></div></body></html>',
++			{
++				url: 'http://localhost/',
++				runScripts: 'outside-only',
++				pretendToBeVisual: true,
++			},
++		);
++		const names = [
++			'window',
++			'document',
++			'Node',
++			'Text',
++			'NodeFilter',
++			'HTMLElement',
++			'Element',
++			'Event',
++			'CustomEvent',
++			'MutationObserver',
++			'requestAnimationFrame',
++			'cancelAnimationFrame',
++		] as const;
++		const previous = new Map(
++			names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]),
++		);
++		for (const name of names) {
++			const value =
++				name === 'requestAnimationFrame' || name === 'cancelAnimationFrame'
++					? dom.window[name].bind(dom.window)
++					: dom.window[name];
++			Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
++		}
++		try {
++			await withWatch(nativeCompiler(root), async (_first, nextBuild) => {
++				(globalThis as any).__octaneNativeHmrEffects = [];
++				let reloads = 0;
++				(globalThis as any).location = {
++					reload() {
++						reloads++;
++					},
++				};
++				const entry = createRequire(import.meta.url)(join(root, 'dist/entry.cjs'));
++				try {
++					entry.mount(authority === 'bootstrapped');
++					const canonical = memo ? entry.remote().type : undefined;
++					if (memo) expect(typeof canonical).toBe('function');
++					const text = (selector: string) =>
++						dom.window.document.querySelector(selector)?.textContent;
++					expect(text('[data-remote-count]')).toBe('1');
++					expect(text('[data-remote-result]')).toBe('2');
++					if (memo) expect(text('[data-remote-label]')).toBe('label1');
++					const host = dom.window.document.querySelector('[data-host]');
++					const sibling = dom.window.document.querySelector('[data-sibling]');
++					entry.click('[data-host]');
++					entry.click('[data-sibling]');
++					entry.click('[data-remote-increment]');
++					entry.click('[data-remote-increment]');
++					entry.click('[data-remote-b]');
++					expect(text('[data-host]')).toBe('6');
++					expect(text('[data-sibling]')).toBe('42');
++					expect(text('[data-remote-count]')).toBe('3');
++					expect(text('[data-remote-b]')).toBe('101');
++					const runtime = entry.runtime();
++					expect(runtime.buildId).not.toBe('native-host-stream');
++					expect(runtime.buildId).not.toBe('native-publisher-stream');
++					for (const version of memo ? [2, 3, 4] : [2, 3]) {
++						const changedBuild = nextBuild((stats) => hasFactoryEffect(stats, `remoteA${version}`));
++						writeFileSync(join(root, 'remote-a.tsrx'), source(version));
++						const stats = await changedBuild;
++						if (authority === 'unbootstrapped') {
++							await expect(applyBuild(entry, stats)).rejects.toThrow(/client build changed/);
++							expect(reloads).toBeGreaterThan(0);
++							expect((globalThis as any).__octaneNativeHmrEffects).not.toContain(
++								`remoteA${version}`,
++							);
++							expect(text('[data-remote-count]')).toBe('3');
++							if (memo) expect(text('[data-remote-label]')).toBe('label1');
++							return;
++						}
++						await applyBuild(entry, stats);
++						entry.settle();
++						expect(entry.runtime()).toBe(runtime);
++						expect(text('[data-remote-count]')).toBe('3');
++						expect(text('[data-remote-result]')).toBe(String(3 + version));
++						if (memo) {
++							expect(text('[data-remote-label]')).toBe(`label${version}`);
++							// The reevaluated export must capture the admitted canonical inner
++							// wrapper, not a fresh private wrapper created by this factory.
++							expect(entry.remote().type).toBe(canonical);
++						}
++						// B was compiled in the initial generation and shares A's private
++						// publisher. Rendering it after A changes must preserve its own grant.
++						entry.click('[data-remote-b]');
++						expect(text('[data-remote-b]')).toBe(String(100 + version));
++						expect(dom.window.document.querySelector('[data-host]')).toBe(host);
++						expect(dom.window.document.querySelector('[data-sibling]')).toBe(sibling);
++						expect(text('[data-host]')).toBe('6');
++						expect(text('[data-sibling]')).toBe('42');
++					}
++					if (ownership === 'retired') {
++						entry.click('[data-publisher-toggle]');
++						expect(dom.window.document.querySelector('[data-remote-a]')).toBeNull();
++						expect(dom.window.document.querySelector('[data-host]')).toBe(host);
++						expect(dom.window.document.querySelector('[data-sibling]')).toBe(sibling);
++						const unrelatedBuild = nextBuild((stats) => hasFactoryEffect(stats, 'ordinary2'));
++						writeFileSync(
++							join(root, 'ordinary.cjs'),
++							"globalThis.__octaneNativeHmrEffects.push('ordinary2');",
++						);
++						await applyBuild(entry, await unrelatedBuild);
++						entry.settle();
++						expect((globalThis as any).__octaneNativeHmrEffects).toContain('ordinary2');
++						expect(reloads).toBe(0);
++						entry.click('[data-publisher-toggle]');
++						expect(text('[data-remote-count]')).toBe('1');
++						expect(text('[data-remote-result]')).toBe('4');
++						expect(text('[data-remote-b]')).toBe('100');
++						entry.click('[data-remote-increment]');
++						const remountedBuild = nextBuild((stats) => hasFactoryEffect(stats, 'remoteA4'));
++						writeFileSync(join(root, 'remote-a.tsrx'), source(4));
++						await applyBuild(entry, await remountedBuild);
++						entry.settle();
++						expect(text('[data-remote-count]')).toBe('2');
++						expect(text('[data-remote-result]')).toBe('6');
++						expect(dom.window.document.querySelector('[data-host]')).toBe(host);
++						expect(dom.window.document.querySelector('[data-sibling]')).toBe(sibling);
++						expect(text('[data-host]')).toBe('6');
++						expect(text('[data-sibling]')).toBe('42');
++						expect(reloads).toBe(0);
++						return;
++					}
++					const coldVersion = memo ? 5 : 4;
++					const changedBuild = nextBuild((stats) =>
++						hasFactoryEffect(stats, `remoteA${coldVersion}`),
++					);
++					writeFileSync(join(root, 'remote-a.tsrx'), source(coldVersion, true));
++					await applyBuild(entry, await changedBuild);
++					entry.settle();
++					expect(text('[data-remote-count]')).toBe('1');
++					expect(text('[data-remote-result]')).toBe(String(1 + coldVersion));
++					if (memo) {
++						expect(text('[data-remote-label]')).toBe(`label${coldVersion}`);
++						expect(entry.remote().type).toBe(canonical);
++					}
++					expect(text('[data-remote-b]')).toBe('100');
++					entry.click('[data-remote-b]');
++					expect(text('[data-remote-b]')).toBe('101');
++					expect(dom.window.document.querySelector('[data-host]')).toBe(host);
++					expect(dom.window.document.querySelector('[data-sibling]')).toBe(sibling);
++					expect(text('[data-host]')).toBe('6');
++					expect(text('[data-sibling]')).toBe('42');
++					const failedVersion = coldVersion + 1;
++					const failedBuild = nextBuild((stats) =>
++						hasFactoryEffect(stats, `remoteA${failedVersion}`),
++					);
++					writeFileSync(join(root, 'remote-a.tsrx'), source(failedVersion, true, true));
++					await expect(applyBuild(entry, await failedBuild)).rejects.toThrow(
++						/native publisher factory failed/,
++					);
++					entry.settle();
++					// The failed generation retires this native publisher and restores
++					// its last accepted component body before the queued scoped mount.
++					expect(text('[data-remote-count]')).toBe('1');
++					expect(text('[data-remote-result]')).toBe(String(1 + coldVersion));
++					if (memo) {
++						expect(text('[data-remote-label]')).toBe(`label${coldVersion}`);
++					}
++					expect(text('[data-remote-b]')).toBe('100');
++					expect(dom.window.document.querySelector('[data-host]')).toBe(host);
++					expect(dom.window.document.querySelector('[data-sibling]')).toBe(sibling);
++					expect(text('[data-host]')).toBe('6');
++					expect(text('[data-sibling]')).toBe('42');
++					expect(
++						(globalThis as any).__octaneNativeHmrEffects.filter(
++							(effect: string) => effect === 'remoteB1',
++						),
++					).toHaveLength(1);
++					expect(reloads).toBe(0);
++				} finally {
++					entry.dispose();
++				}
++			});
++		} finally {
++			for (const name of names) {
++				const descriptor = previous.get(name);
++				if (descriptor) Object.defineProperty(globalThis, name, descriptor);
++				else delete (globalThis as any)[name];
++			}
++			dom.window.close();
++		}
++	},
++	30_000,
++);
++
+ // This exercises native Rspack compilation and hot application, independently
+ // of TSRX parsing. Compiler-result feature discovery has its own compiler tests.
+ it.each(['absent', 'initial', 'added', 'deferred', 'added-deferred'] as const)(
+@@ -64,6 +1141,7 @@ exports.update = function() { return module.hot.check(true); };
+ 									requirements.add(rspack.RuntimeGlobals.interceptModuleExecution);
+ 									requirements.add(rspack.RuntimeGlobals.moduleCache);
+ 									requirements.add(rspack.RuntimeGlobals.global);
++									requirements.add(rspack.RuntimeGlobals.getFullHash);
+ 									compilation.addRuntimeModule(
+ 										chunk,
+ 										createStreamedSignalHmrRuntimeModule(compiler, compilation, modules),
+@@ -75,20 +1153,7 @@ exports.update = function() { return module.hot.check(true); };
+ 				},
+ 			],
+ 		})!;
+-		let completed: (error?: Error | null) => void;
+-		const nextBuild = () =>
+-			new Promise<void>((resolve, reject) => {
+-				completed = (error) => (error ? reject(error) : resolve());
+-			});
+-		const firstBuild = nextBuild();
+-		const watching = compiler.watch({ aggregateTimeout: 0, poll: 20 }, (error, stats) => {
+-			completed(
+-				error ??
+-					(stats?.hasErrors() ? new Error(stats.toString({ all: false, errors: true })) : null),
+-			);
+-		});
+-		try {
+-			await firstBuild;
++		await withWatch(compiler, async (_first, nextBuild) => {
+ 			(globalThis as any).__octaneNativeHmrEffects = [];
+ 			let reloads = 0;
+ 			(globalThis as any).location = {
+@@ -125,11 +1190,6 @@ exports.update = function() { return module.hot.check(true); };
+ 				expect(reloads).toBeGreaterThan(0);
+ 				expect((globalThis as any).__octaneNativeHmrEffects).toEqual(['first']);
+ 			}
+-		} finally {
+-			await new Promise<void>((resolve) => watching.close(resolve));
+-			await new Promise<void>((resolve, reject) =>
+-				compiler.close((error) => (error ? reject(error) : resolve())),
+-			);
+-		}
++		});
+ 	},
+ );

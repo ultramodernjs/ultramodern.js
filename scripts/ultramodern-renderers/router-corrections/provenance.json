@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "package": "@tanstack/router-core",
+  "version": "1.171.39",
+  "upstreamCommit": "6b9fe6d29552270836c511bc9b343d73541f4424",
+  "acceptedCommit": "585d3233f7f54e69c057b413cc3bacbfbcc9b7a5",
+  "upstreamNpmIntegrity": "sha512-qUhoJ0meuSUqGYQbHbcJYdASr06YtK+bulbj6vtrhKYFkLgkSsZ6tXmMyym7sFxiSJSPYgasgozrL01LyyR/6A==",
+  "sourceArchiveSha512": "da4b7a5207790db73c90db65524e91ef1a37bbe92a80efcdfb8547df4c1452fb37a789a94308f40216095ccbffcea677c0d640b98cf0100f8698dcf9c8d40c98",
+  "licenseSha256": "a405ee70c632bb938acb7ac5f210e814409b3760ea9d2329d8ed8ffcfd11a0e7",
+  "patchSha256": "546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8",
+  "sourcePatchSha256": "24f09fbf4cb69a1a8e50779ec9e8610ce9091a98121135461f277959c0a9c521",
+  "correctionCommits": [
+    {
+      "sha": "6f435f3936dab5f7f1a747a61d40eae68bc93a3f",
+      "subject": "perf(router-core): short-circuit different internal locations"
+    },
+    {
+      "sha": "9d36235ff34b696725f0cb0068619ecb8607a4dc",
+      "subject": "fix(router-core): observe loads while dehydration hooks wait"
+    },
+    {
+      "sha": "b9b86e00bbdc4ccd350bb792ed62c9ea2baa7ddc",
+      "subject": "fix(router-core): drain hook-started loads before pending dehydration"
+    },
+    {
+      "sha": "d1bc13740bcb7fc4b6a83536473198bbbb3a1981",
+      "subject": "fix(ssr): drain loads started by early hints before dehydration"
+    },
+    {
+      "sha": "91b11936675a2bffca12c168966cda329dd27519",
+      "subject": "fix(router-core): commit canonical displayed URL changes"
+    },
+    {
+      "sha": "4e62e03a97208749abc22907c7e9bd19985e33e9",
+      "subject": "fix(ssr): settle early-hints loads before dehydration"
+    },
+    {
+      "sha": "7b856ca50d1ff3d6a8367f96a206736efd9b62a0",
+      "subject": "fix(ssr): separate portable and Node stream entries"
+    },
+    {
+      "sha": "ac98cc60d8eeb28a19dd9c00bb5e4d4320c7816f",
+      "subject": "fix(router-core): keep SSR client header declarations browser portable"
+    },
+    {
+      "sha": "f108415c8e13c2ab07681676ef30d3221e8b0ccc",
+      "subject": "fix(start): send settled lifecycle hints before dehydration hooks"
+    },
+    {
+      "sha": "ab28225064e9a453b874bbb1120cb440e40f82dc",
+      "subject": "fix(ssr): preserve redirects from custom dehydration loads"
+    },
+    {
+      "sha": "86984857583d32934b2264a635c8514979d58409",
+      "subject": "fix(router-core): skip custom dehydration after a drained redirect"
+    },
+    {
+      "sha": "ce07c85b2ae8c4647ee93984dd13234ff507a7fc",
+      "subject": "fix(ssr): drain active server loads before dehydration"
+    },
+    {
+      "sha": "f9a35646103d1627a5818ac696851cf6523d02b3",
+      "subject": "perf(router-core): keep inherited search checks on mask builds"
+    },
+    {
+      "sha": "63260e41c741c2444b61c10a7e1e127109ff413a",
+      "subject": "fix(router-core): retain string paths in generic navigation defaults"
+    },
+    {
+      "sha": "fe37ef8dd2a53a1a6f466368a12e4905a44774a0",
+      "subject": "feat(router-core): inherit resolved search in native route masks"
+    },
+    {
+      "sha": "f07f7ffe60fa0aeceb19c1dff0eced0e8152b6a4",
+      "subject": "fix(router-core): report pending for active server loads"
+    }
+  ],
+  "alreadyUpstream": [
+    "SSR renderer hydration-adapter retention is already in the pinned latest source; no replay of 45235831fe or a39702f342.",
+    "Latest package version, changelog and all unchanged npm files are preserved; old fork version/build-release/Start changes are not copied."
+  ],
+  "pending": [
+    "Octane adapter owning lane must publish its 0.3.4 correction with core 1.171.39 and history 1.162.5 authorities. The registry 0.3.4 archive still depends on core 1.171.34 and history 1.162.4.",
+    "Parent owns release tarball digest, supply metadata, patch inventory, integration lock, hosted CI and actual browser acceptance."
+  ]
+}

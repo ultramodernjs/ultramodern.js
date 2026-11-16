@@ -1,0 +1,733 @@
+diff --git a/src/loader.js b/src/loader.js
+index caa6ff6..8d524fb 100644
+--- a/src/loader.js
++++ b/src/loader.js
+@@ -1,27 +1,37 @@
+ import { existsSync, realpathSync } from 'node:fs';
++
+ import { dirname, isAbsolute, resolve } from 'node:path';
++
+ import remapping from '@jridgewell/remapping';
++
+ import { canonicalModuleId, cleanModuleId, createOctaneCompiler } from 'octane/compiler/bundler';
++
+ import { resolveRendererForFile } from 'octane/compiler/renderers';
++
+ import {
+ 	clearCssModuleBuildInfo,
+ 	CSS_MODULE_CONTEXT_KEY,
+ 	finishCssModuleConstants,
+ 	prepareCssModuleConstants,
+ } from './css-module-data.js';
++
+ import {
+ 	inferRspackEnvironment,
+ 	normalizeLoaderOptions,
+ 	selectLayerCompilerOptions,
+ } from './shared.js';
++
+ import { loadDescriptorChildrenImports } from './descriptor-children.js';
++
+ import { textTypeFactsForLoader } from './text-types.js';
++
+ import {
+ 	clearVoidComponentBuildInfo,
+ 	finishVoidComponents,
+ 	prepareVoidComponents,
+ } from './void-component-data.js';
+ 
++
+ function realRoot(path) {
+ 	try {
+ 		return realpathSync(path);
+@@ -30,23 +40,27 @@ function realRoot(path) {
+ 	}
+ }
+ 
++
+ function realModuleId(id) {
+ 	const file = cleanModuleId(id);
+ 	return realRoot(file) + id.slice(file.length);
+ }
+ 
++
+ function clearBuildInfo(module) {
+ 	if (module?.buildInfo && typeof module.buildInfo === 'object') {
+ 		delete module.buildInfo.octane;
+ 	}
+ }
+ 
++
+ function setBuildInfo(module, value) {
+ 	if (!module || typeof module !== 'object') return;
+ 	if (!module.buildInfo || typeof module.buildInfo !== 'object') module.buildInfo = {};
+ 	module.buildInfo.octane = value;
+ }
+ 
++
+ function registerDependencies(context, result) {
+ 	for (const dependency of new Set(result.dependencies ?? [])) {
+ 		context.addDependency?.(dependency);
+@@ -56,6 +70,7 @@ function registerDependencies(context, result) {
+ 	}
+ }
+ 
++
+ function composeSourceMaps(outputMap, inputSourceMap) {
+ 	if (!outputMap || !inputSourceMap) return outputMap ?? inputSourceMap;
+ 	const input = typeof inputSourceMap === 'string' ? JSON.parse(inputSourceMap) : inputSourceMap;
+@@ -63,6 +78,7 @@ function composeSourceMaps(outputMap, inputSourceMap) {
+ 	return String(chained.mappings).length > 0 ? chained : outputMap;
+ }
+ 
++
+ async function resolveClientOnlyImports(context, compiler, source, id) {
+ 	if (typeof context.getResolve !== 'function') return [];
+ 	const requests = compiler.findServerImportRequests(String(source), id);
+@@ -90,6 +106,7 @@ async function resolveClientOnlyImports(context, compiler, source, id) {
+ 	);
+ }
+ 
++
+ /**
+  * Rspack's ESM loader entry. A compiler instance is intentionally scoped to
+  * one invocation: Rspack owns output caching and invalidates it from the file
+@@ -228,6 +245,9 @@ export default function octaneLoader(source, inputSourceMap) {
+ 					resourceQuery: id.slice(cleanModuleId(id).length),
+ 					transformKind: result.kind,
+ 					...(result.streamedSignals === true ? { streamedSignals: true } : null),
++					...(result.hotSignalModule === undefined
++						? null
++						: { hotSignalModule: result.hotSignalModule }),
+ 					serverRpc:
+ 						result.kind === 'compile' &&
+ 						(result.code.includes('_$__serverRpc') ||
+diff --git a/src/plugin.js b/src/plugin.js
+index 383e2b8..a760e3a 100644
+--- a/src/plugin.js
++++ b/src/plugin.js
+@@ -1,8 +1,13 @@
+ import { createHash } from 'node:crypto';
++
+ import { readFileSync, realpathSync } from 'node:fs';
++
+ import { createRequire } from 'node:module';
++
+ import { dirname, isAbsolute, join, resolve } from 'node:path';
++
+ import { fileURLToPath } from 'node:url';
++
+ import {
+ 	CLIENT_REFERENCE_MANIFEST_FILENAME,
+ 	DATA_WORKER_PATH,
+@@ -13,37 +18,60 @@ import {
+ 	createOctaneCompiler,
+ 	formatDataDiagnostic,
+ } from 'octane/compiler/bundler';
++
+ import { installCssModuleConstants } from './css-module-constants.js';
++
+ import { createStreamedSignalHmrRuntimeModule } from './streamed-signals-hmr.js';
++
+ import { installVoidComponentProofs } from './void-component-proofs.js';
++
+ import {
+ 	getOctaneRspackBuildInfo,
+ 	inferRspackEnvironment,
+ 	normalizePluginOptions,
+ } from './shared.js';
++
+ import {
+ 	disposeTextTypeCompiler,
+ 	invalidateTextTypeCompiler,
+ 	registerTextTypeCompiler,
+ } from './text-types.js';
+ 
++
+ const PLUGIN_NAME = 'OctaneRspackPlugin';
++
+ const PROFILE_DEFINE = '__OCTANE_PROFILE_ENABLED__';
++
+ const PLUGIN_VERSION = createRequire(import.meta.url)('../package.json').version;
++
+ const loaderPath = fileURLToPath(new URL('./loader.js', import.meta.url));
++
+ const finalizeLoaderPath = fileURLToPath(new URL('./finalize-loader.js', import.meta.url));
++
+ const parallelLoaderPath = fileURLToPath(new URL('./parallel-loader.js', import.meta.url));
++
+ const dataManifestPath = fileURLToPath(new URL('./data-manifest.js', import.meta.url));
++
+ const DEFAULT_MAX_WORKERS = 4;
++
+ const OCTANE_RULE = /\.(?:tsrx|tsx|ts|js)$/i;
++
+ const TYPESCRIPT_RULE = /\.(?:tsrx|tsx|ts)$/i;
++
+ const RUNTIME_SUBPATHS = [
+ 	'octane/server',
+ 	'octane/internal/client',
+ 	'octane/internal/server',
+ 	'octane/profiling',
++ 'octane/signals',
++ 'octane/signals/client',
++ 'octane/signals/server',
++ 'octane/hydration',
++ 'octane/hydration/streamed-signals',
++ 'octane/hydration/independent-strategies',
+ ];
+ 
++
+ function realRoot(path) {
+ 	try {
+ 		return realpathSync(path);
+@@ -52,6 +80,7 @@ function realRoot(path) {
+ 	}
+ }
+ 
++
+ function addUniqueExtensions(resolveOptions) {
+ 	const extensions = resolveOptions.extensions ?? ['.js', '.json', '.wasm'];
+ 	resolveOptions.extensions = [
+@@ -60,6 +89,7 @@ function addUniqueExtensions(resolveOptions) {
+ 	];
+ }
+ 
++
+ function resolveRuntimeModule(resolver, request, root) {
+ 	if (isAbsolute(request)) return request;
+ 	try {
+@@ -71,6 +101,7 @@ function resolveRuntimeModule(resolver, request, root) {
+ 	}
+ }
+ 
++
+ function octanePackageRoot(entry) {
+ 	if (typeof entry !== 'string' || !isAbsolute(entry)) return undefined;
+ 	let directory = dirname(entry);
+@@ -88,6 +119,7 @@ function octanePackageRoot(entry) {
+ 	}
+ }
+ 
++
+ function mergeRuntimeAliases(aliases, additions) {
+ 	return {
+ 		...additions,
+@@ -96,6 +128,7 @@ function mergeRuntimeAliases(aliases, additions) {
+ 	};
+ }
+ 
++
+ function addRuntimeAliases(compiler, request, root, explicitRuntime) {
+ 	const resolveOptions = compiler.options.resolve;
+ 	// The factory is created before Rspack applies mode/target defaults. Merge
+@@ -147,6 +180,7 @@ function addRuntimeAliases(compiler, request, root, explicitRuntime) {
+ 	return resolver;
+ }
+ 
++
+ function projectRendererModule(request, root) {
+ 	// Renderer config uses project-root IDs such as `/src/object-renderer.ts`.
+ 	// They are never host-filesystem absolute paths, even if the same path happens
+@@ -154,6 +188,7 @@ function projectRendererModule(request, root) {
+ 	return resolve(root, request.replace(/^[/\\]+/, ''));
+ }
+ 
++
+ function addProjectRendererAliases(resolveOptions, renderers, root) {
+ 	if (renderers === undefined) return;
+ 	const aliases = resolveOptions.alias === false ? {} : (resolveOptions.alias ?? {});
+@@ -165,6 +200,7 @@ function addProjectRendererAliases(resolveOptions, renderers, root) {
+ 	resolveOptions.alias = { ...aliases, ...additions };
+ }
+ 
++
+ function layerSpecializationCacheIdentity(layerSpecializations) {
+ 	if (layerSpecializations === undefined) return undefined;
+ 	return Object.fromEntries(
+@@ -183,6 +219,7 @@ function layerSpecializationCacheIdentity(layerSpecializations) {
+ 	);
+ }
+ 
++
+ function createDiscoveryCompiler(options, root, profile, specialization) {
+ 	const renderers = specialization?.renderers ?? options.renderers;
+ 	const universalRuntime = specialization?.universalRuntime ?? options.universalRuntime;
+@@ -202,6 +239,7 @@ function createDiscoveryCompiler(options, root, profile, specialization) {
+ 	});
+ }
+ 
++
+ function discoverAll(compilers) {
+ 	if (compilers.length === 1) return compilers[0].discoverSourceDependencies();
+ 	const packages = new Set();
+@@ -220,21 +258,25 @@ function discoverAll(compilers) {
+ 	};
+ }
+ 
++
+ function addDependencies(collection, values) {
+ 	if (!collection?.add) return;
+ 	for (const value of values ?? []) collection.add(value);
+ }
+ 
++
+ function iterable(value) {
+ 	return value && typeof value === 'object' && Symbol.iterator in value ? value : [];
+ }
+ 
++
+ function isJavaScriptAsset(filename) {
+ 	return (
+ 		/\.(?:c|m)?js(?:\?|$)/.test(filename) && !/\.hot-update\.(?:c|m)?js(?:\?|$)/.test(filename)
+ 	);
+ }
+ 
++
+ function moduleChunks(compilation, module, inherited) {
+ 	const chunks = new Set(inherited);
+ 	for (const chunk of iterable(compilation.chunkGraph.getModuleChunksIterable(module)))
+@@ -242,6 +284,7 @@ function moduleChunks(compilation, module, inherited) {
+ 	return chunks;
+ }
+ 
++
+ function visitClientReferenceModules(
+ 	compilation,
+ 	module,
+@@ -262,6 +305,7 @@ function visitClientReferenceModules(
+ 	}
+ }
+ 
++
+ /** Emit the client-only module identity mapped to its concrete browser chunks. */
+ function emitClientReferenceManifest(compiler, compilation) {
+ 	const entries = [];
+@@ -294,6 +338,7 @@ function emitClientReferenceManifest(compiler, compilation) {
+ 	);
+ }
+ 
++
+ function emitIndependentHydrationManifest(compiler, compilation, mode) {
+ 	const modules = collectIndependentHydrationModules(compilation);
+ 	const widgets = {};
+@@ -351,6 +396,7 @@ function emitIndependentHydrationManifest(compiler, compilation, mode) {
+ 	);
+ }
+ 
++
+ function collectIndependentHydrationModules(compilation) {
+ 	const modules = [];
+ 	for (const topLevelModule of iterable(compilation.modules)) {
+@@ -368,6 +414,7 @@ function collectIndependentHydrationModules(compilation) {
+ 	return modules;
+ }
+ 
++
+ function independentHydrationTargets(modules) {
+ 	const targets = [];
+ 	for (const { info } of modules) {
+@@ -394,6 +441,7 @@ function independentHydrationTargets(modules) {
+ 	return targets;
+ }
+ 
++
+ function independentHydrationRuntimeModule(compiler, compilation) {
+ 	const { RuntimeGlobals, RuntimeModule } = compiler.webpack;
+ 	return class OctaneIndependentHydrationRuntimeModule extends RuntimeModule {
+@@ -446,10 +494,12 @@ function independentHydrationRuntimeModule(compiler, compilation) {
+ 	};
+ }
+ 
++
+ function defineMatchesBoolean(value, expected) {
+ 	return value === expected || value === JSON.stringify(expected);
+ }
+ 
++
+ function assertProfilingDefineAvailable(compiler, enabled) {
+ 	for (const plugin of compiler.options.plugins ?? []) {
+ 		// Rspack's DefinePlugin keeps its constructor argument in `_args`. Inspecting
+@@ -472,6 +522,7 @@ function assertProfilingDefineAvailable(compiler, enabled) {
+ 	}
+ }
+ 
++
+ function installProfilingDefine(compiler, enabled) {
+ 	const DefinePlugin = compiler.webpack?.DefinePlugin;
+ 	if (typeof DefinePlugin !== 'function') {
+@@ -482,12 +533,14 @@ function installProfilingDefine(compiler, enabled) {
+ 	new DefinePlugin({ [PROFILE_DEFINE]: JSON.stringify(enabled) }).apply(compiler);
+ }
+ 
++
+ function hasHotModuleReplacement(compiler) {
+ 	return (compiler.options.plugins ?? []).some(
+ 		(plugin) => plugin?.name === 'HotModuleReplacementPlugin',
+ 	);
+ }
+ 
++
+ function saltPersistentCacheVersion(compiler, inputs) {
+ 	const cache = compiler.options.cache;
+ 	if (cache === null || typeof cache !== 'object' || cache.type !== 'persistent') return;
+@@ -499,6 +552,7 @@ function saltPersistentCacheVersion(compiler, inputs) {
+ 	cache.version = cache.version ? `${cache.version}|${octaneVersion}` : octaneVersion;
+ }
+ 
++
+ export class OctaneRspackPlugin {
+ 	constructor(options = {}) {
+ 		this.options = normalizePluginOptions(options);
+@@ -769,10 +823,11 @@ export class OctaneRspackPlugin {
+ 						const modules = collectIndependentHydrationModules(compilation);
+ 						const featureModules = modules.filter(
+ 							({ info }) =>
+-								info.streamedSignals === true || (info.independentWidgets?.length ?? 0) > 0,
++								info.hotSignalModule !== undefined ||
++								info.streamedSignals === true ||
++								(info.independentWidgets?.length ?? 0) > 0,
+ 						);
+ 						if (
+-							featureModules.length > 0 &&
+ 							compiler.options.plugins.some(
+ 								(plugin) => plugin instanceof compiler.webpack.HotModuleReplacementPlugin,
+ 							)
+@@ -780,6 +835,7 @@ export class OctaneRspackPlugin {
+ 							runtimeRequirements.add(compiler.webpack.RuntimeGlobals.interceptModuleExecution);
+ 							runtimeRequirements.add(compiler.webpack.RuntimeGlobals.moduleCache);
+ 							runtimeRequirements.add(compiler.webpack.RuntimeGlobals.global);
++							runtimeRequirements.add(compiler.webpack.RuntimeGlobals.getFullHash);
+ 							compilation.addRuntimeModule(
+ 								chunk,
+ 								createStreamedSignalHmrRuntimeModule(compiler, compilation, featureModules),
+@@ -814,6 +870,7 @@ export class OctaneRspackPlugin {
+ 	}
+ }
+ 
++
+ export function octaneRspack(options) {
+ 	return new OctaneRspackPlugin(options);
+ }
+diff --git a/src/streamed-signals-hmr.js b/src/streamed-signals-hmr.js
+index 53611d4..2456725 100644
+--- a/src/streamed-signals-hmr.js
++++ b/src/streamed-signals-hmr.js
+@@ -1,59 +1,147 @@
+ /**
+- * Fence feature-bearing documents through Rspack's native module-execution
+- * interceptor, before authored factories run. No compiled source is rewritten.
++ * Admit owned signal generations through Rspack's native module-execution
++ * interceptor, retaining the document fence before every unadmitted factory.
+  * @param {import('@rspack/core').Compiler} compiler
+  * @param {import('@rspack/core').Compilation} compilation
+- * @param {Array<{ module: import('@rspack/core').Module, executableModule?: import('@rspack/core').Module }>} modules
++ * @param {Array<{
++ *   module: import('@rspack/core').Module,
++ *   executableModule?: import('@rspack/core').Module,
++ *   info?: { hotSignalModule?: object, streamedSignals?: boolean, independentWidgets?: unknown[] }
++ * }>} modules
+  */
+ export function createStreamedSignalHmrRuntimeModule(compiler, compilation, modules) {
+ 	const { RuntimeGlobals, RuntimeModule } = compiler.webpack;
+ 	return new (class extends RuntimeModule {
+ 		constructor() {
+ 			super('octane streamed signal HMR fence', RuntimeModule.STAGE_TRIGGER);
++			this.fullHash = true;
+ 		}
+ 
+ 		generate() {
+-			const ids = new Set();
+-			for (const { module, executableModule } of modules) {
++			const manifests = new Map();
++			const unsupported = new Set();
++			const features = new Set();
++			for (const { module, executableModule, info } of modules) {
+ 				for (const candidate of [executableModule, module, module?.rootModule]) {
+ 					const id = candidate == null ? null : compilation.chunkGraph.getModuleId(candidate);
+ 					if (id != null) {
+-						ids.add(String(id));
++						const executableId = String(id);
++						if (
++							info === undefined ||
++							info.streamedSignals === true ||
++							(info.independentWidgets?.length ?? 0) > 0
++						) {
++							features.add(executableId);
++						}
++						const records = manifests.get(executableId) ?? [];
++						manifests.set(executableId, records);
++						if (info?.hotSignalModule === undefined) {
++							unsupported.add(executableId);
++						} else if (!records.some((record) => record === info.hotSignalModule)) {
++							records.push(info.hotSignalModule);
++						}
+ 						break;
+ 					}
+ 				}
+ 			}
++			const records = [...manifests]
++				.sort(([left], [right]) => left.localeCompare(right))
++				.map(([id, entries]) => [id, unsupported.has(id) ? [] : entries]);
+ 			return `
+-var octaneSignalModules = new Set(${JSON.stringify([...ids].sort())});
+-var octaneSignalFenceInstalled = false;
+-var octaneSignalGenerationChanged = false;
+-var octaneSignalModuleExecuted = false;
++var octaneSignalRuntime = ${RuntimeGlobals.require}.__octaneHotSignalRuntime;
++if (!octaneSignalRuntime) {
++  octaneSignalRuntime = ${RuntimeGlobals.require}.__octaneHotSignalRuntime = {
++    modules: new Map(), features: new Set(), buildId: '', executed: new Set(), generationChanged: false
++  };
++}
++octaneSignalRuntime.modules = new Map(${JSON.stringify(records)});
++octaneSignalRuntime.features = new Set(${JSON.stringify([...features].sort())});
++// Native compilation ${JSON.stringify(compilation.hash ?? '')} keeps this runtime in every hot update.
++octaneSignalRuntime.buildId = ${RuntimeGlobals.getFullHash}();
++var octaneSignalExecutionKey = Symbol.for('octane.hot-signals.execution');
++var octaneSignalBridgeKey = Symbol.for('octane.hot-signals.bridge');
+ function octaneReloadSignalDocument() {
+   ${RuntimeGlobals.global}.location?.reload?.();
+   throw new Error('[octane] The streamed signal client build changed. Reload this document.');
+ }
+ function octaneTrackSignalGeneration(hot) {
+-  if (!hot || octaneSignalFenceInstalled) return;
+-  octaneSignalFenceInstalled = true;
+-  if (hot.status() !== 'idle') octaneSignalGenerationChanged = true;
++  if (!hot || octaneSignalRuntime.statusInstalled) return;
++  octaneSignalRuntime.statusInstalled = true;
++  if (hot.status() !== 'idle') octaneSignalRuntime.generationChanged = true;
+   hot.addStatusHandler(function(status) {
+-    if (status === 'apply') octaneSignalGenerationChanged = true;
+-    if (octaneSignalModuleExecuted && (status === 'check' || status === 'dispose' || status === 'apply')) octaneReloadSignalDocument();
++    if (status === 'apply') octaneSignalRuntime.generationChanged = true;
++    if (octaneSignalRuntime.executed.size === 0 ||
++        (status !== 'check' && status !== 'dispose' && status !== 'apply')) return;
++    var bridge = ${RuntimeGlobals.global}[octaneSignalBridgeKey];
++    try {
++      if (bridge && bridge.allowStatus(octaneSignalRuntime, status) === true) return;
++    } catch (_) {}
++    octaneReloadSignalDocument();
+   });
+ }
+ // A newly introduced runtime may itself arrive during hot application. The
+ // entry's cached hot module supplies that state before any feature executes.
+ for (var octaneCachedId in ${RuntimeGlobals.moduleCache}) {
+   octaneTrackSignalGeneration(${RuntimeGlobals.moduleCache}[octaneCachedId].hot);
+-  if (octaneSignalFenceInstalled) break;
++  if (octaneSignalRuntime.statusInstalled) break;
+ }
+-${RuntimeGlobals.interceptModuleExecution}.push(function(options) {
++if (!octaneSignalRuntime.interceptorInstalled) {
++  octaneSignalRuntime.interceptorInstalled = true;
++  ${RuntimeGlobals.interceptModuleExecution}.push(function(options) {
+   var hot = options.module.hot;
+   octaneTrackSignalGeneration(hot);
+-  if (!hot || !octaneSignalModules.has(String(options.id))) return;
+-  if (octaneSignalGenerationChanged || hot.status() !== 'idle') octaneReloadSignalDocument();
+-  octaneSignalModuleExecuted = true;
+-});`;
++  var executableId = String(options.id);
++  var manifests = octaneSignalRuntime.modules.get(executableId);
++  if (!hot || (!manifests && !octaneSignalRuntime.executed.has(executableId))) return;
++  manifests = manifests || [];
++  var factory = options.factory;
++  options.factory = function() {
++    var frame = {
++      runtime: octaneSignalRuntime, executableId: executableId,
++      buildId: octaneSignalRuntime.buildId, manifests: manifests,
++      hot: octaneSignalRuntime.generationChanged || hot.status() !== 'idle',
++      requiresAdmission: octaneSignalRuntime.features.has(executableId) || octaneSignalRuntime.executed.has(executableId)
++    };
++    var previousFrame = ${RuntimeGlobals.global}[octaneSignalExecutionKey];
++    var bridge = ${RuntimeGlobals.global}[octaneSignalBridgeKey];
++    var phase = 'admission';
++    var admitted = false;
++    ${RuntimeGlobals.global}[octaneSignalExecutionKey] = frame;
++    try {
++      var replacing = bridge && bridge.replacementFactory && bridge.replacementFactory(frame) === true;
++      if (frame.hot || replacing) {
++        if (frame.buildId !== ${RuntimeGlobals.getFullHash}()) {
++          throw new Error('Octane hot signal factory has stale compiler metadata.');
++        }
++        if (frame.requiresAdmission || replacing ||
++            (bridge && bridge.requiresFactoryAdmission && bridge.requiresFactoryAdmission(frame))) {
++          frame.transaction = bridge && bridge.beforeFactory(frame);
++          if (frame.transaction === null || typeof frame.transaction !== 'object') {
++            throw new Error('Octane hot signal factory has no native admission.');
++          }
++          admitted = true;
++        }
++      }
++      if (octaneSignalRuntime.features.has(executableId)) octaneSignalRuntime.executed.add(executableId);
++      phase = 'factory';
++      var result = factory.apply(this, arguments);
++      phase = 'commit';
++      bridge = ${RuntimeGlobals.global}[octaneSignalBridgeKey];
++      if (bridge) bridge.afterFactory(frame);
++      return result;
++    } catch (error) {
++      bridge = ${RuntimeGlobals.global}[octaneSignalBridgeKey];
++      var aborted = false;
++      try { aborted = bridge && bridge.abortFactory(frame) === true; } catch (_) {}
++      if (!replacing && (phase !== 'factory' || (admitted && !aborted))) octaneReloadSignalDocument();
++      throw error;
++    } finally {
++      if (previousFrame === undefined) delete ${RuntimeGlobals.global}[octaneSignalExecutionKey];
++      else ${RuntimeGlobals.global}[octaneSignalExecutionKey] = previousFrame;
++    }
++  };
++  });
++}`;
+ 		}
+ 	})();
+ }
+diff --git a/types/index.d.ts b/types/index.d.ts
+index 0655626..9e2edbb 100644
+--- a/types/index.d.ts
++++ b/types/index.d.ts
+@@ -1,10 +1,14 @@
+ import type { Compiler, RspackPluginInstance } from '@rspack/core';
++
+ import type { KnownAttributeSpread, OctaneCssModuleConstants } from 'octane/compiler';
+ 
++
+ export type { OctaneCssModuleConstants } from 'octane/compiler';
+ 
++
+ export type OctaneRspackEnvironment = 'client' | 'server';
+ 
++
+ /** Exact JavaScript CSS-provider module from the current Rspack graph. */
+ export interface OctaneRspackCssModuleConstantModule {
+ 	/** Full module identity, including its loader chain, resource query, and layer. */
+@@ -20,10 +24,12 @@ export interface OctaneRspackCssModuleConstantModule {
+ 	readonly type: string;
+ }
+ 
++
+ export type OctaneRspackCssModuleConstantsProvider = (
+ 	module: OctaneRspackCssModuleConstantModule,
+ ) => OctaneCssModuleConstants | null | undefined;
+ 
++
+ export interface OctaneRendererRuleOptions {
+ 	/** Glob or globs matched against canonical project-relative module IDs. */
+ 	include: string | readonly string[];
+@@ -33,6 +39,7 @@ export interface OctaneRendererRuleOptions {
+ 	renderer: string;
+ }
+ 
++
+ /** @experimental Static source restrictions enforced for a renderer. */
+ export interface OctaneRendererValidationOptions {
+ 	/** Host elements that may directly contain authored primitive text. */
+@@ -45,6 +52,7 @@ export interface OctaneRendererValidationOptions {
+ 	hostProps?: Readonly<Record<string, readonly string[]>>;
+ }
+ 
++
+ export type OctaneRendererRegistryEntry =
+ 	| string
+ 	| {
+@@ -61,6 +69,7 @@ export type OctaneRendererRegistryEntry =
+ 			validation?: OctaneRendererValidationOptions;
+ 	  };
+ 
++
+ /** Static metadata for a component prop lowered for another renderer. */
+ export interface OctaneRendererBoundaryOptions {
+ 	ownerRenderer: string;
+@@ -69,6 +78,7 @@ export interface OctaneRendererBoundaryOptions {
+ 	server?: 'omit-child';
+ }
+ 
++
+ /** @experimental Declarative renderer selection shared with other Octane compilers. */
+ export interface OctaneRendererConfigOptions {
+ 	registry?: Readonly<Record<string, OctaneRendererRegistryEntry>>;
+@@ -78,6 +88,7 @@ export interface OctaneRendererConfigOptions {
+ 	rules?: readonly OctaneRendererRuleOptions[];
+ }
+ 
++
+ /** Canonical renderer configuration accepted when another Octane integration resolved it. */
+ export interface OctaneResolvedRendererConfig {
+ 	readonly registry: Readonly<
+@@ -108,24 +119,28 @@ export interface OctaneResolvedRendererConfig {
+ 	readonly signature: string;
+ }
+ 
++
+ /** Compile-only host identity attached to a universal renderer graph. */
+ export interface OctaneUniversalRuntimeOptions {
+ 	readonly runtime: string;
+ 	readonly thread: 'background' | 'main-thread';
+ }
+ 
++
+ /** Compiler options selected for modules issued from one Rspack layer. */
+ export interface OctaneRspackLoaderLayerSpecializationOptions {
+ 	renderers?: OctaneRendererConfigOptions | OctaneResolvedRendererConfig;
+ 	universalRuntime?: OctaneUniversalRuntimeOptions;
+ }
+ 
++
+ /** Plugin-owned compiler and runtime options selected for one Rspack layer. */
+ export interface OctaneRspackLayerSpecializationOptions extends OctaneRspackLoaderLayerSpecializationOptions {
+ 	/** Override exact `octane` imports for modules issued from this layer. */
+ 	runtime?: string;
+ }
+ 
++
+ export interface OctaneRspackLoaderOptions {
+ 	/** Project root used to canonicalize module IDs and discover package manifests. */
+ 	root?: string;
+@@ -176,6 +191,7 @@ export interface OctaneRspackLoaderOptions {
+ 	requireDirective?: boolean;
+ }
+ 
++
+ export interface OctaneRspackPluginOptions extends OctaneRspackLoaderOptions {
+ 	/**
+ 	 * The app's data worker module, which calls `serveDataOwner` from
+@@ -242,12 +258,15 @@ export interface OctaneRspackPluginOptions extends OctaneRspackLoaderOptions {
+ 	transpile?: boolean;
+ }
+ 
++
+ export interface OctaneRspackBuildInfo {
+ 	canonicalId: string;
+ 	/** Resource query retained separately from the canonical source identity. */
+ 	resourceQuery?: string;
+ 	transformKind: 'compile' | 'slots' | 'client-only-stub';
+ 	streamedSignals?: true;
++	/** Exact native webpack-HMR module recipe; absent recipes retain the reload fence. */
++	hotSignalModule?: HotSignalModuleManifest;
+ 	serverRpc: boolean;
+ 	/** Strict-independent Hydrate templates completed into the emitted client manifest. */
+ 	independentWidgets?: readonly {
+@@ -273,6 +292,7 @@ export interface OctaneRspackBuildInfo {
+ 	};
+ }
+ 
++
+ export declare class OctaneRspackPlugin implements RspackPluginInstance {
+ 	constructor(options?: OctaneRspackPluginOptions);
+ 	readonly options: Readonly<OctaneRspackPluginOptions>;
+@@ -281,10 +301,15 @@ export declare class OctaneRspackPlugin implements RspackPluginInstance {
+ 	apply(compiler: Compiler): void;
+ }
+ 
++
+ export declare function octaneRspack(options?: OctaneRspackPluginOptions): OctaneRspackPlugin;
+ 
++
+ /** Infer client/server compilation from standard Rspack target names. */
+ export declare function inferRspackEnvironment(target: unknown): OctaneRspackEnvironment;
+ 
++
+ /** Read the serializable metadata emitted by the loader for app-level collectors. */
+ export declare function getOctaneRspackBuildInfo(module: unknown): OctaneRspackBuildInfo | null;
++
++import type { HotSignalModuleManifest } from 'octane/signals';

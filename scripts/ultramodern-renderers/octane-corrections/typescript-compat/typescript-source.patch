@@ -1,0 +1,209 @@
+diff --git a/packages/octane/src/compiler/text-types-ts7.js b/packages/octane/src/compiler/text-types-ts7.js
+--- a/packages/octane/src/compiler/text-types-ts7.js
++++ b/packages/octane/src/compiler/text-types-ts7.js
+@@ -36,6 +36,7 @@
+ 	unparenthesizedExpression,
+ } from './text-types-shared.js';
+ import { compileToVolarMappings } from './volar.js';
++import { virtualTextTypeConfig } from './text-types-config.js';
+ 
+ /** @typedef {{ source: string, version: string }} SourceRecord */
+ 
+@@ -73,6 +74,8 @@
+ export function createNativeTextTypeProject(typescript, options) {
+ 	const { configFilename, directory, rendererRoot } = textTypeProjectPaths(options);
+ 	const { sync } = typescript;
++	const configuredApi = typeof sync.API.prototype.createSnapshot !== 'function';
++	const analysisConfig = configFilename + '.octane-text-types.json';
+ 	const host = nativeTextTypeHost(typescript);
+ 	const renderers = normalizeRendererConfig(options.renderers);
+ 	const caseSensitive = fileSystemIsCaseSensitive();
+@@ -202,6 +205,24 @@
+ 	const fileSystem = {
+ 		readFile: (filename) => {
+ 			const file = normalize(filename);
++			if (configuredApi && file === analysisConfig) {
++				const references = virtualTextTypeConfig(readSource(configFilename)?.source ?? '{}').references;
++				return '{"references":' + references + ',' + JSON.stringify({
++					extends: configFilename,
++					files: roots().map(virtualName),
++					include: [],
++					compilerOptions: {
++						...(config.options.jsx === undefined ? { jsx: 'preserve' } : {}),
++						allowArbitraryExtensions: true,
++						noEmit: true,
++						noUncheckedIndexedAccess: true,
++					},
++				}).slice(1);
++			}
++			if (configuredApi && file.endsWith('.json')) {
++				const source = readSource(file)?.source;
++				return source === undefined ? undefined : virtualTextTypeConfig(source).code;
++			}
+ 			const authored = authoredOf(file);
+ 			if (authored !== null) return virtualCode(authored)?.code ?? null;
+ 			const reexported = reexportedOf(file);
+@@ -213,7 +234,7 @@
+ 		},
+ 		fileExists: (filename) => {
+ 			const file = normalize(filename);
+-			return authoredOf(file) !== null || reexportedOf(file) !== null || overrides.has(file)
++			return (configuredApi && file === analysisConfig) || authoredOf(file) !== null || reexportedOf(file) !== null || overrides.has(file)
+ 				? true
+ 				: undefined;
+ 		},
+@@ -243,6 +264,11 @@
+ 	const loadConfig = () => {
+ 		if (config !== null) return config;
+ 		const parsed = ensureApi().parseConfigFile(configFilename);
++		if (configuredApi) {
++			const fileNames = parsed.fileNames.map((file) => authoredOf(normalize(file)) ?? normalize(file));
++			config = { fileNames, fileNameSet: new Set(fileNames), options: parsed.options };
++			return config;
++		}
+ 		// An in-memory snapshot may be the project's first file. All other config
+ 		// errors are actionable configuration failures, not failed type proofs.
+ 		const errors = parsed.errors.filter(
+@@ -304,6 +330,12 @@
+ 	const releaseSnapshot = () => {
+ 		apiSnapshot?.dispose();
+ 		apiSnapshot = null;
++		// Stable's configured-project cache outlives snapshots, including root
++		// lists and inherited configs. Reopen it for each explicit change.
++		if (configuredApi) {
++			api?.close();
++			api = null;
++		}
+ 		clearProofs();
+ 	};
+ 	const changed = (file) => {
+@@ -324,19 +356,38 @@
+ 			: changedPaths.size > 0
+ 				? { changed: [...changedPaths] }
+ 				: undefined;
+-		apiSnapshot = ensureApi().createSnapshot({
+-			fileNotifications,
+-			createPrograms: [
+-				{
+-					rootFiles: roots().map(virtualName),
+-					compilerOptions,
+-					options: projectReferences ? { projectReferences } : undefined,
+-				},
+-			],
+-		});
++		if (configuredApi) {
++			// Stable 7.0 owns Programs through configured Projects, not synthetic
++			// createPrograms operations. Refresh the virtual config as roots change.
++			apiSnapshot = ensureApi().updateSnapshot({
++				openProjects: [analysisConfig],
++				fileChanges: { invalidateAll: true },
++			});
++			const project = apiSnapshot.getProject(analysisConfig);
++			if (project === undefined) throw new Error(`Cannot open text type project ${configFilename}.`);
++			currentProgram = project.program;
++			const errors = currentProgram.getConfigFileParsingDiagnostics().filter(
++				(error) => error.category === sync.DiagnosticCategory.Error && error.code !== 18002 && error.code !== 18003,
++			);
++			if (errors.length > 0) {
++				releaseSnapshot();
++				throw new Error(errors.map((error) => error.text).join('\n'));
++			}
++		} else {
++			apiSnapshot = ensureApi().createSnapshot({
++				fileNotifications,
++				createPrograms: [
++					{
++						rootFiles: roots().map(virtualName),
++						compilerOptions,
++						options: projectReferences ? { projectReferences } : undefined,
++					},
++				],
++			});
++			currentProgram = apiSnapshot.operation.createdPrograms[0];
++		}
+ 		invalidateAll = false;
+ 		changedPaths.clear();
+-		currentProgram = apiSnapshot.operation.createdPrograms[0];
+ 		return currentProgram;
+ 	};
+ 
+@@ -475,7 +526,9 @@
+ 						}
+ 					}
+ 					if (candidates.length > 0) {
+-						const checker = program.getProject().checker;
++						const checker = configuredApi
++							? apiSnapshot.getProject(analysisConfig).checker
++							: program.getProject().checker;
+ 						// One request for every child's type; each is a round trip otherwise.
+ 						const types = checker.getTypeAtLocation(
+ 							candidates.map((candidate) => candidate.expression),
+@@ -507,6 +560,8 @@
+ 			sources.delete(file);
+ 			changed(file);
+ 		}
++		// Config inheritance can change even on a file-specific invalidation.
++		if (configuredApi) for (const file of sources.keys()) if (file.endsWith('.json')) sources.delete(file);
+ 		// Re-reading the config also discovers files newly included by its globs.
+ 		config = null;
+ 		rootFileNames = null;
+@@ -527,6 +582,12 @@
+ 		rootFileNames = null;
+ 	};
+ 
+-	loadConfig();
++	try {
++		loadConfig();
++		if (configuredApi) ensureProgram();
++	} catch (error) {
++		dispose();
++		throw error;
++	}
+ 	return Object.freeze({ snapshot, invalidate, dispose });
+ }
+diff --git a/packages/octane/src/compiler/text-types-config.js b/packages/octane/src/compiler/text-types-config.js
+new file mode 100644
+--- /dev/null
++++ b/packages/octane/src/compiler/text-types-config.js
+@@ -0,0 +1,41 @@
++/**
++ * Rewrite only top-level files/include/exclude string entries to name the
++ * virtual TSX files. Keep JSONC syntax and errors intact for TypeScript's own
++ * config parser, including inherited configs and relative paths. This is a
++ * lexical edit, not a second config parser or an evaluator.
++ */
++export function virtualTextTypeConfig(source) {
++	const tokens = /"(?:[^"\\]|\\[\s\S])*"|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[{}\[\]:,]|[^\s{}\[\]:,"]+/g;
++	let depth = 0;
++	let key = null;
++	let specs = false;
++	let result = '';
++	let end = 0;
++	let referencesStart = null;
++	let references = '[]';
++	for (const match of source.matchAll(tokens)) {
++		const token = match[0];
++		if (token.startsWith('//') || token.startsWith('/*')) continue;
++		if (token === '{' || token === '[') {
++			specs = depth === 1 && token === '[' && ['files', 'include', 'exclude'].includes(key);
++			if (depth === 1 && token === '[' && key === 'references') referencesStart = match.index;
++			depth++;
++		} else if (token === '}' || token === ']') {
++			depth--;
++			if (depth === 1 && token === ']' && referencesStart !== null) {
++				references = source.slice(referencesStart, match.index + 1);
++				referencesStart = null;
++			}
++			if (depth < 2) specs = false;
++		} else if (token.startsWith('"')) {
++			let value;
++			try { value = JSON.parse(token); } catch { continue; }
++			if (depth === 1) key = value;
++			else if (specs && depth === 2 && value.endsWith('.tsrx')) {
++				result += source.slice(end, match.index) + JSON.stringify(value + '.tsx');
++				end = match.index + token.length;
++			}
++		} else if (token === ',' && depth === 1) key = null;
++	}
++	return { code: result + source.slice(end), references };
++}
