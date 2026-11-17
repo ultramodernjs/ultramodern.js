@@ -7,7 +7,11 @@ import {
   isCreatePackageSourceCheckout,
   readCreateReleaseCohort,
 } from '../../ultramodern-release-cohort';
-import { ULTRAMODERN_WORKSPACE_POLICY } from '../policy';
+import { readSupportArtifacts, type SupportArtifacts } from '../package-source';
+import {
+  ULTRAMODERN_WORKSPACE_POLICY,
+  workspaceSupportPackageExtensions,
+} from '../policy';
 import { assertCompilerArchitecture } from './architecture';
 import { sameJson } from './assertions';
 import {
@@ -153,11 +157,13 @@ export function validateBackendFederationEntrypoints(
 /** Keep every native dependency path on the producer's reviewed corrections. */
 export function assertWorkspaceDependencyOverrides(
   workspace: JsonRecord,
+  rootManifest: JsonRecord = {},
 ): void {
   const overrides = record(
     workspace.overrides,
     'Workspace dependency overrides',
   );
+  const support = readSupportArtifacts(rootManifest);
   const required = ULTRAMODERN_WORKSPACE_POLICY.pnpm.overrides;
   for (const [selector, specifier] of Object.entries(required)) {
     assert(
@@ -165,7 +171,9 @@ export function assertWorkspaceDependencyOverrides(
       `Workspace dependency override ${selector} must be ${specifier}`,
     );
   }
-  const managed = Object.keys(required).map(selector => selector.split('@')[0]);
+  const managed = Object.keys(required).map(selector =>
+    selector.slice(0, selector.indexOf('@', 1)),
+  );
   // Match the final dependency target, allowing > inside semver ranges.
   // A managed parent such as braces@3>foo still targets unrelated foo.
   const managedSelector = new RegExp(
@@ -177,6 +185,107 @@ export function assertWorkspaceDependencyOverrides(
       Object.hasOwn(required, selector) || !managedSelector.test(selector),
       `Workspace dependency override ${selector} conflicts with the producer policy`,
     );
+  }
+  if (support) {
+    const rootHosts = record(
+      rootManifest.devDependencies,
+      'Root support host dependencies',
+    );
+    assert(
+      rootHosts['rsbuild-plugin-dts'] ===
+        support.packages['rsbuild-plugin-dts'].request,
+      'Root support compiler host must use the exact descriptor request',
+    );
+    const extensions = record(
+      workspace.packageExtensions,
+      'Workspace support package extensions',
+    );
+    for (const [selector, extension] of Object.entries(
+      workspaceSupportPackageExtensions(support),
+    ))
+      assert(
+        sameJson(extensions[selector], extension),
+        `Workspace support package extension ${selector} must preserve its exact required host peer`,
+      );
+    assertSupportDependencyPolicies(workspace, support, 'workspace');
+    assertSupportDependencyPolicies(rootManifest, support, 'root manifest');
+  }
+}
+
+/** Keep support authority in direct hosts and the one exact compiler peer. */
+export function assertSupportDependencyPolicies(
+  manifest: JsonRecord,
+  support: SupportArtifacts,
+  label: string,
+): void {
+  const inspect = (value: unknown, prefix: string, override: boolean): void => {
+    const policies = record(value, prefix);
+    for (const [key, request] of Object.entries(policies)) {
+      for (const [name, pin] of Object.entries(support.packages)) {
+        // A target may be parent-scoped or dependency-type-scoped. Semver >
+        // comparisons are not parent separators; match from the package name.
+        const target =
+          key
+            .trim()
+            .split(/>(?!\s*(?:=|\d|v\d))/u)
+            .at(-1)
+            ?.trim()
+            .replace(/:(?:prod|dev|optional|peer)$/u, '') ?? '';
+        const targetsName = new RegExp(
+          `^${RegExp.escape(name)}(?:@|$)`,
+          'u',
+        ).test(target);
+        const versionSeparator = target.indexOf('@', 1);
+        const packagePattern =
+          versionSeparator === -1 ? target : target.slice(0, versionSeparator);
+        const wildcard =
+          packagePattern.includes('*') &&
+          new RegExp(
+            `^${packagePattern.split('*').map(RegExp.escape).join('.*')}$`,
+            'u',
+          ).test(name);
+        const alias =
+          typeof request === 'string' && request.startsWith(`npm:${name}@`);
+        if (!targetsName && !wildcard && !alias) continue;
+        assert(
+          !override && key === name && request === pin.request,
+          `${prefix}.${key} conflicts with the exact support policy`,
+        );
+      }
+      if (request !== null && typeof request === 'object')
+        inspect(request, `${prefix}.${key}`, override);
+    }
+  };
+  const pnpm =
+    manifest.pnpm === undefined ? {} : record(manifest.pnpm, `${label}.pnpm`);
+  for (const [prefix, policy] of [
+    ['overrides', manifest.overrides],
+    ['resolutions', manifest.resolutions],
+    ['pnpm.overrides', pnpm.overrides],
+    ['catalog', manifest.catalog],
+    ['catalogs', manifest.catalogs],
+    ['pnpm.catalog', pnpm.catalog],
+    ['pnpm.catalogs', pnpm.catalogs],
+  ] as const) {
+    if (policy !== undefined)
+      inspect(policy, `${label}.${prefix}`, !prefix.includes('catalog'));
+  }
+  const requiredExtensions = workspaceSupportPackageExtensions(support);
+  for (const [prefix, policy] of [
+    ['packageExtensions', manifest.packageExtensions],
+    ['pnpm.packageExtensions', pnpm.packageExtensions],
+  ] as const) {
+    if (policy === undefined) continue;
+    for (const [selector, extension] of Object.entries(
+      record(policy, `${label}.${prefix}`),
+    )) {
+      if (
+        Object.hasOwn(requiredExtensions, selector) &&
+        sameJson(extension, requiredExtensions[selector])
+      )
+        continue;
+      inspect(extension, `${label}.${prefix}.${selector}`, true);
+    }
   }
 }
 
@@ -194,11 +303,12 @@ export function validateWorkspace(
   const ownership = readJson('topology/ownership.json');
   const overlay = readJson('topology/local-overlays/development.json');
   const rootManifest = readJson('package.json');
+  const support = readSupportArtifacts(rootManifest);
   const workspace = record(
     yaml.load(fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8')),
     'pnpm-workspace.yaml',
   );
-  assertWorkspaceDependencyOverrides(workspace);
+  assertWorkspaceDependencyOverrides(workspace, rootManifest);
   const dependencyCatalogs = {
     catalog: record(workspace.catalog ?? {}, 'workspace catalog'),
     catalogs: record(workspace.catalogs ?? {}, 'workspace catalogs'),
@@ -646,6 +756,7 @@ export function validateWorkspace(
     selectedRenderers.size === 1 ? [...selectedRenderers][0] : undefined;
   for (const member of members) {
     const manifest = readJson(member);
+    if (support) assertSupportDependencyPolicies(manifest, support, member);
     if (uniformRenderer) {
       if (member === 'package.json')
         assertWorkspaceRootToolingDependencies(

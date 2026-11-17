@@ -9,6 +9,7 @@ import {
   resolveApiProtocol,
   resolveApiStem,
 } from './descriptors';
+import type { SupportArtifacts } from './package-source';
 import { createLocalisedUrlsMap } from './routes';
 import type { JsonValue, WorkspaceApp } from './types';
 import { isRecord } from './types';
@@ -20,9 +21,26 @@ import {
   EFFECT_VERSION,
   NODE_VERSION,
   PNPM_VERSION,
+  RSLIB_CORE_VERSION,
   SHARP_VERSION,
   ULTRAMODERN_PACKAGE_PINS,
 } from './versions';
+
+export function workspaceSupportPackageExtensions(
+  support: SupportArtifacts | undefined,
+): Record<string, { peerDependencies: Record<string, string> }> {
+  if (!support) return {};
+  // Required dependency/peer pairs use pnpm's native host shadowing. A URL
+  // override is still an exotic subdependency, even when it references a
+  // root dependency or catalog. Do not apply this to optional dependencies.
+  return {
+    [`@rslib/core@${RSLIB_CORE_VERSION}`]: {
+      peerDependencies: {
+        'rsbuild-plugin-dts': support.packages['rsbuild-plugin-dts'].version,
+      },
+    },
+  };
+}
 
 function createCloudflareProofRoute(app: WorkspaceApp): JsonValue {
   if (app.kind === 'shell') {

@@ -187,6 +187,7 @@ export function prepareTractorCohortInstallation(
   release,
   {
     pnpmOverrides = {},
+    pnpmPackageExtensions = {},
     minimumReleaseAgeExclude,
     trustPolicy,
     trustPolicyIgnoreAfter,
@@ -452,10 +453,42 @@ export function prepareTractorCohortInstallation(
     }
     return changed ? [[file, manifest]] : [];
   });
-  for (const specifier of Object.values(pnpmOverrides)) {
+  const compilerVersion = packed.packageJson.devDependencies?.['@rslib/core'];
+  const compilerHostSelector = `@rslib/core@${compilerVersion}`;
+  const compilerHostExtension = {
+    peerDependencies: {
+      'rsbuild-plugin-dts':
+        supportArtifacts.packages['rsbuild-plugin-dts'].version,
+    },
+  };
+  if (
+    !pnpmPackageExtensions ||
+    typeof pnpmPackageExtensions !== 'object' ||
+    Array.isArray(pnpmPackageExtensions) ||
+    Object.entries(pnpmPackageExtensions).some(
+      ([selector, extension]) =>
+        typeof compilerVersion !== 'string' ||
+        selector !== compilerHostSelector ||
+        !isDeepStrictEqual(extension, compilerHostExtension),
+    )
+  ) {
+    throw new Error(
+      'Producer support package extensions must match the packed compiler and its exact required host peer',
+    );
+  }
+  const supportOverrideSelector = new RegExp(
+    `(?:^|>)\\s*(?:${Object.keys(supportRequests).map(RegExp.escape).join('|')})(?:@(?:[^>]|>(?=\\s*(?:=|\\d|v\\d)))*)?\\s*$`,
+    'u',
+  );
+  for (const [selector, specifier] of Object.entries(pnpmOverrides)) {
     if (typeof specifier !== 'string') {
       throw new Error(
         'Producer pnpm overrides must be native string selections',
+      );
+    }
+    if (supportOverrideSelector.test(selector)) {
+      throw new Error(
+        `Producer support override ${selector} conflicts with the descriptor-backed host policy`,
       );
     }
     if (!specifier.startsWith('npm:@bleedingdev/')) continue;
@@ -490,6 +523,27 @@ export function prepareTractorCohortInstallation(
       ),
     ),
     ...pnpmOverrides,
+  };
+  policy.packageExtensions = {
+    ...Object.fromEntries(
+      Object.entries(policy.packageExtensions ?? {}).filter(
+        ([selector, extension]) => {
+          if (selector === compilerHostSelector) return false;
+          if (
+            [...dependencyBlocks, 'peerDependenciesMeta'].some(block =>
+              Object.keys(extension[block] ?? {}).some(name =>
+                Object.hasOwn(supportRequests, name),
+              ),
+            )
+          )
+            throw new Error(
+              `Tractor package extension ${selector} conflicts with the producer compiler host`,
+            );
+          return true;
+        },
+      ),
+    ),
+    ...pnpmPackageExtensions,
   };
   policy.minimumReleaseAge = 1440;
   policy.minimumReleaseAgeStrict = true;

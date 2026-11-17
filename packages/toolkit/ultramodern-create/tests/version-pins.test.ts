@@ -15,6 +15,7 @@ import {
   releaseCohortSelectors,
 } from '../src/ultramodern-release-cohort';
 import { generateUltramodernWorkspace } from '../src/ultramodern-workspace';
+import { readSupportArtifacts } from '../src/ultramodern-workspace/package-source';
 import { ULTRAMODERN_WORKSPACE_POLICY } from '../src/ultramodern-workspace/policy';
 import { readBundledFrameworkManifests } from '../src/ultramodern-workspace/tooling-support';
 import { assertWorkspaceDependencyOverrides } from '../src/ultramodern-workspace/validation/workspace';
@@ -78,6 +79,15 @@ test('local source generation uses native workspace requests without copied rele
       false,
     );
     assert.equal(fs.existsSync(path.join(workspaceDir, 'patches')), false);
+    const support = readSupportArtifacts(manifest);
+    assert(support);
+    assert.deepEqual(policy.packageExtensions, {
+      '@rslib/core@1.0.7': {
+        peerDependencies: {
+          'rsbuild-plugin-dts': support.packages['rsbuild-plugin-dts'].version,
+        },
+      },
+    });
     assert.deepEqual(policy.overrides, {
       'braces@>=3.0.0 <3.0.4': 'npm:@bleedingdev/braces@3.0.4',
       'sharp@>=0.35.0 <0.35.5': '0.35.5',
