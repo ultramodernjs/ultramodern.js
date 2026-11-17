@@ -114,7 +114,10 @@ async function createEvidenceFixture({
         exports: definition.exports,
         name: definition.targetName,
         publishConfig: { access: 'public', exports: definition.exports },
-        ultramodern: definition.ultramodern,
+        ultramodern: {
+          ...definition.ultramodern,
+          sourceName: definition.sourceName,
+        },
         version: release.version,
       })}\n`,
     );

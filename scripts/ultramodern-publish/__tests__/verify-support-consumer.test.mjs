@@ -30,6 +30,13 @@ const actualUpstream = new Map();
 const callerOwnedTempDir = process.env.OWNED_TEMP_DIR;
 const upstreamContracts = [
   {
+    name: 'terser',
+    version: '5.51.2',
+    request: 'https://registry.npmjs.org/terser/-/terser-5.51.2.tgz',
+    integrity:
+      'sha512-bWnjSNscmuI+GJze6ZupnHP8G/cTcsJF+bXCeQknk2SHQsgbNJnLrqiH9jZ2W4STPVXH2mDKKRX3iwPhc9Cn/Q==',
+  },
+  {
     name: '@solidjs/web',
     version: '2.0.0-rc.22',
     request: 'https://registry.npmjs.org/@solidjs/web/-/web-2.0.0-rc.22.tgz',
@@ -862,6 +869,60 @@ function upstreamOwner(f, manifest, packed) {
 function stubOrdinaryDependency(f, name) {
   upstreamOwner(f, { name, version: '1.0.0', main: './entry.cjs' });
 }
+test('actual terser nested dist manifest does not become an installed owner', async () => {
+  const f = fixture();
+  const packed = actualUpstream.get('terser');
+  assert.equal(packed.packageJson.version, '5.51.2');
+  const nested = JSON.parse(packed.fileContents.get('dist/package.json'));
+  assert.equal(nested.name, 'dist');
+  assert.equal(nested.private, true);
+  upstreamOwner(f, packed.packageJson, packed);
+  for (const name of Object.keys(packed.packageJson.dependencies))
+    stubOrdinaryDependency(f, name);
+  await verifySupportConsumer(f);
+});
+test('nested named private package scopes do not replace the installed package owner', async () => {
+  const f = fixture();
+  const owner = upstreamOwner(f, {
+    name: 'minifier-with-dist-scope',
+    version: '1.0.0',
+    main: './dist/bundle.min.js',
+    peerDependencies: { 'solid-js': '^2.0.0-rc.22' },
+  });
+  writeManifest(path.join(owner, 'dist'), {
+    name: 'dist',
+    private: true,
+    type: 'commonjs',
+    // A nested scope is not a separately installed runtime owner.
+    dependencies: { 'not-an-installed-dependency': '1.0.0' },
+  });
+  fs.writeFileSync(
+    path.join(owner, 'dist/bundle.min.js'),
+    'throw new Error("NESTED RUNTIME EXECUTED");',
+  );
+  const receipt = await verifySupportConsumer(f);
+  assert(
+    receipt.resolutions.some(
+      item => item.owner === owner && item.name === 'solid-js',
+    ),
+  );
+});
+test('public entries outside the resolved physical package remain rejected', async () => {
+  const f = fixture();
+  const owner = upstreamOwner(f, {
+    name: 'escaping-package',
+    version: '1.0.0',
+    main: '../foreign-entry.cjs',
+  });
+  fs.writeFileSync(
+    path.join(owner, '../foreign-entry.cjs'),
+    'throw new Error("FOREIGN RUNTIME EXECUTED");',
+  );
+  await assert.rejects(
+    verifySupportConsumer(f),
+    /Resolved entry escapes owning package/u,
+  );
+});
 test('actual upstream @solidjs/web manifest: admitting Solid range and workspace dev edge require no fork descriptor', async () => {
   const f = fixture();
   const packed = actualUpstream.get('@solidjs/web');
