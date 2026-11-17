@@ -1506,6 +1506,19 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     '--detach',
     git('-C', checkout, 'rev-parse', 'HEAD').trim(),
   );
+  // Validate the candidate's tracked source selections, not the older HEAD
+  // copies. Only the artifact-owning manifests start from the shipped inputs.
+  const candidateChanges = execFileSync(
+    'git',
+    ['diff', '--binary', '--no-ext-diff', '--no-textconv', 'HEAD'],
+    { cwd: checkout, maxBuffer: 16 * 1024 * 1024 },
+  );
+  if (candidateChanges.length)
+    execFileSync('git', ['apply', '-'], {
+      cwd: root,
+      input: candidateChanges,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
   git('-C', root, 'checkout', sourceRevision, '--', ...selectedFiles);
   let reviewedEdges = 0;
   // The generator has no direct support edge but emits support requests from
