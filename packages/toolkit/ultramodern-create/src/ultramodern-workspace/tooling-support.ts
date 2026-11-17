@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   hasCreateReleaseCohort,
   readCreateReleaseCohort,
+  type UltramodernReleaseCohort,
 } from '../ultramodern-release-cohort';
 import { createPackageRoot } from './fs-io';
 import { type SupportArtifacts, selectSupportRequests } from './package-source';
@@ -37,19 +38,38 @@ function requests(value: unknown): Record<string, string> {
  */
 export function readBundledFrameworkManifests(
   bundleRoot: string,
-  cohortNames: ReadonlySet<string> = new Set(),
+  cohort?: UltramodernReleaseCohort,
 ): ReadonlyMap<string, FrameworkManifest> {
+  const cohortPackages = new Map(
+    cohort?.packages.map(pkg => [pkg.sourceName, pkg]),
+  );
   const manifests = new Map<string, FrameworkManifest>();
   const queue = [
     {
       name: '@modern-js/ultramodern-create',
-      filename: path.join(bundleRoot, 'package.json'),
+      filename: fs.realpathSync(path.join(bundleRoot, 'package.json')),
     },
   ];
   for (const { name, filename } of queue) {
-    if (manifests.has(name)) continue;
     const value: unknown = JSON.parse(fs.readFileSync(filename, 'utf8'));
     assert(isRecord(value), `Invalid framework manifest ${filename}`);
+    const expected = cohortPackages.get(name);
+    if (cohort) {
+      assert(expected, `Create cohort omits framework owner ${name}`);
+      assert(
+        value.name === expected.targetName &&
+          value.version === expected.version &&
+          isRecord(value.ultramodern) &&
+          value.ultramodern.sourceName === name,
+        `Framework owner ${name} does not match the create release cohort`,
+      );
+    } else {
+      assert(
+        value.name === name,
+        `Framework owner ${name} has the wrong workspace package identity`,
+      );
+    }
+    if (manifests.has(name)) continue;
     const manifest = {
       dependencies: requests(value.dependencies),
       optionalDependencies: requests(value.optionalDependencies),
@@ -63,9 +83,18 @@ export function readBundledFrameworkManifests(
     })) {
       if (
         !dependency.startsWith('@modern-js/') ||
-        (!request.startsWith('workspace:') && !cohortNames.has(dependency))
+        (!request.startsWith('workspace:') && !cohortPackages.has(dependency))
       )
         continue;
+      if (cohort) {
+        const expectedDependency = cohortPackages.get(dependency);
+        assert(
+          expectedDependency &&
+            request ===
+              `npm:${expectedDependency.targetName}@${expectedDependency.version}`,
+          `Framework edge ${name} -> ${dependency} does not match the create release cohort`,
+        );
+      }
       const candidate = require.resolve
         .paths(dependency)
         ?.map(directory => path.join(directory, dependency, 'package.json'))
@@ -77,7 +106,10 @@ export function readBundledFrameworkManifests(
         );
         continue;
       }
-      queue.push({ name: dependency, filename: candidate });
+      queue.push({
+        name: dependency,
+        filename: fs.realpathSync(candidate),
+      });
     }
   }
   return manifests;
@@ -96,11 +128,7 @@ export function toolingSupportDependencies(
     manifests ??
     (bundledManifests ??= readBundledFrameworkManifests(
       createPackageRoot,
-      new Set(
-        hasCreateReleaseCohort()
-          ? readCreateReleaseCohort().packages.map(pkg => pkg.sourceName)
-          : [],
-      ),
+      hasCreateReleaseCohort() ? readCreateReleaseCohort() : undefined,
     ));
   const hosts: Record<string, string> = {};
   const seen = new Set<string>();
