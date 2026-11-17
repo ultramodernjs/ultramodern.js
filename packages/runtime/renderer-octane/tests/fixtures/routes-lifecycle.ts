@@ -1168,32 +1168,58 @@ export async function nativeRouterStreamKeepsBootstrapForScripts() {
 }
 
 export async function nativeRouterStreamTimeoutAndAbort() {
-  for (const disposition of ['timeout', 'abort'] as const) {
-    const { router, session } = await serializingRouter(new Promise(() => {}));
-    let cleanup = 0;
-    router.serverSsr!.onCleanup(() => {
-      cleanup++;
-    });
-    const response = await renderSerializingRouter(router, session, 15);
-    const completion = response.text().then(
-      () => assert.fail('Pending serialization completed'),
-      error => error,
-    );
-    if (disposition === 'abort')
-      await session.abort(
-        new DOMException('Client disconnected', 'AbortError'),
+  const timeoutMs = 15;
+  rs.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    for (const disposition of ['timeout', 'abort'] as const) {
+      const { router, session } = await serializingRouter(
+        new Promise(() => {}),
       );
-    assert.match(
-      String(await completion),
-      disposition === 'timeout' ? /timeout/i : /Client disconnected/,
-    );
-    assert.equal(
-      (await session.completion).state,
-      disposition === 'timeout' ? 'failed' : 'aborted',
-    );
-    await session.abort('again');
-    assert.equal(cleanup, 1);
-    assert.equal(router.serverSsr, undefined);
+      const rendered = deferred<void>();
+      router.serverSsr!.onRenderFinished(() => rendered.resolve());
+      let cleanup = 0;
+      router.serverSsr!.onCleanup(() => {
+        cleanup++;
+      });
+      const response = await renderSerializingRouter(
+        router,
+        session,
+        timeoutMs,
+      );
+      const completion = response.text().then(
+        () => assert.fail('Pending serialization completed'),
+        error => error,
+      );
+      if (disposition === 'timeout') {
+        // The lifetime timer starts at stream creation; the serialization
+        // timer starts only at application EOF. Do not let scheduling decide
+        // which timer wins on a loaded runner.
+        await Promise.race([
+          rendered.promise,
+          completion.then(error => {
+            throw error;
+          }),
+        ]);
+        await rs.advanceTimersByTimeAsync(timeoutMs);
+      } else {
+        await session.abort(
+          new DOMException('Client disconnected', 'AbortError'),
+        );
+      }
+      assert.match(
+        String(await completion),
+        disposition === 'timeout' ? /timeout/i : /Client disconnected/,
+      );
+      assert.equal(
+        (await session.completion).state,
+        disposition === 'timeout' ? 'failed' : 'aborted',
+      );
+      await session.abort('again');
+      assert.equal(cleanup, 1);
+      assert.equal(router.serverSsr, undefined);
+    }
+  } finally {
+    rs.useRealTimers();
   }
 }
 
