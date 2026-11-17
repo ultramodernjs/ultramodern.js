@@ -4,9 +4,9 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1468,
-  "totalHunks": 4950,
-  "totalChangedLines": 105581,
+  "totalFiles": 1460,
+  "totalHunks": 4947,
+  "totalChangedLines": 104261,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -220,8 +220,8 @@
     },
     {
       "file": "packages/cli/plugin-bff/src/cli.ts",
-      "hunks": 16,
-      "changedLines": 221
+      "hunks": 17,
+      "changedLines": 225
     },
     {
       "file": "packages/cli/plugin-bff/src/cli/compress.ts",
@@ -231,7 +231,7 @@
     {
       "file": "packages/cli/plugin-bff/src/cli/generator.ts",
       "hunks": 1,
-      "changedLines": 175
+      "changedLines": 184
     },
     {
       "file": "packages/cli/plugin-bff/src/cli/prefix.ts",
@@ -326,7 +326,7 @@
     {
       "file": "packages/cli/plugin-bff/tests/bffBuildHooks.test.ts",
       "hunks": 1,
-      "changedLines": 138
+      "changedLines": 403
     },
     {
       "file": "packages/cli/plugin-bff/tests/clientGenerator.test.ts",
@@ -4470,28 +4470,13 @@
     },
     {
       "file": "packages/server/utils/package.json",
-      "hunks": 7,
-      "changedLines": 22
+      "hunks": 6,
+      "changedLines": 12
     },
     {
       "file": "packages/server/utils/src/common/index.ts",
-      "hunks": 8,
-      "changedLines": 50
-    },
-    {
-      "file": "packages/server/utils/src/compiler.ts",
-      "hunks": 1,
-      "changedLines": 60
-    },
-    {
-      "file": "packages/server/utils/src/compilers/rslib.ts",
-      "hunks": 1,
-      "changedLines": 484
-    },
-    {
-      "file": "packages/server/utils/src/compilers/tsgo.ts",
-      "hunks": 1,
-      "changedLines": 231
+      "hunks": 7,
+      "changedLines": 33
     },
     {
       "file": "packages/server/utils/src/compilers/typescript/index.ts",
@@ -4507,16 +4492,6 @@
       "file": "packages/server/utils/src/compilers/typescript/typescriptLoader.ts",
       "hunks": 1,
       "changedLines": 30
-    },
-    {
-      "file": "packages/server/utils/tests/compilerProvider.test.ts",
-      "hunks": 1,
-      "changedLines": 401
-    },
-    {
-      "file": "packages/server/utils/tests/declarationPasses.test.ts",
-      "hunks": 1,
-      "changedLines": 77
     },
     {
       "file": "packages/server/utils/tests/fixtures/api/tsconfig.json",
@@ -4574,24 +4549,9 @@
       "changedLines": 24
     },
     {
-      "file": "packages/server/utils/tests/sourceMaps.test.ts",
-      "hunks": 1,
-      "changedLines": 51
-    },
-    {
       "file": "packages/server/utils/tests/ts.test.ts",
       "hunks": 29,
-      "changedLines": 624
-    },
-    {
-      "file": "packages/server/utils/tests/tsgo.test.ts",
-      "hunks": 1,
-      "changedLines": 286
-    },
-    {
-      "file": "packages/server/utils/tests/tsgoCleanup.test.ts",
-      "hunks": 1,
-      "changedLines": 126
+      "changedLines": 621
     },
     {
       "file": "packages/server/utils/tsconfig.json",
@@ -4880,8 +4840,8 @@
     },
     {
       "file": "packages/solutions/app-tools/src/plugins/serverBuild.ts",
-      "hunks": 7,
-      "changedLines": 16
+      "hunks": 12,
+      "changedLines": 69
     },
     {
       "file": "packages/solutions/app-tools/src/plugins/serverRuntime.ts",
@@ -4935,7 +4895,7 @@
     },
     {
       "file": "packages/solutions/app-tools/src/types/config/tools.ts",
-      "hunks": 2,
+      "hunks": 3,
       "changedLines": 12
     },
     {
@@ -4946,7 +4906,7 @@
     {
       "file": "packages/solutions/app-tools/src/types/plugin-base.ts",
       "hunks": 1,
-      "changedLines": 224
+      "changedLines": 230
     },
     {
       "file": "packages/solutions/app-tools/src/types/plugin.ts",
@@ -5121,7 +5081,7 @@
     {
       "file": "packages/solutions/app-tools/tests/serverBuild.test.ts",
       "hunks": 1,
-      "changedLines": 66
+      "changedLines": 155
     },
     {
       "file": "packages/solutions/app-tools/tests/types.test.ts",
