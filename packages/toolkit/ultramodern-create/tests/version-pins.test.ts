@@ -572,6 +572,8 @@ test('workspace validation rejects competing selectors but permits unrelated ove
     'express>body-parser',
     'dompurify',
     'mermaid>dompurify',
+    '@solidjs/signals',
+    'solid-js@2>@solidjs/signals@^2.0.0',
   ]) {
     assert.throws(
       () =>

@@ -158,6 +158,19 @@ export function validateBackendFederationEntrypoints(
     requiredFile(root, `${appPath}/${relative}`, `${appId} API surface`);
 }
 
+// Parent-scoped selectors target the child, not the parent. A semver >
+// comparison is not a parent separator.
+function dependencySelectorTarget(selector: string): string {
+  return (
+    selector
+      .trim()
+      .split(/>(?!\s*(?:=|\d|v\d))/u)
+      .at(-1)
+      ?.trim()
+      .replace(/:(?:prod|dev|optional|peer)$/u, '') ?? ''
+  );
+}
+
 /** Keep every native dependency path on the producer's reviewed corrections. */
 export function assertWorkspaceDependencyOverrides(
   workspace: JsonRecord,
@@ -175,9 +188,11 @@ export function assertWorkspaceDependencyOverrides(
       `Workspace dependency override ${selector} must be ${specifier}`,
     );
   }
-  const managed = Object.keys(required).map(selector =>
-    selector.slice(0, selector.indexOf('@', 1)),
-  );
+  const managed = Object.keys(required).map(selector => {
+    const target = dependencySelectorTarget(selector);
+    const versionSeparator = target.indexOf('@', 1);
+    return versionSeparator === -1 ? target : target.slice(0, versionSeparator);
+  });
   // Match the final dependency target, allowing > inside semver ranges.
   // A managed parent such as braces@3>foo still targets unrelated foo.
   const managedSelector = new RegExp(
@@ -226,15 +241,7 @@ export function assertSupportDependencyPolicies(
     const policies = record(value, prefix);
     for (const [key, request] of Object.entries(policies)) {
       for (const [name, pin] of Object.entries(support.packages)) {
-        // A target may be parent-scoped or dependency-type-scoped. Semver >
-        // comparisons are not parent separators; match from the package name.
-        const target =
-          key
-            .trim()
-            .split(/>(?!\s*(?:=|\d|v\d))/u)
-            .at(-1)
-            ?.trim()
-            .replace(/:(?:prod|dev|optional|peer)$/u, '') ?? '';
+        const target = dependencySelectorTarget(key);
         const targetsName = new RegExp(
           `^${RegExp.escape(name)}(?:@|$)`,
           'u',
