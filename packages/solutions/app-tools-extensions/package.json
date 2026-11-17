@@ -197,6 +197,10 @@
       "modern:source": "./src/server-compiler/index.ts",
       "import": "./dist/esm-node/server-compiler/index.mjs",
       "require": "./dist/cjs/server-compiler/index.js"
+    },
+    "./server-compiler/types": {
+      "types": "./dist/types/server-compiler/types.d.ts",
+      "modern:source": "./src/server-compiler/types.ts"
     }
   },
   "typesVersions": {
@@ -231,6 +235,9 @@
       ],
       "server-compiler": [
         "./dist/types/server-compiler/index.d.ts"
+      ],
+      "server-compiler/types": [
+        "./dist/types/server-compiler/types.d.ts"
       ]
     }
   },

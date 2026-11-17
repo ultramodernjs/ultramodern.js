@@ -11,11 +11,11 @@ import {
   resolveEffectTsgoCompiler,
 } from '@modern-js/app-tools-extensions/config';
 import { nativeServerCompiler } from '@modern-js/app-tools-extensions/native-server-compiler';
-import {
-  compileServerSources,
-  type ServerCompilationResult,
-  type ServerCompilerProvider,
-} from '@modern-js/app-tools-extensions/server-compiler';
+import { compileServerSources } from '@modern-js/app-tools-extensions/server-compiler';
+import type {
+  ServerCompilationResult,
+  ServerCompilerProvider,
+} from '@modern-js/app-tools-extensions/server-compiler/types';
 
 type Equal<Left, Right> =
   (<Value>() => Value extends Left ? 1 : 2) extends <

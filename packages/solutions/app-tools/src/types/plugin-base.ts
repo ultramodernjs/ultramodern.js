@@ -1,5 +1,5 @@
 import type { ResolvedDeployTarget } from '@modern-js/app-tools-extensions/deploy-output/target';
-import type { ServerCompilationResult } from '@modern-js/app-tools-extensions/server-compiler';
+import type { ServerCompilationResult } from '@modern-js/app-tools-extensions/server-compiler/types';
 import type {
   AppContext,
   AsyncHook,

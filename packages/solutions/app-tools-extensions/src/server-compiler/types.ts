@@ -1,4 +1,4 @@
-import type { SourceNormalizedConfig } from '@modern-js/server-core';
+import type { mergeAlias } from '@modern-js/utils/alias';
 import type { Dts, LibConfig, Redirect, RsbuildPlugin } from '@rslib/core';
 
 /** A parsed JSON tsconfig, with paths based at its owning config file. */
@@ -65,7 +65,7 @@ export type ServerCompilerProvider = (
 ) => ServerCompiler | Promise<ServerCompiler>;
 
 export interface ServerCompileConfig {
-  alias?: SourceNormalizedConfig['alias'];
+  alias?: Parameters<typeof mergeAlias>[0];
   sourceMap?: NonNullable<LibConfig['output']>['sourceMap'];
 }
 

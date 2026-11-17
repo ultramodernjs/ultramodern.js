@@ -1,4 +1,4 @@
-import type { ServerCompilerProvider } from '@modern-js/app-tools-extensions/server-compiler';
+import type { ServerCompilerProvider } from '@modern-js/app-tools-extensions/server-compiler/types';
 import type { BuilderConfig } from '@modern-js/builder';
 import type { UnwrapBuilderConfig } from '../utils';
 

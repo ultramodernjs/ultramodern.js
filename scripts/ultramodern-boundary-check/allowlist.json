@@ -144,17 +144,17 @@
     },
     {
       "file": "packages/solutions/app-tools/src/types/config/tools.ts",
-      "specifier": "@modern-js/app-tools-extensions/server-compiler",
-      "target": "packages/solutions/app-tools-extensions/src/server-compiler/index.ts",
+      "specifier": "@modern-js/app-tools-extensions/server-compiler/types",
+      "target": "packages/solutions/app-tools-extensions/src/server-compiler/types.ts",
       "owner": "bleedingdev",
-      "reason": "Retain the native serverCompiler option using the canonical provider type after relocating its implementation and removing the server-utils compiler subpath."
+      "reason": "Retain the native serverCompiler option using the canonical provider type after relocating its implementation and removing the server-utils compiler subpath. Use its renderer-neutral type-only entry, never the runtime implementation graph."
     },
     {
       "file": "packages/solutions/app-tools/src/types/plugin-base.ts",
-      "specifier": "@modern-js/app-tools-extensions/server-compiler",
-      "target": "packages/solutions/app-tools-extensions/src/server-compiler/index.ts",
+      "specifier": "@modern-js/app-tools-extensions/server-compiler/types",
+      "target": "packages/solutions/app-tools-extensions/src/server-compiler/types.ts",
       "owner": "bleedingdev",
-      "reason": "Carry the authoritative emitted-file result through the existing BFF after-compile hook without duplicating its contract."
+      "reason": "Carry the authoritative emitted-file result through the existing BFF after-compile hook without duplicating its contract. Use its renderer-neutral type-only entry, never the runtime implementation graph."
     }
   ],
   "violations": []
