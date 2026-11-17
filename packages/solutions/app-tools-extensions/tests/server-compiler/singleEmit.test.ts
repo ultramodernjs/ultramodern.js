@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import { fs, logger } from '@modern-js/utils';
 import * as actualRslib from '@rslib/core' with { rstest: 'importActual' };
 import type { LibConfig } from '@rslib/core';
@@ -361,9 +362,10 @@ describe('single server emit', () => {
       );
       expect(require(path.join(distDir, 'api/[id].js')).id).toBe(7);
       expect(require(path.join(distDir, 'api/legacy.cjs')).legacy).toBe(8);
-      expect((await import(path.join(distDir, 'api/esm.mjs'))).format).toBe(
-        'esm',
-      );
+      expect(
+        (await import(pathToFileURL(path.join(distDir, 'api/esm.mjs')).href))
+          .format,
+      ).toBe('esm');
     } finally {
       await fs.remove(appDirectory);
     }
