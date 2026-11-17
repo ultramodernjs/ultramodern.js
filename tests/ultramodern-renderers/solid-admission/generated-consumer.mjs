@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { parseSync } from '@babel/core';
 import tsgoInvocation from '../../../scripts/lib/tsgo-invocation.js';
-import { leasePort } from '../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
+import { claimPort } from '../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 import {
   checkInstalledCohort,
   readCohort,
@@ -860,17 +860,20 @@ export async function runGeneratedSolidConsumer({
   const tuple = await installedTuple(appRoot, cohort);
   const scope = createAdmissionProcessScope({ signal });
   let observer;
+  let portClaim;
   try {
     observer = await createSolidConsumerObserver(scope.signal);
     const types = await checkGeneratedSolidTypes({
       appRoot,
       execute: scope.execute,
     });
-    const lease = await leasePort();
-    const { port } = lease;
+    // Claimed until this proof ends: feature rows run side by side, so a
+    // merely free port could be taken before the server binds it.
+    portClaim = await claimPort();
+    const { port } = portClaim;
     const origin = `http://127.0.0.1:${port}`;
     // Unbind in the statement before the server that binds this port starts.
-    await lease.release();
+    await portClaim.release();
     const server = scope.start(
       process.execPath,
       [installedBin(appRoot), 'serve'],
@@ -929,7 +932,11 @@ export async function runGeneratedSolidConsumer({
     try {
       await scope.dispose();
     } finally {
-      await observer?.close();
+      try {
+        await observer?.close();
+      } finally {
+        await portClaim?.free();
+      }
     }
   }
 }

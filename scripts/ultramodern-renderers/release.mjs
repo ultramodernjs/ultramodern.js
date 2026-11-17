@@ -43,13 +43,13 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
-import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { assertAcceptanceReceipt } from '../ultramodern-production-readiness/published-create-proof/acceptance-receipt.mjs';
+import { claimPort } from '../ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 import { runWorkerDispatchProbe } from '../ultramodern-production-readiness/renderer-worker-lifecycle-proof/probe.mjs';
 import { readReleaseManifest } from '../ultramodern-publish/lib/source-create-proof/release-manifest.mjs';
 import { startEphemeralRegistry } from '../ultramodern-publish/lib/source-create-proof/runtime-proof/registry.mjs';
@@ -75,6 +75,13 @@ import {
   assertReleaseAgeExclusionsUnchanged,
   captureReleaseAgeExclusions,
 } from './release-age-policy.mjs';
+import {
+  createReleaseSteps,
+  oneAtATime,
+  rendererFeatureRowLanes,
+  runLanes,
+  settled,
+} from './release-steps.mjs';
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -109,6 +116,34 @@ const { values: opts } = parseArgs({
 });
 const rendererFeatureRowsSchema =
   'bleedingdev.ultramodern.renderer-feature-rows';
+// row -> [renderer whose installed consumer it reads, module, export]
+const rendererFeatureRowProofs = {
+  'localized-navigation': [
+    'octane',
+    './native-localized-navigation.mjs',
+    'runPackedLocalizedNavigationProof',
+  ],
+  'generated-solid': [
+    'solid',
+    './native-solid-generated.mjs',
+    'runPackedGeneratedSolidProof',
+  ],
+  'dev-refresh': [
+    'octane',
+    './native-federation-dev.mjs',
+    'runPackedNativeFederationDevProof',
+  ],
+  'prebuilt-worker': [
+    'octane',
+    './native-federation-worker.mjs',
+    'runPackedNativeFederationWorkerProof',
+  ],
+  'generated-worker': [
+    'octane',
+    './native-federation-generated-worker.mjs',
+    'runPackedNativeFederationGeneratedWorkerProof',
+  ],
+};
 const renderers = opts.renderers.split(',').map(name => name.trim());
 for (const renderer of renderers)
   if (!allRenderers.includes(renderer))
@@ -184,7 +219,16 @@ fs.mkdirSync(logs, { recursive: true });
 
 const children = new Set();
 const nativeFederationCancellation = new AbortController();
-let activeNativeFederation;
+// Every native proof in flight; a signal waits for all of them.
+const activeNativeFederation = new Set();
+async function awaitNativeFederation(run) {
+  activeNativeFederation.add(run);
+  try {
+    return await run;
+  } finally {
+    activeNativeFederation.delete(run);
+  }
+}
 let registry;
 let releaseForAgePolicy;
 async function stopAll() {
@@ -228,8 +272,6 @@ function sh(command, args, { cwd = root, env = process.env, log }) {
     });
   });
 }
-
-const results = [];
 
 // A bare `assert(value)` reports only "The expression evaluated to a falsy
 // value". Name the failing assertion by its source location and lines.
@@ -281,47 +323,7 @@ function describeFailure(error) {
   };
 }
 
-/** Runs one table row. Returns false (and runs nothing) once `when` fails. */
-async function step(name, body, when = true) {
-  if (!when) {
-    results.push({ name, status: 'SKIP', seconds: 0, error: '' });
-    return false;
-  }
-  const started = performance.now();
-  process.stdout.write(`[release] ${name} ...\n`);
-  try {
-    await body();
-    results.push({ name, status: 'PASS', seconds: 0, error: '' });
-    return true;
-  } catch (error) {
-    const { summary, detail } = describeFailure(error);
-    results.push({ name, status: 'FAIL', error: summary });
-    process.stdout.write(`[release] ${name} FAIL\n${detail}\n`);
-    return false;
-  } finally {
-    results.at(-1).seconds = (performance.now() - started) / 1000;
-  }
-}
-
-function table() {
-  const rows = results.map(r => [
-    r.name,
-    r.status,
-    r.seconds.toFixed(0),
-    r.error.slice(0, 120),
-  ]);
-  const widths = [0, 1, 2].map(i =>
-    Math.max(...rows.map(row => row[i].length)),
-  );
-  return rows
-    .map(row =>
-      row
-        .map((cell, i) => (i < 3 ? cell.padEnd(widths[i]) : cell))
-        .join('  ')
-        .trimEnd(),
-    )
-    .join('\n');
-}
+const { step, results, table } = createReleaseSteps({ describeFailure });
 
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const writeJson = (file, value) =>
@@ -386,18 +388,6 @@ function installedCreateBin(workspace) {
   return path.join(packageRoot, bin['ultramodern-create']);
 }
 
-/** A free local port. */
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const { port } = server.address();
-      server.close(() => resolve(port));
-    });
-  });
-}
-
 /**
  * Builds and serves the generated app before the fixture replaces it: the
  * untouched starter must build, and its server must answer / with the
@@ -410,11 +400,16 @@ async function checkStarter(appRoot, renderer, env) {
     env: { ...env, NODE_ENV: 'production' },
     log: `${renderer}-starter-build`,
   });
-  const port = await freePort();
+  // Claimed, not merely free: starters and feature rows run side by side, and
+  // the claim keeps this port ours from here until the starter is stopped.
+  const claim = await claimPort();
+  const { port } = claim;
   const out = fs.openSync(
     path.join(logs, `${renderer}-starter-serve.log`),
     'w',
   );
+  // Unbind in the statement before the server that binds this port starts.
+  await claim.release();
   const server = spawn(process.execPath, [bin, 'serve'], {
     cwd: appRoot,
     env: { ...env, NODE_ENV: 'production', PORT: String(port) },
@@ -447,6 +442,7 @@ async function checkStarter(appRoot, renderer, env) {
   } finally {
     server.kill('SIGTERM');
     children.delete(server);
+    await claim.free();
   }
 }
 
@@ -601,7 +597,11 @@ async function accept() {
       Boolean(release),
     );
 
-    for (const renderer of renderers) {
+    // Each renderer's chain runs beside the others, and every feature row
+    // starts once the consumer it reads is in place (rendererFeatureRowLanes).
+    // The spec runs share one rstest cwd and config, so they take turns.
+    const specsOneAtATime = oneAtATime();
+    const prepareRenderer = async (renderer, installed) => {
       const workspace = path.join(workDir, `app-${renderer}`);
       let appRoot;
       let ready = await step(
@@ -686,6 +686,7 @@ async function accept() {
         ready,
       );
       if (ready) apps[renderer] = { workspace, appRoot };
+      installed.settle();
       let nodeDeployRoot;
       if (renderer !== 'react')
         ready = await step(
@@ -792,36 +793,105 @@ async function accept() {
         ready,
       );
       // The specs build and serve the app with its installed bin.
-      await step(
-        `${renderer} specs`,
-        () =>
-          sh(
-            process.execPath,
-            [
-              'node_modules/@rstest/core/bin/rstest.js',
-              'run',
-              '-c',
-              'tests/rstest.config.mts',
-              `integration/renderer-${renderer}/`,
-            ],
-            {
-              env: {
-                ...process.env,
-                RENDERER_TARGET_DIR: appRoot,
-                RENDERER_TARGET_BIN: installedBin(appRoot),
-                ...(nodeDeployRoot
-                  ? {
-                      RENDERER_NODE_DEPLOY_DIR: nodeDeployRoot,
-                      RENDERER_NODE_DEPLOY_BIN: installedBin(nodeDeployRoot),
-                    }
-                  : {}),
+      await specsOneAtATime(() =>
+        step(
+          `${renderer} specs`,
+          () =>
+            sh(
+              process.execPath,
+              [
+                'node_modules/@rstest/core/bin/rstest.js',
+                'run',
+                '-c',
+                'tests/rstest.config.mts',
+                `integration/renderer-${renderer}/`,
+              ],
+              {
+                env: {
+                  ...process.env,
+                  RENDERER_TARGET_DIR: appRoot,
+                  RENDERER_TARGET_BIN: installedBin(appRoot),
+                  ...(nodeDeployRoot
+                    ? {
+                        RENDERER_NODE_DEPLOY_DIR: nodeDeployRoot,
+                        RENDERER_NODE_DEPLOY_BIN: installedBin(nodeDeployRoot),
+                      }
+                    : {}),
+                },
+                log: `${renderer}-specs`,
               },
-              log: `${renderer}-specs`,
-            },
-          ),
-        ready,
+            ),
+          ready,
+        ),
       );
-    }
+    };
+    const rows = {};
+    const binding = cohort && rendererFeatureBinding(cohort);
+    const nativeInputs = opts['native-inputs']
+      ? readJson(path.resolve(opts['native-inputs']))
+      : undefined;
+    const runFeatureRow = row =>
+      step(row, async () => {
+        const [renderer, module, exported] = rendererFeatureRowProofs[row];
+        if (!apps[renderer])
+          throw new Error(`The installed ${renderer} consumer is unavailable`);
+        const { allowBuilds } = parseYaml(
+          fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
+        );
+        const run = (await import(module))[exported];
+        if (typeof run !== 'function')
+          throw new Error(`${row} has no installed proof entrypoint`);
+        rows[row] = assertRendererFeatureRow(
+          row,
+          await awaitNativeFederation(
+            run({
+              renderer,
+              ...(renderer === 'octane' && nativeInputs
+                ? { nativeInputs }
+                : {}),
+              consumerRoot: apps[renderer].appRoot,
+              generatorConsumerRoot: createRoot,
+              acceptanceMode: opts['acceptance-mode'],
+              registryUrl: acceptanceRegistryUrl,
+              storeDir,
+              browserDependencyRoot:
+                row === 'localized-navigation'
+                  ? path.join(root, 'tests')
+                  : playwrightRoot(),
+              browserExecutable: browserExecutable(),
+              manifestPath: release.manifestPath,
+              pnpmExecutable: execFileSync('which', ['pnpm'], {
+                encoding: 'utf8',
+              }).trim(),
+              workDir: path.join(workDir, `feature-${row}`),
+              log: path.join(logs, `feature-${row}.log`),
+              receiptPath: path.join(logs, `feature-${row}.receipt.json`),
+              binding,
+              env,
+              signal: nativeFederationCancellation.signal,
+              allowBuilds,
+            }),
+          ),
+          binding,
+          { evidenceRoot: logs },
+        );
+      });
+    const gates = {};
+    const chains = renderers.map(renderer => {
+      const installed = settled();
+      const specs = settled();
+      gates[`${renderer} installed`] = installed.promise;
+      gates[`${renderer} specs`] = specs.promise;
+      return prepareRenderer(renderer, installed).finally(() => {
+        installed.settle();
+        specs.settle();
+      });
+    });
+    await Promise.all([
+      ...chains,
+      opts['required-features'] &&
+        runLanes(rendererFeatureRowLanes, gates, runFeatureRow),
+    ]);
 
     // The React runners need a browser, the shared store and the release.
     const owner = `renderer-release-${process.pid}`;
@@ -919,9 +989,6 @@ async function accept() {
       ],
       renderers.includes('react'),
     );
-    const nativeInputs = opts['native-inputs']
-      ? readJson(path.resolve(opts['native-inputs']))
-      : undefined;
     const nativeArchiveContext = renderer =>
       renderer === 'octane' && nativeInputs ? { nativeInputs } : {};
     const nativeFederationProofs = [
@@ -953,111 +1020,29 @@ async function accept() {
             const { allowBuilds } = parseYaml(
               fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
             );
-            activeNativeFederation = nativeProof.run({
-              ...nativeProof.context(renderer),
-              renderer,
-              consumerRoot: apps[renderer].appRoot,
-              manifestPath: release.manifestPath,
-              pnpmExecutable: execFileSync('which', ['pnpm'], {
-                encoding: 'utf8',
-              }).trim(),
-              workDir: path.join(workDir, `${nativeProof.folder}-${renderer}`),
-              log: path.join(logs, `${renderer}-${nativeProof.folder}.log`),
-              env,
-              signal: nativeFederationCancellation.signal,
-              allowBuilds,
-            });
-            try {
-              await activeNativeFederation;
-            } finally {
-              activeNativeFederation = undefined;
-            }
+            await awaitNativeFederation(
+              nativeProof.run({
+                ...nativeProof.context(renderer),
+                renderer,
+                consumerRoot: apps[renderer].appRoot,
+                manifestPath: release.manifestPath,
+                pnpmExecutable: execFileSync('which', ['pnpm'], {
+                  encoding: 'utf8',
+                }).trim(),
+                workDir: path.join(
+                  workDir,
+                  `${nativeProof.folder}-${renderer}`,
+                ),
+                log: path.join(logs, `${renderer}-${nativeProof.folder}.log`),
+                env,
+                signal: nativeFederationCancellation.signal,
+                allowBuilds,
+              }),
+            );
           },
           Boolean(apps[renderer]) && runners.includes('mf'),
         );
     if (opts['required-features']) {
-      const rows = {};
-      const binding = rendererFeatureBinding(cohort);
-      for (const [row, renderer, module, exported] of [
-        [
-          'localized-navigation',
-          'octane',
-          './native-localized-navigation.mjs',
-          'runPackedLocalizedNavigationProof',
-        ],
-        [
-          'generated-solid',
-          'solid',
-          './native-solid-generated.mjs',
-          'runPackedGeneratedSolidProof',
-        ],
-        [
-          'dev-refresh',
-          'octane',
-          './native-federation-dev.mjs',
-          'runPackedNativeFederationDevProof',
-        ],
-        [
-          'prebuilt-worker',
-          'octane',
-          './native-federation-worker.mjs',
-          'runPackedNativeFederationWorkerProof',
-        ],
-        [
-          'generated-worker',
-          'octane',
-          './native-federation-generated-worker.mjs',
-          'runPackedNativeFederationGeneratedWorkerProof',
-        ],
-      ]) {
-        await step(row, async () => {
-          if (!apps[renderer])
-            throw new Error(
-              `The installed ${renderer} consumer is unavailable`,
-            );
-          const { allowBuilds } = parseYaml(
-            fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
-          );
-          const run = (await import(module))[exported];
-          if (typeof run !== 'function')
-            throw new Error(`${row} has no installed proof entrypoint`);
-          activeNativeFederation = run({
-            renderer,
-            ...(renderer === 'octane' && nativeInputs ? { nativeInputs } : {}),
-            consumerRoot: apps[renderer].appRoot,
-            generatorConsumerRoot: createRoot,
-            acceptanceMode: opts['acceptance-mode'],
-            registryUrl: acceptanceRegistryUrl,
-            storeDir,
-            browserDependencyRoot:
-              row === 'localized-navigation'
-                ? path.join(root, 'tests')
-                : playwrightRoot(),
-            browserExecutable: browserExecutable(),
-            manifestPath: release.manifestPath,
-            pnpmExecutable: execFileSync('which', ['pnpm'], {
-              encoding: 'utf8',
-            }).trim(),
-            workDir: path.join(workDir, `feature-${row}`),
-            log: path.join(logs, `feature-${row}.log`),
-            receiptPath: path.join(logs, `feature-${row}.receipt.json`),
-            binding,
-            env,
-            signal: nativeFederationCancellation.signal,
-            allowBuilds,
-          });
-          try {
-            rows[row] = assertRendererFeatureRow(
-              row,
-              await activeNativeFederation,
-              binding,
-              { evidenceRoot: logs },
-            );
-          } finally {
-            activeNativeFederation = undefined;
-          }
-        });
-      }
       // --emit-rows stops here: the ERP receipt these rows bind to is produced
       // by a concurrent job, so another `release.mjs --rows` seals them.
       if (opts['emit-rows'])
@@ -1267,8 +1252,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'])
     nativeFederationCancellation.abort(
       new Error(`Renderer release received ${signal}`),
     );
-    Promise.resolve(activeNativeFederation)
-      .catch(() => {})
+    Promise.allSettled(activeNativeFederation)
       .then(stopAll)
       .finally(() => process.exit(130));
   });
