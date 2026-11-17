@@ -1,4 +1,5 @@
-import type { Dts, Redirect, RsbuildPlugin } from '@rslib/core';
+import type { SourceNormalizedConfig } from '@modern-js/server-core';
+import type { Dts, LibConfig, Redirect, RsbuildPlugin } from '@rslib/core';
 
 /** A parsed JSON tsconfig, with paths based at its owning config file. */
 export interface ServerCompilerConfig {
@@ -31,6 +32,10 @@ type DtsOptions = Exclude<Dts, boolean>;
 
 /** The server build's declaration settings for its one emitting library. */
 export interface DeclarationPluginOptions {
+  /**
+   * A directory private to this compilation. The compiler moves what the
+   * plugin writes here into the server output and reports each file.
+   */
   distPath: NonNullable<DtsOptions['distPath']>;
   /** Emit-only diagnostics (such as TS2742) surface only through this. */
   abortOnError: NonNullable<DtsOptions['abortOnError']>;
@@ -58,3 +63,28 @@ export interface ServerCompiler {
 export type ServerCompilerProvider = (
   appDirectory: string,
 ) => ServerCompiler | Promise<ServerCompiler>;
+
+export interface ServerCompileConfig {
+  alias?: SourceNormalizedConfig['alias'];
+  sourceMap?: NonNullable<LibConfig['output']>['sourceMap'];
+}
+
+export interface ServerCompileOptions {
+  /** Omit to use the stable TypeScript 7.0.2 compiler this package ships. */
+  compiler?: ServerCompilerProvider;
+  sourceDirs: string[];
+  distDir: string;
+  /** Absolute files excluded as roots; imported dependencies remain checked. */
+  excludeFiles?: string[];
+  tsconfigPath?: string;
+  moduleType?: 'module' | 'commonjs';
+  throwErrorInsteadOfExit?: boolean;
+}
+
+/** What one server compilation actually wrote, as absolute paths. */
+export interface ServerCompilationResult {
+  /** The emitted JavaScript of the source-directory roots, not what they reach. */
+  readonly rootFiles: readonly string[];
+  /** Every file written into `distDir`: JavaScript, maps, declarations, assets. */
+  readonly emittedFiles: readonly string[];
+}

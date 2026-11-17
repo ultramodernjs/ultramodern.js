@@ -2,16 +2,18 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import { compile } from '@modern-js/server-utils';
 import { fs } from '@modern-js/utils';
 import { createBffGenerator } from '../../../cli/plugin-bff/src/cli/generator';
 import serverBuildPlugin from '../../app-tools/src/plugins/serverBuild';
 import { resolveEffectTsrsCompiler } from '../src/build-config/build-environment';
 import { nativeServerCompiler } from '../src/native-server-compiler';
+import {
+  type ServerCompiler as Compiler,
+  compileServerSources as compile,
+  type ServerCompilerProvider as Provider,
+} from '../src/server-compiler';
 
 const require = createRequire(import.meta.url);
-type Provider = NonNullable<Parameters<typeof compile>[2]['compiler']>;
-type Compiler = Awaited<ReturnType<Provider>>;
 
 /**
  * The provider's invocation-private adapter directories, observed through a
@@ -29,6 +31,11 @@ async function privateTmp(appDirectory: string) {
       (await fs.readdir(directory))
         .filter(name => name.startsWith('modern-server-tsrs-'))
         .map(name => path.join(directory, name)),
+    /** Compiler-private discovery and declaration directories. */
+    scratch: async () =>
+      (await fs.readdir(directory)).filter(name =>
+        name.startsWith('modern-server-compile-'),
+      ),
     restore: () => {
       if (previous === undefined) delete process.env[variable];
       else process.env[variable] = previous;
@@ -189,7 +196,7 @@ process.stdout.write(JSON.stringify({ executable, assignment: process.env.TSRS_C
       excluded,
       "import type { Missing } from 'not-installed';\n",
     );
-    await compile(
+    const result = await compile(
       appDirectory,
       {},
       {
@@ -202,6 +209,13 @@ process.stdout.write(JSON.stringify({ executable, assignment: process.env.TSRS_C
       },
     );
     expect(calls).toEqual([appDirectory]);
+    expect(result).toEqual({
+      rootFiles: [path.join(appDirectory, 'dist/api/index.js')],
+      emittedFiles: ['api/index.d.ts', 'api/index.js', 'api/index.js.map'].map(
+        file => path.join(appDirectory, 'dist', file),
+      ),
+    });
+    expect(await tmp.scratch()).toEqual([]);
     expect(require(path.join(appDirectory, 'dist/api/index.js')).answer).toBe(
       42,
     );
@@ -342,6 +356,11 @@ test('fails on declaration-only diagnostics from the native plugin and cleans th
     ).rejects.toThrow('declaration files generation');
     expect(disposed.map(adapters => adapters.length)).toEqual([1]);
     expect(await tmp.adapters()).toEqual([]);
+    expect(await tmp.scratch()).toEqual([]);
+    // The failed compilation leaves none of its JavaScript behind.
+    expect(
+      await fs.pathExists(path.join(appDirectory, 'dist/api/index.js')),
+    ).toBe(false);
     expect(
       (await fs.readdir(path.dirname(tsconfigPath))).filter(file =>
         file.endsWith('.resolved.json'),
@@ -447,15 +466,81 @@ export const api = HttpApi.make('NativeApi');
   }
 });
 
-test('both real BFF and custom-server callers forward the configured provider and app origin', async () => {
+test('a transitive alias is checked under the inherited Effect policy and its scoped overrides', async () => {
+  const { appDirectory, tsconfigPath } = await fixture();
+  const tmp = await privateTmp(appDirectory);
+  try {
+    await fs.writeJSON(tsconfigPath, {
+      extends: './preset/base.json',
+      compilerOptions: {
+        module: 'NodeNext',
+        declaration: false,
+        // Effect's declarations use URL, fetch and stream globals.
+        lib: ['ESNext', 'DOM', 'DOM.Iterable'],
+        paths: { '@lib/*': ['../lib/*'] },
+      },
+      include: ['../api'],
+    });
+    await fs.writeFile(
+      path.join(appDirectory, 'api/index.ts'),
+      "export { run } from '@lib/first';\n",
+    );
+    await fs.outputFile(
+      path.join(appDirectory, 'lib/first.ts'),
+      "export { run } from '@lib/second';\n",
+    );
+    const second = path.join(appDirectory, 'lib/second.ts');
+    const options = {
+      compiler: nativeServerCompiler,
+      sourceDirs: [path.join(appDirectory, 'api')],
+      distDir: path.join(appDirectory, 'dist'),
+      tsconfigPath,
+      throwErrorInsteadOfExit: true,
+    };
+    const alias = { alias: { '@lib': './lib' } };
+    const body = `import { Effect } from 'effect';
+export const run = (): number => {
+  Effect.succeed(1);
+  return 1;
+};
+`;
+    // Reached only through `source.alias`: the inherited severity applies.
+    await fs.outputFile(second, body);
+    await expect(compile(appDirectory, alias, options)).rejects.toThrow(
+      /lib\/second\.ts[\s\S]*floatingEffect/u,
+    );
+    expect(await fs.pathExists(options.distDir)).toBe(false);
+    // A scoped directive in the reached file still governs its own scope.
+    await fs.outputFile(
+      second,
+      `// @effect-diagnostics floatingEffect:off\n${body}`,
+    );
+    const result = await compile(appDirectory, alias, options);
+    expect(result.rootFiles).toEqual([
+      path.join(options.distDir, 'api/index.js'),
+    ]);
+    expect(result.emittedFiles).toContain(
+      path.join(options.distDir, 'lib/second.js'),
+    );
+    expect(require(path.join(options.distDir, 'api/index.js')).run()).toBe(1);
+    expect(await tmp.adapters()).toEqual([]);
+    expect(await tmp.scratch()).toEqual([]);
+  } finally {
+    tmp.restore();
+    await fs.remove(appDirectory);
+  }
+});
+
+test('one owner compiles the BFF and server roots with the configured provider', async () => {
   const { appDirectory, tsconfigPath } = await fixture();
   const calls: string[] = [];
   const compiler: Provider = async from => {
     calls.push(from);
     return nativeServerCompiler(from);
   };
-  let afterBuild: (() => Promise<void>) | undefined;
-  const context = {
+  const afterBuild: Array<() => Promise<void>> = [];
+  const results: Array<{ readonly emittedFiles: readonly string[] }> = [];
+  let context: Record<string, unknown> = {
     appDirectory,
     apiDirectory: path.join(appDirectory, 'api'),
     sharedDirectory: path.join(appDirectory, 'shared'),
@@ -472,31 +557,49 @@ test('both real BFF and custom-server callers forward the configured provider an
   };
   const api = {
     getAppContext: () => context,
+    updateAppContext: (update: Record<string, unknown>) => {
+      context = { ...context, ...update };
+    },
     getNormalizedConfig: () => config,
     getHooks: () => ({
       onBeforeBffCompile: { call: async () => {} },
-      onAfterBffCompile: { call: async () => {} },
+      onAfterBffCompile: {
+        call: async (
+          _context: unknown,
+          result: { readonly emittedFiles: readonly string[] },
+        ) => {
+          results.push(result);
+        },
+      },
     }),
     onAfterBuild: (callback: () => Promise<void>) => {
-      afterBuild = callback;
+      afterBuild.push(callback);
     },
   };
+  const dist = (file: string) => path.join(appDirectory, 'dist', file);
   try {
     serverBuildPlugin().setup!(api as never);
-    if (!afterBuild) throw new Error('Custom-server build hook not registered');
-    // BFF and custom-server both emit shared/: do not introduce a test-only
-    // output race while proving that each independently forwards the provider.
-    await createBffGenerator(api as never).compileApi();
-    await afterBuild();
-    expect(calls).toEqual([appDirectory, appDirectory]);
+    // Without an owner, the custom-server build compiles server and shared.
+    for (const callback of afterBuild) await callback();
+    expect(calls).toEqual([appDirectory]);
+    expect(await fs.pathExists(dist('server/cache.d.ts'))).toBe(true);
+    expect(await fs.pathExists(dist('api/index.js'))).toBe(false);
+
+    await fs.remove(dist('.'));
+    calls.length = 0;
+    // The BFF build owns the server roots: one compilation, one provider.
+    api.updateAppContext({ serverCompileOwner: '@modern-js/plugin-bff' });
+    await createBffGenerator(api as never).compileApi('build');
+    for (const callback of afterBuild) await callback();
+    expect(calls).toEqual([appDirectory]);
+    expect(results).toHaveLength(1);
     for (const file of [
       'api/index.d.ts',
       'server/cache.d.ts',
       'shared/index.d.ts',
     ]) {
-      expect(await fs.pathExists(path.join(context.distDirectory, file))).toBe(
-        true,
-      );
+      expect(results[0].emittedFiles).toContain(dist(file));
+      expect(await fs.pathExists(dist(file))).toBe(true);
     }
   } finally {
     await fs.remove(appDirectory);

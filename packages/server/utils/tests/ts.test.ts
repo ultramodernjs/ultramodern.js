@@ -575,7 +575,7 @@ describe('typescript', () => {
     }
   });
 
-  it('emits runnable aliased output even when the type check fails', async () => {
+  it('emits no aliased output when the blocking type check fails', async () => {
     const example = await fs.realpath(
       await fs.mkdtemp(path.join(os.tmpdir(), 'server-config-alias-')),
     );
@@ -620,10 +620,7 @@ describe('typescript', () => {
         }),
       ).rejects.toThrow(/TS-Go type check failed/);
 
-      const serverOutput = require(
-        path.join(distDir, 'server/modern.server.js'),
-      );
-      expect(serverOutput.default).toBe('alias test');
+      expect(await fs.pathExists(distDir)).toBe(false);
     } finally {
       await fs.remove(example);
     }

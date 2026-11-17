@@ -1,7 +1,7 @@
 import { fs } from '@modern-js/utils';
 import os from 'os';
 import path from 'path';
-import { compile } from '../src';
+import { compileServerSources as compile } from '../../src/server-compiler';
 
 describe('server source-map policy', () => {
   it.each([
@@ -27,7 +27,7 @@ describe('server source-map policy', () => {
           path.join(sourceDir, 'index.ts'),
           'export const answer: number = 42;\n',
         );
-        await compile(
+        const result = await compile(
           appDirectory,
           { sourceMap },
           {
@@ -38,6 +38,10 @@ describe('server source-map policy', () => {
           },
         );
         const output = path.join(distDir, 'server/index.js');
+        expect(result).toEqual({
+          rootFiles: [output],
+          emittedFiles: enabled ? [output, `${output}.map`] : [output],
+        });
         expect(await fs.pathExists(`${output}.map`)).toBe(enabled);
         expect(
           (await fs.readFile(output, 'utf8')).includes('sourceMappingURL='),

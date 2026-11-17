@@ -2,12 +2,45 @@ import { createRequire } from 'node:module';
 import { fs } from '@modern-js/utils';
 import os from 'os';
 import path from 'path';
-import { compile } from '../src/common';
+import { compileServerSources as compile } from '../../src/server-compiler';
 import {
   createResolvedTsgoConfig,
   getTsgoBinPath,
-} from '../src/compilers/tsgo';
-import { createIsolatedTsExample } from './helpers';
+} from '../../src/server-compiler/tsgo';
+
+/** A server app whose roots and `paths` mirror a generated Modern.js app. */
+const createIsolatedTsExample = async (prefix = 'server-compiler-tsgo-') => {
+  const tempRoot = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), prefix)),
+  );
+  const example = path.join(tempRoot, 'ts-example');
+  await fs.outputJSON(path.join(example, 'tsconfig.json'), {
+    compilerOptions: {
+      declaration: false,
+      module: 'NodeNext',
+      moduleResolution: 'NodeNext',
+      paths: { '@/*': ['./src/*'], '@shared/*': ['./shared/*'] },
+      types: [],
+    },
+    include: ['src', 'shared', 'server', 'api', 'modern-app-env.d.ts'],
+  });
+  await fs.outputJSON(path.join(example, 'nested/tsconfig.json'), {
+    extends: '../tsconfig.json',
+  });
+  await fs.outputFile(
+    path.join(example, 'modern-app-env.d.ts'),
+    "declare module '@modern-js/runtime/server' {}\n",
+  );
+  for (const file of [
+    'api/index.ts',
+    'shared/index.ts',
+    'server/index.ts',
+    'src/index.ts',
+  ]) {
+    await fs.outputFile(path.join(example, file), 'export const value = 1;\n');
+  }
+  return { example, tempRoot };
+};
 
 const require = createRequire(import.meta.url);
 
@@ -16,7 +49,7 @@ describe('getTsgoBinPath', () => {
 
   beforeEach(async () => {
     tmpDir = await fs.realpath(
-      await fs.mkdtemp(path.join(os.tmpdir(), 'server-utils-tsgo-')),
+      await fs.mkdtemp(path.join(os.tmpdir(), 'server-compiler-tsgo-')),
     );
   });
 
@@ -231,7 +264,7 @@ describe('createResolvedTsgoConfig', () => {
 
   it('emits executable output for concurrent consumers with app build flags', async () => {
     const { example, tempRoot } = await createIsolatedTsExample(
-      'server-utils-tsgo-consumer-',
+      'server-compiler-tsgo-consumer-',
     );
     const consumerDir = path.join(example, 'consumer');
     const tsconfigPath = path.join(example, 'tsconfig.consumer.json');

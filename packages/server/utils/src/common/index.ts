@@ -1,17 +1,9 @@
-import type { ServerCompilerProvider } from '../compiler';
-
-export type {
-  ServerCompiler,
-  ServerCompilerConfig,
-  ServerCompilerProvider,
-} from '../compiler';
-
-import type {
-  SourceNormalizedConfig,
-  ToolsNormalizedConfig,
-} from '@modern-js/server-core';
-import { fs, logger } from '@modern-js/utils';
-import type { LibConfig } from '@rslib/core';
+import {
+  compileServerSources,
+  type ServerCompilationResult,
+  type ServerCompileConfig,
+  type ServerCompileOptions,
+} from '@modern-js/app-tools-extensions/server-compiler';
 import * as path from 'path';
 
 export interface Pattern {
@@ -20,28 +12,15 @@ export interface Pattern {
   tsconfigPath?: string;
 }
 
-export interface IConfig {
-  alias?: SourceNormalizedConfig['alias'];
-  sourceMap?: NonNullable<LibConfig['output']>['sourceMap'];
-}
+export type IConfig = ServerCompileConfig;
 
-export interface CompileOptions {
-  /** Omit to retain the stable TypeScript compiler shipped by server-utils. */
-  compiler?: ServerCompilerProvider;
-  sourceDirs: string[];
-  distDir: string;
-  /** Absolute files excluded as roots; imported dependencies remain checked. */
-  excludeFiles?: string[];
-  tsconfigPath?: string;
-  moduleType?: 'module' | 'commonjs';
-  throwErrorInsteadOfExit?: boolean;
-}
+export type CompileOptions = ServerCompileOptions;
 
 export type CompileFunc = (
   appDirectory: string,
   modernConfig: IConfig,
   compileOptions: CompileOptions,
-) => Promise<void>;
+) => Promise<ServerCompilationResult>;
 
 export const FILE_EXTENSIONS = ['.js', '.ts', '.mjs', '.ejs'];
 
@@ -65,36 +44,12 @@ export const compile: CompileFunc = async (
   modernConfig,
   compileOptions,
 ) => {
-  const {
-    sourceDirs,
-    distDir,
-    excludeFiles = [],
-    tsconfigPath,
-  } = compileOptions;
+  const { sourceDirs, distDir } = compileOptions;
   validateAbsolutePaths(
     sourceDirs,
     dir => `source dir ${dir} is not an absolute path.`,
   );
   validateAbsolutePath(distDir, `dist dir ${distDir} is not an absolute path.`);
-  validateAbsolutePaths(
-    excludeFiles,
-    file => `excluded file ${file} is not an absolute path.`,
-  );
 
-  if (!tsconfigPath) {
-    return;
-  }
-  const { compileServerSources } = await import('../compilers/rslib');
-  try {
-    await compileServerSources(appDirectory, modernConfig, {
-      ...compileOptions,
-      tsconfigPath,
-    });
-  } catch (error) {
-    if (compileOptions.throwErrorInsteadOfExit) {
-      throw error;
-    }
-    logger.error(error);
-    process.exit(1);
-  }
+  return compileServerSources(appDirectory, modernConfig, compileOptions);
 };

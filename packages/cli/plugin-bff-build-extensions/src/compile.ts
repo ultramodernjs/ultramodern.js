@@ -15,7 +15,7 @@ export function registerBffCompilation(api: CLIPluginAPI<AppTools>) {
       serializeServerGlobalVars(api.getNormalizedConfig().source.globalVars),
     );
   });
-  api.onAfterBffCompile(async context => {
+  api.onAfterBffCompile(async (context, result) => {
     const globals = serialized.get(context);
     if (!globals)
       throw new Error('BFF compilation completed without its before hook.');
@@ -51,7 +51,7 @@ export function registerBffCompilation(api: CLIPluginAPI<AppTools>) {
       globals.ULTRAMODERN_BUILD_MARKER = JSON.stringify(buildMarker);
       globals.ULTRAMODERN_SOURCE_REVISION = JSON.stringify(sourceRevision);
     }
-    await transformServerGlobalVars([...context.outputDirectories], globals);
+    await transformServerGlobalVars(result.emittedFiles, globals);
     if (api.getAppContext().bffRuntimeFramework !== 'effect') return;
     // Hosted APIs use the producer's compiled entry; it is not emitted by this app.
     if (api.getNormalizedConfig().bff?.isCrossProjectServer === true) return;

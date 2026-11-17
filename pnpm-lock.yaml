@@ -2983,18 +2983,15 @@ importers:
 
   packages/server/utils:
     dependencies:
+      '@modern-js/app-tools-extensions':
+        specifier: workspace:*
+        version: link:../../solutions/app-tools-extensions
       '@modern-js/utils':
         specifier: workspace:*
         version: link:../../toolkit/utils
-      '@rslib/core':
-        specifier: 1.0.7
-        version: 1.0.7(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(typescript@7.0.2)
       '@swc/helpers':
         specifier: ^0.5.24
         version: 0.5.24
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
     devDependencies:
       '@modern-js/rslib':
         specifier: workspace:*
@@ -3002,6 +2999,9 @@ importers:
       '@modern-js/server-core':
         specifier: workspace:*
         version: link:../core
+      '@rslib/core':
+        specifier: 1.0.7
+        version: 1.0.7(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(typescript@7.0.2)
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
@@ -3153,9 +3153,6 @@ importers:
       '@modern-js/server-runtime-extensions':
         specifier: workspace:*
         version: link:../../server/runtime-extensions
-      '@modern-js/server-utils':
-        specifier: workspace:*
-        version: link:../../server/utils
       '@modern-js/surface-resolution':
         specifier: workspace:*
         version: link:../../toolkit/surface-resolution
@@ -3165,6 +3162,9 @@ importers:
       '@modern-js/utils':
         specifier: workspace:*
         version: link:../../toolkit/utils
+      '@rslib/core':
+        specifier: 1.0.7
+        version: 1.0.7(@bleedingdev/mf-runtime-tools@2.9.5)(core-js@3.51.0)(typescript@7.0.2)
       '@swc/helpers':
         specifier: ^0.5.24
         version: 0.5.24
@@ -3183,6 +3183,9 @@ importers:
       std-env:
         specifier: 4.3.0
         version: 4.3.0
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
     devDependencies:
       '@effect/tsgo':
         specifier: 0.69.0
@@ -3217,9 +3220,6 @@ importers:
       '@rsbuild/plugin-svgr':
         specifier: 2.0.5
         version: 2.0.5(@rsbuild/core@2.3.2(@bleedingdev/mf-runtime-tools@2.9.5)(core-js@3.51.0))(@rspack/core@2.3.2(@bleedingdev/mf-runtime-tools@2.9.5)(@swc/helpers@0.5.24))(supports-color@10.2.2)(typescript@7.0.2)
-      '@rslib/core':
-        specifier: 1.0.7
-        version: 1.0.7(@bleedingdev/mf-runtime-tools@2.9.5)(core-js@3.51.0)(typescript@7.0.2)
       '@scripts/rstest-config':
         specifier: workspace:*
         version: link:../../../scripts/rstest-config

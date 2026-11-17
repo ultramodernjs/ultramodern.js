@@ -27,21 +27,12 @@
         "require": "./dist/cjs/index.js"
       },
       "default": "./dist/cjs/index.js"
-    },
-    "./compiler": {
-      "types": "./dist/types/compiler.d.ts",
-      "modern:source": "./src/compiler.ts",
-      "import": "./dist/esm-node/compiler.mjs",
-      "require": "./dist/cjs/compiler.js"
     }
   },
   "typesVersions": {
     "*": {
       ".": [
         "./dist/types/index.d.ts"
-      ],
-      "compiler": [
-        "./dist/types/compiler.d.ts"
       ]
     }
   },
@@ -52,10 +43,9 @@
     "test": "rstest"
   },
   "dependencies": {
+    "@modern-js/app-tools-extensions": "workspace:*",
     "@modern-js/utils": "workspace:*",
-    "@rslib/core": "1.0.7",
-    "@swc/helpers": "^0.5.24",
-    "typescript": "7.0.2"
+    "@swc/helpers": "^0.5.24"
   },
   "devDependencies": {
     "@modern-js/rslib": "workspace:*",

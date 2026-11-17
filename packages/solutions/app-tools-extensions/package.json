@@ -191,6 +191,12 @@
       "modern:source": "./src/native-server-compiler.ts",
       "import": "./dist/esm-node/native-server-compiler.mjs",
       "require": "./dist/cjs/native-server-compiler.js"
+    },
+    "./server-compiler": {
+      "types": "./dist/types/server-compiler/index.d.ts",
+      "modern:source": "./src/server-compiler/index.ts",
+      "import": "./dist/esm-node/server-compiler/index.mjs",
+      "require": "./dist/cjs/server-compiler/index.js"
     }
   },
   "typesVersions": {
@@ -222,6 +228,9 @@
       ],
       "native-server-compiler": [
         "./dist/types/native-server-compiler.d.ts"
+      ],
+      "server-compiler": [
+        "./dist/types/server-compiler/index.d.ts"
       ]
     }
   },
@@ -249,13 +258,14 @@
     "@modern-js/surface-resolution": "workspace:*",
     "@modern-js/types": "workspace:*",
     "@modern-js/utils": "workspace:*",
+    "@rslib/core": "1.0.7",
     "@swc/helpers": "^0.5.24",
     "@vercel/nft": "^1.11.2",
     "compression-webpack-plugin": "^12.0.0",
     "esbuild": "^0.28.2",
     "jsonc-parser": "3.3.1",
     "std-env": "4.3.0",
-    "@modern-js/server-utils": "workspace:*"
+    "typescript": "7.0.2"
   },
   "peerDependencies": {
     "@rsbuild/core": "2.3.2",
@@ -292,7 +302,6 @@
     "@module-federation/runtime-tools": "npm:@bleedingdev/mf-runtime-tools@2.9.5",
     "@rsbuild/core": "2.3.2",
     "@rsbuild/plugin-svgr": "2.0.5",
-    "@rslib/core": "1.0.7",
     "@types/babel__core": "^7.20.5",
     "@scripts/rstest-config": "workspace:*",
     "@types/babel__traverse": "7.28.0",

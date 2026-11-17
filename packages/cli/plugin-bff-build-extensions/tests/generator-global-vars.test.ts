@@ -1,10 +1,46 @@
 import type { BffCompilation } from '@modern-js/app-tools';
+import * as actualEffectLoader from '@modern-js/plugin-bff-extensions/effect-source-loader' with {
+  rstest: 'importActual',
+};
 import { fs } from '@modern-js/utils';
 import os from 'os';
 import path from 'path';
+import * as actualServerUtils from '../../../server/utils/src/index' with {
+  rstest: 'importActual',
+};
+import serverBuildPlugin from '../../../solutions/app-tools/src/plugins/serverBuild';
 import { bffPlugin } from '../../plugin-bff/src/cli';
 import { createBffGenerator } from '../../plugin-bff/src/cli/generator';
+import { bffPlugin as extendedBffPlugin } from '../src';
 import { registerBffCompilation } from '../src/compile';
+
+type Compile = typeof actualServerUtils.compile;
+type BundleEffectEntry =
+  typeof actualEffectLoader.bundleBuiltEffectEntryForNode;
+const compileCalls: Parameters<Compile>[] = [];
+let compileImplementation: Compile = actualServerUtils.compile;
+let bundleImplementation: BundleEffectEntry =
+  actualEffectLoader.bundleBuiltEffectEntryForNode;
+
+rstest.mock('../../../server/utils/src/index', () => ({
+  ...actualServerUtils,
+  compile: (...args: Parameters<Compile>) => {
+    compileCalls.push(args);
+    return compileImplementation(...args);
+  },
+}));
+rstest.mock('@modern-js/plugin-bff-extensions/effect-source-loader', () => ({
+  ...actualEffectLoader,
+  bundleBuiltEffectEntryForNode: (...args: Parameters<BundleEffectEntry>) =>
+    bundleImplementation(...args),
+}));
+
+beforeEach(() => {
+  compileCalls.length = 0;
+  compileImplementation = actualServerUtils.compile;
+  bundleImplementation = actualEffectLoader.bundleBuiltEffectEntryForNode;
+});
+
 import type {
   BffRuntimeBuildIdentity,
   BffRuntimeBuildIdentityProvider,
@@ -127,7 +163,7 @@ describe('BFF compiler global variables', () => {
         };
       });
 
-      await fixture.compileApi();
+      await fixture.compileApi('build');
 
       expect(providerCompilation).toBe(beforeCompilation);
       expect(providerCompilation?.appDirectory).toBe(appDirectory);
@@ -172,7 +208,7 @@ describe('BFF compiler global variables', () => {
           ),
         ),
       );
-      for (const fixture of fixtures) await fixture.compileApi();
+      for (const fixture of fixtures) await fixture.compileApi('build');
       fixtures.forEach((fixture, index) => {
         expect(executeRuntimeIdentityFixture(fixture.compiledEntry)).toEqual({
           buildMarker: (index === 0 ? 'a' : 'b').repeat(64),
@@ -213,7 +249,7 @@ describe('BFF compiler global variables', () => {
         fixture.appContext.apiOnly = true;
       });
 
-      await fixture.compileApi();
+      await fixture.compileApi('build');
 
       expect(providerCalls).toBe(0);
       expect(executeRuntimeIdentityFixture(fixture.compiledEntry)).toEqual({
@@ -273,7 +309,7 @@ describe('BFF compiler global variables', () => {
           async () => identity,
         );
 
-        await expect(fixture.compileApi()).rejects.toThrow(message);
+        await expect(fixture.compileApi('build')).rejects.toThrow(message);
 
         const compiledSource = await fs.readFile(fixture.compiledEntry, 'utf8');
         expect(compiledSource).toContain('ULTRAMODERN_BUILD_MARKER');
@@ -298,7 +334,7 @@ describe('BFF compiler global variables', () => {
         },
       );
 
-      await expect(fixture.compileApi()).rejects.toThrow(
+      await expect(fixture.compileApi('build')).rejects.toThrow(
         'Finalized UI build identity is not ready.',
       );
 
@@ -333,7 +369,7 @@ describe('BFF compiler global variables', () => {
         fixture.appContext.appDirectory = path.join(appDirectory, 'other-app');
       });
 
-      await expect(fixture.compileApi()).rejects.toThrow(
+      await expect(fixture.compileApi('build')).rejects.toThrow(
         'BFF runtime build identity provider does not belong to this application.',
       );
 
@@ -463,7 +499,7 @@ describe('BFF compiler global variables', () => {
       };
       registerBffCompilation(compilationApi as never);
       const { compileApi } = createBffGenerator(compilationApi as never);
-      await compileApi();
+      await compileApi('build');
 
       const compiledEntry = path.join(distDirectory, 'api/index.js');
       await fs.remove(packageDirectory);
@@ -567,7 +603,7 @@ describe('BFF compiler global variables', () => {
       };
       registerBffCompilation(compilationApi as never);
       const { compileApi } = createBffGenerator(compilationApi as never);
-      await compileApi();
+      await compileApi('build');
 
       const compiledPath = path.join(
         distDirectory,
@@ -606,4 +642,173 @@ describe('BFF compiler global variables', () => {
       await fs.remove(appDirectory);
     }
   });
+});
+
+const PROOF_SOURCE = 'module.exports = PROOF_GLOBAL;';
+
+/**
+ * Emits each root plus `src/aliased.ts`, which roots reach through an alias,
+ * and reports exactly those files, like the server compiler.
+ */
+const aliasReachingCompile: Compile = async (
+  appDirectory,
+  _config,
+  options,
+) => {
+  const rootFiles: string[] = [];
+  for (const directory of options.sourceDirs)
+    for (const name of await fs.readdir(directory))
+      rootFiles.push(path.join(directory, name));
+  const emittedFiles: string[] = [];
+  for (const file of [
+    ...rootFiles,
+    path.join(appDirectory, 'src/aliased.ts'),
+  ]) {
+    const output = path.join(
+      options.distDir,
+      path.relative(appDirectory, file).replace(/\.ts$/u, '.js'),
+    );
+    await fs.outputFile(output, PROOF_SOURCE);
+    emittedFiles.push(output);
+  }
+  return {
+    rootFiles: emittedFiles.slice(0, rootFiles.length),
+    emittedFiles,
+  };
+};
+
+type LifecycleMode = {
+  runtimeFramework?: 'hono' | 'effect';
+  apiOnly?: boolean;
+  api?: boolean;
+};
+
+async function createLifecycleApp(mode: LifecycleMode) {
+  const appDirectory = await fs.realpath(
+    await fs.mkdtemp(
+      path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'bff-one-writer-'),
+    ),
+  );
+  if (mode.api !== false)
+    await fs.outputFile(path.join(appDirectory, 'api/index.ts'), '');
+  await fs.outputFile(path.join(appDirectory, 'shared/schema.ts'), '');
+  await fs.outputFile(path.join(appDirectory, 'server/modern.server.ts'), '');
+  await fs.outputFile(path.join(appDirectory, 'src/aliased.ts'), '');
+  // Not emitted by this compilation, so finalization must not touch it.
+  await fs.outputFile(
+    path.join(appDirectory, 'dist/src/stale.js'),
+    PROOF_SOURCE,
+  );
+  await fs.outputJSON(path.join(appDirectory, 'tsconfig.json'), {});
+  let context: Record<string, unknown> = {
+    appDirectory,
+    apiDirectory: path.join(appDirectory, 'api'),
+    lambdaDirectory: path.join(appDirectory, 'api/lambda'),
+    distDirectory: path.join(appDirectory, 'dist'),
+    sharedDirectory: path.join(appDirectory, 'shared'),
+    metaName: 'modern-js',
+    moduleType: 'commonjs',
+    apiOnly: mode.apiOnly ?? false,
+  };
+  const config = {
+    source: { alias: {}, globalVars: { PROOF_GLOBAL: 'final' } },
+    resolve: { alias: {} },
+    server: {},
+    output: {},
+    tools: {},
+    bff: { runtimeFramework: mode.runtimeFramework },
+  };
+  const hooks = bffPlugin().registryHooks!;
+  const afterBuild: (() => Promise<void>)[] = [];
+  const api = new Proxy(
+    {},
+    {
+      get: (_target, name) => {
+        switch (name) {
+          case 'getAppContext':
+            return () => context;
+          case 'updateAppContext':
+            return (update: Record<string, unknown>) => {
+              context = { ...context, ...update };
+            };
+          case 'getConfig':
+          case 'getNormalizedConfig':
+            return () => config;
+          case 'getHooks':
+            return () => hooks;
+          case 'onAfterBuild':
+            return (callback: () => Promise<void>) => afterBuild.push(callback);
+          case 'onBeforeBffCompile':
+            return hooks.onBeforeBffCompile.tap;
+          case 'onAfterBffCompile':
+            return hooks.onAfterBffCompile.tap;
+          default:
+            return () => undefined;
+        }
+      },
+    },
+  );
+  const read = (file: string) =>
+    fs.readFile(path.join(appDirectory, 'dist', file), 'utf8');
+  return { appDirectory, api, afterBuild, read };
+}
+
+describe('one writer finalizes every emitted server file', () => {
+  beforeEach(() => {
+    compileImplementation = aliasReachingCompile;
+  });
+
+  it.each([
+    ['Effect', {}],
+    ['Hono', { runtimeFramework: 'hono' }],
+    ['API-only', { apiOnly: true }],
+    ['BFF server-only', { api: false }],
+  ] as [string, LifecycleMode][])(
+    'finalizes server, shared and aliased src output for %s in every order',
+    async (_name, mode) => {
+      for (const serverBuildFirst of [true, false]) {
+        for (const reverseCallbacks of [false, true]) {
+          const app = await createLifecycleApp(mode);
+          compileCalls.length = 0;
+          const bundled: string[] = [];
+          bundleImplementation = async () => {
+            // The Effect entry bundle runs only after global finalization.
+            bundled.push(await app.read('shared/schema.js'));
+          };
+          try {
+            const plugins = [
+              serverBuildPlugin(),
+              bffPlugin(),
+              extendedBffPlugin(),
+            ];
+            if (!serverBuildFirst) plugins.push(plugins.shift()!);
+            for (const plugin of plugins) await plugin.setup!(app.api as never);
+            const callbacks = [...app.afterBuild];
+            if (reverseCallbacks) callbacks.reverse();
+            for (const callback of callbacks) await callback();
+
+            expect(compileCalls).toHaveLength(1);
+            const outputs = [
+              ...(mode.api === false ? [] : ['api/index.js']),
+              'server/modern.server.js',
+              'shared/schema.js',
+              'src/aliased.js',
+            ];
+            for (const output of outputs)
+              expect(await app.read(output)).toBe(
+                'module.exports = "final";\n',
+              );
+            expect(await app.read('src/stale.js')).toBe(PROOF_SOURCE);
+            expect(bundled).toEqual(
+              mode.runtimeFramework === 'hono'
+                ? []
+                : ['module.exports = "final";\n'],
+            );
+          } finally {
+            await fs.remove(app.appDirectory);
+          }
+        }
+      }
+    },
+  );
 });

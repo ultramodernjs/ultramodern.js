@@ -443,7 +443,6 @@ describe('React metadata in the existing CLI build hooks', () => {
       appDirectory: root,
       apiDirectory: path.join(root, 'api'),
       sourceDirectories: [path.join(root, 'api')],
-      outputDirectories: [path.join(root, 'dist/api')],
       distDirectory: api.getAppContext().distDirectory,
       moduleType: 'module',
     };

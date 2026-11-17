@@ -32,6 +32,8 @@ export const bffPlugin = (): CliPlugin<AppTools> => ({
       api.updateAppContext({
         ...appContext,
         bffRuntimeFramework: userRuntimeFramework ?? 'hono',
+        // Every BFF build compiles the server roots with its own sources.
+        serverCompileOwner: '@modern-js/plugin-bff',
       });
     }
 
@@ -156,7 +158,7 @@ export const bffPlugin = (): CliPlugin<AppTools> => ({
     });
 
     api.onAfterBuild(async () => {
-      await compileApi();
+      await compileApi('build');
       await handleCrossProjectInvocation(true);
     });
 

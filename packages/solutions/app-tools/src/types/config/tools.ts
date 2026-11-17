@@ -1,5 +1,5 @@
+import type { ServerCompilerProvider } from '@modern-js/app-tools-extensions/server-compiler';
 import type { BuilderConfig } from '@modern-js/builder';
-import type { ServerCompilerProvider } from '@modern-js/server-utils/compiler';
 import type { UnwrapBuilderConfig } from '../utils';
 
 type BuilderToolsConfig = UnwrapBuilderConfig<BuilderConfig, 'tools'>;

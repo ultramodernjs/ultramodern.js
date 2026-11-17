@@ -4,8 +4,8 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import type { ServerCompilerProvider } from '@modern-js/server-utils/compiler';
 import { resolveEffectTsrsCompiler } from './build-config/build-environment';
+import type { ServerCompilerProvider } from './server-compiler/types';
 
 type CompilerProvider = ServerCompilerProvider;
 type Compiler = Awaited<ReturnType<CompilerProvider>>;
