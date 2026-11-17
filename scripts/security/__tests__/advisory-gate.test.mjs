@@ -127,6 +127,72 @@ test('an unexpired exception acknowledges exactly its advisory', async () => {
   );
 });
 
+// The ERP-10 acceptance calls the gate with allowRepositoryCorrections false and
+// the committed exceptions file; a no-patch advisory reached through several
+// parents passes only when every path's parent is recorded.
+test('a release context acknowledges a no-patch advisory only through recorded parents', async () => {
+  const report = JSON.stringify({
+    advisories: {
+      picomatch: {
+        github_advisory_id: 'GHSA-fc5q-39xc-vjpf',
+        module_name: 'picomatch',
+        severity: 'high',
+        title:
+          'picomatch vulnerable to ReDoS through single-branch repeated extglobs',
+        vulnerable_versions: '<=4.0.7',
+        patched_versions: null,
+        url: 'https://github.com/advisories/GHSA-fc5q-39xc-vjpf',
+        findings: [
+          {
+            version: '2.3.2',
+            paths: [
+              'verticals__support>@bleedingdev/modern-js-utils>fast-glob>micromatch>picomatch',
+            ],
+          },
+          {
+            version: '4.0.7',
+            paths: ['apps__shell>sass>@parcel/watcher>picomatch'],
+          },
+        ],
+      },
+    },
+  });
+  const exception = parents => ({
+    id: 'GHSA-fc5q-39xc-vjpf',
+    package: 'picomatch',
+    parents,
+    reason: 'test',
+    expires: '2026-10-01',
+  });
+  await withExceptions(
+    [exception(['micromatch', '@parcel/watcher'])],
+    async exceptionsPath => {
+      assert.deepEqual(
+        await assertNoHighAdvisories({
+          allowRepositoryCorrections: false,
+          cwd: '/scratch',
+          exceptionsPath,
+          now,
+          ...auditReturning(report),
+        }),
+        { auditLevel: 'high', acknowledged: ['GHSA-fc5q-39xc-vjpf'] },
+      );
+    },
+  );
+  await withExceptions([exception(['micromatch'])], async exceptionsPath => {
+    await assert.rejects(
+      assertNoHighAdvisories({
+        allowRepositoryCorrections: false,
+        cwd: '/scratch',
+        exceptionsPath,
+        now,
+        ...auditReturning(report),
+      }),
+      /found 1 high or critical advisory:\nhigh GHSA-fc5q-39xc-vjpf picomatch@2\.3\.2, 4\.0\.7[\s\S]*patched null[\s\S]*via apps__shell>sass>@parcel\/watcher>picomatch/u,
+    );
+  });
+});
+
 test('an expired exception fails before auditing', async () => {
   const { calls, runCommandImpl } = auditReturning(imageSizeReport);
   await withExceptions(
