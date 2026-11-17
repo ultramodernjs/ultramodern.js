@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { yaml } from '@modern-js/utils';
+import { readSupportArtifacts, type SupportArtifacts } from './package-source';
 import { getRendererGenerationProfile } from './renderer-profile';
 import type { JsonValue, WorkspaceRenderer } from './types';
 import { isRecord } from './types';
@@ -14,6 +15,10 @@ import {
   parseNpmAlias,
   validateApiOnlySourceSurface,
 } from './validation/renderer';
+import {
+  assertSupportDependencyPolicies,
+  assertWorkspaceDependencyOverrides,
+} from './validation/workspace';
 import {
   EFFECT_VERSION,
   REACT_DOM_VERSION,
@@ -352,6 +357,7 @@ export type OverlayBaselineSnapshot = {
     Readonly<Record<string, string>>
   >;
   rendererProjectionsByManifest?: Record<string, RendererProjection>;
+  supportArtifacts?: SupportArtifacts;
 };
 
 type RendererProjection = {
@@ -440,6 +446,19 @@ export function captureOverlayBaselineSnapshot(
   shellPackageDirectories: string[],
   deferredUiArtifactPaths: ReadonlySet<string> = new Set(),
 ): OverlayBaselineSnapshot {
+  const supportArtifacts = fs.existsSync(
+    path.join(workspaceRoot, 'package.json'),
+  )
+    ? readSupportArtifacts(readPackageJson(workspaceRoot, 'package.json'))
+    : undefined;
+  const supportPins = (pins: Readonly<Record<string, string>>) =>
+    Object.fromEntries(
+      Object.entries(pins).map(([name, request]) => [
+        name,
+        supportArtifacts?.packages[name as keyof SupportArtifacts['packages']]
+          ?.request ?? request,
+      ]),
+    );
   const rendererProjectionsByManifest = rendererProjections(
     workspaceRoot,
     deferredUiArtifactPaths,
@@ -466,12 +485,14 @@ export function captureOverlayBaselineSnapshot(
       .filter(renderer => renderer !== 'none'),
   );
   const workspaceRenderer = renderers.size === 1 ? [...renderers][0] : 'react';
-  const baselineDependencyPins = rendererBaselinePins(workspaceRenderer);
+  const baselineDependencyPins = supportPins(
+    rendererBaselinePins(workspaceRenderer),
+  );
   const baselineDependencyPinsByManifest = Object.fromEntries(
     Object.entries(rendererProjectionsByManifest).map(
       ([manifest, projection]) => [
         manifest,
-        rendererBaselinePins(projection.renderer),
+        supportPins(rendererBaselinePins(projection.renderer)),
       ],
     ),
   );
@@ -523,6 +544,7 @@ export function captureOverlayBaselineSnapshot(
     baselineDependencyPins,
     baselineDependencyPinsByManifest,
     rendererProjectionsByManifest,
+    supportArtifacts,
   };
 }
 
@@ -772,6 +794,13 @@ function collectRendererViolations(
       const policyPath = `${prefix}.${key}`;
       const alias =
         typeof child === 'string' ? parseNpmAlias(child) : undefined;
+      // Exact support policy is validated against the captured descriptor below.
+      // Root tooling hosts may intentionally belong to another renderer.
+      if (
+        snapshot.supportArtifacts &&
+        Object.hasOwn(snapshot.supportArtifacts.packages, dependency)
+      )
+        continue;
       if (
         isForeignRendererPackage(dependency, renderer) ||
         (alias && isForeignRendererPackage(alias.name, renderer))
@@ -914,7 +943,43 @@ export function assertOverlayPreservedBaseline(options: {
   generator: string;
   snapshot: OverlayBaselineSnapshot;
 }) {
+  const supportViolations: OverlayBaselineViolation[] = [];
+  if (options.snapshot.supportArtifacts) {
+    try {
+      const rootManifest = readPackageJson(
+        options.workspaceRoot,
+        'package.json',
+      );
+      if (
+        !sameJson(
+          readSupportArtifacts(rootManifest),
+          options.snapshot.supportArtifacts,
+        )
+      )
+        throw new Error('Overlay changed the selected support descriptor.');
+      assertWorkspaceDependencyOverrides(
+        readPnpmWorkspaceYaml(options.workspaceRoot),
+        rootManifest,
+      );
+      for (const manifestPath of walkFiles(
+        options.workspaceRoot,
+        isPackageManifest,
+      ))
+        assertSupportDependencyPolicies(
+          readPackageJson(options.workspaceRoot, manifestPath),
+          options.snapshot.supportArtifacts,
+          manifestPath,
+        );
+    } catch (error) {
+      supportViolations.push({
+        kind: 'baseline-version-relaxation',
+        path: 'pnpm-workspace.yaml',
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
   const violations = [
+    ...supportViolations,
     ...collectVersionViolations(options.workspaceRoot, options.snapshot),
     ...collectForbiddenShellArtifactViolations(
       options.workspaceRoot,

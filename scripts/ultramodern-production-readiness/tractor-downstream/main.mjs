@@ -289,6 +289,7 @@ function readTractorProducerOverrides({
         ]),
       ),
       pnpmOverrides: overrides,
+      pnpmPackageExtensions: policy.packageExtensions ?? {},
       minimumReleaseAgeExclude: producerExclusions,
       trustPolicy: policy.trustPolicy,
       trustPolicyIgnoreAfter: policy.trustPolicyIgnoreAfter,

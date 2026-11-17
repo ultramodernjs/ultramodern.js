@@ -237,6 +237,7 @@ async function writeCandidateCreatePackage(
       version: next.release.version,
       publishConfig: { access: 'public' },
       dependencies,
+      devDependencies: { '@rslib/core': '1.0.7' },
       ...(supportArtifacts
         ? {
             ultramodern: {
@@ -449,6 +450,14 @@ test('cohort staging projects packed tooling hosts per importer, including optio
   fs.writeFileSync(
     path.join(root, 'pnpm-workspace.yaml'),
     stringify({
+      packageExtensions: {
+        'authored-tool@2.0.0': {
+          peerDependencies: { 'authored-host': '^3.0.0' },
+        },
+        '@rslib/core@1.0.7': {
+          peerDependencies: { 'rsbuild-plugin-dts': '*' },
+        },
+      },
       catalogs: {
         ultramodern: Object.fromEntries(
           Object.keys(next.aliases).map(name => [name, 'old']),
@@ -457,6 +466,11 @@ test('cohort staging projects packed tooling hosts per importer, including optio
     }),
   );
   const options = toolingProducerOptions(next);
+  options.pnpmPackageExtensions = {
+    '@rslib/core@1.0.7': {
+      peerDependencies: { 'rsbuild-plugin-dts': '1.0.7' },
+    },
+  };
   const { compilerBootstrapSelectors } = await import(
     '../published-create-proof/package-cohort.mjs'
   );
@@ -482,7 +496,63 @@ test('cohort staging projects packed tooling hosts per importer, including optio
     before,
   );
   fs.writeFileSync(tools.artifactPath, originalBytes);
+  for (const [selector, request] of [
+    ['rsbuild-plugin-dts@1.0.7', 'https://wrong.invalid/dts.tgz'],
+    ['rsbuild-plugin-dts', support.packages['rsbuild-plugin-dts'].request],
+    [
+      '@rslib/core@1.0.7>rsbuild-plugin-dts',
+      support.packages['rsbuild-plugin-dts'].request,
+    ],
+    ['@effect/opentelemetry@4.1.4', '4.1.4'],
+  ]) {
+    assert.throws(
+      () =>
+        prepareTractorCohortInstallation(root, next, {
+          ...options,
+          pnpmOverrides: { [selector]: request },
+        }),
+      /descriptor-backed host policy/u,
+    );
+    assert.equal(
+      fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
+      before,
+    );
+  }
+  for (const extensions of [
+    { '@rslib/core@*': options.pnpmPackageExtensions['@rslib/core@1.0.7'] },
+    {
+      '@rslib/core@1.0.7': {
+        peerDependencies: { 'rsbuild-plugin-dts': '*' },
+      },
+    },
+    {
+      '@rslib/core@1.0.7': {
+        peerDependencies: { 'rsbuild-plugin-dts': '1.0.7' },
+        peerDependenciesMeta: { 'rsbuild-plugin-dts': { optional: true } },
+      },
+    },
+  ])
+    assert.throws(
+      () =>
+        prepareTractorCohortInstallation(root, next, {
+          ...options,
+          pnpmPackageExtensions: extensions,
+        }),
+      /exact required host peer/u,
+    );
   prepareTractorCohortInstallation(root, next, options);
+  const { parse } = await import('yaml');
+  assert.deepEqual(
+    parse(fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'))
+      .packageExtensions,
+    {
+      'authored-tool@2.0.0': {
+        peerDependencies: { 'authored-host': '^3.0.0' },
+      },
+      ...options.pnpmPackageExtensions,
+    },
+    'The exact producer compiler peer reaches the consumer installer',
+  );
   const expectedHosts = {
     'package.json': ['rsbuild-plugin-dts', 'solid-js'],
     'apps/shell-super-app/package.json': ['rsbuild-plugin-dts', 'solid-js'],
@@ -1086,7 +1156,7 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
       );
       fs.writeFileSync(
         path.join(workspace, 'pnpm-workspace.yaml'),
-        `minimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\nminimumReleaseAgeIgnoreMissingTime: false\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\ntrustPolicyExclude:\n  - tsrs@0.25.0-ts7.1.0-beta\nminimumReleaseAgeExclude:\n${bootstrapExclude.map(selector => `  - ${JSON.stringify(selector)}`).join('\n')}\noverrides:\n  'braces@>=3.0.0 <3.0.4': npm:@bleedingdev/braces@3.0.4\n  'sharp@>=0.35.0 <0.35.5': 0.35.5\n`,
+        `minimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\nminimumReleaseAgeIgnoreMissingTime: false\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\ntrustPolicyExclude:\n  - tsrs@0.25.0-ts7.1.0-beta\nminimumReleaseAgeExclude:\n${bootstrapExclude.map(selector => `  - ${JSON.stringify(selector)}`).join('\n')}\noverrides:\n  'braces@>=3.0.0 <3.0.4': npm:@bleedingdev/braces@3.0.4\n  'sharp@>=0.35.0 <0.35.5': 0.35.5\npackageExtensions:\n  '@rslib/core@1.0.7':\n    peerDependencies:\n      rsbuild-plugin-dts: 1.0.7\n`,
       );
     },
   });
@@ -1096,6 +1166,11 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
     pnpmOverrides: {
       'braces@>=3.0.0 <3.0.4': 'npm:@bleedingdev/braces@3.0.4',
       'sharp@>=0.35.0 <0.35.5': '0.35.5',
+    },
+    pnpmPackageExtensions: {
+      '@rslib/core@1.0.7': {
+        peerDependencies: { 'rsbuild-plugin-dts': '1.0.7' },
+      },
     },
     minimumReleaseAgeExclude: bootstrapExclude,
     trustPolicy: 'no-downgrade',

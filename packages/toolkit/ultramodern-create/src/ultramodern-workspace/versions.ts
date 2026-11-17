@@ -107,6 +107,7 @@ export const SHARP_VERSION = '0.35.5';
 // Required exact peer of @modern-js/app-tools-extensions' native server
 // compiler; support metadata selects the corrected archive for this version.
 export const RSBUILD_PLUGIN_DTS_VERSION = '1.0.7';
+export const RSLIB_CORE_VERSION = '1.0.7';
 
 export const ULTRAMODERN_PACKAGE_PINS = {
   appDependencies: {

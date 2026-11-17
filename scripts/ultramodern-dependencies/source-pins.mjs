@@ -124,6 +124,7 @@ function reviewedSourcePins(read) {
     BRACES_FORK_VERSION: supplementalSourcePins['@bleedingdev/braces'],
     SHARP_VERSION: supplementalSourcePins.sharp,
     RSBUILD_PLUGIN_DTS_VERSION: targets['rsbuild-plugin-dts'],
+    RSLIB_CORE_VERSION: targets['@rslib/core'],
   };
   const comparisonDependencies = JSON.parse(
     read(`${octane}typescript-compat/latest-build-package.json`),

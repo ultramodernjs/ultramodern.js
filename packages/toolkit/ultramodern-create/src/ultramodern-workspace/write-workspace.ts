@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { yaml } from '@modern-js/utils';
 import {
   modernPackageSpecifier,
   ULTRAMODERN_WORKSPACE_MODERN_PACKAGES,
@@ -54,7 +55,10 @@ import {
   resolvePackageSource,
   resolveWorkspacePackageLinkingPolicy,
 } from './package-source';
-import { ULTRAMODERN_WORKSPACE_POLICY } from './policy';
+import {
+  ULTRAMODERN_WORKSPACE_POLICY,
+  workspaceSupportPackageExtensions,
+} from './policy';
 import { captureWorkspaceRendererEvaluations } from './renderer-config-evaluation';
 import { reconcileWorkspaceRendererIdentities } from './renderer-identity';
 import { initializeGeneratedRendererIdentity } from './renderer-initial-identity';
@@ -296,14 +300,16 @@ async function generateUltramodernWorkspaceInPlace(
       packageScope: scope,
       nodeVersion: NODE_VERSION,
       pnpmVersion: PNPM_VERSION,
-      dependencyOverridesYaml: `overrides:\n${Object.entries(
-        ULTRAMODERN_WORKSPACE_POLICY.pnpm.overrides,
-      )
-        .map(
-          ([selector, specifier]) =>
-            `  ${JSON.stringify(selector)}: ${JSON.stringify(specifier)}`,
-        )
-        .join('\n')}\n\n`,
+      dependencyOverridesYaml: yaml.dump({
+        overrides: ULTRAMODERN_WORKSPACE_POLICY.pnpm.overrides,
+        ...(packageSource.supportArtifacts
+          ? {
+              packageExtensions: workspaceSupportPackageExtensions(
+                packageSource.supportArtifacts,
+              ),
+            }
+          : {}),
+      }),
       compilerTrustExceptionsYaml: `trustPolicyExclude: ${JSON.stringify(ULTRAMODERN_WORKSPACE_POLICY.pnpm.trustPolicyExclude)}\n`,
       effectVersion: EFFECT_VERSION,
       i18nextVersion: I18NEXT_VERSION,
