@@ -13,6 +13,13 @@ export const rslibPatchSha256 =
 export const supportBaselineRevision =
   'c4a6393979e763cf94cdcd18337e5047a8577d63';
 
+// Immutable reviewed merge (PR #316) carrying the accepted native activation
+// (producer source 48b9eef7, run 43904193604 attempt 1). Its manifests are a
+// baseline only for native-owned metadata and the exact native edges that
+// select that descriptor; they grant no other edge or URL authority.
+export const nativeBaselineRevision =
+  'ea6b64f23735f29a2cb2a4647c04d2dc3a185cbc';
+
 // Owning source and actual packed runtime/type qualification establish this
 // consolidation. Corrected OTel distribution and release acceptance stay separate.
 export const traceConsolidation = Object.freeze({
