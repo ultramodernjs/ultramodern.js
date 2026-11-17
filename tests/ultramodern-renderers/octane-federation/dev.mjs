@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { inspectOwnedProcessGroup } from '../../../scripts/ultramodern-production-readiness/react-rsc-worker-proof/runtime.mjs';
+import { claimPorts } from '../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 import { resolveDiskGuardian } from '../../../scripts/ultramodern-production-readiness/renderer-worker-lifecycle-proof/support.mjs';
 import { createDevArtifactOwnership } from './artifact-ownership.mjs';
 import {
@@ -73,6 +74,7 @@ const results = {};
 let browserOpened = false;
 let disposeBrowserDiagnostics;
 let proxy;
+let portClaim;
 let developmentURLs;
 let remoteWidgetFile;
 let remoteEdited = false;
@@ -104,17 +106,6 @@ const artifacts = createDevArtifactOwnership({
 
 const registerArtifact = (directory, kind) =>
   artifacts.register(directory, kind, cancellation.signal);
-
-async function freePort() {
-  const server = net.createServer();
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
-  const { port } = server.address();
-  await new Promise(resolve => server.close(resolve));
-  return port;
-}
 
 async function writeApp(directory, files) {
   for (const [name, content] of Object.entries(files)) {
@@ -603,9 +594,13 @@ try {
     results.mode = 'source-installed';
     results.installedConsumers = sourceContext.installations;
   }
-  const remotePort = await freePort();
-  const hostPort = await freePort();
-  const proxyPort = await freePort();
+  // The remote dev server is stopped and started again on its port mid-proof,
+  // and `modern dev` silently moves to the next port when its own is taken.
+  // So all three stay claimed until cleanup; each is unbound in the statement
+  // before its server starts.
+  portClaim = await claimPorts(3);
+  const [remotePort, hostPort, proxyPort] = portClaim.ports;
+  const [remoteClaim, hostClaim, proxyClaim] = portClaim.claims;
   const remoteUrl = `http://127.0.0.1:${remotePort}`;
   const hostUrl = `http://127.0.0.1:${hostPort}`;
   developmentURLs = { remoteUrl, hostUrl };
@@ -641,6 +636,7 @@ export default function Away() { const router = useRouter(); return <section dat
   await writeApp(remoteDirectory, fixtures.remote);
   await writeApp(hostDirectory, fixtures.host);
   remoteWidgetFile = path.join(remoteDirectory, 'src/components/Widget.tsx');
+  await remoteClaim.release();
   const initialRemoteProcess = await startDev(remoteDirectory, remotePort);
   const manifest = await waitFor(
     async () => {
@@ -672,6 +668,7 @@ export default function Away() { const router = useRouter(); return <section dat
   process.stdout.write(
     `${JSON.stringify({ stage: 'remote-published', remoteUrl, ...results.remoteManifest, nodePublication: results.nodePublication })}\n`,
   );
+  await hostClaim.release();
   await startDev(hostDirectory, hostPort);
   const document = await waitFor(
     async () => {
@@ -767,6 +764,7 @@ export default function Away() { const router = useRouter(); return <section dat
       return url.href;
     });
   assert.ok(allowedEntrySources.length > 0);
+  await proxyClaim.release();
   proxy = await markingProxy(nativeHostOrigin, proxyPort, allowedEntrySources);
   results.entryBarrier = proxy.proof;
   const startupDiagnosticTarget = `about:blank#${browserSession}`;
@@ -1501,6 +1499,7 @@ export default function Away() { const router = useRouter(); return <section dat
         cleanupErrors.push(error);
       });
   await proxy?.().catch(error => cleanupErrors.push(error));
+  await portClaim?.free().catch(error => cleanupErrors.push(error));
   let releasedArtifactCount = 0;
   if (processesRetired)
     for (const directory of artifacts.directories)

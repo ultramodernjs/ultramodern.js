@@ -15,7 +15,7 @@ import {
   readWorkerFixturePlan,
   runWorkerFixtureProof,
 } from '../../tests/ultramodern-renderers/octane-federation-workers/proof.mjs';
-import { leasePorts } from '../ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
+import { claimPorts } from '../ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 import {
   nativeFederationPackageRequests,
   nativeStartArchiveRequests,
@@ -323,10 +323,36 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
   });
   const dependencies = generatedWorkerDependencies(context);
   // The three origins are compiled into the Worker bundles, so the ports stay
-  // bound from here until the statement before compilation, which serves each
-  // remote's emitted assets on its origin.
-  const portLease = await leasePorts(3);
-  const origins = portLease.ports.map(port => `http://127.0.0.1:${port}`);
+  // bound from here until the statement before compilation, and claimed until
+  // this proof ends: the asset servers and bridges that bind them later can
+  // never find them taken by a sibling proof.
+  const portClaim = await claimPorts(3);
+  try {
+    return await runGeneratedWorkerOnClaimedPorts(context, {
+      signal,
+      portClaim,
+      generatorArtifact,
+      generator,
+      generatorConsumerRoot,
+      dependencies,
+    });
+  } finally {
+    await portClaim.free();
+  }
+}
+
+async function runGeneratedWorkerOnClaimedPorts(
+  context,
+  {
+    signal,
+    portClaim,
+    generatorArtifact,
+    generator,
+    generatorConsumerRoot,
+    dependencies,
+  },
+) {
+  const origins = portClaim.ports.map(port => `http://127.0.0.1:${port}`);
   const binding = (remote, index) => ({
     binding: `VERTICAL_REMOTE_${index ? 'B' : 'A'}_WORKER`,
     service: `proof-${remote.id}`,
@@ -507,7 +533,7 @@ export async function runGeneratedWorkerConsumer(context, { signal } = {}) {
     return { id: app.id, services: authored.deploy?.worker?.services ?? [] };
   });
   verifyGeneratedWorkerServices(generation.workerServices);
-  await portLease.release();
+  await portClaim.release();
   const compiled = await buildCompiledWorkerApplications({
     applications,
     context,

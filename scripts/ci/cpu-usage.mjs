@@ -6,7 +6,9 @@
 //   cpu-usage.mjs report --out <file> --label L  stop sampling, summarize
 //
 // The report goes to stdout and, when present, to $GITHUB_STEP_SUMMARY. It
-// never fails the job: a missing sample file reports "no samples".
+// never fails the job: a missing sample file reports "no samples". The log
+// also gets a timeline (busy cores per 10 s window from the first sample's
+// time), so a saturated phase can be matched to the step that ran then.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -36,10 +38,15 @@ export function summarize(text, cores) {
       return { at: Number(at), ...parseCpuLine(cpu.join(' ')) };
     });
   const busy = [];
+  const windows = [];
   for (let index = 1; index < samples.length; index += 1) {
     const total = samples[index].total - samples[index - 1].total;
     const idle = samples[index].idle - samples[index - 1].idle;
-    if (total > 0) busy.push(((total - idle) / total) * cores);
+    if (total <= 0) continue;
+    const value = ((total - idle) / total) * cores;
+    busy.push(value);
+    const window = Math.floor((samples[index].at - samples[0].at) / 10_000);
+    (windows[window] ??= []).push(value);
   }
   if (busy.length === 0) return undefined;
   const sorted = [...busy].sort((a, b) => a - b);
@@ -54,6 +61,12 @@ export function summarize(text, cores) {
     max: sorted.at(-1),
     saturatedShare:
       busy.filter(value => value >= cores * 0.9).length / busy.length,
+    startedAt: new Date(samples[0].at).toISOString(),
+    timeline: Array.from(windows, values =>
+      values
+        ? values.reduce((sum, value) => sum + value, 0) / values.length
+        : undefined,
+    ),
   };
 }
 
@@ -88,6 +101,10 @@ function report(out, label) {
     ? `${label}: ${result.cores} vCPUs over ${result.seconds} s; busy cores mean ${result.mean.toFixed(1)}, p50 ${result.p50.toFixed(1)}, p90 ${result.p90.toFixed(1)}, max ${result.max.toFixed(1)}; ${(result.saturatedShare * 100).toFixed(0)}% of samples at >= 90% of all cores`
     : `${label}: no CPU samples`;
   console.log(line);
+  if (result)
+    console.log(
+      `${label} timeline from ${result.startedAt}, busy cores per 10 s: ${result.timeline.map(value => value?.toFixed(1) ?? '-').join(' ')}`,
+    );
   if (process.env.GITHUB_STEP_SUMMARY)
     fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${line}\n`);
 }

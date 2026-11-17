@@ -106,7 +106,7 @@ const {
 const { launchServer, ready } = await harness(
   'scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/runtime.mjs',
 );
-const { leasePort } = await harness(
+const { claimPort } = await harness(
   'scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs',
 );
 
@@ -212,6 +212,7 @@ for (const event of ['SIGINT', 'SIGTERM', 'SIGHUP'])
   process.once(event, interrupt);
 const witnesses = [];
 const servers = [];
+const portClaims = [];
 let registry;
 let browser;
 let failure;
@@ -487,11 +488,14 @@ try {
           `${renderer}-typecheck`,
         );
       }
-      const lease = await leasePort();
-      const { port } = lease;
+      // Claimed until this renderer's server is stopped: feature rows run side
+      // by side, so a merely free port could be taken before the server binds.
+      const claim = await claimPort();
+      portClaims.push(claim);
+      const { port } = claim;
       const origin = `http://127.0.0.1:${port}`;
       // Unbind in the statement before the server that binds this port starts.
-      await lease.release();
+      await claim.release();
       const server = launchServer(process.execPath, installedBin(appRoot), {
         cwd: appRoot,
         env: { ...env, PORT: String(port), [shell.portEnv]: String(port) },
@@ -512,6 +516,7 @@ try {
       }
       await server.stop();
       servers.pop();
+      await claim.free();
       assertReleaseAgeExclusionsUnchanged(consumerPolicy);
       observations[renderer] = {
         strictGeneratedTypes: true,
@@ -542,6 +547,7 @@ try {
     }
   };
   for (const server of servers.reverse()) await attempt(() => server.stop());
+  for (const claim of portClaims) await attempt(() => claim.free());
   if (browser) await attempt(() => browser.close());
   if (registry?.stop) await attempt(() => registry.stop());
   for (const witness of witnesses)
