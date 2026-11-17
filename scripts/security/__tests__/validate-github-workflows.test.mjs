@@ -640,6 +640,11 @@ test('release gates keep their fail-fast needs edges', () => {
         error.includes('must need') || error.includes('--check-registry'),
     );
   assert.deepEqual(edgeErrors(content), []);
+  // A job's key, name, runner, timeout and needs, up to its condition.
+  const jobHead = jobId => {
+    const start = content.indexOf(`\n  ${jobId}:\n`);
+    return content.slice(start, content.indexOf('    if: >-\n', start));
+  };
   for (const [edge, job, need] of [
     [
       '      - qualify-source\n      - reconcile-sidecars\n      - accept-release\n      # A dry run is green only when the Tractor rehearsal is.\n',
@@ -651,9 +656,10 @@ test('release gates keep their fail-fast needs edges', () => {
       'publish-sidecars',
       'reconcile-sidecars',
     ],
+    [jobHead('prepare-release'), 'prepare-release', 'publish-security'],
     [
-      '    timeout-minutes: 90\n    needs:\n      - publish-security\n      - effect-compiler-payload\n',
-      'prepare-release',
+      jobHead('qualify-source-compute'),
+      'qualify-source-compute',
       'publish-security',
     ],
     [
@@ -732,10 +738,10 @@ test('release qualification overlaps integration and issues no receipt before bo
       results: { ...results, ...overrides },
       context: { ...context, inputs },
     });
-  assert.equal(
-    workflow.jobs['qualify-source-compute'].needs,
+  assert.deepEqual(workflow.jobs['qualify-source-compute'].needs, [
+    'publish-security',
     'effect-compiler-payload',
-  );
+  ]);
   assert.deepEqual(workflow.jobs['qualify-source'].needs, [
     'integration',
     'qualify-source-compute',

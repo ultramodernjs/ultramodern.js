@@ -2,175 +2,143 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  acceptanceRunName,
+  acceptanceWorkflowPath,
+  anchorPackage,
   assessPreviousReleaseAcceptance,
-  handoffJobName,
-  publicationJobName,
   readPreviousReleaseAcceptance,
 } from '../lib/release-acceptance-gate.mjs';
 
 const repository = 'ultramodernjs/ultramodern.js';
-const live = { id: 300, status: 'completed' };
-const job = (name, conclusion, run_attempt = 1) => ({
-  name,
-  conclusion,
-  run_attempt,
+const version = '3.11.3-ultramodern.8';
+const packument = deprecated => ({
+  'dist-tags': { latest: version },
+  versions: { [version]: deprecated === undefined ? {} : { deprecated } },
 });
-const handedOff = [
-  job(publicationJobName, 'success', 2),
-  job(handoffJobName, 'success', 2),
-];
-const acceptance = (
+const acceptance = (status, conclusion, overrides = {}) => ({
+  id: 900,
+  path: acceptanceWorkflowPath,
+  head_branch: 'main-ultramodern',
+  event: 'workflow_dispatch',
   status,
   conclusion,
-  id = 900,
-  created_at = '2026-11-17T12:00:00Z',
-) => ({
-  id,
-  display_title: acceptanceRunName(live.id),
-  status,
-  conclusion,
-  created_at,
+  created_at: '2026-11-17T12:00:00Z',
+  ...overrides,
 });
 
 function assess({
-  publishRuns = [{ id: 400, status: 'in_progress' }, live],
-  jobs = { 300: handedOff },
+  npm = packument(),
+  releases = [],
   acceptanceRuns = [],
-  artifacts = [],
 } = {}) {
   return assessPreviousReleaseAcceptance({
-    acceptanceRuns,
-    artifactsFor: () => artifacts,
-    currentRunId: 400,
-    jobsFor: runId => jobs[runId] ?? [],
-    publishRuns,
+    acceptanceRuns: () => acceptanceRuns,
+    packument: npm,
+    releaseFor: tag => (releases.includes(tag) ? { tag_name: tag } : null),
     repository,
   });
 }
 
-test('a live cohort waits while the previous cohort is still being accepted', () => {
-  for (const status of ['queued', 'in_progress', 'waiting', 'pending']) {
-    const result = assess({ acceptanceRuns: [acceptance(status, null)] });
-    assert.equal(result.status, 'blocked', status);
-    assert.match(result.message, /still/u);
-  }
-});
-
-test('a cohort that never started or lost its acceptance blocks with the exact re-dispatch', () => {
-  const never = assess({
-    jobs: {
-      300: [
-        job(publicationJobName, 'success', 2),
-        job(handoffJobName, 'failure', 2),
-      ],
-    },
-    artifacts: [
-      {
-        name: 'bleedingdev-release-identity-run-300-attempt-1-publication-attempt-2',
-      },
-    ],
-  });
-  assert.equal(never.status, 'blocked');
-  assert.match(
-    never.message,
-    /gh workflow run accept-bleedingdev-release\.yml .* -f original_run_id=300 -f producer_run_attempt=1 -f publication_run_attempt=2$/u,
-  );
-  // Dispatched but not yet listed: still blocks rather than racing it.
-  assert.equal(assess().status, 'blocked');
-  const cancelled = assess({
-    acceptanceRuns: [acceptance('completed', 'cancelled')],
-  });
-  assert.equal(cancelled.status, 'blocked');
-  assert.match(cancelled.message, /cancelled/u);
-});
-
-test('a red acceptance never blocks the corrected cohort, but is reported', () => {
-  for (const conclusion of ['failure', 'timed_out', 'startup_failure']) {
-    const result = assess({
-      acceptanceRuns: [acceptance('completed', conclusion)],
-    });
-    assert.equal(result.status, 'failed', conclusion);
-    assert.match(result.message, /not accepted/u);
-  }
-});
-
-test('the newest acceptance of the newest live cohort decides', () => {
+test('the cohort at latest is accepted exactly when its release record exists', () => {
   assert.equal(
-    assess({ acceptanceRuns: [acceptance('completed', 'success')] }).status,
+    assess({ releases: [`ultramodern-v${version}`] }).status,
     'clear',
   );
-  // An owner re-run that passed after a red one clears the gate.
+  // No live cohort at all, or a package npm does not know yet.
+  assert.equal(assess({ npm: null }).status, 'clear');
+  assert.equal(assess({ npm: { 'dist-tags': {} } }).status, 'clear');
+  // An older cohort's release never stands in for the one at latest.
   assert.equal(
-    assess({
-      acceptanceRuns: [
-        acceptance('completed', 'failure', 901, '2026-11-17T12:00:00Z'),
-        acceptance('completed', 'success', 902, '2026-11-17T13:00:00Z'),
-      ],
-    }).status,
-    'clear',
-  );
-  // Another run's acceptance never stands in for this cohort's.
-  assert.equal(
-    assess({
-      acceptanceRuns: [
-        {
-          ...acceptance('completed', 'success'),
-          display_title: acceptanceRunName(299),
-        },
-      ],
-    }).status,
+    assess({ releases: ['ultramodern-v3.11.3-ultramodern.7'] }).status,
     'blocked',
   );
 });
 
-test('dry runs, failed publications and in-run acceptance do not hold a cohort', () => {
-  // Only a run whose publish job passed is a live cohort.
-  assert.equal(
-    assess({
-      publishRuns: [{ id: 301, status: 'completed' }, live],
-      jobs: {
-        301: [job(publicationJobName, 'skipped')],
-        300: [
-          job(publicationJobName, 'success'),
-          job('Accept the exact published registry cohort', 'success'),
-        ],
-      },
-    }).status,
-    'clear',
-  );
-  assert.equal(
-    assess({
-      publishRuns: [{ id: 302, status: 'completed' }],
-      jobs: { 302: [job(publicationJobName, 'failure')] },
-    }).status,
-    'clear',
-  );
+test('a cohort without a release record blocks whatever its acceptance did', () => {
+  for (const [status, conclusion] of [
+    ['queued', null],
+    ['in_progress', null],
+    ['completed', 'failure'],
+    ['completed', 'timed_out'],
+    ['completed', 'cancelled'],
+    ['completed', 'skipped'],
+    ['completed', 'startup_failure'],
+    // The release record failed after a green outcome: still not recorded.
+    ['completed', 'success'],
+  ]) {
+    const result = assess({ acceptanceRuns: [acceptance(status, conclusion)] });
+    assert.equal(result.status, 'blocked', `${status}/${conclusion}`);
+    assert.match(result.message, /actions\/runs\/900/u);
+  }
+  const never = assess();
+  assert.equal(never.status, 'blocked');
+  assert.match(never.message, /section 5/u);
 });
 
-test('the gate reads runs through the GitHub API only', () => {
+test('runs that are not owner acceptances on main never describe the cohort', () => {
+  const result = assess({
+    acceptanceRuns: [
+      acceptance('in_progress', null, { id: 901, head_branch: 'other' }),
+      acceptance('in_progress', null, { id: 902, event: 'push' }),
+      acceptance('in_progress', null, {
+        id: 903,
+        path: '.github/workflows/x.yml',
+      }),
+      acceptance('completed', 'failure', {
+        id: 904,
+        created_at: '2026-11-17T11:00:00Z',
+      }),
+    ],
+  });
+  assert.equal(result.status, 'blocked');
+  assert.match(result.message, /runs\/904 concluded failure/u);
+});
+
+test('only deprecating the unaccepted cohort lets a corrected one replace it', () => {
+  const result = assess({ npm: packument('Deprecated: use .9') });
+  assert.equal(result.status, 'withdrawn');
+  assert.match(result.message, /never accepted/u);
+  assert.equal(assess({ npm: packument('') }).status, 'blocked');
+});
+
+test('the gate reads npm origin and the GitHub API only', async () => {
   const requests = [];
-  const result = readPreviousReleaseAcceptance(
+  const fetched = [];
+  const result = await readPreviousReleaseAcceptance(
     {
       GITHUB_REPOSITORY: repository,
-      GITHUB_RUN_ID: '400',
       GITHUB_SERVER_URL: 'https://github.com',
     },
-    endpoint => {
-      requests.push(endpoint);
-      if (endpoint.includes('publish-bleedingdev.yml/runs'))
-        return { workflow_runs: [live] };
-      if (endpoint.includes('accept-bleedingdev-release.yml/runs'))
-        return { workflow_runs: [acceptance('completed', 'success')] };
-      if (endpoint.endsWith('/jobs?filter=latest&per_page=100'))
-        return { jobs: handedOff };
-      throw new Error(`unexpected ${endpoint}`);
+    {
+      api: endpoint => {
+        requests.push(endpoint);
+        if (endpoint.endsWith(`/releases/tags/ultramodern-v${version}`))
+          return null;
+        if (endpoint.includes('accept-bleedingdev-release.yml/runs'))
+          return { workflow_runs: [acceptance('in_progress', null)] };
+        throw new Error(`unexpected ${endpoint}`);
+      },
+      fetchImpl: async url => {
+        fetched.push(url);
+        return { ok: true, status: 200, json: async () => packument() };
+      },
     },
   );
-  assert.equal(result.status, 'clear');
-  assert.deepEqual(requests, [
-    `repos/${repository}/actions/workflows/accept-bleedingdev-release.yml/runs?per_page=100`,
-    `repos/${repository}/actions/workflows/publish-bleedingdev.yml/runs?branch=main-ultramodern&event=workflow_dispatch&per_page=30`,
-    `repos/${repository}/actions/runs/300/jobs?filter=latest&per_page=100`,
+  assert.equal(result.status, 'blocked');
+  assert.deepEqual(fetched, [
+    `https://registry.npmjs.org/${encodeURIComponent(anchorPackage)}?write=true`,
   ]);
+  assert.deepEqual(requests, [
+    `repos/${repository}/releases/tags/ultramodern-v${version}`,
+    `repos/${repository}/actions/workflows/accept-bleedingdev-release.yml/runs?branch=main-ultramodern&event=workflow_dispatch&per_page=100`,
+  ]);
+  await assert.rejects(
+    readPreviousReleaseAcceptance(
+      { GITHUB_REPOSITORY: repository },
+      {
+        api: () => assert.fail('npm must answer first'),
+        fetchImpl: async () => ({ ok: false, status: 503 }),
+      },
+    ),
+    /HTTP 503/u,
+  );
 });

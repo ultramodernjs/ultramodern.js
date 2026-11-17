@@ -1166,7 +1166,7 @@ const bleedingdevPublishJobs = Object.freeze([
 // the registry reconciliation and the Tractor rehearsal.
 const bleedingdevRequiredNeeds = Object.freeze({
   integration: ['publish-security', 'effect-compiler-payload'],
-  'qualify-source-compute': ['effect-compiler-payload'],
+  'qualify-source-compute': ['publish-security', 'effect-compiler-payload'],
   'prepare-release': ['publish-security', 'effect-compiler-payload'],
   publish: [
     'publish-security',
@@ -1908,13 +1908,13 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
     );
   }
   const qualificationNeeds = normalizeNeeds(jobs['qualify-source']);
+  const computeNeeds = normalizeNeeds(jobs['qualify-source-compute']);
   if (
     qualificationNeeds.length !== 2 ||
     !qualificationNeeds.includes('qualify-source-compute') ||
-    normalizeNeeds(jobs['qualify-source-compute']).length !== 1 ||
-    !normalizeNeeds(jobs['qualify-source-compute']).includes(
-      'effect-compiler-payload',
-    )
+    computeNeeds.length !== 2 ||
+    !computeNeeds.includes('effect-compiler-payload') ||
+    !computeNeeds.includes('publish-security')
   ) {
     errors.push(
       `${relativePath} qualify-source must join integration and compiler-dependent qualify-source-compute before issuing a receipt`,

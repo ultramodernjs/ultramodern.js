@@ -10,6 +10,7 @@ import {
   lookupRegistryPackageDist,
   lookupRegistryPackument,
   mapWithConcurrency,
+  readRegistryInstallView,
   registryPackumentDist,
   registryPackumentDistTag,
   verifyRegistryTarball,
@@ -1114,10 +1115,43 @@ async function validateRegistryCohort(
   );
 }
 
+// Consumer: accept-bleedingdev-release.yml, after validateRegistryCohort has
+// proven the origin. Installers read a CDN copy that can trail the origin by
+// up to its max-age, so the published checks start only once that copy lists
+// the version at `tag` for every member. The reads are cheap and run for all
+// members at once, so the cohort waits out one schedule, not one per slot.
+async function awaitRegistryInstallView(
+  manifest,
+  { tag },
+  { readInstallView = readRegistryInstallView, wait } = {},
+) {
+  const version = manifest.release.version;
+  const outcomes = await mapWithConcurrency(
+    manifest.packages,
+    manifest.packages.length,
+    async item => ({
+      item,
+      outcome: await pollRegistryPropagation(
+        () => readInstallView(item.targetName, tag, version),
+        { wait },
+      ),
+    }),
+  );
+  const pending = outcomes.filter(({ outcome }) => !outcome.settled);
+  if (pending.length > 0) {
+    throw new Error(
+      [
+        `npm install metadata never served ${version} at ${tag} for ${pending.length} member(s), although the origin does.`,
+        ...pending.map(({ outcome }) => outcome.detail),
+      ].join('\n'),
+    );
+  }
+}
+
 // Returns once npm has accepted every tarball. Reading the cohort back from
-// npm is accept-bleedingdev-release.yml's first job, bound to this run's
-// signed invocation, so it waits on npm's propagation once, outside the run
-// that publishes.
+// npm is accept-bleedingdev-release.yml's first job, under the same provenance
+// predicate as this run, so it waits on npm's propagation once, outside the
+// run that publishes.
 async function publishManifestPackages(
   releaseArtifacts,
   options,
@@ -1239,6 +1273,7 @@ async function publishManifestPackages(
 export {
   assertRegistrySourceCommitUnpublished,
   assertRegistryDistMatches,
+  awaitRegistryInstallView,
   createRegistryProvenanceExpectation,
   extractTarball,
   isRegistryNotFoundError,
