@@ -22,14 +22,18 @@ import { getPrimaryPrefix } from './prefix';
 
 const RUNTIME_CREATE_REQUEST = '@modern-js/plugin-bff/client';
 
+/** `build` also compiles the app's server roots; `dev` only API and shared. */
+export type BffCompileMode = 'build' | 'dev';
+
 export const createBffGenerator = (api: CLIPluginAPI<AppTools>) => {
-  const compileApi = async () => {
+  const compileApi = async (mode: BffCompileMode) => {
     const {
       appDirectory,
       distDirectory,
       apiDirectory,
       sharedDirectory,
       moduleType,
+      resolveServerCompileSourceDirs,
     } = api.getAppContext();
     const config = api.getNormalizedConfig();
     const distDir = path.resolve(distDirectory);
@@ -43,6 +47,14 @@ export const createBffGenerator = (api: CLIPluginAPI<AppTools>) => {
     for (const directory of [apiDir, sharedDir]) {
       if (await fs.pathExists(directory)) sourceDirs.push(directory);
     }
+    // In builds, this single compilation also owns the app's server roots.
+    const serverDirs =
+      mode === 'build' ? (resolveServerCompileSourceDirs?.() ?? []) : [];
+    for (const directory of serverDirs) {
+      const resolved = path.resolve(directory);
+      if (!sourceDirs.some(existing => path.resolve(existing) === resolved))
+        sourceDirs.push(directory);
+    }
     if (sourceDirs.length === 0) return;
     const combinedAlias = ([] as unknown[])
       .concat(config.source.alias ?? [])
@@ -51,16 +63,13 @@ export const createBffGenerator = (api: CLIPluginAPI<AppTools>) => {
       appDirectory,
       apiDirectory: apiDir,
       sourceDirectories: sourceDirs,
-      outputDirectories: sourceDirs.map(directory =>
-        path.resolve(distDir, path.relative(appDirectory, directory)),
-      ),
       distDirectory: distDir,
       tsconfigPath,
       moduleType,
     };
     const hooks = api.getHooks();
     await hooks.onBeforeBffCompile.call(context);
-    await compile(
+    const result = await compile(
       appDirectory,
       { alias: combinedAlias, sourceMap: config.output?.sourceMap },
       {
@@ -73,7 +82,7 @@ export const createBffGenerator = (api: CLIPluginAPI<AppTools>) => {
         throwErrorInsteadOfExit: true,
       },
     );
-    await hooks.onAfterBffCompile.call(context);
+    await hooks.onAfterBffCompile.call(context, result);
   };
 
   const generate = async () => {
@@ -168,7 +177,7 @@ export const createBffGenerator = (api: CLIPluginAPI<AppTools>) => {
 
   const handleCrossProjectInvocation = async (isBuild = false) => {
     if (api.getNormalizedConfig().bff?.crossProject !== true) return;
-    if (!isBuild) await compileApi();
+    if (!isBuild) await compileApi('dev');
     await generate();
   };
   return { compileApi, generate, handleCrossProjectInvocation };

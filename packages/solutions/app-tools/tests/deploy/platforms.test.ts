@@ -96,6 +96,26 @@ describe('deploy platforms', () => {
     );
   });
 
+  it('selects the Effect runtime bundle rather than its unbundled inputs as trace roots', async () => {
+    const params = createPresetParams(true);
+    const appDirectory = params.appContext.appDirectory;
+    fs.mkdirSync(path.join(appDirectory, 'api'));
+    fs.writeFileSync(
+      path.join(appDirectory, 'api/index.ts'),
+      'export default {};',
+    );
+    params.modernConfig.bff = { runtimeFramework: 'effect' };
+    await createNodePreset(params).end?.();
+    const filter = ndepe.nodeDepEmit.mock.calls[0][0].entryFilter;
+    expect(filter).toBeTypeOf('function');
+    const output = path.join(appDirectory, '.output');
+    expect(filter(path.join(output, 'api/index.js'))).toBe(true);
+    expect(filter(path.join(output, 'server/config.js'))).toBe(true);
+    expect(filter(path.join(output, 'api/unused.js'))).toBe(false);
+    expect(filter(path.join(output, 'shared/unused.js'))).toBe(false);
+    expect(filter(path.join(output, 'src/unused.js'))).toBe(false);
+  });
+
   it('emits dependencies for the vercel and netlify presets', async () => {
     const params = createPresetParams(true);
     const { appDirectory } = params.appContext;

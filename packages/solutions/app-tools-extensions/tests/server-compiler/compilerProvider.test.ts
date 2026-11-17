@@ -2,13 +2,16 @@ import { fs } from '@modern-js/utils';
 import type { RsbuildPlugin } from '@rslib/core';
 import os from 'os';
 import path from 'path';
-import { compile, type ServerCompiler } from '../src/common';
-import type { DeclarationPluginOptions } from '../src/compiler';
+import {
+  compileServerSources as compile,
+  type DeclarationPluginOptions,
+  type ServerCompiler,
+} from '../../src/server-compiler';
 import {
   createResolvedTsgoConfig,
   getTsgoBinPath,
   runTsgo,
-} from '../src/compilers/tsgo';
+} from '../../src/server-compiler/tsgo';
 
 const unrequestedDeclarations = (): never => {
   throw new Error('Declarations were not requested');
@@ -203,7 +206,7 @@ describe('neutral server compiler provider', () => {
             if (args[0] !== '-p' || args[2] !== '--noEmit') process.exit(9);
             const config = JSON.parse(fs.readFileSync(args[1], 'utf8'));
             if (config.references || config.compilerOptions.composite) process.exit(8);
-            process.stdout.write('TS99999: selected provider diagnostic');
+            process.stdout.write('api/index.d.ts(1,1): error TS99999: selected provider diagnostic');
             process.exit(2);
           `,
               '--',
@@ -235,7 +238,11 @@ describe('neutral server compiler provider', () => {
         if (noEmitOnError) {
           await expect(result).rejects.toThrow('selected provider diagnostic');
         } else {
-          await expect(result).resolves.toBeUndefined();
+          // Declarations are not emitted, so nothing is written.
+          await expect(result).resolves.toEqual({
+            rootFiles: [],
+            emittedFiles: [],
+          });
         }
         expect(provider).toHaveBeenCalledExactlyOnceWith(appDirectory);
         expect(readConfig).toHaveBeenCalledExactlyOnceWith(configFile);
@@ -283,7 +290,75 @@ describe('neutral server compiler provider', () => {
     }
   });
 
-  it('emits declarations once through each sibling provider plugin across passes and formats', async () => {
+  it.each([
+    ['a crash without diagnostics', 'segmentation fault', 2, ''],
+    ['a config error', 'error TS5023: Unknown compiler option', 1, ''],
+    [
+      'a config file diagnostic',
+      'tsconfig.json(3,5): error TS5024: bad',
+      1,
+      '',
+    ],
+    [
+      'an unexpected exit status',
+      'api/index.ts(1,1): error TS2322: x',
+      134,
+      '',
+    ],
+    [
+      'a panic after partial diagnostics',
+      'api/index.ts(1,1): error TS2322: x',
+      2,
+      'panic: runtime error: invalid memory address\n',
+    ],
+  ])(
+    'fails on %s even when noEmitOnError=false',
+    async (_name, output, code, stderr) => {
+      const appDirectory = await fs.realpath(
+        await fs.mkdtemp(path.join(os.tmpdir(), 'server-compiler-crash-')),
+      );
+      try {
+        await fs.outputFile(
+          path.join(appDirectory, 'api/index.ts'),
+          'export const answer = 42;\n',
+        );
+        await expect(
+          compile(
+            appDirectory,
+            {},
+            {
+              compiler: () => ({
+                command: {
+                  executable: process.execPath,
+                  args: [
+                    '-e',
+                    `process.stdout.write(${JSON.stringify(output)}); process.stderr.write(${JSON.stringify(stderr)}); process.exit(${code});`,
+                    '--',
+                  ],
+                },
+                readConfig: async () => ({
+                  compilerOptions: { noEmitOnError: false },
+                  files: [path.join(appDirectory, 'api/index.ts')],
+                }),
+                declarationPlugin: unrequestedDeclarations,
+              }),
+              sourceDirs: [path.join(appDirectory, 'api')],
+              distDir: path.join(appDirectory, 'dist'),
+              tsconfigPath: path.join(appDirectory, 'tsconfig.json'),
+              throwErrorInsteadOfExit: true,
+            },
+          ),
+        ).rejects.toThrow(`exit code ${code}`);
+        expect(await fs.pathExists(path.join(appDirectory, 'dist'))).toBe(
+          false,
+        );
+      } finally {
+        await fs.remove(appDirectory);
+      }
+    },
+  );
+
+  it('emits declarations once through each sibling provider plugin across formats', async () => {
     const apps = await Promise.all(
       ['server-compiler-dts-a-', 'server-compiler-dts-b-'].map(prefix =>
         declarationApp(prefix),
@@ -292,7 +367,7 @@ describe('neutral server compiler provider', () => {
     try {
       const builds = await Promise.all(
         apps.map(async (appDirectory, index) => {
-          // `api/index.ts` reaches `lib/value.ts`, which a second pass emits;
+          // `api/index.ts` reaches `lib/value.ts`, which discovery finds;
           // `api/esm.mts` adds a second library.
           await fs.outputFile(
             path.join(appDirectory, 'api/index.ts'),
@@ -307,7 +382,7 @@ describe('neutral server compiler provider', () => {
             'export const format: string = "esm";\n',
           );
           const provider = declarationProvider(appDirectory);
-          await compile(
+          const result = await compile(
             appDirectory,
             {},
             {
@@ -318,17 +393,32 @@ describe('neutral server compiler provider', () => {
               throwErrorInsteadOfExit: true,
             },
           );
-          return provider;
+          return { ...provider, result };
         }),
       );
       for (const [index, appDirectory] of apps.entries()) {
         const dist = path.join(appDirectory, 'dist');
-        expect(builds[index].requested).toEqual([
-          {
-            distPath: dist,
-            abortOnError: true,
-            redirect: { extension: false },
-          },
+        // The plugin writes to a private directory; only its output moves.
+        const [requested, ...others] = builds[index].requested;
+        expect(others).toEqual([]);
+        expect(requested).toMatchObject({
+          abortOnError: true,
+          redirect: { extension: false },
+        });
+        expect(path.relative(appDirectory, requested.distPath)).toMatch(
+          /^\.\./u,
+        );
+        expect(await fs.pathExists(requested.distPath)).toBe(false);
+        expect(builds[index].result.emittedFiles).toEqual(
+          expect.arrayContaining(
+            ['api/index.js', 'api/esm.mjs', 'lib/value.js']
+              .concat(['api/index.d.ts', 'api/esm.d.mts', 'lib/value.d.ts'])
+              .map(file => path.join(dist, file)),
+          ),
+        );
+        expect(builds[index].result.rootFiles.slice().sort()).toEqual([
+          path.join(dist, 'api/esm.mjs'),
+          path.join(dist, 'api/index.js'),
         ]);
         expect(builds[index].emits()).toBe(1);
         expect(require(path.join(dist, 'api/index.js')).value).toBe(index);
@@ -381,8 +471,14 @@ describe('neutral server compiler provider', () => {
         );
         if (noEmitOnError) {
           await expect(result).rejects.toThrow('TS2322');
+          // The failed compilation leaves none of its JavaScript behind.
+          expect(
+            await fs.pathExists(path.join(appDirectory, 'dist/api/index.js')),
+          ).toBe(false);
         } else {
-          await expect(result).resolves.toBeUndefined();
+          await expect(result).resolves.toMatchObject({
+            rootFiles: [path.join(appDirectory, 'dist/api/index.js')],
+          });
           expect(
             require(path.join(appDirectory, 'dist/api/index.js')).broken,
           ).toBe(42);

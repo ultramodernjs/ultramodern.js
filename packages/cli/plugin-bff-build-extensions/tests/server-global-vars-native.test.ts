@@ -70,12 +70,15 @@ test('cold source import and non-transform APIs leave native SWC unloaded', () =
 const directory = process.env.BFF_GLOBAL_VARS_TEST_DIRECTORY;
 const globals = serializeServerGlobalVars((_config, context) => ({ context }));
 assert.deepEqual(globals, { context: '{"env":"server","target":"node"}' });
-const emptyGlobals = transformServerGlobalVars([directory], {});
+const emitted = path.join(directory, 'emitted.js');
+await writeFile(emitted, 'module.exports = GLOBAL_VALUE;');
+const emptyGlobals = transformServerGlobalVars([emitted], {});
 assert.ok(emptyGlobals instanceof Promise);
 assert.equal(await emptyGlobals, undefined);
 assert.equal(await transformServerGlobalVars([], globals), undefined);
-assert.equal(await transformServerGlobalVars([directory], globals), undefined);
-assert.equal(await transformServerGlobalVars([path.join(directory, 'missing')], globals), undefined);
+assert.equal(await transformServerGlobalVars([path.join(directory, 'emitted.d.ts')], globals), undefined);
+// A reported emitted file that does not exist is an inconsistent compile result.
+await assert.rejects(transformServerGlobalVars([path.join(directory, 'missing.js')], globals));
 assert.deepEqual(swcLoads(nativeLoadAttempts), [], 'serialization and empty outputs must stay cold');
 `);
 });
@@ -130,7 +133,13 @@ const globals = serializeServerGlobalVars({
   BUILD_SETTINGS: expected.settings,
 });
 assert.deepEqual(swcLoads(), []);
-const transformed = transformServerGlobalVars([directory], globals);
+// Exactly the emitted inventory: files beside it are not walked into.
+const unreported = path.join(nested, 'unreported.js');
+await writeFile(unreported, 'module.exports = ULTRAMODERN_BUILD_MARKER;\\n');
+const transformed = transformServerGlobalVars(
+  [filename, esmFilename, strictFilename, untouchedFilename],
+  globals,
+);
 assert.ok(transformed instanceof Promise);
 assert.equal(await transformed, undefined);
 assert.ok(swcLoads().some(filename => filename.endsWith('.node')), 'real SWC native binding must execute');
@@ -142,6 +151,7 @@ const code = await readFile(filename, 'utf8');
 assert.ok(code.includes('// ULTRAMODERN_BUILD_MARKER remains a comment.'));
 assert.ok(code.includes('ULTRAMODERN_BUILD_MARKER_NEAR_MATCH'));
 assert.equal(await readFile(untouchedFilename, 'utf8'), 'ULTRAMODERN_BUILD_MARKER');
+assert.equal(await readFile(unreported, 'utf8'), 'module.exports = ULTRAMODERN_BUILD_MARKER;\\n');
 const transformedSourceMap = await readFile(filename + '.map', 'utf8');
 assert.notEqual(transformedSourceMap, originalSourceMap);
 const sourceMap = JSON.parse(transformedSourceMap);
@@ -158,7 +168,7 @@ const filename = path.join(process.env.BFF_GLOBAL_VARS_TEST_DIRECTORY, 'invalid.
 const source = 'const = GLOBAL_VALUE;';
 await writeFile(filename, source);
 const transformed = transformServerGlobalVars(
-  [process.env.BFF_GLOBAL_VARS_TEST_DIRECTORY],
+  [filename],
   serializeServerGlobalVars({ GLOBAL_VALUE: 'value' }),
 );
 assert.ok(transformed instanceof Promise);

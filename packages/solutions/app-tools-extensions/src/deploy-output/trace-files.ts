@@ -16,6 +16,65 @@ const GLOB_SEGMENT = /[*?[{]/;
 const isInside = (parent: string, child: string) =>
   child === parent || child.startsWith(`${parent}${path.sep}`);
 
+/** Select emitted runtime roots; nft still follows every real import. */
+export async function createNodeDeployEntryFilter(options: {
+  appDirectory: string;
+  outputDirectory: string;
+  apiDirectory: string;
+  sharedDirectory: string;
+  bff?: {
+    runtimeFramework?: string;
+    isCrossProjectServer?: boolean;
+    effect?: { entry?: string };
+  };
+}) {
+  const { appDirectory, outputDirectory, apiDirectory, sharedDirectory, bff } =
+    options;
+  const output = path.resolve(outputDirectory);
+  const staticDirectory = path.join(output, 'static');
+  let bundledEntry: string | undefined;
+  if (bff?.runtimeFramework === 'effect' && !bff.isCrossProjectServer) {
+    const { resolveEffectEntryPaths } = await import(
+      '@modern-js/plugin-bff-extensions/effect-source-loader'
+    );
+    const { relativeEffectEntry } = resolveEffectEntryPaths({
+      appDir: appDirectory,
+      apiDir: apiDirectory,
+      effectEntry: bff.effect?.entry,
+    });
+    const entry = path.resolve(output, relativeEffectEntry);
+    // Server-only apps have no Effect entry. External SDK entries belong to
+    // their package trace rather than this app's bundled source directories.
+    if (
+      relativeEffectEntry &&
+      !relativeEffectEntry.split(/[\\/]/u).includes('node_modules') &&
+      isInside(output, entry)
+    )
+      bundledEntry = entry;
+  }
+  const bundledDirectories = [
+    apiDirectory,
+    sharedDirectory,
+    path.join(appDirectory, 'src'),
+  ]
+    .filter(directory =>
+      isInside(path.resolve(appDirectory), path.resolve(directory)),
+    )
+    .map(directory =>
+      path.resolve(output, path.relative(appDirectory, directory)),
+    );
+  return (file: string) => {
+    const absolute = path.resolve(file);
+    if (isInside(staticDirectory, absolute) || absolute.endsWith('.map'))
+      return false;
+    return (
+      !bundledEntry ||
+      absolute === bundledEntry ||
+      !bundledDirectories.some(directory => isInside(directory, absolute))
+    );
+  };
+}
+
 const globRoot = (absolutePattern: string) => {
   const { root } = path.parse(absolutePattern);
   const segments = absolutePattern.slice(root.length).split(path.sep);

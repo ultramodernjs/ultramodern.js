@@ -11,6 +11,11 @@ import {
   resolveEffectTsgoCompiler,
 } from '@modern-js/app-tools-extensions/config';
 import { nativeServerCompiler } from '@modern-js/app-tools-extensions/native-server-compiler';
+import { compileServerSources } from '@modern-js/app-tools-extensions/server-compiler';
+import type {
+  ServerCompilationResult,
+  ServerCompilerProvider,
+} from '@modern-js/app-tools-extensions/server-compiler/types';
 
 type Equal<Left, Right> =
   (<Value>() => Value extends Left ? 1 : 2) extends <
@@ -38,6 +43,21 @@ const apiCompilerPath: string = resolveEffectTsrsCompiler({
 void apiCompilerPath;
 const serverCompilerResult = nativeServerCompiler('/consumer');
 void serverCompilerResult;
+const serverCompilerProvider: ServerCompilerProvider = nativeServerCompiler;
+const serverCompilation: Promise<ServerCompilationResult> =
+  compileServerSources(
+    '/consumer',
+    {},
+    {
+      compiler: serverCompilerProvider,
+      sourceDirs: ['/consumer/api'],
+      distDir: '/consumer/dist',
+    },
+  );
+const compiledRoots: Promise<readonly string[]> = serverCompilation.then(
+  result => result.rootFiles,
+);
+void compiledRoots;
 void environmentValue;
 
 const cloudflareConfig: CloudflareDeployConfig = {

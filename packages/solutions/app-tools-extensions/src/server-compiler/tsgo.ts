@@ -1,7 +1,7 @@
 import { fs } from '@modern-js/utils';
 import { spawn } from 'child_process';
 import path from 'path';
-import type { ServerCompiler, ServerCompilerConfig } from '../common';
+import type { ServerCompiler, ServerCompilerConfig } from './types';
 
 type TypeScriptPackageJson = {
   name?: string;

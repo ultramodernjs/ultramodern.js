@@ -2,7 +2,7 @@ import { fs } from '@modern-js/utils';
 import { EventEmitter } from 'events';
 import os from 'os';
 import path from 'path';
-import { compile } from '../src/common';
+import { compileServerSources as compile } from '../../src/server-compiler';
 
 type SpawnBehavior = (child: {
   stdout: EventEmitter;
@@ -37,13 +37,16 @@ describe('compile temp config cleanup', () => {
   });
 
   const createIsolatedTsExample = async () => {
-    const fixture = path.join(__dirname, './fixtures', './ts-example');
     const tempRoot = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'server-utils-tsgo-cleanup-'),
+      path.join(os.tmpdir(), 'server-compiler-tsgo-cleanup-'),
     );
     const example = path.join(tempRoot, 'ts-example');
     tempRoots.push(tempRoot);
-    await fs.copy(fixture, example);
+    await fs.outputJSON(path.join(example, 'tsconfig.json'), {});
+    await fs.outputFile(
+      path.join(example, 'api/index.ts'),
+      'export const value = 1;\n',
+    );
     return example;
   };
 
@@ -122,5 +125,9 @@ describe('compile temp config cleanup', () => {
         },
       ),
     ).rejects.toThrow('TS1295');
+    // The check runs before the only emit, so nothing was written.
+    expect(await fs.pathExists(path.join(example, 'dist-tsgo-failure'))).toBe(
+      false,
+    );
   });
 });

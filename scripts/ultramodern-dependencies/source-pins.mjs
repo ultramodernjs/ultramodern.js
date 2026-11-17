@@ -214,7 +214,7 @@ function reviewedSourcePins(read) {
       `typescript@${targets.typescript}`,
       `packageJson.version !== '${targets.typescript}'`,
     ],
-    'packages/server/utils/src/compilers/tsgo.ts': [
+    'packages/solutions/app-tools-extensions/src/server-compiler/tsgo.ts': [
       `typescript@${targets.typescript}`,
       `pkg.version !== '${targets.typescript}'`,
     ],

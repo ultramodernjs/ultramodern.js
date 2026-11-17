@@ -1,4 +1,5 @@
 import type { ResolvedDeployTarget } from '@modern-js/app-tools-extensions/deploy-output/target';
+import type { ServerCompilationResult } from '@modern-js/app-tools-extensions/server-compiler/types';
 import type {
   AppContext,
   AsyncHook,
@@ -27,7 +28,6 @@ export interface BffCompilation {
   readonly appDirectory: string;
   readonly apiDirectory: string;
   readonly sourceDirectories: readonly string[];
-  readonly outputDirectories: readonly string[];
   readonly distDirectory: string;
   readonly tsconfigPath?: string;
   readonly moduleType: AppToolsModuleType;
@@ -77,6 +77,8 @@ export type BeforeBffCompileFn = (
 ) => void | Promise<void>;
 export type AfterBffCompileFn = (
   context: BffCompilation,
+  /** What the compiler actually compiled and wrote for this compilation. */
+  result: ServerCompilationResult,
 ) => void | Promise<void>;
 export type ModifyBffClientArtifactsFn = TransformFunction<BffClientArtifacts>;
 export type ModifyBffGeneratedEntriesFn =
@@ -179,6 +181,10 @@ export interface AppToolsExtendContextBase<Extends extends CLIPluginExtends> {
   moduleType: AppToolsModuleType;
   /** Exact generated files excluded from server compilation. */
   serverCompileExcludedFiles?: string[];
+  /** Server source roots of the final app files, resolved on each call. */
+  resolveServerCompileSourceDirs?: () => string[];
+  /** Plugin that compiles the server source roots in its own compilation. */
+  serverCompileOwner?: string;
   /** Information for entry points */
   entrypoints: Entrypoint[];
   /** Selected entry points */

@@ -335,7 +335,6 @@ describe('native infrastructure in the owning CLI hooks', () => {
           appDirectory: root,
           apiDirectory: path.join(root, 'api'),
           sourceDirectories: [path.join(root, 'api')],
-          outputDirectories: [path.join(root, 'dist', 'api')],
           distDirectory: path.join(root, 'dist'),
           moduleType: 'commonjs',
         };
