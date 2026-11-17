@@ -6,12 +6,50 @@ import path from 'path';
 import { compileServerSources as compile } from '../../src/server-compiler';
 
 const builds: LibConfig[][] = [];
+let omittedOutput: string | undefined;
 
 rstest.mock('@rslib/core', () => ({
   ...actualRslib,
   createRslib: (options: Parameters<typeof actualRslib.createRslib>[0]) => {
     builds.push(options?.config?.lib ?? []);
-    return actualRslib.createRslib(options);
+    return actualRslib.createRslib({
+      ...options,
+      config: {
+        ...options?.config,
+        plugins: [
+          ...(options?.config?.plugins ?? []),
+          {
+            name: 'test:omit-server-output',
+            setup(api) {
+              api.modifyRspackConfig(config => {
+                config.plugins ??= [];
+                config.plugins.push({
+                  apply(compiler) {
+                    compiler.hooks.thisCompilation.tap(
+                      'test:omit-output',
+                      compilation => {
+                        compilation.hooks.processAssets.tap(
+                          {
+                            name: 'test:omit-output',
+                            stage:
+                              compiler.webpack.Compilation
+                                .PROCESS_ASSETS_STAGE_REPORT,
+                          },
+                          () => {
+                            if (omittedOutput)
+                              compilation.deleteAsset(omittedOutput);
+                          },
+                        );
+                      },
+                    );
+                  },
+                });
+              });
+            },
+          },
+        ],
+      },
+    });
   },
 }));
 
@@ -85,7 +123,137 @@ const chainConfig = (appDirectory: string) => ({
 describe('single server emit', () => {
   beforeEach(() => {
     builds.length = 0;
+    omittedOutput = undefined;
   });
+
+  it('keeps temporary resolved configs out of output when the config is under API sources', async () => {
+    const { appDirectory, distDir, write } = await app('server-config-asset-');
+    try {
+      const tsconfigPath = path.join(appDirectory, 'api/tsconfig.json');
+      await fs.outputJSON(tsconfigPath, { compilerOptions: { types: [] } });
+      await write('api/index.ts', 'export const value = 42;\n');
+      // Another generation may own a resolved config in the same directory.
+      await write('api/.tsgo.123.456.resolved.json', '{}');
+      const result = await compile(
+        appDirectory,
+        { sourceMap: false },
+        {
+          sourceDirs: [path.join(appDirectory, 'api')],
+          distDir,
+          tsconfigPath,
+          throwErrorInsteadOfExit: true,
+        },
+      );
+      expect(result.emittedFiles).toEqual([path.join(distDir, 'api/index.js')]);
+      expect(await fs.readdir(path.join(distDir, 'api'))).toEqual(['index.js']);
+    } finally {
+      await fs.remove(appDirectory);
+    }
+  });
+
+  it.each(['api/index.js', 'lib/child.js'])(
+    'rejects a missing emitted source %s and removes the other emitted files',
+    async missing => {
+      const { appDirectory, distDir, write } = await app(
+        'server-missing-output-',
+      );
+      try {
+        const tsconfigPath = path.join(appDirectory, 'tsconfig.json');
+        await fs.outputJSON(tsconfigPath, {
+          compilerOptions: { types: [] },
+          include: ['api'],
+        });
+        await write('api/index.ts', "export { value } from '../lib/child';\n");
+        await write('lib/child.ts', 'export const value = 42;\n');
+        omittedOutput = missing;
+        await expect(
+          compile(
+            appDirectory,
+            { sourceMap: false },
+            {
+              sourceDirs: [path.join(appDirectory, 'api')],
+              distDir,
+              tsconfigPath,
+              throwErrorInsteadOfExit: true,
+            },
+          ),
+        ).rejects.toThrow('did not emit');
+        for (const file of ['api/index.js', 'lib/child.js'])
+          expect(await fs.pathExists(path.join(distDir, file))).toBe(false);
+      } finally {
+        await fs.remove(appDirectory);
+      }
+    },
+  );
+
+  // These are valid POSIX filenames, but Windows disallows pipes and uses
+  // backslash as its path separator.
+  (process.platform === 'win32' ? it.skip : it).each(['pipe', 'backslash'])(
+    'never reports successful incomplete output for a literal %s filename',
+    async name => {
+      const { appDirectory, distDir, write } = await app(
+        'server-literal-glob-',
+      );
+      try {
+        const tsconfigPath = path.join(appDirectory, 'tsconfig.json');
+        await fs.outputJSON(tsconfigPath, {
+          compilerOptions: { types: [] },
+          include: ['api'],
+        });
+        await write(
+          'api/index.ts',
+          name === 'pipe'
+            ? "export { value } from '../lib/a|b';\n"
+            : 'export const value = 42;\n',
+        );
+        if (name === 'pipe')
+          await write('lib/a|b.ts', 'export const value = 42;\n');
+        else await write('api/a\\b.ts', 'export const other = 1;\n');
+        const result = compile(
+          appDirectory,
+          { sourceMap: false },
+          {
+            compiler: () => ({
+              command: {
+                executable: process.execPath,
+                args: ['-e', 'process.exit(0)', '--'],
+              },
+              readConfig: async () => ({
+                files:
+                  name === 'pipe'
+                    ? ['api/index.ts']
+                    : ['api/index.ts', 'api/a\\b.ts'],
+              }),
+              declarationPlugin: () => {
+                throw new Error('Declarations not requested');
+              },
+            }),
+            sourceDirs: [path.join(appDirectory, 'api')],
+            distDir,
+            tsconfigPath,
+            throwErrorInsteadOfExit: true,
+          },
+        );
+        if (name === 'pipe') {
+          expect((await result).emittedFiles).toEqual(
+            ['api/index.js', 'lib/a|b.js']
+              .map(file => path.join(distDir, file))
+              .sort(),
+          );
+          expect(require(path.join(distDir, 'api/index.js')).value).toBe(42);
+        } else {
+          // Rslib normalizes literal backslashes as separators. That
+          // unsupported mapping must fail and clean up, never report success.
+          await expect(result).rejects.toThrow('did not emit');
+          expect(await fs.pathExists(path.join(distDir, 'api/index.js'))).toBe(
+            false,
+          );
+        }
+      } finally {
+        await fs.remove(appDirectory);
+      }
+    },
+  );
 
   it('discovers a deep aliased chain once, then emits and declares it once', async () => {
     const { appDirectory, distDir, write } = await app('server-single-emit-');

@@ -291,13 +291,29 @@ describe('neutral server compiler provider', () => {
   });
 
   it.each([
-    ['a crash without diagnostics', 'segmentation fault', 2],
-    ['a config error', 'error TS5023: Unknown compiler option', 1],
-    ['a config file diagnostic', 'tsconfig.json(3,5): error TS5024: bad', 1],
-    ['an unexpected exit status', 'api/index.ts(1,1): error TS2322: x', 134],
+    ['a crash without diagnostics', 'segmentation fault', 2, ''],
+    ['a config error', 'error TS5023: Unknown compiler option', 1, ''],
+    [
+      'a config file diagnostic',
+      'tsconfig.json(3,5): error TS5024: bad',
+      1,
+      '',
+    ],
+    [
+      'an unexpected exit status',
+      'api/index.ts(1,1): error TS2322: x',
+      134,
+      '',
+    ],
+    [
+      'a panic after partial diagnostics',
+      'api/index.ts(1,1): error TS2322: x',
+      2,
+      'panic: runtime error: invalid memory address\n',
+    ],
   ])(
     'fails on %s even when noEmitOnError=false',
-    async (_name, output, code) => {
+    async (_name, output, code, stderr) => {
       const appDirectory = await fs.realpath(
         await fs.mkdtemp(path.join(os.tmpdir(), 'server-compiler-crash-')),
       );
@@ -316,7 +332,7 @@ describe('neutral server compiler provider', () => {
                   executable: process.execPath,
                   args: [
                     '-e',
-                    `process.stdout.write(${JSON.stringify(output)}); process.exit(${code});`,
+                    `process.stdout.write(${JSON.stringify(output)}); process.stderr.write(${JSON.stringify(stderr)}); process.exit(${code});`,
                     '--',
                   ],
                 },

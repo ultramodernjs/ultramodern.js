@@ -25,7 +25,9 @@ const toPosix = (file: string) => file.split(path.sep).join(path.posix.sep);
 
 // Rslib reads bundleless entries as globs; BFF routes such as `[id].ts` are
 // literal names.
-const escapeGlob = (file: string) => file.replace(/[()[\]{}*?!+@]/gu, '\\$&');
+const escapeGlob = (file: string) =>
+  file.replace(/[\\()[\]{}*?!+@|]/gu, '\\$&');
+const RESOLVED_CONFIG_RE = /\.tsgo\.\d+\.\d+\.resolved\.json$/u;
 
 const walk = async (dir: string): Promise<string[]> => {
   if (!(await fs.pathExists(dir))) {
@@ -289,8 +291,15 @@ const ANSI = /\u001b\[[0-9;]*m/gu;
  * Everything else (config and option errors, a crash, a signal, output that
  * is not diagnostics) means there was no complete check, and always fails.
  */
-const isSourceDiagnosticsOnly = (code: number, output: string) => {
+const isSourceDiagnosticsOnly = (
+  code: number,
+  output: string,
+  errorOutput: string,
+) => {
   if (code !== 1 && code !== 2) return false;
+  // Native checker panics share exit code 2 with source diagnostics. Never
+  // hide their stderr behind diagnostics already printed to stdout.
+  if (errorOutput.trim()) return false;
   const text = output.replace(ANSI, '');
   if (GLOBAL_DIAGNOSTIC.test(text)) return false;
   const files = [...text.matchAll(LOCATED_DIAGNOSTIC)].map(match => match[1]);
@@ -552,10 +561,12 @@ const compileProgram = async ({
       { cwd: appDirectory, reject: false },
     );
     if (result.code !== 0) {
-      const diagnostics = result.stdout.trim() || result.stderr.trim();
+      const diagnostics = [result.stdout.trim(), result.stderr.trim()]
+        .filter(Boolean)
+        .join('\n');
       if (
         failOnTypeError ||
-        !isSourceDiagnosticsOnly(result.code, diagnostics)
+        !isSourceDiagnosticsOnly(result.code, result.stdout, result.stderr)
       ) {
         throw new Error(
           [
@@ -571,6 +582,9 @@ const compileProgram = async ({
   }
 
   const emitted = new Set<string>();
+  const rootFiles = initialSources.map(file =>
+    path.join(distDir, path.relative(appDirectory, emittedName(file))),
+  );
   try {
     if (sources.size > 0) {
       // Declarations go to a private directory first: the plugin
@@ -659,7 +673,11 @@ const compileProgram = async ({
     const copies = new Map<string, string>();
     for (const sourceDir of sourceDirs) {
       for (const file of await walk(sourceDir)) {
-        if (!SCRIPT_RE.test(file) && !file.endsWith('tsconfig.json')) {
+        if (
+          !SCRIPT_RE.test(file) &&
+          !file.endsWith('tsconfig.json') &&
+          !RESOLVED_CONFIG_RE.test(file)
+        ) {
           copies.set(
             path.join(distDir, path.relative(appDirectory, file)),
             file,
@@ -674,21 +692,22 @@ const compileProgram = async ({
       await fs.copy(file, target);
       emitted.add(target);
     }
+    const missing = [...sources]
+      .map(file =>
+        path.join(distDir, path.relative(appDirectory, emittedName(file))),
+      )
+      .filter(file => !emitted.has(file));
+    if (missing.length > 0) {
+      throw new Error(
+        `Server compilation did not emit its sources: ${missing.join(', ')}`,
+      );
+    }
   } catch (error) {
     // A failed compilation leaves none of its own output behind.
     await Promise.all([...emitted].map(file => fs.remove(file)));
     throw error;
   }
 
-  const rootFiles = initialSources.map(file =>
-    path.join(distDir, path.relative(appDirectory, emittedName(file))),
-  );
-  const missing = rootFiles.filter(file => !emitted.has(file));
-  if (missing.length > 0) {
-    throw new Error(
-      `Server compilation did not emit its roots: ${missing.join(', ')}`,
-    );
-  }
   logger.info('Server sources compiled');
   return { rootFiles, emittedFiles: [...emitted].sort() };
 };
