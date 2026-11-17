@@ -154,35 +154,53 @@ tarballs it did not cover.
 A green `Publish BleedingDev Packages` run means npm accepted every tarball,
 nothing more. Its last job, `start-release-acceptance`, dispatches
 `.github/workflows/accept-bleedingdev-release.yml` for that run. That run reads
-the cohort back from npm (exact bytes, `latest`, and the original run's signed
-invocation), runs published ERP-10 and renderer features and published Tractor,
-records the authenticated publish outcome and only then writes the GitHub
-release `ultramodern-v<version>`. The cohort is accepted only when that run is
-green; the publish run's summary links it.
+the cohort back from npm (exact bytes at `latest` with provenance from this
+workflow on `main-ultramodern`, first at npm's origin, then in the CDN copy
+pnpm installs from), runs published ERP-10 and renderer features and
+published Tractor, records the authenticated publish outcome and only then
+writes the GitHub release `ultramodern-v<version>`. The cohort is accepted
+only when that release exists; the publish run's summary links the run.
 
 - **The acceptance run failed on a transient cause, or only the release record
   failed:** `gh run rerun <acceptance-run-id> --failed`. It converges on an
   existing release.
 - **It was cancelled, never started, or can no longer be re-run:** dispatch it
-  again for the same publish run (the publish run's attempts are in its job
-  list):
+  again for the same publish run. Both attempts are in the name of that run's
+  `bleedingdev-release-identity-run-<id>-attempt-<producer>-publication-attempt-<publication>`
+  artifact (job lists relabel jobs a failed-job rerun carried over with the
+  newest attempt, so do not read them from there):
 
 ```bash
+gh api repos/ultramodernjs/ultramodern.js/actions/runs/<publish-run-id>/artifacts \
+  --jq '.artifacts[].name | select(startswith("bleedingdev-release-identity-"))'
 gh workflow run accept-bleedingdev-release.yml --repo ultramodernjs/ultramodern.js \
   --ref main-ultramodern -f original_run_id=<publish-run-id> \
-  -f producer_run_attempt=<attempt of prepare-release> \
-  -f publication_run_attempt=<attempt of the publish job>
+  -f producer_run_attempt=<producer> \
+  -f publication_run_attempt=<publication>
 ```
 
 - **It failed because the published cohort is wrong:** that cohort keeps no
   release record. Use the deprecate-and-republish path in §3.
 
-The next live cohort's `publish-security` refuses to start while the previous
-cohort's acceptance is queued, running, cancelled or was never started, so
-`latest` never moves under a running acceptance and no cohort is buried
-unaccepted. A previous acceptance that finished red does not block: it is
-printed as an error in the next run, because publishing a corrected cohort is
-the only remedy. Recovery and dry-run dispatches are never held.
+Members that an earlier attempt (`gh run rerun --failed`, §4 item 1) or the original
+producer run (recovery, §4 item 2) already placed on npm were signed by that run.
+The acceptance accepts them under the same rule the publish job used to reuse
+them: the exact accepted bytes with provenance from this workflow on
+`main-ultramodern`.
+
+The acceptance must pass while its cohort is still `latest`. The next live
+cohort's `publish-security` therefore refuses to start until the cohort npm
+serves at `latest` has its `ultramodern-v<version>` release, so `latest` never
+moves under an acceptance that has not passed and no cohort is buried
+unaccepted. The only other way past it is the rollback in §3: once
+`@bleedingdev/modern-js-ultramodern-create` (the member the gate reads) is
+deprecated at that version, the gate reports the withdrawn cohort as an error
+and lets the corrected one start. Dry runs and recovery dispatches are never
+held.
+
+Published Tractor reads the reviewed baseline pin at `main-ultramodern`'s HEAD.
+If an adoption advanced it while the publish run was in flight, the acceptance
+reports the change and records the pin it actually used.
 
 Tractor retained adoption (`ultramodern-tractor-downstream.yml` dispatched by
 hand) accepts a publish run only when that run's published acceptance is green.
