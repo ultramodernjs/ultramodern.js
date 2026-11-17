@@ -73,7 +73,7 @@ for (const [mode, failures] of [
           ? readWorkflow('ultramodern-release-acceptance').jobs[
               'renderer-features'
             ]
-          : readWorkflow('publish-bleedingdev').jobs['accept-published'];
+          : readWorkflow('accept-bleedingdev-release').jobs['accept-published'];
       const command = job.steps.find(step =>
         step.name.includes('installed renderer features'),
       ).run;
@@ -214,7 +214,7 @@ for (const [mode, failures] of [
     });
 
 test('published uploads the selected non-log evidence as well as failure logs', () => {
-  const upload = readWorkflow('publish-bleedingdev').jobs[
+  const upload = readWorkflow('accept-bleedingdev-release').jobs[
     'accept-published'
   ].steps.find(
     step => step.name === 'Preserve renderer feature runtime evidence',
@@ -231,7 +231,7 @@ for (const mode of ['source', 'published'])
         ? readWorkflow('ultramodern-release-acceptance').jobs[
             'renderer-features'
           ]
-        : readWorkflow('publish-bleedingdev').jobs['accept-published'];
+        : readWorkflow('accept-bleedingdev-release').jobs['accept-published'];
     const install = job.steps.findIndex(
       step => step.id === 'renderer-fixed-browser',
     );
@@ -291,7 +291,7 @@ for (const mode of ['source', 'published'])
         ? readWorkflow('ultramodern-release-acceptance').jobs[
             'renderer-features'
           ]
-        : readWorkflow('publish-bleedingdev').jobs['accept-published'];
+        : readWorkflow('accept-bleedingdev-release').jobs['accept-published'];
     const install = job.steps.findIndex(
       step => step.id === 'renderer-browser-cli',
     );
@@ -359,7 +359,7 @@ test('every acceptance leg selects the one Depot Linux runner', () => {
     ['ultramodern-release-acceptance', 'seal'],
     ['ultramodern-tractor-downstream', 'tractor-downstream'],
     ['native-compatibility', 'native-compatibility'],
-    ['publish-bleedingdev', 'accept-published'],
+    ['accept-bleedingdev-release', 'accept-published'],
   ])
     assert.equal(
       readWorkflow(workflow).jobs[job]['runs-on'],

@@ -149,11 +149,44 @@ The bundle and its acceptance receipt always stay on `recovery_run_attempt` —
 they are one indivisible pair, and an acceptance receipt must never vouch for
 tarballs it did not cover.
 
-`publish-change-record` runs after npm publication, so its failure turns the run
-red while the packages are already live. Repair the release record by rerunning
-only that job with `gh run rerun <run-id> --failed`; it reuses the run's
-authenticated publish outcome and converges on an existing release. Never
-re-dispatch a completed publication.
+## 5. After publication: `Accept published BleedingDev release`
+
+A green `Publish BleedingDev Packages` run means npm accepted every tarball,
+nothing more. Its last job, `start-release-acceptance`, dispatches
+`.github/workflows/accept-bleedingdev-release.yml` for that run. That run reads
+the cohort back from npm (exact bytes, `latest`, and the original run's signed
+invocation), runs published ERP-10 and renderer features and published Tractor,
+records the authenticated publish outcome and only then writes the GitHub
+release `ultramodern-v<version>`. The cohort is accepted only when that run is
+green; the publish run's summary links it.
+
+- **The acceptance run failed on a transient cause, or only the release record
+  failed:** `gh run rerun <acceptance-run-id> --failed`. It converges on an
+  existing release.
+- **It was cancelled, never started, or can no longer be re-run:** dispatch it
+  again for the same publish run (the publish run's attempts are in its job
+  list):
+
+```bash
+gh workflow run accept-bleedingdev-release.yml --repo ultramodernjs/ultramodern.js \
+  --ref main-ultramodern -f original_run_id=<publish-run-id> \
+  -f producer_run_attempt=<attempt of prepare-release> \
+  -f publication_run_attempt=<attempt of the publish job>
+```
+
+- **It failed because the published cohort is wrong:** that cohort keeps no
+  release record. Use the deprecate-and-republish path in §3.
+
+The next live cohort's `publish-security` refuses to start while the previous
+cohort's acceptance is queued, running, cancelled or was never started, so
+`latest` never moves under a running acceptance and no cohort is buried
+unaccepted. A previous acceptance that finished red does not block: it is
+printed as an error in the next run, because publishing a corrected cohort is
+the only remedy. Recovery and dry-run dispatches are never held.
+
+Tractor retained adoption (`ultramodern-tractor-downstream.yml` dispatched by
+hand) accepts a publish run only when that run's published acceptance is green.
+Never re-dispatch a completed publication.
 
 ## Evidence anchors
 

@@ -186,7 +186,7 @@ test('retained Tractor adoption is owner-only and leaves reusable acceptance rea
   assert.equal(upload.with['if-no-files-found'], 'error');
 });
 
-test('retained Tractor adoption requires a successful live publication and exact release inputs', () => {
+test('retained Tractor adoption requires an accepted live publication and exact release inputs', () => {
   const job = readWorkflow('ultramodern-tractor-downstream').jobs[
     'tractor-downstream'
   ];
@@ -208,13 +208,29 @@ test('retained Tractor adoption requires a successful live publication and exact
       { name: 'Publish accepted @bleedingdev tarballs', conclusion: 'success' },
     ],
   };
-  const execute = (env = {}, runOverrides = {}, jobData = jobs) =>
+  // A green publish run proves only that npm accepted the tarballs.
+  const acceptance = {
+    workflow_runs: [
+      {
+        display_title: 'Accept published release from run 123',
+        conclusion: 'success',
+        head_branch: 'main-ultramodern',
+        event: 'workflow_dispatch',
+      },
+    ],
+  };
+  const execute = (
+    env = {},
+    runOverrides = {},
+    jobData = jobs,
+    acceptanceData = acceptance,
+  ) =>
     spawnSync(
       'bash',
       [
         '-e',
         '-c',
-        `gh() { if [ "\${GH_FAIL:-0}" = 1 ]; then return 1; fi; case "$2" in *"/jobs?"*) printf '%s' "$JOB_DATA";; *) printf '%s' "$RUN_DATA";; esac; }\n${validate.run}`,
+        `gh() { if [ "\${GH_FAIL:-0}" = 1 ]; then return 1; fi; case "$2" in *"/jobs?"*) printf '%s' "$JOB_DATA";; *"/accept-bleedingdev-release.yml/runs?"*) printf '%s' "$ACCEPTANCE_DATA";; *) printf '%s' "$RUN_DATA";; esac; }\n${validate.run}`,
       ],
       {
         encoding: 'utf8',
@@ -227,11 +243,43 @@ test('retained Tractor adoption requires a successful live publication and exact
           GITHUB_REPOSITORY: 'ultramodernjs/ultramodern.js',
           RUN_DATA: JSON.stringify({ ...run, ...runOverrides }),
           JOB_DATA: JSON.stringify(jobData),
+          ACCEPTANCE_DATA: JSON.stringify(acceptanceData),
           ...env,
         },
       },
     );
   assert.equal(execute().status, 0);
+  for (const patch of [
+    { conclusion: 'failure' },
+    { display_title: 'Accept published release from run 1234' },
+    { head_branch: 'other' },
+  ])
+    assert.notEqual(
+      execute({}, {}, jobs, {
+        workflow_runs: [{ ...acceptance.workflow_runs[0], ...patch }],
+      }).status,
+      0,
+      JSON.stringify(patch),
+    );
+  assert.notEqual(execute({}, {}, jobs, { workflow_runs: [] }).status, 0);
+  // A run that accepted the cohort in-run needs no separate acceptance.
+  assert.equal(
+    execute(
+      {},
+      {},
+      {
+        jobs: [
+          ...jobs.jobs,
+          {
+            name: 'Accept the exact published registry cohort',
+            conclusion: 'success',
+          },
+        ],
+      },
+      { workflow_runs: [] },
+    ).status,
+    0,
+  );
   assert.notEqual(execute({ GH_FAIL: '1' }).status, 0);
   for (const env of [
     { PRODUCER_RUN_ID: 'invalid' },
@@ -270,7 +318,7 @@ test('both required feature workflows stage verified native inputs before consum
   const source = readWorkflow('ultramodern-release-acceptance').jobs[
     'renderer-features'
   ];
-  const published = readWorkflow('publish-bleedingdev').jobs[
+  const published = readWorkflow('accept-bleedingdev-release').jobs[
     'accept-published'
   ];
   for (const job of [source, published]) {
@@ -336,7 +384,7 @@ test('feature proofs select Depot on every event, with no GitHub-hosted branch',
   const source = readWorkflow('ultramodern-release-acceptance').jobs[
     'accept-release'
   ];
-  const published = readWorkflow('publish-bleedingdev').jobs[
+  const published = readWorkflow('accept-bleedingdev-release').jobs[
     'accept-published'
   ];
   // Every job of this repository runs on Depot, so no event and no repository

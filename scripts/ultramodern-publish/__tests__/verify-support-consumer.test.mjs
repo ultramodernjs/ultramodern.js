@@ -1108,6 +1108,68 @@ test('installer boundary: actual workspace siblings have exact root-direct autho
   );
   await assert.rejects(verifySupportWorkspace(f), /wrong physical peer/);
 });
+test('workspace importers are verified at the same time and keep their order', async () => {
+  const { verifySupportWorkspace } = await import(
+    '../verify-support-workspace.mjs'
+  );
+  const f = fixture();
+  fs.writeFileSync(
+    path.join(f.root, 'pnpm-workspace.yaml'),
+    'packages:\n  - apps/*\n',
+  );
+  const sibling = path.join(f.root, 'apps/sibling');
+  writeManifest(sibling, {
+    name: '@synthetic/sibling',
+    version: '1.0.0',
+    main: './entry.cjs',
+    ultramodern: { supportArtifacts: f.descriptor },
+    dependencies: { 'solid-js': f.descriptor.packages['solid-js'].request },
+  });
+  fs.writeFileSync(path.join(sibling, 'entry.cjs'), 'throw Error("EXECUTED")');
+  fs.mkdirSync(path.join(f.root, 'node_modules/@synthetic'), {
+    recursive: true,
+  });
+  fs.symlinkSync(sibling, path.join(f.root, 'node_modules/@synthetic/sibling'));
+  f.rootManifest.dependencies = { '@synthetic/sibling': 'workspace:*' };
+  f.save();
+  const transport = f.fetchArtifact;
+  const measured = () => {
+    let active = 0;
+    const counter = {
+      max: 0,
+      fetchArtifact: async (...args) => {
+        active += 1;
+        counter.max = Math.max(counter.max, active);
+        try {
+          await new Promise(resolve => setTimeout(resolve, 5));
+          return await transport(...args);
+        } finally {
+          active -= 1;
+        }
+      },
+    };
+    return counter;
+  };
+  const single = measured();
+  await verifySupportConsumer({
+    ...f,
+    workspaceRoot: f.root,
+    fetchArtifact: single.fetchArtifact,
+  });
+  const workspace = measured();
+  const receipt = await verifySupportWorkspace({
+    ...f,
+    fetchArtifact: workspace.fetchArtifact,
+  });
+  assert(
+    workspace.max > single.max,
+    `importers overlap their reads (${workspace.max} > ${single.max})`,
+  );
+  assert.deepEqual(
+    receipt.importers.map(importer => importer.root),
+    [fs.realpathSync(f.root), fs.realpathSync(sibling)],
+  );
+});
 test('installer boundary: workspace discovery excludes installed descriptors and rejects escaped symlink members', async () => {
   const { supportWorkspaceImporters, verifySupportWorkspace } = await import(
     '../verify-support-workspace.mjs'

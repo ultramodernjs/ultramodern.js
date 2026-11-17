@@ -151,7 +151,7 @@ test('only the two ERP coordinator steps receive the dedicated read token', () =
       'Run exact-artifact ERP-10 acceptance',
     ],
     [
-      '../../../.github/workflows/publish-bleedingdev.yml',
+      '../../../.github/workflows/accept-bleedingdev-release.yml',
       'Run published ERP-10 acceptance',
     ],
   ];
@@ -170,4 +170,14 @@ test('only the two ERP coordinator steps receive the dedicated read token', () =
       /^\$\{\{ github\.token \}\}$/u,
     );
   }
+  // The publish workflow calls the source coordinator and ends at npm
+  // acceptance; it never hands the token to a step of its own.
+  const publish = fs.readFileSync(
+    new URL(
+      '../../../.github/workflows/publish-bleedingdev.yml',
+      import.meta.url,
+    ),
+    'utf8',
+  );
+  assert.doesNotMatch(publish, /SUPPORT_ARTIFACT_GITHUB_TOKEN/u);
 });

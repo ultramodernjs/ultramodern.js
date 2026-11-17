@@ -1016,18 +1016,23 @@ async function publishPackage(artifact, options, overrides = {}) {
 
 const cohortVerificationFailureBudget = 3;
 
+// Consumer: accept-bleedingdev-release.yml, the only post-publication wait.
+// Polls every member until npm serves the exact accepted bytes with provenance
+// from the trusted workflow and `tag` names the cohort version, then returns
+// each verified dist so the caller can authenticate the exact signed
+// invocation. The caller supplies the expectation of the run that published,
+// never of the run that verifies.
 async function validateRegistryCohort(
   manifest,
   options,
   registry = { verifyRegistryDistTag, verifyRegistryPackage },
   now = () => performance.now(),
 ) {
-  if (options.dryRun) {
-    console.log('Skipping final registry cohort assertion for dry-run publish');
-    return;
-  }
-
-  const provenanceExpectation = createRegistryProvenanceExpectation(manifest);
+  const provenanceExpectation = options.provenanceExpectation;
+  assertPlainObject(
+    provenanceExpectation,
+    'Registry cohort provenance expectation',
+  );
   // One deadline for the whole published cohort: the tarball wait of all 50
   // members (concurrency 8) ends together, so the cohort cannot multiply one
   // propagation window into the job timeout.
@@ -1046,16 +1051,18 @@ async function validateRegistryCohort(
       const startedAt = now();
       const elapsed = () => `${((now() - startedAt) / 1000).toFixed(1)}s`;
       try {
-        await registry.verifyRegistryPackage(item, provenanceExpectation, {
-          deadline,
-        });
+        const dist = await registry.verifyRegistryPackage(
+          item,
+          provenanceExpectation,
+          { deadline },
+        );
         await registry.verifyRegistryDistTag(
           item.targetName,
           options.tag,
           manifest.release.version,
         );
         console.log(`Registry verified ${item.targetName} in ${elapsed()}`);
-        return {};
+        return { dist };
       } catch (error) {
         failureCount += 1;
         console.log(
@@ -1099,8 +1106,18 @@ async function validateRegistryCohort(
       ].join('\n'),
     );
   }
+  return new Map(
+    manifest.packages.map((item, index) => [
+      item.targetName,
+      outcomes[index].dist,
+    ]),
+  );
 }
 
+// Returns once npm has accepted every tarball. Reading the cohort back from
+// npm is accept-bleedingdev-release.yml's first job, bound to this run's
+// signed invocation, so it waits on npm's propagation once, outside the run
+// that publishes.
 async function publishManifestPackages(
   releaseArtifacts,
   options,
@@ -1114,10 +1131,7 @@ async function publishManifestPackages(
     preflightTrustedPublishingPackages,
     preflightRegistryPackages,
     publishPackage,
-    validateRegistryCohort,
     verifyPackageArtifact,
-    verifyRegistryDistTag,
-    verifyRegistryPackage,
     verifyRegistryPackageDist,
     verifyRegistryProvenance,
     verifyRegistryTarball,
@@ -1219,13 +1233,6 @@ async function publishManifestPackages(
       resolveRegistryConcurrency(options),
       publishOne,
     );
-  }
-
-  if (!options.dryRun) {
-    await registry.validateRegistryCohort(manifest, options, {
-      verifyRegistryDistTag: registry.verifyRegistryDistTag,
-      verifyRegistryPackage: registry.verifyRegistryPackage,
-    });
   }
 }
 

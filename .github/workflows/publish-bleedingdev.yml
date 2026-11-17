@@ -76,16 +76,13 @@ env:
   BLEEDINGDEV_PUBLISH_TAG: latest
   BLEEDINGDEV_RELEASE_BUNDLE_ARTIFACT: bleedingdev-release-bundle
   BLEEDINGDEV_RELEASE_ACCEPTANCE_ARTIFACT: bleedingdev-release-acceptance
-  BLEEDINGDEV_PUBLISHED_ACCEPTANCE_ARTIFACT: bleedingdev-published-acceptance
   BLEEDINGDEV_RELEASE_IDENTITY_ARTIFACT: bleedingdev-release-identity
-  BLEEDINGDEV_PUBLISH_OUTCOME_ARTIFACT: bleedingdev-publish-outcome
   BLEEDINGDEV_SOURCE_QUALIFICATION_ARTIFACT: bleedingdev-source-qualification
   BLEEDINGDEV_RELEASE_DIR: .modern/bleedingdev-publish
   BLEEDINGDEV_RELEASE_MANIFEST: .modern/bleedingdev-publish/manifest.json
   BLEEDINGDEV_RELEASE_MANIFEST_DIGEST: .modern/bleedingdev-publish/manifest.json.sha256
   BLEEDINGDEV_RELEASE_COHORT_DIGEST: .modern/bleedingdev-publish/cohort.sha256
   BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT: .modern/bleedingdev-publish/acceptance-receipt.json
-  BLEEDINGDEV_PUBLISHED_ACCEPTANCE_RECEIPT: .modern/bleedingdev-publish/published-acceptance-receipt.json
   BLEEDINGDEV_RELEASE_IDENTITY: .modern/bleedingdev-publish/release-identity.json
   BLEEDINGDEV_PUBLISH_OUTCOME: .modern/bleedingdev-publish/publish-outcome.json
   BLEEDINGDEV_SOURCE_QUALIFICATION: .modern/bleedingdev-publish/source-qualification.json
@@ -111,11 +108,6 @@ jobs:
       github.triggering_actor == 'BleedingDev' &&
       github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern')
     steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -168,6 +160,17 @@ jobs:
           PUBLISH_VERSION: ${{ inputs.version }}
         run: node scripts/ultramodern-publish/workflow.mjs reject-published-source
 
+      # The previous live cohort's published checks run after its publish run,
+      # in accept-bleedingdev-release.yml. A new live cohort would move latest
+      # under them, so it waits until they finished; a red one is reported
+      # here as an error but never blocks the corrected cohort that replaces
+      # it. Recovery and dry runs move nothing and are not held.
+      - name: Refuse a live cohort while the previous one is being accepted
+        if: inputs.mode == 'cohort' && inputs.recovery_run_id == '' && inputs.dry_run == false
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ultramodern-publish/workflow.mjs assert-previous-release-settled
+
       # A cohort requires every recipe name. A recovery dispatch instead checks
       # the recovered bundle through reconcile-sidecars.
       - name: Check every sidecar name exists on npm
@@ -179,8 +182,11 @@ jobs:
         if: inputs.mode == 'sidecars'
         run: node scripts/ultramodern-publish/publish-sidecars.mjs --mode sidecars --profile "$BLEEDINGDEV_SIDECAR_PROFILE" --check-registry
 
+  # Starts beside publish-security: it restores or builds the compiler payload
+  # for this exact commit and authorizes nothing. Every job that consumes the
+  # payload also needs publish-security, so no build, test or acceptance job
+  # starts before the dispatch inputs and registry preflights have passed.
   effect-compiler-payload:
-    needs: publish-security
     if: >-
       inputs.mode == 'cohort' &&
       github.actor == 'BleedingDev' &&
@@ -194,7 +200,9 @@ jobs:
   # registry. The compiler matrix supplies the same verified selection on both paths.
   integration:
     name: Integration suites on the release commit
-    needs: effect-compiler-payload
+    needs:
+      - publish-security
+      - effect-compiler-payload
     if: >-
       inputs.mode == 'cohort' &&
       github.actor == 'BleedingDev' &&
@@ -220,11 +228,6 @@ jobs:
       github.triggering_actor == 'BleedingDev' &&
       github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern')
     steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-
       - name: Checkout
         # Full history: "Qualify release source" runs pnpm test:scripts, whose
         # divergence gate derives ownership at eded841256 and diffs from the
@@ -405,11 +408,6 @@ jobs:
       needs.integration.result == 'success' &&
       needs.qualify-source-compute.result == 'success'
     steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -483,7 +481,9 @@ jobs:
     name: Build the immutable @bleedingdev release bundle
     runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 90
-    needs: effect-compiler-payload
+    needs:
+      - publish-security
+      - effect-compiler-payload
     if: >-
       inputs.mode == 'cohort' &&
       github.actor == 'BleedingDev' &&
@@ -495,18 +495,14 @@ jobs:
       producer_run_identity: ${{ steps.producer-identity.outputs.run_identity }}
       release_source_commit: ${{ steps.verify-bundle.outputs.source_commit }}
     steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-
       - name: Checkout
-        # Full history is kept deliberately: the release bundle is built from
-        # the same complete checkout qualify-source qualifies. Matches
-        # ultramodern-nightly.yml and boundary-anti-patterns.yml.
+        # The bundle is built from the tree at HEAD; git is read only for HEAD
+        # itself and for verify-bundle's ancestry check, where the manifest
+        # commit is HEAD. Only a recovery verifies an older manifest commit,
+        # so only a recovery needs history.
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: ${{ inputs.recovery_run_id == '' && 1 || 0 }}
           persist-credentials: false
 
       - name: Setup Node.js 26.13.1
@@ -693,8 +689,9 @@ jobs:
   # The same registry reconciliation publish-sidecars performs, without
   # publishing and without OIDC: a dry run of the staged sidecar lane reports
   # what it would do and fails closed on a missing package or any registry
-  # content/version mismatch. It needs only the bundle and the publication CLI dependency, so it runs as soon as
-  # prepare-release uploads it and gates the expensive clean-room acceptance.
+  # content/version mismatch. It needs only the bundle and the publication CLI
+  # dependency, so it runs beside the clean-room acceptance; publish-sidecars,
+  # publish and validate-release each require it.
   reconcile-sidecars:
     name: Reconcile the staged sidecars with the registry
     runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
@@ -708,11 +705,6 @@ jobs:
       - publish-security
       - prepare-release
     steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-
       - name: Checkout exact-artifact sidecar CLI
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -756,11 +748,12 @@ jobs:
       github.actor == 'BleedingDev' &&
       github.triggering_actor == 'BleedingDev' &&
       github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern')
+    # Reads only prepare-release outputs, so it starts with reconcile-sidecars
+    # instead of behind it. publish-sidecars, publish and validate-release
+    # each require reconcile-sidecars, so no registry write and no green dry
+    # run happens without the registry reconciliation.
     needs:
       - prepare-release
-      # The cheap registry gates finish long before the bundle does; a
-      # registry the release cannot publish to never starts this job.
-      - reconcile-sidecars
     uses: ./.github/workflows/ultramodern-release-acceptance.yml
     with:
       required_renderer_features: true
@@ -777,6 +770,7 @@ jobs:
       always() && cancelled() == false &&
       needs.publish-security.result == 'success' &&
       needs.qualify-source.result == 'success' &&
+      needs.reconcile-sidecars.result == 'success' &&
       needs.accept-release.result == 'success' &&
       needs.rehearse-tractor.result == 'success' &&
       inputs.mode == 'cohort' &&
@@ -787,15 +781,11 @@ jobs:
     needs:
       - publish-security
       - qualify-source
+      - reconcile-sidecars
       - accept-release
       # A dry run is green only when the Tractor rehearsal is.
       - rehearse-tractor
     steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-
       - name: Checkout exact-artifact validation CLI
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -905,11 +895,6 @@ jobs:
       github.triggering_actor == 'BleedingDev' &&
       github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern')
     steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-
       - name: Checkout the exact sidecar inputs
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -956,11 +941,6 @@ jobs:
       needs.publish-security.result == 'success' &&
       needs.prepare-sidecars.result == 'success'
     steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-
       - name: Checkout the sidecar qualification tools
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1053,7 +1033,7 @@ jobs:
       inputs.dry_run == false &&
       needs.publish-security.result == 'success' &&
       (
-        (inputs.mode == 'cohort' && needs.integration.result == 'success' && needs.qualify-source-compute.result == 'success' && needs.qualify-source.result == 'success' && needs.accept-release.result == 'success' && needs.rehearse-tractor.result == 'success') ||
+        (inputs.mode == 'cohort' && needs.integration.result == 'success' && needs.qualify-source-compute.result == 'success' && needs.qualify-source.result == 'success' && needs.reconcile-sidecars.result == 'success' && needs.accept-release.result == 'success' && needs.rehearse-tractor.result == 'success') ||
         (inputs.mode == 'sidecars' && needs.prepare-sidecars.result == 'success' && needs.qualify-sidecars.result == 'success')
       )
     needs:
@@ -1063,6 +1043,7 @@ jobs:
       - qualify-source-compute
       - publish-security
       - qualify-source
+      - reconcile-sidecars
       - accept-release
       # Nothing reaches npm until the immutable bundle has already been proven
       # downstream in Tractor against an ephemeral registry.
@@ -1199,6 +1180,7 @@ jobs:
       needs.integration.result == 'success' &&
       needs.qualify-source-compute.result == 'success' &&
       needs.qualify-source.result == 'success' &&
+      needs.reconcile-sidecars.result == 'success' &&
       needs.accept-release.result == 'success' &&
       needs.rehearse-tractor.result == 'success' &&
       needs.publish-sidecars.result == 'success'
@@ -1207,6 +1189,7 @@ jobs:
       - qualify-source-compute
       - publish-security
       - qualify-source
+      - reconcile-sidecars
       - accept-release
       # Same pre-publication gate as publish-sidecars, declared explicitly here
       # too rather than relied on transitively.
@@ -1321,202 +1304,27 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
-  # This workflow publishes the cohort directly at `latest`. It is already
-  # public here; this job immediately verifies the registry bytes in the same
-  # workflow. It does not approve a staged cohort or roll publication back.
-  # accept-release already built and ran the exact tarballs npm now serves.
-  # ERP resolution must reproduce the source receipt closure, then all three
-  # renderer feature proofs run again using registry-resolved installed bytes.
-  accept-published:
-    name: Accept the exact published registry cohort
-    # Acceptance consumes npm packages; only publication requires GitHub-hosted OIDC.
-    # Feature proofs validate a job-owned RUNNER_TEMP on GitHub or Depot GHA.
+  # The cohort is public once the publish job above returns: npm has accepted
+  # every exact tarball. The checks that read it back from npm - the registry
+  # cohort itself, published ERP-10 and renderer features, published Tractor,
+  # the authenticated outcome and the GitHub release record - run in
+  # accept-bleedingdev-release.yml for this exact run, so this run ends when
+  # the packages are live. That run fails loudly on its own, and the next live
+  # cohort's publish-security refuses to start while it is still queued or
+  # running, was cancelled, or was never started.
+  #
+  # The only job here that holds actions: write, and it only dispatches that
+  # one workflow. The follow-up authenticates this run through the API, not
+  # through its own actor (github-actions[bot]).
+  start-release-acceptance:
+    name: Start the published release acceptance
     runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
-    timeout-minutes: 180
-    if: >-
-      always() &&
-      cancelled() == false &&
-      inputs.mode == 'cohort' &&
-      github.actor == 'BleedingDev' &&
-      github.triggering_actor == 'BleedingDev' &&
-      github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern') &&
-      inputs.dry_run == false &&
-      needs.publish.result == 'success' &&
-      needs.accept-release.result == 'success'
+    timeout-minutes: 5
+    permissions:
+      actions: write
     needs:
-      - publish
       - accept-release
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-
-      - name: Checkout published acceptance runner
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Setup Node.js 26.13.1
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '26.13.1'
-
-      - name: Setup mise
-        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
-        with:
-          version: 2026.11.8
-
-      - name: Download exact published release identity
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          github-token: ${{ github.token }}
-          name: ${{ env.BLEEDINGDEV_RELEASE_IDENTITY_ARTIFACT }}-${{ needs.accept-release.outputs.producer_artifact_identity }}-publication-attempt-${{ needs.publish.outputs.publication_run_attempt }}
-          path: .modern/bleedingdev-publish
-          repository: ${{ github.repository }}
-          run-id: ${{ github.run_id }}
-
-      - name: Verify accepted producer receipt for published acceptance
-        env:
-          PRODUCER_RUN_IDENTITY: ${{ needs.accept-release.outputs.producer_run_identity }}
-        run: |
-          node scripts/ultramodern-publish/run-release-acceptance.mjs \
-            --verify-receipt \
-            --expected-mode source \
-            --manifest "$BLEEDINGDEV_RELEASE_MANIFEST" \
-            --scale-profile erp-10 \
-            --receipt "$BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT" \
-            --run-identity "$PRODUCER_RUN_IDENTITY"
-
-      - name: Verify exact published release identity
-        env:
-          PUBLICATION_RUN_ATTEMPT: ${{ needs.publish.outputs.publication_run_attempt }}
-          PRODUCER_RUN_IDENTITY: ${{ needs.accept-release.outputs.producer_run_identity }}
-        run: |
-          node scripts/ultramodern-publish/workflow.mjs verify-published-identity
-
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        run: echo "path=$(mise exec -- pnpm store path)" >> "$GITHUB_OUTPUT"
-
-      # Scoped cache namespace: same rationale as accept-release — this job
-      # installs only the @scripts/ultramodern-production-readiness closure.
-      - name: Restore pnpm store cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-accept-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            pnpm-store-accept-${{ runner.os }}-
-
-      - name: Install published acceptance tools
-        timeout-minutes: 20
-        run: |
-          mise exec -- pnpm install --frozen-lockfile --ignore-scripts \
-            --filter @scripts/ultramodern-production-readiness --filter modern-js-monorepo --filter tests
-
-      - name: Await the registry cohort
-        timeout-minutes: 20
-        env:
-          PUBLISH_CONCURRENCY: ${{ env.BLEEDINGDEV_PUBLISH_CONCURRENCY }}
-          PUBLISH_TAG: ${{ env.BLEEDINGDEV_PUBLISH_TAG }}
-          PUBLISH_VERSION: ${{ inputs.version }}
-        run: |
-          timeout --signal=TERM --kill-after=15s 15m \
-            bash scripts/ultramodern-publish/wait-for-registry-cohort.sh \
-            "$BLEEDINGDEV_RELEASE_DIR" "$PUBLISH_CONCURRENCY" \
-            "$PUBLISH_VERSION" "$PUBLISH_TAG"
-
-      - name: Run published ERP-10 acceptance
-        env:
-          SUPPORT_ARTIFACT_GITHUB_TOKEN: ${{ github.token }}
-          PRODUCER_RUN_IDENTITY: ${{ needs.accept-release.outputs.producer_run_identity }}
-          PUBLISH_VERSION: ${{ inputs.version }}
-        run: |
-          node scripts/ultramodern-publish/run-release-acceptance.mjs \
-            --mode published \
-            --manifest "$BLEEDINGDEV_RELEASE_MANIFEST" \
-            --expected-source-revision "${{ needs.accept-release.outputs.release_source_commit }}" \
-            --expected-version "$PUBLISH_VERSION" \
-            --scale-profile erp-10 \
-            --registry-url https://registry.npmjs.org/ \
-            --source-receipt "$BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT" \
-            --receipt "$BLEEDINGDEV_PUBLISHED_ACCEPTANCE_RECEIPT" \
-            --run-identity "$PRODUCER_RUN_IDENTITY"
-
-      - name: Resolve installed-renderer browser runtime
-        id: renderer-browser-runtime
-        run: mise exec -- node scripts/lib/browser-provisioning.js --resolve --runtime tests
-
-      - name: Install installed-renderer browser runtime
-        run: >-
-          mise exec -- node scripts/lib/browser-provisioning.js --install --runtime tests
-          --version ${{ steps.renderer-browser-runtime.outputs.version }}
-
-      - name: Install pinned installed-renderer browser CLI
-        id: renderer-browser-cli
-        run: mise exec -- node scripts/ultramodern-renderers/provision-agent-browser.mjs
-
-      - name: Install fixed installed-renderer Chrome
-        id: renderer-fixed-browser
-        run: mise exec -- node scripts/ultramodern-renderers/provision-browser.mjs
-
-      - name: Run registry-byte installed renderer features
-        env:
-          NATIVE_ARTIFACT_GITHUB_TOKEN: ${{ github.token }}
-          RENDERER_AGENT_BROWSER_EXECUTABLE: ${{ steps.renderer-browser-cli.outputs.executable_path }}
-          RENDERER_BROWSER_EXECUTABLE: ${{ steps.renderer-fixed-browser.outputs.executable_path }}
-          PRODUCER_RUN_IDENTITY: ${{ needs.accept-release.outputs.producer_run_identity }}
-        run: |
-          test -x "$RENDERER_BROWSER_EXECUTABLE"
-          test -x "$RENDERER_AGENT_BROWSER_EXECUTABLE"
-          test "$(command -v agent-browser)" = "$RENDERER_AGENT_BROWSER_EXECUTABLE"
-          feature_work="$(mktemp -d "$RUNNER_TEMP/renderer-features-XXXXXX")"
-          feature_work="$(realpath "$feature_work")"
-          export OWNED_TEMP_DIR="$feature_work"
-          trap 'rm -rf -- "$feature_work/native-inputs"' EXIT
-          GH_TOKEN="$NATIVE_ARTIFACT_GITHUB_TOKEN" mise exec -- node scripts/ultramodern-renderers/native-federation-inputs.mjs \
-            --manifest "$BLEEDINGDEV_RELEASE_MANIFEST" --out "$feature_work/native-inputs"
-          unset NATIVE_ARTIFACT_GITHUB_TOKEN
-          mise exec -- node scripts/ultramodern-renderers/release.mjs \
-            --cohort-dir "$BLEEDINGDEV_RELEASE_DIR" --renderers solid,octane --with '' \
-            --work-dir "$feature_work" --required-features \
-            --browser-executable "$RENDERER_BROWSER_EXECUTABLE" \
-            --native-inputs "$feature_work/native-inputs/native-inputs.json" \
-            --acceptance-mode published --registry-url https://registry.npmjs.org/ \
-            --source-feature-receipt "$BLEEDINGDEV_RELEASE_DIR/acceptance-receipt.renderer-features.json" \
-            --source-acceptance-receipt "$BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT" \
-            --acceptance-receipt "$BLEEDINGDEV_PUBLISHED_ACCEPTANCE_RECEIPT" \
-            --feature-receipt "$BLEEDINGDEV_RELEASE_DIR/published-acceptance-receipt.renderer-features.json" \
-            --run-identity "$PRODUCER_RUN_IDENTITY"
-          mise exec -- node scripts/ultramodern-renderers/retain-feature-evidence.mjs \
-            --receipt "$BLEEDINGDEV_RELEASE_DIR/published-acceptance-receipt.renderer-features.json"
-
-      - name: Preserve renderer feature runtime evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: renderer-feature-published-runtime-${{ needs.accept-release.outputs.producer_artifact_identity }}-publication-attempt-${{ needs.publish.outputs.publication_run_attempt }}
-          path: |
-            ${{ runner.temp }}/renderer-features-*/**/*.log
-            ${{ runner.temp }}/renderer-features-*/logs/retained-evidence/**
-          if-no-files-found: error
-          include-hidden-files: true
-
-      - name: Upload published acceptance evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ env.BLEEDINGDEV_PUBLISHED_ACCEPTANCE_ARTIFACT }}-${{ needs.accept-release.outputs.producer_artifact_identity }}-publication-attempt-${{ needs.publish.outputs.publication_run_attempt }}
-          path: |
-            .modern/bleedingdev-publish/published-acceptance-receipt.json
-            .modern/bleedingdev-publish/published-acceptance-receipt.renderer-features.json
-          if-no-files-found: error
-          include-hidden-files: true
-
-  tractor-downstream:
-    name: Accept the exact published cohort in Tractor
+      - publish
     if: >-
       always() &&
       cancelled() == false &&
@@ -1525,24 +1333,24 @@ jobs:
       github.triggering_actor == 'BleedingDev' &&
       github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern') &&
       inputs.dry_run == false &&
-      needs.prepare-release.result == 'success' &&
+      needs.accept-release.result == 'success' &&
       needs.publish.result == 'success'
-    # Runs beside accept-published rather than behind it. record-publish-outcome
-    # below still requires both, so evidence ordering is unchanged; only the
-    # scheduling is. The callee re-runs the registry cohort gate itself
-    # (wait_for_registry_cohort) because it may now start before this workflow's
-    # own cohort wait has passed.
-    needs:
-      - prepare-release
-      - publish
-    uses: ./.github/workflows/ultramodern-tractor-downstream.yml
-    with:
-      # Stated rather than defaulted: this is the only lane whose evidence is
-      # promotable, and record-publish-outcome still requires it.
-      mode: published
-      release_bundle_artifact: bleedingdev-release-bundle-${{ needs.prepare-release.outputs.producer_artifact_identity }}
-      wait_for_registry_cohort: true
+    steps:
+      - name: Dispatch the published release acceptance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCER_RUN_ATTEMPT: ${{ needs.accept-release.outputs.producer_run_attempt }}
+          PUBLICATION_RUN_ATTEMPT: ${{ needs.publish.outputs.publication_run_attempt }}
+        run: |
+          gh workflow run accept-bleedingdev-release.yml --repo "$GITHUB_REPOSITORY" --ref main-ultramodern -f original_run_id="$GITHUB_RUN_ID" -f producer_run_attempt="$PRODUCER_RUN_ATTEMPT" -f publication_run_attempt="$PUBLICATION_RUN_ATTEMPT"
+          printf '%s\n' \
+            '## Packages are live on npm' \
+            '' \
+            "npm accepted every tarball of this cohort. The published acceptance and the release record continue in [Accept published release from run $GITHUB_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/accept-bleedingdev-release.yml). Until that run is green the cohort is live but not accepted." \
+            >> "$GITHUB_STEP_SUMMARY"
 
+  # Dry-run branch only. A live cohort records its outcome in
+  # accept-bleedingdev-release.yml, after the published checks.
   record-publish-outcome:
     name: Record the authenticated publish outcome
     runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
@@ -1555,12 +1363,10 @@ jobs:
       - validate-release
       - publish-sidecars
       - publish
-      - accept-published
       # The rehearsal runs in a dry run too, and a dry run has no publish job to
       # carry its failure, so it is required directly below. It contributes a
       # gate only: source evidence is never downloaded, read, or promoted here.
       - rehearse-tractor
-      - tractor-downstream
     if: >-
       inputs.mode == 'cohort' &&
       always() &&
@@ -1568,26 +1374,20 @@ jobs:
       github.actor == 'BleedingDev' &&
       github.triggering_actor == 'BleedingDev' &&
       github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern') &&
+      inputs.dry_run == true &&
       needs.publish-security.result == 'success' &&
       needs.accept-release.result == 'success' &&
       needs.rehearse-tractor.result == 'success' &&
-      (
-        (inputs.dry_run == true && needs.validate-release.result == 'success' && needs.rehearse-tractor.result == 'success' && needs.publish-sidecars.result == 'skipped' && needs.publish.result == 'skipped') ||
-        (inputs.dry_run == false && needs.publish-sidecars.result == 'success' && needs.publish.result == 'success' && needs.accept-published.result == 'success' && needs.tractor-downstream.result == 'success' && needs.validate-release.result == 'skipped')
-      )
+      needs.validate-release.result == 'success' &&
+      needs.publish-sidecars.result == 'skipped' &&
+      needs.publish.result == 'skipped'
     env:
-      DRY_RUN: ${{ inputs.dry_run }}
       PRODUCER_ARTIFACT_IDENTITY: ${{ needs.accept-release.outputs.producer_artifact_identity }}
       PRODUCER_RUN_ATTEMPT: ${{ needs.accept-release.outputs.producer_run_attempt }}
       PRODUCER_RUN_IDENTITY: ${{ needs.accept-release.outputs.producer_run_identity }}
       RELEASE_SOURCE_COMMIT: ${{ needs.accept-release.outputs.release_source_commit }}
       PUBLISH_VERSION: ${{ inputs.version }}
     steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-
       - name: Checkout exact-outcome recorder
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1617,26 +1417,6 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ github.run_id }}
 
-      - name: Download published acceptance evidence
-        if: inputs.dry_run == false
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          github-token: ${{ github.token }}
-          name: ${{ env.BLEEDINGDEV_PUBLISHED_ACCEPTANCE_ARTIFACT }}-${{ needs.accept-release.outputs.producer_artifact_identity }}-publication-attempt-${{ needs.publish.outputs.publication_run_attempt }}
-          path: .modern/bleedingdev-publish
-          repository: ${{ github.repository }}
-          run-id: ${{ github.run_id }}
-
-      - name: Download Tractor acceptance evidence
-        if: inputs.dry_run == false
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          github-token: ${{ github.token }}
-          name: ${{ needs.tractor-downstream.outputs.evidence_artifact_name }}
-          path: .modern/bleedingdev-publish
-          repository: ${{ github.repository }}
-          run-id: ${{ github.run_id }}
-
       - name: Verify accepted producer receipt for the outcome
         run: |
           node scripts/ultramodern-publish/run-release-acceptance.mjs \
@@ -1646,45 +1426,15 @@ jobs:
             --receipt "$BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT" \
             --run-identity "$PRODUCER_RUN_IDENTITY"
 
-      - name: Verify published receipt for the outcome
-        if: inputs.dry_run == false
-        run: |
-          node scripts/ultramodern-publish/run-release-acceptance.mjs \
-            --verify-receipt \
-            --expected-mode published \
-            --manifest "$BLEEDINGDEV_RELEASE_MANIFEST" \
-            --scale-profile erp-10 \
-            --receipt "$BLEEDINGDEV_PUBLISHED_ACCEPTANCE_RECEIPT" \
-            --run-identity "$PRODUCER_RUN_IDENTITY"
-
       - name: Create publish outcome
         id: publish-outcome
         run: |
-          publication_identity=()
-          published_evidence=()
-          tractor_evidence=()
-          if [[ "$DRY_RUN" == "false" ]]; then
-            publication_identity=(
-              --publication-run-attempt "${{ needs.publish.outputs.publication_run_attempt }}"
-            )
-            published_evidence=(
-              --published-receipt "$BLEEDINGDEV_PUBLISHED_ACCEPTANCE_RECEIPT"
-            )
-            tractor_evidence=(
-              --tractor-report "$BLEEDINGDEV_RELEASE_DIR/tractor-downstream-acceptance.json"
-              --tractor-report-sha256 "${{ needs.tractor-downstream.outputs.report_sha256 }}"
-              --tractor-baseline-revision "${{ needs.tractor-downstream.outputs.baseline_revision }}"
-            )
-          fi
           node scripts/ultramodern-publish/publish-outcome.mjs create \
             --manifest "$BLEEDINGDEV_RELEASE_MANIFEST" \
             --manifest-digest "$BLEEDINGDEV_RELEASE_MANIFEST_DIGEST" \
             --cohort-digest "$BLEEDINGDEV_RELEASE_COHORT_DIGEST" \
             --receipt "$BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT" \
             --operational-evidence "${BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT%.json}.operational-independence.json" \
-            "${publication_identity[@]}" \
-            "${published_evidence[@]}" \
-            "${tractor_evidence[@]}" \
             --out "$BLEEDINGDEV_PUBLISH_OUTCOME" \
             --repository "$GITHUB_REPOSITORY" \
             --source-commit "$RELEASE_SOURCE_COMMIT" \
@@ -1695,7 +1445,7 @@ jobs:
             --producer-artifact-identity "$PRODUCER_ARTIFACT_IDENTITY" \
             --producer-run-attempt "$PRODUCER_RUN_ATTEMPT" \
             --producer-run-identity "$PRODUCER_RUN_IDENTITY" \
-            --dry-run "$DRY_RUN" \
+            --dry-run true \
             --github-output "$GITHUB_OUTPUT"
 
       - name: Upload publish outcome
@@ -1712,158 +1462,10 @@ jobs:
             .modern/bleedingdev-publish/acceptance-receipt.json
             .modern/bleedingdev-publish/acceptance-receipt.operational-independence.json
             .modern/bleedingdev-publish/acceptance-receipt.renderer-features.json
-            .modern/bleedingdev-publish/published-acceptance-receipt.json
-            .modern/bleedingdev-publish/published-acceptance-receipt.renderer-features.json
-            .modern/bleedingdev-publish/tractor-downstream-acceptance.json
             .modern/bleedingdev-publish/publish-outcome.json
           if-no-files-found: error
           include-hidden-files: true
 
-      # One concise, truthful delivery-state summary read straight off the
-      # authenticated outcome this job just wrote — no new receipt schema, no
-      # certification hash, no progress database. Persistent Tractor main
-      # promotion is real product delivery this workflow cannot perform itself
-      # (it would need cross-repo write credentials this workflow never
-      # holds), so it is reported as a required, visible, retryable
-      # obligation rather than folded into a silent "done".
       - name: Summarize the publish delivery state
-        env:
-          TRACTOR_STORE_REPOSITORY: BleedingDev/tractor-store-vertical-demo
         run: |
           node scripts/ultramodern-publish/workflow.mjs summarize-delivery
-
-  publish-change-record:
-    name: Publish the cohort change record
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
-    timeout-minutes: 15
-    # The only job that may write to the repository, and it runs strictly after
-    # the publish outcome is recorded.
-    permissions:
-      actions: read
-      contents: write
-    needs:
-      - record-publish-outcome
-    if: >-
-      inputs.mode == 'cohort' &&
-      always() &&
-      cancelled() == false &&
-      needs.record-publish-outcome.result == 'success' &&
-      github.actor == 'BleedingDev' &&
-      github.triggering_actor == 'BleedingDev' &&
-      github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern') &&
-      inputs.dry_run == false
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Setup Node.js 26.13.1
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '26.13.1'
-
-      - name: Download authenticated publish outcome
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          github-token: ${{ github.token }}
-          name: ${{ needs.record-publish-outcome.outputs.artifact_name }}
-          path: .modern/bleedingdev-publish
-          repository: ${{ github.repository }}
-          run-id: ${{ github.run_id }}
-
-      - name: Generate the cohort change record
-        id: change-record
-        run: |
-          # Immutable source identity comes from the authenticated publish
-          # outcome's own manifest.json (downloaded above), never from a
-          # second job dependency: the outcome already verified this manifest
-          # against the accepted release before uploading it.
-          RELEASE_SOURCE_COMMIT="$(node scripts/ultramodern-publish/workflow.mjs source-commit)"
-          git checkout --detach "$RELEASE_SOURCE_COMMIT"
-          mkdir -p "$BLEEDINGDEV_RELEASE_DIR"
-          node scripts/ultramodern-publish/gen-cohort-change-record.mjs \
-            --manifest "$BLEEDINGDEV_RELEASE_MANIFEST" \
-            --out "$BLEEDINGDEV_RELEASE_DIR/change-record.md" \
-            --github-output "$GITHUB_OUTPUT"
-
-      - name: Create or update the GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          PUBLISH_VERSION: ${{ steps.change-record.outputs.version }}
-          SOURCE_COMMIT: ${{ steps.change-record.outputs.source_commit }}
-        run: |
-          set -euo pipefail
-          # FORK: this repository carries 271 inherited upstream Modern.js `v*`
-          # tags (v1.x .. v3.4.0). `gh release create` REUSES a pre-existing tag
-          # and silently ignores --target, so a fork release published under
-          # `v$PUBLISH_VERSION` could point at an upstream commit. Namespace the
-          # fork's releases away from `v*` and never move an existing tag.
-          TAG="ultramodern-v$PUBLISH_VERSION"
-          TITLE="@bleedingdev/modern-js-* $PUBLISH_VERSION"
-          NOTES="$BLEEDINGDEV_RELEASE_DIR/change-record.md"
-
-          EXISTING_TAG_SHA="$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" || true)"
-          if [ -n "$EXISTING_TAG_SHA" ] && [ "$EXISTING_TAG_SHA" != "$SOURCE_COMMIT" ]; then
-            echo "::error::tag $TAG already exists at $EXISTING_TAG_SHA, not $SOURCE_COMMIT" >&2
-            exit 1
-          fi
-
-          # Idempotent: the publish job runs BEFORE this one and is
-          # unrollbackable, so a re-run must be able to converge instead of
-          # failing permanently on an already-created release.
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "$TITLE" \
-              --notes-file "$NOTES"
-          elif [ -n "$EXISTING_TAG_SHA" ]; then
-            # The tag already names SOURCE_COMMIT, so no --target: GitHub
-            # evaluates an explicit target as a new ref at that commit and, when
-            # its .github/workflows differs from the default branch, refuses
-            # GITHUB_TOKEN with HTTP 403 even though the tag exists.
-            gh release create "$TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --verify-tag \
-              --title "$TITLE" \
-              --notes-file "$NOTES"
-          else
-            # Creating the release creates its tag. GitHub refuses that to
-            # GITHUB_TOKEN (HTTP 403 "Resource not accessible by integration")
-            # whenever the tagged commit's .github/workflows differs from the
-            # default branch: it counts as a workflow change, and GITHUB_TOKEN
-            # can never hold the `workflows` permission. Name that cause and its
-            # recovery instead of the opaque 403; once an owner has pushed the
-            # tag, a rerun takes the branch above.
-            WORKFLOW_DRIFT="$(gh api "repos/$GITHUB_REPOSITORY/compare/$SOURCE_COMMIT...$DEFAULT_BRANCH" \
-              --jq '[.files[].filename | select(startswith(".github/workflows/"))] | join(" ")')"
-            if [ -n "$WORKFLOW_DRIFT" ]; then
-              echo "::error::$DEFAULT_BRANCH changed $WORKFLOW_DRIFT after $SOURCE_COMMIT, so GITHUB_TOKEN cannot create tag $TAG. An owner creates it first: gh api repos/$GITHUB_REPOSITORY/git/refs -f ref=refs/tags/$TAG -f sha=$SOURCE_COMMIT" >&2
-              exit 1
-            fi
-            gh release create "$TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$SOURCE_COMMIT" \
-              --title "$TITLE" \
-              --notes-file "$NOTES"
-          fi
-
-      - name: Explain how to recover the release record
-        if: failure()
-        run: |
-          echo "::error::npm publication succeeded; only the GitHub release record is missing. Resolve the error above, then run: gh run rerun $GITHUB_RUN_ID --failed --repo $GITHUB_REPOSITORY"
-
-      - name: Upload the change record
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: bleedingdev-change-record-${{ steps.change-record.outputs.version }}
-          path: .modern/bleedingdev-publish/change-record.md
-          if-no-files-found: error
-          include-hidden-files: true

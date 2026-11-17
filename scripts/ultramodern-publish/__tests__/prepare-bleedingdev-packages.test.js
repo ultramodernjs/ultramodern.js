@@ -725,27 +725,49 @@ test('one propagation deadline bounds the tarball wait of a whole publish set', 
   }
 });
 
-test('the published cohort verifies every member against one shared deadline', async t => {
-  // validateRegistryCohort builds the real provenance expectation before it
-  // fans out, so this test must run in a release context: the environment of
-  // the pull-request job running this file names a repository the fixture
-  // manifest does not.
-  mockTrustedWorkflowEnvironment(t);
+test('the published cohort verifies every member against one shared deadline', async () => {
   const { validateRegistryCohort } = await import(
     '../prepare-bleedingdev-packages.mjs'
   );
   const fixture = await createArtifactFixture();
   try {
     const deadlines = [];
-    await validateRegistryCohort(
+    const expectations = new Set();
+    const provenanceExpectation = { invocation: { exactAttempt: true } };
+    const verified = await validateRegistryCohort(
       fixture.releaseArtifacts.manifest,
-      { dryRun: false, publishConcurrency: 8, tag: 'latest' },
+      { provenanceExpectation, publishConcurrency: 8, tag: 'latest' },
       {
         verifyRegistryDistTag: async () => {},
-        verifyRegistryPackage: async (_item, _expectation, options) => {
+        verifyRegistryPackage: async (item, expectation, options) => {
           deadlines.push(options?.deadline);
+          expectations.add(expectation);
+          return { tarball: item.targetName };
         },
       },
+    );
+    assert.deepEqual(
+      [...verified],
+      fixture.releaseArtifacts.manifest.packages.map(item => [
+        item.targetName,
+        { tarball: item.targetName },
+      ]),
+    );
+    assert.deepEqual(
+      [...expectations],
+      [provenanceExpectation],
+      'the caller names the publishing run; the verifier never derives it',
+    );
+    await assert.rejects(
+      validateRegistryCohort(
+        fixture.releaseArtifacts.manifest,
+        { publishConcurrency: 8, tag: 'latest' },
+        {
+          verifyRegistryDistTag: async () => {},
+          verifyRegistryPackage: async () => ({}),
+        },
+      ),
+      /provenance expectation/,
     );
     assert.equal(
       deadlines.length,
@@ -1211,6 +1233,49 @@ test('full-cohort publish runs each dependency level concurrently and never star
   }
 });
 
+test('a live publish returns once npm accepted the last tarball and never polls the registry back', async t => {
+  mockTrustedWorkflowEnvironment(t);
+  const { publishManifestPackages } = await import(
+    '../prepare-bleedingdev-packages.mjs'
+  );
+  const fixture = await createArtifactFixture();
+  const published = [];
+  const readBack = () => {
+    throw new Error(
+      'registry read-back belongs to accept-bleedingdev-release.yml',
+    );
+  };
+  try {
+    await publishManifestPackages(
+      fixture.releaseArtifacts,
+      {
+        dryRun: false,
+        publishConcurrency: 8,
+        tag: 'latest',
+        version: '3.2.0-ultramodern.1',
+      },
+      {
+        lookupRegistryDistTag: async () => '3.1.0-ultramodern.previous',
+        lookupRegistryPackageDist: async () => null,
+        preflightTrustedPublishingPackages: async () => {},
+        publishPackage: async artifact => {
+          published.push(artifact.targetName);
+          return artifact.targetName;
+        },
+        validateRegistryCohort: readBack,
+        verifyRegistryDistTag: readBack,
+        verifyRegistryPackage: readBack,
+      },
+    );
+    assert.deepEqual(
+      [...published].sort(),
+      [...fixture.releaseArtifacts.manifest.publishOrder].sort(),
+    );
+  } finally {
+    removeDir(fixture.root);
+  }
+});
+
 test('dry-run validation cannot publish or request credentials', async () => {
   const { validateAcceptedPackageDryRun } = await import(
     '../prepare-bleedingdev-packages.mjs'
@@ -1267,7 +1332,7 @@ test('registry entrypoints fetch source state and accept an already coherent pub
   });
   assert.equal(
     fetchedUrl,
-    `https://registry.npmjs.org/${encodeURIComponent(packageName)}`,
+    `https://registry.npmjs.org/${encodeURIComponent(packageName)}?write=true`,
   );
   assert.equal(state.versionCount, 0);
   await assert.rejects(

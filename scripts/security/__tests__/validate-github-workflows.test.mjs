@@ -67,35 +67,48 @@ test('accepted-tarball dry-run validation installs the frozen publication CLI fi
   assert.equal(job.permissions?.['id-token'], undefined);
 });
 
-test('Tractor installs the frozen publication CLI before waiting for the registry cohort', () => {
-  const workflow = yaml.load(
-    fs.readFileSync(
-      new URL(
-        '../../../.github/workflows/ultramodern-tractor-downstream.yml',
-        import.meta.url,
+test('the published cohort is awaited once, after the frozen publication CLI, before any published acceptance', () => {
+  const read = name =>
+    yaml.load(
+      fs.readFileSync(
+        new URL(`../../../.github/workflows/${name}.yml`, import.meta.url),
+        'utf8',
       ),
-      'utf8',
-    ),
-  );
-  const steps = workflow.jobs['tractor-downstream'].steps;
-  const waitIndex = steps.findIndex(step =>
-    step.run?.includes(
-      'scripts/ultramodern-publish/wait-for-registry-cohort.sh',
-    ),
+    );
+  const acceptance = read('accept-bleedingdev-release');
+  const steps = acceptance.jobs['verify-publication'].steps;
+  const verifyIndex = steps.findIndex(step =>
+    step.run?.includes('accept-published-release.mjs verify-registry'),
   );
   const installIndex = steps.findIndex(step =>
     step.run?.includes('--filter modern-js-monorepo'),
   );
-  assert.ok(installIndex >= 0 && installIndex < waitIndex);
-  const install = steps[installIndex];
-  assert.equal(install['working-directory'], 'modernjs');
-  assert.equal(install.if, steps[waitIndex].if);
-  assert.equal(install.if, 'inputs.wait_for_registry_cohort');
+  assert.ok(installIndex >= 0 && installIndex < verifyIndex);
   assert.equal(
-    install.run,
+    steps[installIndex].run,
     'mise exec -- pnpm install --frozen-lockfile --ignore-scripts --prod --filter modern-js-monorepo --package-import-method=clone-or-copy',
   );
-  assert.notEqual(install['continue-on-error'], true);
+  assert.equal(steps[installIndex].if, undefined);
+  for (const job of ['accept-published', 'tractor-downstream'])
+    assert.deepEqual(
+      [acceptance.jobs[job].needs].flat(),
+      ['verify-publication'],
+      job,
+    );
+  // No other job waits on npm: the publish job ends at the last upload and
+  // the Tractor callee reads the cohort verify-publication handed off.
+  const tractor = read('ultramodern-tractor-downstream');
+  assert.equal(
+    tractor.on.workflow_call.inputs.wait_for_registry_cohort,
+    undefined,
+  );
+  for (const workflow of [tractor, read('publish-bleedingdev'), acceptance])
+    for (const job of Object.values(workflow.jobs))
+      for (const step of job.steps ?? [])
+        assert.doesNotMatch(
+          String(step.run ?? ''),
+          /wait-for-registry-cohort|Await the registry cohort/u,
+        );
   const rootPackage = JSON.parse(
     fs.readFileSync(new URL('../../../package.json', import.meta.url), 'utf8'),
   );
@@ -179,21 +192,21 @@ const readPublishWorkflow = () =>
     ),
   );
 const cohortJobs = [
-  'accept-published',
   'accept-release',
   'effect-compiler-payload',
   'integration',
   'prepare-release',
   'publish',
-  'publish-change-record',
   'qualify-source',
   'qualify-source-compute',
   'reconcile-sidecars',
   'record-publish-outcome',
   'rehearse-tractor',
-  'tractor-downstream',
+  'start-release-acceptance',
   'validate-release',
 ];
+// Jobs that run only in a cohort dry run.
+const dryCohortJobs = ['record-publish-outcome', 'validate-release'];
 const sidecarJobs = ['prepare-sidecars', 'qualify-sidecars'];
 const oidcJobs = ['publish', 'publish-sidecars'];
 const publicationResults = (workflow, mode, dryRun = false) => {
@@ -205,14 +218,11 @@ const publicationResults = (workflow, mode, dryRun = false) => {
     results[jobId] = 'success';
   }
   if (mode === 'cohort') {
-    results['validate-release'] = dryRun ? 'success' : 'skipped';
+    for (const jobId of dryCohortJobs) {
+      results[jobId] = dryRun ? 'success' : 'skipped';
+    }
     if (dryRun) {
-      for (const jobId of [
-        'publish',
-        'accept-published',
-        'tractor-downstream',
-        'publish-change-record',
-      ]) {
+      for (const jobId of ['publish', 'start-release-acceptance']) {
         results[jobId] = 'skipped';
       }
     }
@@ -265,10 +275,15 @@ test('source-cohort reuse is rejected before compiler and integration work start
   );
   assert.equal(early['continue-on-error'], undefined);
   assert.equal(early.env.PUBLISH_VERSION, githubExpression('inputs.version'));
-  assert.deepEqual(
-    workflow.jobs['effect-compiler-payload'].needs,
-    'publish-security',
-  );
+  // The payload starts beside publish-security; every job that consumes it
+  // still waits for the validated dispatch.
+  assert.equal(workflow.jobs['effect-compiler-payload'].needs, undefined);
+  for (const job of ['integration', 'prepare-release'])
+    assert.deepEqual(
+      workflow.jobs[job].needs,
+      ['publish-security', 'effect-compiler-payload'],
+      job,
+    );
   assert.ok(
     workflow.jobs['prepare-release'].steps.some(step =>
       step.run?.includes('workflow.mjs reject-published-source'),
@@ -566,14 +581,32 @@ test('release jobs reject inline programs and a Tractor baseline pinned in workf
   // refuses GITHUB_TOKEN a tag whose commit's workflows differ from the
   // default branch.
   const workflowPinned = content.replace(
-    '      wait_for_registry_cohort: true\n',
-    `      wait_for_registry_cohort: true\n      tractor_ref: ${'0'.repeat(40)}\n`,
+    '      mode: source\n',
+    `      mode: source\n      tractor_ref: ${'0'.repeat(40)}\n`,
   );
   assert.notEqual(workflowPinned, content);
   assert.ok(
     validateWorkflowContent(workflowPath, workflowPinned).some(error =>
       error.includes(
-        'job tractor-downstream must call ultramodern-tractor-downstream.yml without a tractor_ref',
+        'job rehearse-tractor must call ultramodern-tractor-downstream.yml without a tractor_ref',
+      ),
+    ),
+  );
+  const acceptancePath = '.github/workflows/accept-bleedingdev-release.yml';
+  const acceptance = fs.readFileSync(
+    new URL(`../../../${acceptancePath}`, import.meta.url),
+    'utf8',
+  );
+  assert.deepEqual(validateWorkflowContent(acceptancePath, acceptance), []);
+  const acceptancePinned = acceptance.replace(
+    '      mode: published\n',
+    `      mode: published\n      tractor_ref: ${'0'.repeat(40)}\n`,
+  );
+  assert.notEqual(acceptancePinned, acceptance);
+  assert.ok(
+    validateWorkflowContent(acceptancePath, acceptancePinned).some(error =>
+      error.includes(
+        'job tractor-downstream must call ultramodern-tractor-downstream.yml in published mode without a tractor_ref',
       ),
     ),
   );
@@ -609,9 +642,19 @@ test('release gates keep their fail-fast needs edges', () => {
   assert.deepEqual(edgeErrors(content), []);
   for (const [edge, job, need] of [
     [
-      '      - reconcile-sidecars\n    uses:',
-      'accept-release',
+      '      - qualify-source\n      - reconcile-sidecars\n      - accept-release\n      # A dry run is green only when the Tractor rehearsal is.\n',
+      'validate-release',
       'reconcile-sidecars',
+    ],
+    [
+      '      - qualify-source\n      - reconcile-sidecars\n      - accept-release\n      # Nothing reaches npm',
+      'publish-sidecars',
+      'reconcile-sidecars',
+    ],
+    [
+      '    timeout-minutes: 90\n    needs:\n      - publish-security\n      - effect-compiler-payload\n',
+      'prepare-release',
+      'publish-security',
     ],
     [
       '      - prepare-release\n    steps:',
@@ -755,6 +798,7 @@ const modePrerequisites = {
     'integration',
     'qualify-source-compute',
     'qualify-source',
+    'reconcile-sidecars',
     'accept-release',
     'rehearse-tractor',
   ],
@@ -764,8 +808,7 @@ const requiredPublicationNeeds = {
   'qualify-sidecars': ['publish-security', 'prepare-sidecars'],
   'publish-sidecars': [...modePrerequisites.cohort, ...sidecarJobs],
   publish: [...modePrerequisites.cohort, 'publish-sidecars'],
-  'accept-published': ['publish', 'accept-release'],
-  'tractor-downstream': ['prepare-release', 'publish'],
+  'start-release-acceptance': ['publish', 'accept-release'],
 };
 const identityGuards = [
   "github.actor == 'BleedingDev'",
@@ -874,26 +917,8 @@ test('each active publication gate rejects unsuccessful or absent required resul
     [
       'cohort',
       false,
-      'accept-published',
-      requiredPublicationNeeds['accept-published'],
-    ],
-    [
-      'cohort',
-      false,
-      'tractor-downstream',
-      requiredPublicationNeeds['tractor-downstream'],
-    ],
-    [
-      'cohort',
-      false,
-      'record-publish-outcome',
-      [
-        ...outcomeNeeds,
-        'publish-sidecars',
-        'publish',
-        'accept-published',
-        'tractor-downstream',
-      ],
+      'start-release-acceptance',
+      requiredPublicationNeeds['start-release-acceptance'],
     ],
     [
       'cohort',
@@ -901,7 +926,17 @@ test('each active publication gate rejects unsuccessful or absent required resul
       'record-publish-outcome',
       [...outcomeNeeds, 'validate-release'],
     ],
-    ['cohort', false, 'publish-change-record', ['record-publish-outcome']],
+    [
+      'cohort',
+      true,
+      'validate-release',
+      [
+        'qualify-source',
+        'reconcile-sidecars',
+        'accept-release',
+        'rehearse-tractor',
+      ],
+    ],
   ];
   for (const [mode, dryRun, jobId, required] of requirements) {
     const schedules = publicationSchedules(workflow, mode, dryRun);
@@ -933,7 +968,7 @@ test('publication guards reject the wrong identity, ref, mode, and dry-run type'
     const activeJobs = [
       'publish-security',
       ...(mode === 'cohort'
-        ? cohortJobs.filter(id => id !== 'validate-release')
+        ? cohortJobs.filter(id => !dryCohortJobs.includes(id))
         : sidecarJobs),
       'publish-sidecars',
     ];
@@ -1010,7 +1045,7 @@ test('publication guards reject the wrong identity, ref, mode, and dry-run type'
       );
     }
     for (const dryRun of [true, undefined, 'false', 'true']) {
-      for (const jobId of [...oidcJobs, 'publish-change-record']) {
+      for (const jobId of [...oidcJobs, 'start-release-acceptance']) {
         assert.equal(
           schedules(jobId, {
             context: {
@@ -1529,8 +1564,7 @@ test('release validator rejects missing mode and identity guards', () => {
   for (const jobId of [
     'publish-sidecars',
     'publish',
-    'accept-published',
-    'tractor-downstream',
+    'start-release-acceptance',
   ]) {
     assertJobMutationRejected(
       jobId,
@@ -1543,10 +1577,8 @@ test('release validator rejects missing mode and identity guards', () => {
   }
   for (const jobId of [
     'publish',
-    'accept-published',
-    'tractor-downstream',
+    'start-release-acceptance',
     'record-publish-outcome',
-    'publish-change-record',
   ]) {
     assertJobMutationRejected(
       jobId,
@@ -2499,8 +2531,9 @@ test('release jobs and steps reject continue-on-error', () => {
     validateWorkflowContent(workflowPath, source).filter(error =>
       error.includes('must not set continue-on-error'),
     );
-  const jobHeader = '    name: Publish the cohort change record\n';
-  const stepHeader = '      - name: Create or update the GitHub release\n';
+  const jobHeader = '    name: Start the published release acceptance\n';
+  const stepHeader =
+    '      - name: Dispatch the published release acceptance\n';
   assert.ok(content.includes(jobHeader));
   assert.ok(content.includes(stepHeader));
 
@@ -2678,4 +2711,126 @@ test('trigger path filters must run an edit of the workflow itself', () => {
     ),
     [],
   );
+});
+
+test('only start-release-acceptance holds actions: write, and it only dispatches the published acceptance', () => {
+  const read = relativePath =>
+    fs.readFileSync(
+      new URL(`../../../${relativePath}`, import.meta.url),
+      'utf8',
+    );
+  const acceptancePath = '.github/workflows/accept-bleedingdev-release.yml';
+  for (const [label, mutate, pattern] of [
+    [
+      'another release job holds actions: write',
+      workflow => {
+        workflow.jobs['validate-release'].permissions = { actions: 'write' };
+      },
+      /validate-release must not grant actions: write/u,
+    ],
+    [
+      'the handoff gains contents',
+      workflow => {
+        workflow.jobs['start-release-acceptance'].permissions.contents = 'read';
+      },
+      /exactly actions: write and nothing else/u,
+    ],
+    [
+      'the handoff dispatches another workflow',
+      workflow => {
+        const step = workflow.jobs['start-release-acceptance'].steps[0];
+        step.run = step.run.replace(
+          'accept-bleedingdev-release.yml',
+          'publish-bleedingdev.yml',
+        );
+      },
+      /must check out nothing and run only/u,
+    ],
+    [
+      'the handoff loses --repo',
+      workflow => {
+        const step = workflow.jobs['start-release-acceptance'].steps[0];
+        step.run = step.run.replace(' --repo "$GITHUB_REPOSITORY"', '');
+      },
+      /must check out nothing and run only/u,
+    ],
+    [
+      'the handoff runs for a dry run',
+      workflow => {
+        replaceGuard('inputs.dry_run == false')(
+          workflow.jobs['start-release-acceptance'],
+        );
+      },
+      /start-release-acceptance must start exactly when/u,
+    ],
+  ])
+    assertPublishMutationRejected(label, mutate, pattern);
+
+  const otherPath = '.github/workflows/lint-Linux.yml';
+  const other = yaml.load(read(otherPath));
+  const [jobId] = Object.keys(other.jobs);
+  other.jobs[jobId].permissions = { actions: 'write', contents: 'read' };
+  assert.ok(
+    validateWorkflowContent(otherPath, yaml.dump(other)).some(error =>
+      error.includes(`job ${jobId} must not grant actions: write`),
+    ),
+  );
+
+  const acceptance = () => yaml.load(read(acceptancePath));
+  assert.deepEqual(
+    validateWorkflowContent(acceptancePath, yaml.dump(acceptance())),
+    [],
+  );
+  for (const [label, mutate, pattern] of [
+    [
+      'joins the live-publication lock',
+      workflow => {
+        workflow.concurrency.group = 'publish-bleedingdev';
+      },
+      /own concurrency group/u,
+    ],
+    [
+      'drops the actor guard',
+      workflow => {
+        workflow.jobs['verify-publication'].if = workflow.jobs[
+          'verify-publication'
+        ].if.replace(
+          "(github.actor == 'BleedingDev' || github.actor == 'github-actions[bot]') &&",
+          '',
+        );
+      },
+      /verify-publication must run only/u,
+    ],
+    [
+      'records the release before the outcome',
+      workflow => {
+        workflow.jobs['release-record'].needs = ['verify-publication'];
+      },
+      /release-record must need verify-publication, record-outcome/u,
+    ],
+    [
+      'writes contents outside the release record',
+      workflow => {
+        workflow.jobs['record-outcome'].permissions = { contents: 'write' };
+      },
+      /record-outcome must not grant contents: write/u,
+    ],
+    [
+      'skips the registry cohort',
+      workflow => {
+        workflow.jobs['verify-publication'].steps = workflow.jobs[
+          'verify-publication'
+        ].steps.filter(step => !step.run?.includes('verify-registry'));
+      },
+      /verify the registry cohort exactly once/u,
+    ],
+  ]) {
+    const workflow = acceptance();
+    mutate(workflow);
+    const errors = validateWorkflowContent(acceptancePath, yaml.dump(workflow));
+    assert.ok(
+      errors.some(error => pattern.test(error)),
+      `${label}: ${errors.join('\n') || 'mutation was accepted'}`,
+    );
+  }
 });

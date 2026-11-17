@@ -264,51 +264,48 @@ function createOptions(fixture, artifactName, dryRun) {
     delete options.tractorBaselineRevision;
     delete options.tractorReportPath;
     delete options.tractorReportSha256;
+  } else {
+    options.runAttempt = publicationRunAttempt;
+    options.acceptanceExecution = acceptanceExecution;
   }
   return options;
 }
 
+// A live cohort is accepted, and recorded, by its own later run.
+const acceptanceExecution = Object.freeze({
+  runId: '456',
+  runAttempt: 2,
+  tractorRunAttempt: 1,
+  sourceCommit: '2'.repeat(40),
+});
+
 const outcomeArtifactName = api =>
   api.publishOutcomeArtifactName({ runAttempt: outcomeRunAttempt, runId });
 
-test('acceptance recovery preserves publication identity and binds only the new Tractor executor', async t => {
+test('a live outcome keeps the publication identity and names its separate acceptance run', async t => {
   const api = await outcomeApi();
   const fixture = await createEvidenceFixture();
   t.after(() => fs.rmSync(fixture.root, { force: true, recursive: true }));
   const options = createOptions(fixture, outcomeArtifactName(api), false);
-  const recovery = {
-    runId: '456',
-    runAttempt: 2,
-    tractorRunAttempt: 1,
-    sourceCommit: '2'.repeat(40),
-  };
-  const original = api.createPublishOutcome(options);
-  const recovered = api.createPublishOutcome({
-    ...options,
-    acceptanceRecovery: recovery,
-  });
-  assert.equal(recovered.schemaVersion, 7);
+  const outcome = api.createPublishOutcome(options);
+  assert.equal(outcome.schemaVersion, 7);
+  // Recorded by, and named after, the acceptance run.
   assert.equal(
-    recovered.artifactName,
-    'bleedingdev-recovered-publish-outcome-run-456-attempt-2',
+    outcome.artifactName,
+    'bleedingdev-publish-outcome-run-456-attempt-2',
   );
-  for (const key of [
-    'source',
-    'release',
-    'workflowRun',
-    'publication',
-    'producer',
-    'evidence',
-  ]) {
-    assert.deepEqual(
-      recovered[key],
-      original[key],
-      `Recovery cannot relabel ${key}`,
-    );
-  }
-  assert.deepEqual(recovered.acceptanceRecovery, {
-    result: 'tractor-downstream',
-    sourceCommit: recovery.sourceCommit,
+  assert.deepEqual(outcome.workflowRun, {
+    attempt: publicationRunAttempt,
+    id: runId,
+  });
+  assert.deepEqual(outcome.publication, { runAttempt: publicationRunAttempt });
+  assert.deepEqual(outcome.producer, {
+    artifactIdentity: producerArtifactIdentity,
+    runAttempt: producerRunAttempt,
+    runIdentity: producerRunIdentity,
+  });
+  assert.deepEqual(outcome.acceptance, {
+    sourceCommit: acceptanceExecution.sourceCommit,
     tractorRunAttempt: 1,
     workflowRun: { id: '456', attempt: 2 },
   });
@@ -321,19 +318,25 @@ test('acceptance recovery preserves publication identity and binds only the new 
     assert.throws(() =>
       api.createPublishOutcome({
         ...options,
-        acceptanceRecovery: { ...recovery, ...patch },
+        acceptanceExecution: { ...acceptanceExecution, ...patch },
       }),
     );
   }
+  const unaccepted = { ...options };
+  delete unaccepted.acceptanceExecution;
+  assert.throws(
+    () => api.createPublishOutcome(unaccepted),
+    /Published acceptance execution/,
+  );
   assert.throws(
     () =>
       api.createPublishOutcome({
         ...createOptions(fixture, outcomeArtifactName(api), true),
-        acceptanceRecovery: recovery,
+        acceptanceExecution,
       }),
-    /separate live acceptance run/,
+    /A dry run has no published acceptance execution/,
   );
-  // A recovery still needs a real passing Tractor report bound to these bytes.
+  // The acceptance still needs a real passing Tractor report bound to these bytes.
   const report = JSON.parse(fs.readFileSync(fixture.tractorReportPath, 'utf8'));
   report.mode = 'source';
   fs.writeFileSync(fixture.tractorReportPath, JSON.stringify(report));
@@ -341,7 +344,6 @@ test('acceptance recovery preserves publication identity and binds only the new 
     api.createPublishOutcome({
       ...options,
       tractorReportSha256: digest(fs.readFileSync(fixture.tractorReportPath)),
-      acceptanceRecovery: recovery,
     }),
   );
 });
@@ -355,6 +357,8 @@ test('a dry run never claims published acceptance evidence', async t => {
   const dry = api.createPublishOutcome(createOptions(fixture, name, true));
   assert.equal(dry.dryRun, true);
   assert.equal(dry.publication, null);
+  assert.equal(dry.acceptance, null);
+  assert.equal(dry.artifactName, name);
   assert.equal(dry.evidence.publishedAcceptance, null);
 
   const real = api.createPublishOutcome(createOptions(fixture, name, false));
@@ -391,6 +395,10 @@ test('a dry run never claims published acceptance evidence', async t => {
     /advance `scripts\/ultramodern-publish\/tractor-baseline-revision` to it/u,
   );
   assert.doesNotMatch(summary, /promotable Tractor revision|merge `/u);
+  assert.match(
+    summary,
+    /\[publication\]\(https:\/\/github\.com\/[^)]+\/actions\/runs\/123\), \[published acceptance\]\(https:\/\/github\.com\/[^)]+\/actions\/runs\/456\)/u,
+  );
 });
 
 test('non-dry outcome fails closed without passing published acceptance evidence', async t => {
@@ -671,29 +679,22 @@ test('workflow identity commands bind immutable bytes and distinct producer/publ
   };
   try {
     await runWorkflowCommand(['create-published-identity'], env);
-    await runWorkflowCommand(['verify-published-identity'], env);
     const identity = JSON.parse(
       fs.readFileSync(env.BLEEDINGDEV_RELEASE_IDENTITY),
     );
+    // accept-published-release.mjs authenticates this identity against the
+    // original run; its own tests cover relabeling.
+    assert.equal(identity.releaseRunId, runId);
     assert.equal(identity.producerRunAttempt, '1');
     assert.equal(identity.publicationRunAttempt, '2');
-    for (const [key, value] of Object.entries({
-      GITHUB_RUN_ID: 'foreign',
-      PUBLICATION_RUN_ATTEMPT: '3',
-      PRODUCER_RUN_IDENTITY: 'foreign',
-    })) {
-      await assert.rejects(
-        runWorkflowCommand(['verify-published-identity'], {
-          ...env,
-          [key]: value,
-        }),
-        /does not bind/,
-      );
-    }
-    fs.appendFileSync(fixture.receiptPath, ' ');
+    assert.equal(identity.producerRunIdentity, producerRunIdentity);
+    assert.equal(
+      identity.acceptanceReceiptSha256,
+      digest(fs.readFileSync(fixture.receiptPath)),
+    );
     await assert.rejects(
       runWorkflowCommand(['verify-published-identity'], env),
-      /does not bind/,
+      /Expected one workflow command/,
     );
     fs.appendFileSync(fixture.manifestPath, ' ');
     await assert.rejects(
