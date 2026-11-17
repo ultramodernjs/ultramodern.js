@@ -637,7 +637,7 @@ test('every fresh build stages the complete payload before selecting a compiler'
 // release job that builds from it still waits for the validated dispatch.
 const publishPayloadNeeds = Object.freeze({
   integration: ['publish-security', 'effect-compiler-payload'],
-  'qualify-source-compute': ['effect-compiler-payload'],
+  'qualify-source-compute': ['publish-security', 'effect-compiler-payload'],
   'prepare-release': ['publish-security', 'effect-compiler-payload'],
 });
 const assertPublishPayloadNeeds = () => {
@@ -717,7 +717,11 @@ test('recovery retains current-source integration and compiler qualification; si
         false,
       );
   }
-  for (const jobId of ['integration', 'prepare-release'])
+  for (const jobId of [
+    'integration',
+    'qualify-source-compute',
+    'prepare-release',
+  ])
     for (const result of ['failure', 'cancelled', 'skipped'])
       assert.equal(
         evaluateJobSchedule({

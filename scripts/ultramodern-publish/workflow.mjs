@@ -96,12 +96,12 @@ function createPublishedIdentity(env) {
   );
 }
 
-function assertPreviousReleaseSettled(env) {
-  const { status, message } = readPreviousReleaseAcceptance(env);
+async function assertPreviousReleaseSettled(env) {
+  const { status, message } = await readPreviousReleaseAcceptance(env);
   const summary = [
     '## Previous live cohort',
     '',
-    `- ${{ clear: 'Settled', failed: 'NOT ACCEPTED', blocked: 'Blocks this cohort' }[status]}: ${message}`,
+    `- ${{ clear: 'Accepted', withdrawn: 'NOT ACCEPTED, withdrawn', blocked: 'Blocks this cohort' }[status]}: ${message}`,
     '',
   ].join('\n');
   if (env.GITHUB_STEP_SUMMARY) {
@@ -110,7 +110,7 @@ function assertPreviousReleaseSettled(env) {
   if (status === 'blocked') {
     throw new Error(message);
   }
-  if (status === 'failed') {
+  if (status === 'withdrawn') {
     console.log(`::error title=Previous cohort not accepted::${message}`);
     return;
   }

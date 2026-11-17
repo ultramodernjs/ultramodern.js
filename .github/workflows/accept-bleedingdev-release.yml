@@ -31,9 +31,9 @@ permissions:
   contents: read
 
 # One acceptance per publish run. It never joins the live-publication lock: a
-# pending run there would cancel a publish already waiting for it. The next
-# live cohort's publish-security refuses to start while this run is queued or
-# running instead.
+# pending run there would cancel a publish already waiting for it. Instead the
+# next live cohort's publish-security refuses to start until the cohort at
+# latest has the release record this run writes last.
 concurrency:
   group: accept-bleedingdev-release-${{ inputs.original_run_id }}
   cancel-in-progress: false
@@ -53,10 +53,12 @@ env:
   BLEEDINGDEV_PUBLISH_OUTCOME: .modern/bleedingdev-publish/publish-outcome.json
 
 jobs:
-  # The only post-publication registry wait: every member must be served with
-  # the exact accepted bytes at `latest`, signed by the original publish run's
-  # exact source, run and attempt. Everything below reads the cohort it hands
-  # off.
+  # The only post-publication registry wait: every member must be served by
+  # npm's origin with the exact accepted bytes at `latest` and provenance from
+  # publish-bleedingdev.yml on main-ultramodern - the predicate the publish job
+  # itself used, which also holds for members a failed-job rerun or a recovery
+  # run reused - and then by the CDN copy pnpm installs from. Everything below
+  # installs the cohort it hands off.
   verify-publication:
     name: Verify the published cohort on npm
     # start-release-acceptance dispatches as github-actions[bot]; the owner
@@ -109,7 +111,7 @@ jobs:
           run-id: ${{ inputs.original_run_id }}
           name: ${{ steps.original.outputs.identity_artifact }}
           path: .modern/bleedingdev-publish
-      - name: Await and verify every published package, its tag and its signed invocation
+      - name: Await every published package at latest, at npm's origin and in the install view
         id: registry
         env:
           GH_TOKEN: ${{ github.token }}

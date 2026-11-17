@@ -280,6 +280,52 @@ function registryPackumentDist(packument, packageName, version) {
   return dist;
 }
 
+// The abbreviated document pnpm and npm install from, read exactly as they read
+// it: the plain packument URL with their accept header, so it is the CDN copy
+// (cf-cache-status HIT, `vary: accept`, max-age=300), not the origin. Only
+// this view says whether an install started now resolves the new version.
+const registryInstallViewRequestInit = Object.freeze({
+  headers: Object.freeze({
+    accept:
+      'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*',
+  }),
+  method: 'GET',
+  redirect: 'error',
+});
+
+async function readRegistryInstallView(
+  packageName,
+  tag,
+  version,
+  fetchImpl = globalThis.fetch,
+) {
+  assertNonEmptyString(packageName, 'Registry package name');
+  const url = `${npmRegistryOrigin}/${encodeURIComponent(packageName)}`;
+  let document;
+  try {
+    const response = await fetchImpl(url, registryInstallViewRequestInit);
+    if (!response?.ok) {
+      throw new Error(`HTTP ${String(response?.status ?? '<unknown>')}`);
+    }
+    document = await response.json();
+  } catch (error) {
+    // The origin already serves this version, so a failed read of the cached
+    // copy is a pending state the caller's bounded schedule waits out.
+    return {
+      settled: false,
+      detail: `${packageName} install metadata read failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  const listed = isPlainObject(document?.versions?.[version]);
+  const tagged = document?.['dist-tags']?.[tag];
+  return listed && tagged === version
+    ? { settled: true, value: version }
+    : {
+        settled: false,
+        detail: `${packageName} install metadata ${listed ? 'lists' : 'does not list'} ${version} and tags ${tag} as ${String(tagged)}`,
+      };
+}
+
 // Uncached origin reads, never memoized: `null` means the package is absent.
 async function readFreshRegistryPackument(packageName, overrides = {}) {
   try {
@@ -508,6 +554,8 @@ export {
   lookupRegistryPackageDist,
   lookupRegistryPackument,
   mapWithConcurrency,
+  readRegistryInstallView,
+  registryInstallViewRequestInit,
   registryPackumentDist,
   registryPackumentDistTag,
   verifyRegistryTarball,

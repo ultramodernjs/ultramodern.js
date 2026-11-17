@@ -160,12 +160,14 @@ jobs:
           PUBLISH_VERSION: ${{ inputs.version }}
         run: node scripts/ultramodern-publish/workflow.mjs reject-published-source
 
-      # The previous live cohort's published checks run after its publish run,
-      # in accept-bleedingdev-release.yml. A new live cohort would move latest
-      # under them, so it waits until they finished; a red one is reported
-      # here as an error but never blocks the corrected cohort that replaces
-      # it. Recovery and dry runs move nothing and are not held.
-      - name: Refuse a live cohort while the previous one is being accepted
+      # The cohort npm serves at latest is accepted once
+      # accept-bleedingdev-release.yml has written its release record, after
+      # every published check passed. A new live cohort would move latest
+      # under checks that have not passed yet, and they could never pass
+      # again, so it waits until then, or until that cohort is deprecated (the
+      # runbook's rollback). Dry runs move nothing, and a recovery dispatch
+      # finishes a cohort that has not fully reached npm; neither is held.
+      - name: Refuse a live cohort while the previous one is not accepted
         if: inputs.mode == 'cohort' && inputs.recovery_run_id == '' && inputs.dry_run == false
         env:
           GH_TOKEN: ${{ github.token }}
@@ -183,9 +185,12 @@ jobs:
         run: node scripts/ultramodern-publish/publish-sidecars.mjs --mode sidecars --profile "$BLEEDINGDEV_SIDECAR_PROFILE" --check-registry
 
   # Starts beside publish-security: it restores or builds the compiler payload
-  # for this exact commit and authorizes nothing. Every job that consumes the
-  # payload also needs publish-security, so no build, test or acceptance job
-  # starts before the dispatch inputs and registry preflights have passed.
+  # for this exact commit and authorizes nothing. It is the only job that does
+  # not wait for publish-security: every job that consumes the payload also
+  # needs publish-security, so no other build, test or acceptance job starts
+  # before the dispatch inputs and registry preflights have passed. A rejected
+  # dispatch still finishes this job (a cache restore, or the compiler matrix
+  # on a miss, which then fills the cache) before its run ends.
   effect-compiler-payload:
     if: >-
       inputs.mode == 'cohort' &&
@@ -221,7 +226,9 @@ jobs:
     name: Test the release source and publication tooling
     runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 90
-    needs: effect-compiler-payload
+    needs:
+      - publish-security
+      - effect-compiler-payload
     if: >-
       inputs.mode == 'cohort' &&
       github.actor == 'BleedingDev' &&
@@ -1310,8 +1317,8 @@ jobs:
   # the authenticated outcome and the GitHub release record - run in
   # accept-bleedingdev-release.yml for this exact run, so this run ends when
   # the packages are live. That run fails loudly on its own, and the next live
-  # cohort's publish-security refuses to start while it is still queued or
-  # running, was cancelled, or was never started.
+  # cohort's publish-security refuses to start until this cohort has the
+  # release record that run writes last.
   #
   # The only job here that holds actions: write, and it only dispatches that
   # one workflow. The follow-up authenticates this run through the API, not
