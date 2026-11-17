@@ -24,12 +24,38 @@ const names = {
 };
 const newSteps = Object.values(names).map(name => stepNamed(name));
 const correctionDirectory = 'scripts/ultramodern-renderers/octane-corrections';
-const sourcePatch = `${correctionDirectory}/runtime-source.patch`;
-const testsPatch = `${correctionDirectory}/runtime-tests.patch`;
-const generatedPatches = [
-  'patches/octane@0.18.0.patch',
-  'patches/@octanejs__rspack-plugin@0.2.10.patch',
-];
+const candidates = {
+  'octane-0.18.0': {
+    flags: [],
+    inputs: [
+      `${correctionDirectory}/runtime-source.patch`,
+      `${correctionDirectory}/runtime-tests.patch`,
+    ],
+    patches: [
+      'patches/octane@0.18.0.patch',
+      'patches/@octanejs__rspack-plugin@0.2.10.patch',
+    ],
+  },
+  'octane-0.20.0': {
+    flags: ['--octane-0.20.0'],
+    inputs: [
+      `${correctionDirectory}/octane-0.20.0/runtime-source.patch`,
+      `${correctionDirectory}/octane-0.20.0/rspack-source.patch`,
+      `${correctionDirectory}/octane-0.20.0/rspack-tests.patch`,
+      `${correctionDirectory}/runtime-tests.patch`,
+      `${correctionDirectory}/typescript-compat/typescript-source.patch`,
+      `${correctionDirectory}/typescript-compat/native-signals-source.patch`,
+      `${correctionDirectory}/typescript-compat/volar-core-source.patch`,
+      `${correctionDirectory}/octane-0.20.0/provenance.json`,
+      `${correctionDirectory}/octane-0.20.0/runtime-build-package.json`,
+      `${correctionDirectory}/octane-0.20.0/runtime-build-pnpm-lock.yaml`,
+    ],
+    patches: [
+      'patches/octane@0.20.0.patch',
+      'patches/@octanejs__rspack-plugin@0.2.12.patch',
+    ],
+  },
+};
 const uploadPin =
   'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a';
 const manualCondition =
@@ -77,6 +103,83 @@ test('runtime patch generation is an explicit manual opt-in, never a change-gate
   );
 });
 
+test('the Octane candidate is a fixed choice that reaches shell only through env', () => {
+  assert.deepEqual(workflow.on.workflow_dispatch.inputs.octane_candidate, {
+    description:
+      'Octane correction candidate qualified when runtime_patch_handoff is true',
+    required: true,
+    type: 'choice',
+    options: ['octane-0.18.0', 'octane-0.20.0'],
+    default: 'octane-0.18.0',
+  });
+  for (const name of [names.qualify, names.receipt]) {
+    const step = stepNamed(name);
+    assert.equal(
+      step.env.OCTANE_CANDIDATE,
+      expression('inputs.octane_candidate'),
+      name,
+    );
+    assert.doesNotMatch(step.run, /\$\{\{[^}]*inputs\./u, name);
+  }
+});
+
+/** Run the qualify step with stubbed mise, pnpm and node, so no qualifier work starts. */
+function runQualifyStep(t, candidate) {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-qualify-step-'));
+  t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
+  const bin = path.join(cwd, 'bin');
+  const pnpm = path.join(cwd, 'pnpm');
+  const argv = path.join(cwd, 'node-argv');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(pnpm, '#!/usr/bin/env bash\necho 12.21.0\n', {
+    mode: 0o755,
+  });
+  fs.writeFileSync(
+    path.join(bin, 'mise'),
+    `#!/usr/bin/env bash\necho ${pnpm}\n`,
+    { mode: 0o755 },
+  );
+  fs.writeFileSync(
+    path.join(bin, 'node'),
+    '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$QUALIFY_ARGV"\n',
+    { mode: 0o755 },
+  );
+  const result = runBash(stepNamed(names.qualify).run, {
+    cwd,
+    env: {
+      PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      RUNNER_TEMP: cwd,
+      OCTANE_CANDIDATE: candidate,
+      QUALIFY_ARGV: argv,
+    },
+  });
+  return {
+    result,
+    argv: fs.existsSync(argv)
+      ? fs.readFileSync(argv, 'utf8').trimEnd().split('\n')
+      : undefined,
+  };
+}
+
+test('manual qualifier passes exactly the selected candidate flag and starts only for a known candidate', t => {
+  for (const [candidate, { flags }] of Object.entries(candidates)) {
+    const { result, argv } = runQualifyStep(t, candidate);
+    assert.equal(result.status, 0, `${candidate}: ${result.stderr}`);
+    assert.deepEqual(
+      argv,
+      [
+        'scripts/ultramodern-renderers/octane-corrections/qualify-runtime.mjs',
+        ...flags,
+        '--write-patch',
+      ],
+      candidate,
+    );
+  }
+  const unknown = runQualifyStep(t, 'octane-0.19.0');
+  assert.notEqual(unknown.result.status, 0);
+  assert.equal(unknown.argv, undefined);
+});
+
 test('manual qualifier writes canonical patches from the reviewed pnpm', () => {
   const qualify = stepNamed(names.qualify);
   assert.equal(qualify.if, manualCondition);
@@ -97,10 +200,6 @@ test('manual qualifier writes canonical patches from the reviewed pnpm', () => {
   assert.match(
     qualify.run,
     /OWNED_TEMP_DIR="\$owned" PNPM_BINARY="\$pnpm_binary"/u,
-  );
-  assert.match(
-    qualify.run,
-    /node scripts\/ultramodern-renderers\/octane-corrections\/qualify-runtime\.mjs --write-patch/u,
   );
   assert.doesNotMatch(qualify.run, /pnpm\s+(install|run|build|test)\b/u);
   assert.equal(
@@ -143,29 +242,28 @@ test('upload is immutable, pinned, bound to the run and checkout SHA, and publis
   );
 });
 
-test('receipt binds the checkout SHA, run identity, toolchain and every patch digest', t => {
-  const receipt = stepNamed(names.receipt);
-  assert.equal(receipt.env.SOURCE_SHA, expression('github.sha'));
-  assert.equal(receipt.env.RUN_ID, expression('github.run_id'));
-  assert.equal(receipt.env.RUN_ATTEMPT, expression('github.run_attempt'));
-  assert.equal(receipt.env.PNPM_VERSION, '12.21.0');
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-receipt-'));
-  t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
-  const files = {
-    [generatedPatches[0]]: 'octane patch\n',
-    [generatedPatches[1]]: 'rspack patch\n',
-    [sourcePatch]: 'source correction\n',
-    [testsPatch]: 'test correction\n',
-  };
+function stageFiles(cwd, files) {
   for (const [file, bytes] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(cwd, file)), { recursive: true });
     fs.writeFileSync(path.join(cwd, file), bytes);
   }
+}
+
+/** Run the receipt step against candidate files staged in a scratch checkout. */
+function runReceipt(t, candidate) {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-receipt-'));
+  t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
+  const { inputs = [], patches = [] } = candidates[candidate] ?? {};
+  const files = Object.fromEntries(
+    [...inputs, ...patches].map(file => [file, `${file} bytes\n`]),
+  );
+  stageFiles(cwd, files);
   const handoff = path.join(cwd, 'handoff');
-  const result = runBash(receipt.run, {
+  const result = runBash(stepNamed(names.receipt).run, {
     cwd,
     env: {
       HANDOFF_DIR: handoff,
+      OCTANE_CANDIDATE: candidate,
       SOURCE_SHA: 'a'.repeat(40),
       RUN_ID: '42',
       RUN_ATTEMPT: '3',
@@ -173,29 +271,64 @@ test('receipt binds the checkout SHA, run identity, toolchain and every patch di
       MISE_VERSION: '2026.11.8',
     },
   });
-  assert.equal(result.status, 0, result.stderr);
-  const digest = file => sha256(Buffer.from(files[file]));
-  for (const file of generatedPatches)
-    assert.equal(
-      fs.readFileSync(path.join(handoff, file), 'utf8'),
-      files[file],
+  return { result, files, handoff };
+}
+
+test('receipt binds the checkout SHA, run identity, toolchain and every staged file digest', t => {
+  const receipt = stepNamed(names.receipt);
+  assert.equal(receipt.env.SOURCE_SHA, expression('github.sha'));
+  assert.equal(receipt.env.RUN_ID, expression('github.run_id'));
+  assert.equal(receipt.env.RUN_ATTEMPT, expression('github.run_attempt'));
+  assert.equal(receipt.env.PNPM_VERSION, '12.21.0');
+  for (const [candidate, { inputs, patches }] of Object.entries(candidates)) {
+    const { result, files, handoff } = runReceipt(t, candidate);
+    assert.equal(result.status, 0, `${candidate}: ${result.stderr}`);
+    const digest = file => sha256(Buffer.from(files[file]));
+    const body = JSON.parse(
+      fs.readFileSync(path.join(handoff, 'receipt.json'), 'utf8'),
     );
-  const body = JSON.parse(
-    fs.readFileSync(path.join(handoff, 'receipt.json'), 'utf8'),
-  );
-  assert.equal(body.schema, 'runtime-patch-handoff/v1');
-  assert.equal(body.sourceSha, 'a'.repeat(40));
-  assert.deepEqual(body.run, { id: '42', attempt: '3' });
-  assert.equal(body.toolchain.pnpm, '12.21.0');
-  assert.equal(body.toolchain.mise, '2026.11.8');
-  assert.equal(body.toolchain.node, process.versions.node);
-  assert.deepEqual(
-    body.patches.map(({ path: file, sha256: hash }) => [file, hash]),
-    generatedPatches.map(file => [file, digest(file)]),
-  );
-  assert.deepEqual(
-    body.inputs.map(({ path: file, sha256: hash }) => [file, hash]),
-    [sourcePatch, testsPatch].map(file => [file, digest(file)]),
+    assert.equal(body.schema, 'runtime-patch-handoff/v1');
+    assert.equal(body.candidate, candidate);
+    assert.equal(body.sourceSha, 'a'.repeat(40));
+    assert.deepEqual(body.run, { id: '42', attempt: '3' });
+    assert.equal(body.toolchain.pnpm, '12.21.0');
+    assert.equal(body.toolchain.mise, '2026.11.8');
+    assert.equal(body.toolchain.node, process.versions.node);
+    assert.deepEqual(
+      body.patches.map(({ path: file, sha256: hash }) => [file, hash]),
+      patches.map(file => [file, digest(file)]),
+    );
+    assert.deepEqual(
+      body.inputs.map(({ path: file, sha256: hash }) => [file, hash]),
+      inputs.map(file => [file, digest(file)]),
+    );
+    // The handoff carries the actual inputs and outputs, not only their digests.
+    for (const file of [...inputs, ...patches])
+      assert.equal(
+        fs.readFileSync(path.join(handoff, file), 'utf8'),
+        files[file],
+        file,
+      );
+  }
+});
+
+test('receipt refuses an unknown Octane candidate without writing a handoff', t => {
+  const { result, handoff } = runReceipt(t, 'octane-0.19.0');
+  assert.notEqual(result.status, 0);
+  assert.equal(fs.existsSync(path.join(handoff, 'receipt.json')), false);
+});
+
+test('every candidate input the handoff stages exists in the checkout', () => {
+  for (const { inputs } of Object.values(candidates))
+    for (const file of inputs)
+      assert.ok(fs.existsSync(new URL(file, root)), file);
+});
+
+test('the native framework contracts job runs this schema test', () => {
+  const controls = stepNamed('Test renderer acceptance controls');
+  assert.match(
+    controls.run,
+    /scripts\/ci\/__tests__\/native-runtime-handoff\.test\.mjs/u,
   );
 });
 

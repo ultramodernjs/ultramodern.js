@@ -17,6 +17,14 @@ on:
         required: false
         type: boolean
         default: false
+      octane_candidate:
+        description: Octane correction candidate qualified when runtime_patch_handoff is true
+        required: true
+        type: choice
+        options:
+          - octane-0.18.0
+          - octane-0.20.0
+        default: octane-0.18.0
 
 permissions:
   actions: read
@@ -118,6 +126,7 @@ jobs:
             scripts/__tests__/rslib-tsrs-options.test.mjs \
             scripts/native-compatibility/packed-workflows.test.mjs \
             scripts/ultramodern-renderers/*.test.mjs \
+            scripts/ci/__tests__/native-runtime-handoff.test.mjs \
             packages/runtime/renderer-octane/tests/{package-metadata,latest-profile}.test.mjs \
             packages/toolkit/ultramodern-create/tests/workerd-target-listeners.test.mjs \
             tests/ultramodern-renderers/octane-federation/{artifact-ownership,browser-temporary}.test.mjs \
@@ -146,7 +155,14 @@ jobs:
       - name: Qualify runtime source and write canonical patches
         if: github.event_name == 'workflow_dispatch' && inputs.runtime_patch_handoff == true && github.workflow_ref == format('{0}/.github/workflows/native-compatibility.yml@{1}', github.repository, github.ref)
         shell: bash
+        env:
+          OCTANE_CANDIDATE: ${{ inputs.octane_candidate }}
         run: |
+          case "$OCTANE_CANDIDATE" in
+            octane-0.18.0) candidate_flags=() ;;
+            octane-0.20.0) candidate_flags=(--octane-0.20.0) ;;
+            *) echo "::error::unknown Octane candidate" >&2; exit 1 ;;
+          esac
           pnpm_binary="$(mise which pnpm --tool pnpm@12.21.0)"
           case "$pnpm_binary" in
             /*) ;;
@@ -159,7 +175,7 @@ jobs:
           owned="$(mktemp -d "$RUNNER_TEMP/runtime-qualify-XXXXXX")"
           trap 'rm -rf -- "$owned"' EXIT
           OWNED_TEMP_DIR="$owned" PNPM_BINARY="$pnpm_binary" \
-            node scripts/ultramodern-renderers/octane-corrections/qualify-runtime.mjs --write-patch
+            node scripts/ultramodern-renderers/octane-corrections/qualify-runtime.mjs "${candidate_flags[@]}" --write-patch
 
       - name: Stage runtime patch handoff receipt
         if: success() && github.event_name == 'workflow_dispatch' && inputs.runtime_patch_handoff == true && github.workflow_ref == format('{0}/.github/workflows/native-compatibility.yml@{1}', github.repository, github.ref)
@@ -170,6 +186,7 @@ jobs:
           RUN_ATTEMPT: ${{ github.run_attempt }}
           PNPM_VERSION: '12.21.0'
           MISE_VERSION: '2026.11.8'
+          OCTANE_CANDIDATE: ${{ inputs.octane_candidate }}
         run: |
           node --input-type=module <<'JS'
           import crypto from 'node:crypto';
@@ -177,14 +194,39 @@ jobs:
           import path from 'node:path';
 
           const handoff = process.env.HANDOFF_DIR;
-          const patches = [
-            'patches/octane@0.18.0.patch',
-            'patches/@octanejs__rspack-plugin@0.2.10.patch',
-          ];
-          const inputs = [
-            'scripts/ultramodern-renderers/octane-corrections/runtime-source.patch',
-            'scripts/ultramodern-renderers/octane-corrections/runtime-tests.patch',
-          ];
+          const corrections = 'scripts/ultramodern-renderers/octane-corrections';
+          const candidates = {
+            'octane-0.18.0': {
+              inputs: [
+                `${corrections}/runtime-source.patch`,
+                `${corrections}/runtime-tests.patch`,
+              ],
+              patches: [
+                'patches/octane@0.18.0.patch',
+                'patches/@octanejs__rspack-plugin@0.2.10.patch',
+              ],
+            },
+            'octane-0.20.0': {
+              inputs: [
+                `${corrections}/octane-0.20.0/runtime-source.patch`,
+                `${corrections}/octane-0.20.0/rspack-source.patch`,
+                `${corrections}/octane-0.20.0/rspack-tests.patch`,
+                `${corrections}/runtime-tests.patch`,
+                `${corrections}/typescript-compat/typescript-source.patch`,
+                `${corrections}/typescript-compat/native-signals-source.patch`,
+                `${corrections}/typescript-compat/volar-core-source.patch`,
+                `${corrections}/octane-0.20.0/provenance.json`,
+                `${corrections}/octane-0.20.0/runtime-build-package.json`,
+                `${corrections}/octane-0.20.0/runtime-build-pnpm-lock.yaml`,
+              ],
+              patches: [
+                'patches/octane@0.20.0.patch',
+                'patches/@octanejs__rspack-plugin@0.2.12.patch',
+              ],
+            },
+          };
+          const candidate = candidates[process.env.OCTANE_CANDIDATE];
+          if (!candidate) throw new Error('unknown Octane candidate');
           const describe = file => {
             const bytes = fs.readFileSync(file);
             return {
@@ -193,13 +235,15 @@ jobs:
               sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
             };
           };
-          const generated = patches.map(describe);
-          fs.mkdirSync(path.join(handoff, 'patches'), { recursive: true });
-          for (const file of patches) {
+          const staged = candidate.inputs.map(describe);
+          const generated = candidate.patches.map(describe);
+          for (const file of [...candidate.inputs, ...candidate.patches]) {
+            fs.mkdirSync(path.dirname(path.join(handoff, file)), { recursive: true });
             fs.copyFileSync(file, path.join(handoff, file));
           }
           const receipt = {
             schema: 'runtime-patch-handoff/v1',
+            candidate: process.env.OCTANE_CANDIDATE,
             sourceSha: process.env.SOURCE_SHA,
             run: { id: process.env.RUN_ID, attempt: process.env.RUN_ATTEMPT },
             toolchain: {
@@ -207,7 +251,7 @@ jobs:
               pnpm: process.env.PNPM_VERSION,
               mise: process.env.MISE_VERSION,
             },
-            inputs: inputs.map(describe),
+            inputs: staged,
             patches: generated,
           };
           fs.writeFileSync(path.join(handoff, 'receipt.json'), `${JSON.stringify(receipt)}\n`);

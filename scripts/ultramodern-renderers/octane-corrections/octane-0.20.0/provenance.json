@@ -1,0 +1,91 @@
+{
+  "schema": "ultramodern.octane-correction-candidate.v1",
+  "status": "candidate: static application only, owning qualification pending",
+  "scope": "Rspack plugin source/test and TanStack adapter shared-core peer corrections for the Octane 0.20.0 tuple. The runtime correction (runtime-source.patch) is owned separately and is not part of this candidate.",
+  "upstream": {
+    "repository": "octanejs/octane",
+    "commit": "1cdd9d2027bef63e6cec601952795e9ed84e1344",
+    "tags": {
+      "octane@0.20.0": "1cdd9d2027bef63e6cec601952795e9ed84e1344",
+      "@octanejs/tanstack-router@0.3.6": "1cdd9d2027bef63e6cec601952795e9ed84e1344",
+      "@octanejs/rspack-plugin@0.2.12": "1cdd9d2027bef63e6cec601952795e9ed84e1344"
+    },
+    "sourceArchive": {
+      "url": "https://codeload.github.com/octanejs/octane/tar.gz/1cdd9d2027bef63e6cec601952795e9ed84e1344",
+      "sha256": "a3577342fde976c4388ae3334ceb23b42c42c7dd4ec77926a7e88a49c6bd5dca",
+      "integrity": "sha512-f5Eco2XWSLcSn4WkMCdmYZrESS7/FrWxCMzREEKrSMWqFN9Z0L6o/8zYb/PbxOiMjH8Jb7j/EvO6O1fkzRlNJA=="
+    },
+    "packages": {
+      "octane": {
+        "version": "0.20.0",
+        "url": "https://registry.npmjs.org/octane/-/octane-0.20.0.tgz",
+        "integrity": "sha512-a69zurcQrUce2BbS+yYt0+qF3UzpM4gFriK4DA274FY23dzuvuMUbHM+uYZHhgmaNsLbPAOmnnsKSRJHvIC1gg==",
+        "licenseSha256": "fe9a7b24f2d1540df1a4d273ba9b4b081844ecd1142839def5b7f242a13203b8"
+      },
+      "@octanejs/tanstack-router": {
+        "version": "0.3.6",
+        "url": "https://registry.npmjs.org/@octanejs/tanstack-router/-/tanstack-router-0.3.6.tgz",
+        "integrity": "sha512-wn14do+ZPIQrSmG0mfFB/70nkmEsnByWKt1UApnXsx5ZSd6mf3kkSEHoEtshUIWWwdlK8gFdjjaKzyhCggblZQ==",
+        "licenseSha256": "4b83c082bc5305628aceda4130f495f30a6b992389b8d19229d508d38bc09a36"
+      },
+      "@octanejs/rspack-plugin": {
+        "version": "0.2.12",
+        "url": "https://registry.npmjs.org/@octanejs/rspack-plugin/-/rspack-plugin-0.2.12.tgz",
+        "integrity": "sha512-llWu/p9Atm+SNGATDAYLTAh3Cbg+DSnYGRmbjA7tUkxC6gBCvHe6C1vc8letvMdk+VhHEIhv7MLMyEgJARutkQ==",
+        "licenseSha256": "4b83c082bc5305628aceda4130f495f30a6b992389b8d19229d508d38bc09a36"
+      }
+    }
+  },
+  "previous": {
+    "commit": "4c35afcdca0f4889921612fc462e6aabe507d78d",
+    "files": {
+      "scripts/ultramodern-renderers/octane-corrections/rspack-source.patch": "d1c3701919c7e7ed7129479497089aa14df8f0f41818b29795ac49998917336e",
+      "scripts/ultramodern-renderers/octane-corrections/rspack-tests.patch": "08d967919d786b4ff085e1bcb124abeff0c591e61938e0f3d9557cd585dcf06a",
+      "scripts/ultramodern-renderers/octane-corrections/upstream-adapter-package.json": "8f5af936fdc9dfd71be354ef412d14537ba29628d5880ad591571cdb67d2b94d",
+      "patches/@octanejs__tanstack-router@0.3.4.patch": "c82cc89c373d23b42b24cb9eb5d748940170b76895bd94139d538ceeebe6af9b",
+      "patches/@octanejs__tanstack-router@0.3.4.shared-core-peer.patch": "df6732ebcfc0af7cf274187c44596ac519abbc383ce30a796205b55c561bf688"
+    }
+  },
+  "candidates": {
+    "rspack-source.patch": {
+      "sha256": "2d4385db6c0e0027a88a61ae6669b2c4b789906948340ccf8e06a0304ad2e74c",
+      "layout": "source archive root",
+      "staticProof": "git apply --check --verbose on the extracted source archive: 4 files, 0 offset, 0 fuzz; does not apply to 4c35afc.",
+      "delta": "Added and removed lines are identical to the previous rspack-source.patch; only context and line numbers changed."
+    },
+    "rspack-tests.patch": {
+      "sha256": "1110956640b54cfa4b483c1c3b62ac367947967681055f80d0dfb543a3ade143",
+      "layout": "source archive root, after rspack-source.patch",
+      "staticProof": "git apply --check --verbose on the extracted source archive: 3 files, 0 offset, 0 fuzz.",
+      "delta": "Identical to the previous rspack-tests.patch except that the upstream-owned native HMR fence test keeps its new upstream harness."
+    },
+    "@octanejs__tanstack-router@0.3.6.shared-core-peer.patch": {
+      "sha256": "91bcdd98a1f5c45bff8e495541570b646719bdef2d8b7861fc98d4f3a49643ea",
+      "layout": "npm package root",
+      "staticProof": "git apply --check --verbose on the 0.3.6 npm archive: 0 offset, 0 fuzz; does not apply to 0.3.4.",
+      "derivation": "The historical 0.3.4 patch applied exactly, then sharedCoreManifest() from shared-core-peer.mjs, emitted by builtPatch(). The same procedure reproduces the accepted 0.3.4 shared-core patch byte for byte. The three src sections are byte-identical to the accepted patch; only the package.json octane peer context changed from ^0.18.0 to ^0.20.0."
+    },
+    "upstream-adapter-package.json": {
+      "sha256": "3e96ca066d45d0ef1f8c1627590a18b4e15b48106224120fdecc9b501813e8d2",
+      "derivation": "JSON string of the exact 0.3.6 npm package.json bytes."
+    }
+  },
+  "resolutions": [
+    {
+      "file": "packages/rspack-plugin-octane/src/plugin.js",
+      "upstream": "045d927759438df50625a9d59a0c6f26e9f02247",
+      "decision": "Textual only. Upstream adds an environment parameter and a server octane/react alias to addRuntimeAliases; the fork only inserted a blank line before that signature. The fork RUNTIME_SUBPATHS additions and HMR runtime changes are unchanged and use different alias keys."
+    },
+    {
+      "file": "packages/rspack-plugin-octane/tests/streamed-signals-hmr.test.ts",
+      "upstream": "3252e24db79d00bbbb882d23a58520ae0ecedfae",
+      "decision": "Upstream replaced the watch harness of its own absent/initial/added/deferred fence test with sequenced compiler.run rebuilds. The fork had only moved that test onto its withWatch helper. The candidate keeps the upstream harness for that test; every fork assertion, the getFullHash requirement and all fork-authored tests are unchanged."
+    }
+  ],
+  "ciObligations": [
+    "Rebased runtime-source.patch on the same commit, because the fork Rspack tests import fork runtime APIs (octane/signals hot declarations, publisherBoundary, externalSnapshotBoundary, preparePublisherBoundaryReplacement).",
+    "Owning Rspack suites (loader, streamed-signals-hmr, publisher-replacement) on source and on the packed reconstruction, including the upstream fence test under compiler.run with the fork HMR runtime module.",
+    "Upstream server octane/react alias behavior together with the fork RUNTIME_SUBPATHS aliases in a server-environment build.",
+    "Owning adapter qualification against corrected Core 1.171.39 and octane 0.20.0, then the authenticated runtime handoff and a byte-compared native release."
+  ]
+}

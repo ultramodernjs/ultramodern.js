@@ -28,6 +28,58 @@ export const runtimePair = Object.freeze({
       '4b83c082bc5305628aceda4130f495f30a6b992389b8d19229d508d38bc09a36',
   }),
 });
+const runtimePatchOrder = Object.freeze([
+  'runtime-source.patch',
+  'typescript-compat/typescript-source.patch',
+  'typescript-compat/native-signals-source.patch',
+  'typescript-compat/volar-core-source.patch',
+  'runtime-tests.patch',
+  'rspack-source.patch',
+  'rspack-tests.patch',
+]);
+const currentInputs = Object.freeze({
+  source,
+  sourceIntegrity,
+  packages,
+  runtimePair,
+  dependencyDirectory: here,
+  patches: Object.freeze(runtimePatchOrder.map(name => path.join(here, name))),
+});
+
+export function octane20RuntimeInputs() {
+  const directory = path.join(here, 'octane-0.20.0');
+  const { upstream } = JSON.parse(
+    fs.readFileSync(path.join(directory, 'provenance.json'), 'utf8'),
+  );
+  const names = ['octane', '@octanejs/rspack-plugin'];
+  const inputs = names.map(name => ({ name, ...upstream.packages[name] }));
+  for (const { name, version } of inputs)
+    assert.equal(upstream.tags[`${name}@${version}`], upstream.commit);
+  const localPatches = new Set([
+    'runtime-source.patch',
+    'rspack-source.patch',
+    'rspack-tests.patch',
+  ]);
+  return {
+    source: { ...upstream.sourceArchive, commit: upstream.commit },
+    sourceIntegrity: upstream.sourceArchive.integrity,
+    packages: inputs,
+    runtimePair: Object.fromEntries(
+      inputs.map(({ name, version, licenseSha256 }) => [
+        name,
+        {
+          patchPath: `patches/${name.replace('/', '__')}@${version}.patch`,
+          licenseSha256,
+        },
+      ]),
+    ),
+    dependencyDirectory: directory,
+    patches: runtimePatchOrder.map(name =>
+      path.join(localPatches.has(name) ? directory : here, name),
+    ),
+  };
+}
+
 export const hydrationParitySlices = Object.freeze([
   'automatic-signal-stream',
   'early-control-handoff',
@@ -185,7 +237,12 @@ export function packagePatch(pristine, built) {
   return Buffer.from(patch);
 }
 
-export function assemblePackage(upstream, sourcePackage, destination) {
+export function assemblePackage(
+  upstream,
+  sourcePackage,
+  destination,
+  expectedVersion,
+) {
   fs.cpSync(upstream, destination, { recursive: true });
   fs.rmSync(path.join(destination, 'dist'), { recursive: true, force: true });
   fs.cpSync(path.join(sourcePackage, 'dist'), path.join(destination, 'dist'), {
@@ -194,7 +251,7 @@ export function assemblePackage(upstream, sourcePackage, destination) {
   const file = path.join(destination, 'package.json');
   const manifest = JSON.parse(fs.readFileSync(file));
   assert.equal(manifest.name, 'octane');
-  assert.equal(manifest.version, '0.18.0');
+  assert.equal(manifest.version, expectedVersion);
   manifest.dependencies['@tsrx/core'] = '^0.6.1';
   manifest.dependencies.esrap = '^2.4.0';
   manifest.peerDependencies['@tsrx/oxc'] = '^0.24.0';
@@ -490,12 +547,21 @@ export function phaseTracker(write = line => process.stderr.write(line)) {
 export async function qualifyRuntimePair({
   work,
   expectedPatches,
+  inputs = currentInputs,
   writePatch = false,
   runner = {},
   pnpm = process.env.PNPM_BINARY ?? 'pnpm',
   storeDirectory = path.join(process.env.HOME, '.local/share/pnpm/store'),
   phases = phaseTracker(),
 }) {
+  const {
+    packages,
+    runtimePair,
+    source,
+    sourceIntegrity,
+    dependencyDirectory,
+    patches,
+  } = inputs;
   if (expectedPatches !== undefined)
     assert.deepEqual(
       Object.keys(expectedPatches).sort(),
@@ -559,21 +625,12 @@ export async function qualifyRuntimePair({
       execute,
     );
     phases.enter('apply source corrections');
-    for (const name of [
-      'runtime-source.patch',
-      'typescript-compat/typescript-source.patch',
-      'typescript-compat/native-signals-source.patch',
-      'typescript-compat/volar-core-source.patch',
-      'runtime-tests.patch',
-      'rspack-source.patch',
-      'rspack-tests.patch',
-    ])
-      applyExact(root, path.join(here, name), execute);
+    for (const patch of patches) applyExact(root, patch, execute);
     const deps = path.join(work, 'deps');
     fs.mkdirSync(deps);
     for (const name of ['package.json', 'pnpm-lock.yaml'])
       fs.copyFileSync(
-        path.join(here, `runtime-build-${name}`),
+        path.join(dependencyDirectory, `runtime-build-${name}`),
         path.join(deps, name),
       );
     fs.writeFileSync(path.join(deps, 'pnpm-workspace.yaml'), 'packages: []\n');
@@ -649,7 +706,7 @@ export async function qualifyRuntimePair({
     execute(process.execPath, ['packages/octane/scripts/build.mjs'], root);
     register(path.join(pkg, 'dist'), 'build');
     const built = path.join(work, 'built');
-    assemblePackage(upstream, pkg, built);
+    assemblePackage(upstream, pkg, built, npmInput.version);
     const builtPatchBytes = packagePatch(upstream, built);
     const rspackBuilt = path.join(work, 'rspack-built');
     fs.cpSync(rspackUpstream, rspackBuilt, { recursive: true });
@@ -769,7 +826,11 @@ if (
     process.env.OWNED_TEMP_DIR,
     'Run via owned-temp-dir --need-gib 20 --run octane-runtime -- node <this-file>',
   );
+  const inputs = process.argv.includes('--octane-0.20.0')
+    ? octane20RuntimeInputs()
+    : currentInputs;
   const receipts = await qualifyRuntimePair({
+    inputs,
     work: path.join(
       fs.realpathSync(process.env.OWNED_TEMP_DIR),
       'qualification',
@@ -777,7 +838,7 @@ if (
     writePatch: process.argv.includes('--write-patch'),
   });
   console.log({
-    sourceIntegrity,
+    sourceIntegrity: inputs.sourceIntegrity,
     ...Object.fromEntries(
       Object.entries(receipts).map(([name, receipt]) => [
         name,
