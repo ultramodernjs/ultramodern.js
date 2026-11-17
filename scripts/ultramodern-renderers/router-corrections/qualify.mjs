@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { qualifyRoutePathTypes } from './route-path-consumer.mjs';
 
 // Run the same behavior suites against the emitted package, not a source alias.
 export function qualify({
@@ -32,6 +33,8 @@ export function qualify({
           '@tanstack/history': '1.162.5',
           react: '19.3.1',
           'react-dom': '19.3.1',
+          // React declarations for the route path public-API consumer.
+          '@types/react': '19.3.0',
         },
       },
       null,
@@ -163,6 +166,11 @@ const output: Readable = transformPipeableStreamWithRouter(router, Readable.from
       consumer,
     );
   }
+  qualifyRoutePathTypes({
+    consumer,
+    tsc,
+    typeRoots: path.join(pkg, 'node_modules/@types'),
+  });
   for (const condition of ['node', 'browser', 'workerd', 'worker']) {
     for (const format of ['module', 'commonjs']) {
       const code =
@@ -191,6 +199,6 @@ const output: Readable = transformPipeableStreamWithRouter(router, Readable.from
     consumer,
   );
   console.log(
-    'PACKED_QUALIFICATION_PASS source suites x CJS/ESM, browser/Node declarations, 8 conditional entrypoints, React 1.170.46 + history 1.162.5',
+    'PACKED_QUALIFICATION_PASS source suites x CJS/ESM, browser/Node declarations, route path types, 8 conditional entrypoints, React 1.170.46 + history 1.162.5',
   );
 }

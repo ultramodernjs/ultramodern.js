@@ -1,7 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { yaml } from '@modern-js/utils';
-import { readSupportArtifacts, type SupportArtifacts } from './package-source';
+import {
+  NATIVE_ROUTER_CORE,
+  readNativeArtifacts,
+  readSupportArtifacts,
+  type SupportArtifacts,
+} from './package-source';
 import { getRendererGenerationProfile } from './renderer-profile';
 import type { JsonValue, WorkspaceRenderer } from './types';
 import { isRecord } from './types';
@@ -446,17 +451,24 @@ export function captureOverlayBaselineSnapshot(
   shellPackageDirectories: string[],
   deferredUiArtifactPaths: ReadonlySet<string> = new Set(),
 ): OverlayBaselineSnapshot {
-  const supportArtifacts = fs.existsSync(
-    path.join(workspaceRoot, 'package.json'),
-  )
-    ? readSupportArtifacts(readPackageJson(workspaceRoot, 'package.json'))
+  const rootManifest = fs.existsSync(path.join(workspaceRoot, 'package.json'))
+    ? readPackageJson(workspaceRoot, 'package.json')
+    : undefined;
+  const supportArtifacts = rootManifest
+    ? readSupportArtifacts(rootManifest)
+    : undefined;
+  // An admitted native Core is the baseline; a registry Core relaxes it.
+  const nativeCore = rootManifest
+    ? readNativeArtifacts(rootManifest)?.packages[NATIVE_ROUTER_CORE].request
     : undefined;
   const supportPins = (pins: Readonly<Record<string, string>>) =>
     Object.fromEntries(
       Object.entries(pins).map(([name, request]) => [
         name,
         supportArtifacts?.packages[name as keyof SupportArtifacts['packages']]
-          ?.request ?? request,
+          ?.request ??
+          (name === NATIVE_ROUTER_CORE ? nativeCore : undefined) ??
+          request,
       ]),
     );
   const rendererProjectionsByManifest = rendererProjections(

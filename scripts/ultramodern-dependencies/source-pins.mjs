@@ -243,9 +243,16 @@ function reviewedSourcePins(read) {
       `https://github\\\\.com/BleedingDev/router/releases/download/\${prefix}-[a-f0-9]{12}/tanstack-\${basename}-[0-9]+\\\\.[0-9]+\\\\.[0-9]+(?:-[0-9A-Za-z.-]+)?\\\\.tgz$`,
     ],
     [`${generator}package-source.ts`]: [
-      `https://github.com/${descriptor.producer?.repository}/releases/download/\${producer.tag}/`,
+      `https://github.com/${descriptor.producer?.repository}/releases/download/`,
+      `\${releaseBase}\${producer.tag}/`,
+      "tagPrefix: 'native-renderers'",
+      "tagPrefix: 'support-artifacts'",
       `https://github.com/${descriptor.producer?.repository}/releases/download/support-artifacts-`,
     ],
+    'scripts/ultramodern-production-readiness/tractor-downstream/cohort-install.mjs':
+      [
+        `https://github.com/${descriptor.producer?.repository}/releases/download/native-renderers-`,
+      ],
     // Inputs the native run reconstructed into the admitted descriptor.
     'scripts/ultramodern-renderers/native-artifacts/recipes.mjs': [
       patch('octane'),

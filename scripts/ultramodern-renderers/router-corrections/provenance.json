@@ -7,8 +7,9 @@
   "upstreamNpmIntegrity": "sha512-qUhoJ0meuSUqGYQbHbcJYdASr06YtK+bulbj6vtrhKYFkLgkSsZ6tXmMyym7sFxiSJSPYgasgozrL01LyyR/6A==",
   "sourceArchiveSha512": "da4b7a5207790db73c90db65524e91ef1a37bbe92a80efcdfb8547df4c1452fb37a789a94308f40216095ccbffcea677c0d640b98cf0100f8698dcf9c8d40c98",
   "licenseSha256": "a405ee70c632bb938acb7ac5f210e814409b3760ea9d2329d8ed8ffcfd11a0e7",
-  "patchSha256": "546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8",
+  "patchSha256": "6a2ebee5cc73df367ba768b9a950dee2a57ec0c93122ded77e5342ca8640df24",
   "sourcePatchSha256": "24f09fbf4cb69a1a8e50779ec9e8610ce9091a98121135461f277959c0a9c521",
+  "routePathTypesPatchSha256": "c126cf9d0792fb1ce563f1521fb465fcfc36cc70a197a3c61f8a5339b791e9dc",
   "correctionCommits": [
     {
       "sha": "6f435f3936dab5f7f1a747a61d40eae68bc93a3f",
@@ -82,5 +83,8 @@
   "pending": [
     "Octane adapter owning lane must publish its 0.3.4 correction with core 1.171.39 and history 1.162.5 authorities. The registry 0.3.4 archive still depends on core 1.171.34 and history 1.162.4.",
     "Parent owns release tarball digest, supply metadata, patch inventory, integration lock, hosted CI and actual browser acceptance."
+  ],
+  "frameworkCorrections": [
+    "route-path-types.patch: RoutePrefix mirrors BaseRoute.init ids/full paths (repeated slashes collapse, a trailing index slash such as $lang/ stays, a literal __root__ segment stays), and the never/always link target types derive from the runtime route.to (every trailing slash trimmed, one re-added for always). The fork does not carry this correction; port.mjs skips its tests."
   ]
 }

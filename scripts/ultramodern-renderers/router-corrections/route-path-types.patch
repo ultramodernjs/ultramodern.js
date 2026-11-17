@@ -1,0 +1,69 @@
+diff --git a/packages/router-core/src/route.ts b/packages/router-core/src/route.ts
+index ab3d9ffb57..a669d1edb0 100644
+--- a/packages/router-core/src/route.ts
++++ b/packages/router-core/src/route.ts
+@@ -264,21 +264,21 @@ export type DefaultSearchValidator = SearchValidator<
+   AnySchema
+ >
+ 
++// Mirrors BaseRoute.init: join below the parent (the root contributes no
++// prefix), collapse repeated slashes and keep a trailing index slash.
+ export type RoutePrefix<
+   TPrefix extends string,
+   TPath extends string,
+ > = string extends TPath
+   ? RootRouteId
+   : TPath extends string
+-    ? TPrefix extends RootRouteId
+-      ? TPath extends '/'
+-        ? '/'
+-        : `/${TrimPath<TPath>}`
+-      : `${TPrefix}/${TPath}` extends '/'
+-        ? '/'
+-        : `/${TrimPathLeft<`${TrimPathRight<TPrefix>}/${TrimPath<TPath>}`>}`
++    ? CleanRoutePath<`${TPrefix extends RootRouteId ? '' : TPrefix}/${TPath}`>
+     : never
+ 
++type CleanRoutePath<T extends string> = T extends `${infer L}//${infer R}`
++  ? CleanRoutePath<`${L}/${R}`>
++  : T
++
+ export type TrimPath<T extends string> = '' extends T
+   ? ''
+   : TrimPathRight<TrimPathLeft<T>>
+diff --git a/packages/router-core/src/routeInfo.ts b/packages/router-core/src/routeInfo.ts
+index 6c9249e091..ec19d0e306 100644
+--- a/packages/router-core/src/routeInfo.ts
++++ b/packages/router-core/src/routeInfo.ts
+@@ -1,6 +1,6 @@
+ import type { InferFileRouteTypes } from './fileRoute'
+ import type { AddTrailingSlash, RemoveTrailingSlashes } from './link'
+-import type { AnyRoute } from './route'
++import type { AnyRoute, TrimPathRight } from './route'
+ import type { AnyRouter, TrailingSlashOption } from './router'
+ import type { PartialMergeAll } from './utils'
+ 
+@@ -114,19 +114,14 @@ export type RoutePaths<TRouteTree extends AnyRoute> = unknown extends TRouteTree
+           : InferFileRouteTypes<TRouteTree>['fullPaths'])
+       | '/'
+ 
++// Runtime `route.to` trims every trailing slash; the modes re-add or omit it.
+ export type RouteToPathAlwaysTrailingSlash<TRoute extends AnyRoute> =
+-  TRoute['path'] extends '/'
++  TRoute['fullPath'] extends '/'
+     ? TRoute['fullPath']
+-    : TRoute['fullPath'] extends '/'
+-      ? TRoute['fullPath']
+-      : `${TRoute['fullPath']}/`
++    : `${TrimPathRight<TRoute['fullPath']>}/`
+ 
+ export type RouteToPathNeverTrailingSlash<TRoute extends AnyRoute> =
+-  TRoute['path'] extends '/'
+-    ? TRoute['fullPath'] extends '/'
+-      ? TRoute['fullPath']
+-      : RemoveTrailingSlashes<TRoute['fullPath']>
+-    : TRoute['fullPath']
++  TrimPathRight<TRoute['fullPath']>
+ 
+ export type RouteToPathPreserveTrailingSlash<TRoute extends AnyRoute> =
+   | RouteToPathNeverTrailingSlash<TRoute>

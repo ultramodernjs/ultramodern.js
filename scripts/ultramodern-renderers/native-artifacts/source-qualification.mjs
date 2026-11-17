@@ -11,7 +11,10 @@ import {
 } from '../octane-corrections/inputs.mjs';
 import { qualify as qualifyAdapter } from '../octane-corrections/qualify.mjs';
 import { qualify as qualifyRouter } from '../router-corrections/qualify.mjs';
-import { portableExports } from '../router-corrections/reconstruct.mjs';
+import {
+  portableExports,
+  sourcePatches,
+} from '../router-corrections/reconstruct.mjs';
 import { assetFilename, exactKeys, integrity, sha256 } from './protocol.mjs';
 import { applyExactPatch } from './reconstruct.mjs';
 import { readBytes } from './transport.mjs';
@@ -438,9 +441,11 @@ export async function qualifyRouterSource({
       assertSameLayout(path.join(original, 'src'), path.join(pkg, 'src'));
       const licenseBytes = fs.readFileSync(path.join(source, 'LICENSE'));
       assert.equal(sha256(licenseBytes), item.upstream.licenseSha256);
-      const correction = fs.readFileSync(path.join(here, 'source.patch'));
-      assert.equal(sha256(correction), provenance.sourcePatchSha256);
-      applyExactPatch(correction, source);
+      for (const [file, digest] of sourcePatches(provenance)) {
+        const correction = fs.readFileSync(path.join(here, file));
+        assert.equal(sha256(correction), digest, `${file}: source correction`);
+        applyExactPatch(correction, source);
+      }
       for (const file of fs.readdirSync(path.join(here, 'tests')))
         fs.copyFileSync(
           path.join(here, 'tests', file),
@@ -532,6 +537,7 @@ export async function qualifyRouterSource({
           'mask-inherit-search',
           'headers.test',
           'transformStreamWithRouter.test',
+          'route-path-types.test',
         ],
         pkg,
       );
@@ -545,6 +551,7 @@ export async function qualifyRouterSource({
           'mask-inherit-search',
           'headers',
           'transformStreamWithRouter',
+          'route-path-types',
         ],
         pkg,
       );

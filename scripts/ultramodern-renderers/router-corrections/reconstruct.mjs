@@ -34,6 +34,16 @@ function disk() {
     'Below 20 GiB: stop before installing/building',
   );
 }
+/**
+ * Ordered owning source corrections: the pinned fork diff, then the
+ * framework-owned route path type correction that the fork does not carry.
+ */
+export function sourcePatches(provenance) {
+  return [
+    ['source.patch', provenance.sourcePatchSha256],
+    ['route-path-types.patch', provenance.routePathTypesPatchSha256],
+  ];
+}
 export function portableExports(manifest) {
   const portable = manifest.exports['./ssr/server'];
   const node = JSON.parse(
@@ -121,12 +131,14 @@ export async function main() {
       provenance.sourceArchiveSha512,
       'Pinned git archive mismatch',
     );
-    assert.equal(
-      createHash('sha256')
-        .update(fs.readFileSync(path.join(here, 'source.patch')))
-        .digest('hex'),
-      provenance.sourcePatchSha256,
-    );
+    for (const [file, digest] of sourcePatches(provenance))
+      assert.equal(
+        createHash('sha256')
+          .update(fs.readFileSync(path.join(here, file)))
+          .digest('hex'),
+        digest,
+        `${file}: source correction differs from provenance`,
+      );
     execFileSync('tar', ['-xf', '-', '-C', source], { input: archive });
     assert.equal(
       fs.readFileSync(path.join(original, 'LICENSE'), 'utf8'),
@@ -143,11 +155,12 @@ export async function main() {
           `git/npm source mismatch: ${file}`,
         );
     }
-    run(
-      'patch',
-      ['-p1', '--fuzz=0', '--batch', '-i', path.join(here, 'source.patch')],
-      source,
-    );
+    for (const [file] of sourcePatches(provenance))
+      run(
+        'patch',
+        ['-p1', '--fuzz=0', '--batch', '-i', path.join(here, file)],
+        source,
+      );
     for (const file of fs.readdirSync(path.join(here, 'tests')))
       fs.copyFileSync(
         path.join(here, 'tests', file),
@@ -327,6 +340,7 @@ export async function main() {
         'mask-inherit-search',
         'headers.test',
         'transformStreamWithRouter.test',
+        'route-path-types.test',
       ],
       pkg,
     );
@@ -340,6 +354,7 @@ export async function main() {
         'mask-inherit-search',
         'headers',
         'transformStreamWithRouter',
+        'route-path-types',
       ],
       pkg,
     );

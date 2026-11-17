@@ -29,7 +29,7 @@ const routerProvenancePath = path.join(
   'scripts/ultramodern-renderers/router-corrections/provenance.json',
 );
 const routerPatch =
-  '546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8';
+  '6a2ebee5cc73df367ba768b9a950dee2a57ec0c93122ded77e5342ca8640df24';
 const adapterPatch =
   'df6732ebcfc0af7cf274187c44596ac519abbc383ce30a796205b55c561bf688';
 

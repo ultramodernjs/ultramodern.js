@@ -53,11 +53,11 @@ export default [
     packageName: '@tanstack/router-core',
     version: '1.171.39',
     path: 'patches/@tanstack__router-core@1.171.39.patch',
-    sha256: '546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8',
+    sha256: '6a2ebee5cc73df367ba768b9a950dee2a57ec0c93122ded77e5342ca8640df24',
     repository: false,
     workspace: null,
     reason:
-      'Canonical source-qualified router-core 1.171.39 correction (localized-mask search inheritance, loader lifecycle, SSR rewrites and public declarations) fed byte-for-byte to the native artifact producer and retained as producer input and fixture evidence. Every repository resolution is the authenticated native 1.171.39 archive whose descriptor pins this patch SHA-256 and whose bytes already carry the correction, so the repository no longer reapplies it. Generated workspaces remain patch-free.',
+      'Canonical router-core 1.171.39 correction for localized-mask search inheritance, loader lifecycle, SSR rewrites, runtime-aligned route IDs and trailing-slash navigation types. The native artifact producer must rebuild and byte-compare this exact patch before admitting a new archive; existing release descriptors remain immutable until that qualification succeeds. The repository never reapplies this producer-only correction. Generated workspaces remain patch-free.',
   },
   {
     packageName: '@effect/opentelemetry',

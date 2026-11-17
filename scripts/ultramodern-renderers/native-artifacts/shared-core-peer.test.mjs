@@ -70,7 +70,7 @@ test('reviewed canonical patches and immutable adapter payload match their exact
     'patches/@octanejs__tanstack-router@0.3.4.patch':
       'c82cc89c373d23b42b24cb9eb5d748940170b76895bd94139d538ceeebe6af9b',
     'patches/@tanstack__router-core@1.171.39.patch':
-      '546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8',
+      '6a2ebee5cc73df367ba768b9a950dee2a57ec0c93122ded77e5342ca8640df24',
     'patches/octane@0.18.0.patch':
       'c005016a3c6a15a76cbb52ecf0c80f409878f13d68894fa67c50daf490f8c9d8',
     'patches/@octanejs__rspack-plugin@0.2.10.patch':

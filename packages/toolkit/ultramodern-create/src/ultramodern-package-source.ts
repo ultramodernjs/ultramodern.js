@@ -45,6 +45,7 @@ export type UltramodernPackageSourceStrategy = 'workspace' | 'install';
 
 export type ResolvedUltramodernPackageSource = {
   supportArtifacts?: import('./ultramodern-workspace/package-source').SupportArtifacts;
+  nativeArtifacts?: import('./ultramodern-workspace/package-source').NativeArtifacts;
   strategy: UltramodernPackageSourceStrategy;
   modernPackageVersion: string;
   registry?: string;

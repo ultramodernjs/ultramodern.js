@@ -6,6 +6,7 @@ import {
   inspectNpmTarball,
   readVerifiedPackageArtifactBytes,
 } from '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs';
+import { validateDescriptor as validateNativeDescriptor } from '../../ultramodern-renderers/native-artifacts/protocol.mjs';
 import { supportProtocol } from '../../ultramodern-support-artifacts/protocol.mjs';
 import {
   compilerBootstrapSelectors,
@@ -181,6 +182,65 @@ function importerToolingSupport(manifest, manifests, support) {
   return hosts;
 }
 
+const nativeCore = '@tanstack/router-core';
+const nativeReleasePrefix =
+  'https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-';
+
+// The packed create descriptor is the one native authority. A packed owner
+// that records native metadata must repeat it exactly.
+function admitTractorNativeArtifacts(createManifest, manifests) {
+  const descriptor = createManifest.ultramodern?.nativeArtifacts;
+  if (descriptor === undefined) return undefined;
+  try {
+    validateNativeDescriptor(descriptor);
+  } catch (cause) {
+    throw new Error(
+      'Release create package ships an invalid native artifact descriptor',
+      { cause },
+    );
+  }
+  for (const [name, manifest] of manifests) {
+    const recorded = manifest.ultramodern?.nativeArtifacts;
+    if (recorded !== undefined && !isDeepStrictEqual(recorded, descriptor)) {
+      throw new Error(
+        `Packed framework owner ${name} records a different native artifact authority`,
+      );
+    }
+  }
+  return descriptor;
+}
+
+// Match nativeCoreDependencies: only installed edges reach an exact Core peer
+// owner; an optional peer owner the importer does not declare is not installed.
+function importerReachesNativeCore(names, manifests, native) {
+  const pin = native.packages[nativeCore];
+  const seen = new Set();
+  const queue = [...names];
+  let reached = false;
+  for (const name of queue) {
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const owner = manifests.get(name);
+    if (!owner) continue;
+    const peer = owner.peerDependencies?.[nativeCore];
+    if (peer !== undefined) {
+      if (peer !== pin.version && peer !== pin.request) {
+        throw new Error(
+          `Packed framework peer ${name} -> ${nativeCore} differs from the native descriptor`,
+        );
+      }
+      reached = true;
+    }
+    queue.push(
+      ...Object.keys({
+        ...owner.dependencies,
+        ...owner.optionalDependencies,
+      }).filter(dependency => manifests.has(dependency)),
+    );
+  }
+  return reached;
+}
+
 /** Select the exact supplied bundle through the consumer's native pnpm catalog. */
 export function prepareTractorCohortInstallation(
   workspace,
@@ -267,6 +327,19 @@ export function prepareTractorCohortInstallation(
     release,
     packed.packageJson,
   );
+  const nativeArtifacts = admitTractorNativeArtifacts(
+    packed.packageJson,
+    toolingManifests,
+  );
+  // Descriptor-backed archives: exact requests for hosts, exact versions for peers.
+  const admittedArtifacts = {
+    ...supportArtifacts.packages,
+    ...(nativeArtifacts
+      ? { [nativeCore]: nativeArtifacts.packages[nativeCore] }
+      : {}),
+  };
+  if (nativeArtifacts)
+    nativeDependencies[nativeCore] = admittedArtifacts[nativeCore].request;
   const nativePackages = Object.keys(nativeDependencies);
   const expectedExclusions = [
     ...cohort.targetNames.map(name => `${name}@${version}`),
@@ -324,14 +397,28 @@ export function prepareTractorCohortInstallation(
   }));
   let dependencyCount = 0;
   for (const { file, manifest } of consumerManifests) {
+    if (!nativeArtifacts && manifest.ultramodern?.nativeArtifacts !== undefined)
+      throw new Error(
+        `Tractor ${path.relative(workspace, file) || 'package.json'} records a native artifact descriptor the packed producer does not admit`,
+      );
     for (const block of dependencyBlocks) {
       for (const [name, specifier] of Object.entries(manifest[block] ?? {})) {
         if (
-          Object.hasOwn(supportRequests, name) &&
+          Object.hasOwn(admittedArtifacts, name) &&
           block === 'optionalDependencies'
         ) {
           throw new Error(
             `Tractor support artifact ${name} must not be an optional dependency`,
+          );
+        }
+        if (
+          !nativeArtifacts &&
+          name === nativeCore &&
+          typeof specifier === 'string' &&
+          specifier.startsWith(nativeReleasePrefix)
+        ) {
+          throw new Error(
+            `Tractor ${nativeCore} archive in ${path.relative(workspace, file)} requires the packed producer native descriptor`,
           );
         }
         if (!name.startsWith('@modern-js/')) continue;
@@ -388,6 +475,7 @@ export function prepareTractorCohortInstallation(
   const manifestUpdates = consumerManifests.flatMap(({ file, manifest }) => {
     let changed = false;
     let ownsSupport = false;
+    let ownsNative = false;
     if (
       path.dirname(file) !== workspace &&
       ['ts', 'js', 'mjs'].some(extension =>
@@ -410,15 +498,16 @@ export function prepareTractorCohortInstallation(
       for (const name of nativePackages) {
         if (
           Object.hasOwn(manifest[block] ?? {}, name) &&
-          Object.hasOwn(supportRequests, name)
+          Object.hasOwn(admittedArtifacts, name)
         ) {
           const selected =
             block === 'peerDependencies'
-              ? supportArtifacts.packages[name].version
-              : supportRequests[name];
+              ? admittedArtifacts[name].version
+              : admittedArtifacts[name].request;
           changed ||= manifest[block][name] !== selected;
           manifest[block][name] = selected;
-          ownsSupport = true;
+          if (name === nativeCore) ownsNative ||= block !== 'peerDependencies';
+          else ownsSupport = true;
         } else if (
           Object.hasOwn(manifest[block] ?? {}, name) &&
           !manifest[block][name].startsWith('catalog:')
@@ -444,11 +533,59 @@ export function prepareTractorCohortInstallation(
       if (manifest.peerDependencies) delete manifest.peerDependencies[name];
       ownsSupport = true;
     }
+    if (
+      nativeArtifacts &&
+      importerReachesNativeCore(
+        Object.keys({
+          ...manifest.dependencies,
+          ...manifest.devDependencies,
+          ...manifest.optionalDependencies,
+        }),
+        toolingManifests,
+        nativeArtifacts,
+      )
+    ) {
+      // The application runtime owns Core when a runtime dependency installs
+      // its peer owner; the root has no renderer/runtime ownership.
+      const block =
+        path.dirname(file) !== workspace &&
+        importerReachesNativeCore(
+          Object.keys(manifest.dependencies ?? {}),
+          toolingManifests,
+          nativeArtifacts,
+        )
+          ? 'dependencies'
+          : 'devDependencies';
+      const other =
+        block === 'dependencies' ? 'devDependencies' : 'dependencies';
+      const request = admittedArtifacts[nativeCore].request;
+      manifest[block] ??= {};
+      changed ||= manifest[block][nativeCore] !== request;
+      manifest[block][nativeCore] = request;
+      if (manifest[other] && Object.hasOwn(manifest[other], nativeCore)) {
+        delete manifest[other][nativeCore];
+        changed = true;
+      }
+      ownsNative = true;
+    }
     if (ownsSupport) {
       manifest.ultramodern = {
         ...manifest.ultramodern,
         supportArtifacts,
       };
+      changed = true;
+    }
+    // A native descriptor is recorded exactly where its Core is hosted.
+    if (ownsNative) {
+      changed ||= !isDeepStrictEqual(
+        manifest.ultramodern?.nativeArtifacts,
+        nativeArtifacts,
+      );
+      manifest.ultramodern = { ...manifest.ultramodern, nativeArtifacts };
+    } else if (manifest.ultramodern?.nativeArtifacts !== undefined) {
+      const { nativeArtifacts: _stale, ...ultramodern } = manifest.ultramodern;
+      if (Object.keys(ultramodern).length) manifest.ultramodern = ultramodern;
+      else delete manifest.ultramodern;
       changed = true;
     }
     return changed ? [[file, manifest]] : [];
@@ -477,7 +614,7 @@ export function prepareTractorCohortInstallation(
     );
   }
   const supportOverrideSelector = new RegExp(
-    `(?:^|>)\\s*(?:${Object.keys(supportRequests).map(RegExp.escape).join('|')})(?:@(?:[^>]|>(?=\\s*(?:=|\\d|v\\d)))*)?\\s*$`,
+    `(?:^|>)\\s*(?:${Object.keys(admittedArtifacts).map(RegExp.escape).join('|')})(?:@(?:[^>]|>(?=\\s*(?:=|\\d|v\\d)))*)?\\s*$`,
     'u',
   );
   for (const [selector, specifier] of Object.entries(pnpmOverrides)) {

@@ -10,7 +10,7 @@ import { authenticateDescriptor } from '../ultramodern-renderers/native-artifact
 
 const coreName = '@tanstack/router-core';
 const corePatch =
-  '546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8';
+  '6a2ebee5cc73df367ba768b9a950dee2a57ec0c93122ded77e5342ca8640df24';
 const coreUpstream = Object.freeze({
   request:
     'https://registry.npmjs.org/@tanstack/router-core/-/router-core-1.171.39.tgz',

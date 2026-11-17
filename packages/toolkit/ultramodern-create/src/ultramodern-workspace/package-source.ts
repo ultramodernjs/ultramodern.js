@@ -23,12 +23,26 @@ const supportVersions = {
   'rsbuild-plugin-dts': '1.0.7',
 } as const;
 
-export type SupportArtifacts = JsonObject & {
-  protocol: 'ultramodern.support-artifacts.v3';
+// The closed native renderer cohort. Its router Core is the exact peer of the
+// React and native TanStack adapters.
+const nativeVersions = {
+  octane: '0.18.0',
+  '@octanejs/tanstack-router': '0.3.4',
+  '@octanejs/rspack-plugin': '0.2.10',
+  '@tanstack/router-core': '1.171.39',
+} as const;
+export const NATIVE_ROUTER_CORE = '@tanstack/router-core';
+
+type ArtifactDescriptor<
+  Protocol extends string,
+  Workflow extends string,
+  Versions extends Record<string, string>,
+> = JsonObject & {
+  protocol: Protocol;
   producer: JsonObject & {
     repository: 'ultramodernjs/ultramodern.js';
     repositoryId: 1151231350;
-    workflow: '.github/workflows/support-artifacts.yml';
+    workflow: Workflow;
     source: string;
     runId: number;
     runAttempt: number;
@@ -36,8 +50,8 @@ export type SupportArtifacts = JsonObject & {
   };
   manifest: { request: string; integrity: string };
   packages: {
-    [Name in keyof typeof supportVersions]: JsonObject & {
-      version: (typeof supportVersions)[Name];
+    [Name in keyof Versions]: JsonObject & {
+      version: Versions[Name];
       request: string;
       integrity: string;
       upstream: JsonObject;
@@ -45,6 +59,16 @@ export type SupportArtifacts = JsonObject & {
     };
   };
 };
+export type SupportArtifacts = ArtifactDescriptor<
+  'ultramodern.support-artifacts.v3',
+  '.github/workflows/support-artifacts.yml',
+  typeof supportVersions
+>;
+export type NativeArtifacts = ArtifactDescriptor<
+  'ultramodern.native-artifacts.v1',
+  '.github/workflows/native-renderer-artifacts.yml',
+  typeof nativeVersions
+>;
 
 function object(value: unknown): asserts value is JsonObject {
   assert(
@@ -61,11 +85,25 @@ function exactKeys(value: unknown, keys: string[]) {
   );
 }
 
-/** Project publisher-admitted framework metadata, not archive authentication. */
-export function parseSupportArtifacts(value: unknown): SupportArtifacts {
+const releaseBase =
+  'https://github.com/ultramodernjs/ultramodern.js/releases/download/';
+const integrityPattern = /^sha512-[A-Za-z0-9+/]{86}==$/u;
+
+function parseArtifactDescriptor(
+  value: unknown,
+  policy: {
+    protocol: string;
+    workflow: string;
+    tagPrefix: string;
+    manifestFilename: string;
+    versions: Readonly<Record<string, string>>;
+    label: string;
+    upstream?: (value: unknown, name: string, version: string) => void;
+  },
+): unknown {
   exactKeys(value, ['protocol', 'producer', 'manifest', 'packages']);
   object(value);
-  assert.equal(value.protocol, 'ultramodern.support-artifacts.v3');
+  assert.equal(value.protocol, policy.protocol);
   const producer = value.producer;
   exactKeys(producer, [
     'repository',
@@ -79,7 +117,7 @@ export function parseSupportArtifacts(value: unknown): SupportArtifacts {
   object(producer);
   assert.equal(producer.repository, 'ultramodernjs/ultramodern.js');
   assert.equal(producer.repositoryId, 1151231350);
-  assert.equal(producer.workflow, '.github/workflows/support-artifacts.yml');
+  assert.equal(producer.workflow, policy.workflow);
   assert(
     typeof producer.source === 'string' &&
       /^[a-f0-9]{40}$/u.test(producer.source),
@@ -92,26 +130,25 @@ export function parseSupportArtifacts(value: unknown): SupportArtifacts {
     );
   assert.equal(
     producer.tag,
-    `support-artifacts-${producer.source}-${producer.runId}-${producer.runAttempt}`,
+    `${policy.tagPrefix}-${producer.source}-${producer.runId}-${producer.runAttempt}`,
   );
-  const base = `https://github.com/ultramodernjs/ultramodern.js/releases/download/${producer.tag}/`;
+  const base = `${releaseBase}${producer.tag}/`;
   const checkPin = (pin: JsonObject, filename: string) => {
     assert.equal(
       pin.request,
       `${base}${filename}`,
-      'Support request differs from descriptor authority',
+      `${policy.label} request differs from descriptor authority`,
     );
     assert(
-      typeof pin.integrity === 'string' &&
-        /^sha512-[A-Za-z0-9+/]{86}==$/u.test(pin.integrity),
+      typeof pin.integrity === 'string' && integrityPattern.test(pin.integrity),
     );
   };
   exactKeys(value.manifest, ['request', 'integrity']);
   object(value.manifest);
-  checkPin(value.manifest, 'support-artifacts.json');
-  exactKeys(value.packages, Object.keys(supportVersions));
+  checkPin(value.manifest, policy.manifestFilename);
+  exactKeys(value.packages, Object.keys(policy.versions));
   object(value.packages);
-  for (const [name, version] of Object.entries(supportVersions)) {
+  for (const [name, version] of Object.entries(policy.versions)) {
     const pin: unknown = value.packages[name];
     exactKeys(pin, [
       'version',
@@ -121,7 +158,11 @@ export function parseSupportArtifacts(value: unknown): SupportArtifacts {
       'patchSha256',
     ]);
     object(pin);
-    assert.equal(pin.version, version, `${name}: support version mismatch`);
+    assert.equal(
+      pin.version,
+      version,
+      `${name}: ${policy.label.toLowerCase()} version mismatch`,
+    );
     checkPin(
       pin,
       `${name.replace(/^@/u, '').replace('/', '-')}-${version}.tgz`,
@@ -131,21 +172,98 @@ export function parseSupportArtifacts(value: unknown): SupportArtifacts {
         /^[a-f0-9]{64}$/u.test(pin.patchSha256),
     );
     object(pin.upstream);
+    policy.upstream?.(pin.upstream, name, version);
   }
   // The publisher authenticates archive/provenance before writing this metadata.
-  return structuredClone(value) as SupportArtifacts;
+  return structuredClone(value);
+}
+
+/** Project publisher-admitted framework metadata, not archive authentication. */
+export function parseSupportArtifacts(value: unknown): SupportArtifacts {
+  return parseArtifactDescriptor(value, {
+    protocol: 'ultramodern.support-artifacts.v3',
+    workflow: '.github/workflows/support-artifacts.yml',
+    tagPrefix: 'support-artifacts',
+    manifestFilename: 'support-artifacts.json',
+    versions: supportVersions,
+    label: 'Support',
+  }) as SupportArtifacts;
+}
+
+/** Project publisher-admitted native renderer metadata, not archive authentication. */
+export function parseNativeArtifacts(value: unknown): NativeArtifacts {
+  return parseArtifactDescriptor(value, {
+    protocol: 'ultramodern.native-artifacts.v1',
+    workflow: '.github/workflows/native-renderer-artifacts.yml',
+    tagPrefix: 'native-renderers',
+    manifestFilename: 'native-artifacts.json',
+    versions: nativeVersions,
+    label: 'Native',
+    upstream(upstream, name, version) {
+      exactKeys(upstream, [
+        'request',
+        'integrity',
+        'repository',
+        'commit',
+        'sourceArchiveIntegrity',
+        'licenseSha256',
+      ]);
+      object(upstream);
+      assert.equal(
+        upstream.request,
+        `https://registry.npmjs.org/${name}/-/${name.split('/').at(-1)}-${version}.tgz`,
+      );
+      for (const key of ['integrity', 'sourceArchiveIntegrity'])
+        assert(
+          typeof upstream[key] === 'string' &&
+            integrityPattern.test(upstream[key]),
+        );
+      assert(
+        typeof upstream.repository === 'string' &&
+          /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(upstream.repository),
+      );
+      assert(
+        typeof upstream.commit === 'string' &&
+          /^[a-f0-9]{40}$/u.test(upstream.commit),
+      );
+      assert(
+        typeof upstream.licenseSha256 === 'string' &&
+          /^[a-f0-9]{64}$/u.test(upstream.licenseSha256),
+      );
+    },
+  }) as NativeArtifacts;
+}
+
+function readArtifactMetadata<Descriptor>(
+  manifest: unknown,
+  key: 'supportArtifacts' | 'nativeArtifacts',
+  parse: (value: unknown) => Descriptor,
+): Descriptor | undefined {
+  object(manifest);
+  const metadata = manifest.ultramodern;
+  if (metadata === undefined) return undefined;
+  object(metadata);
+  return Object.hasOwn(metadata, key) ? parse(metadata[key]) : undefined;
 }
 
 export function readSupportArtifacts(
   manifest: unknown,
 ): SupportArtifacts | undefined {
-  object(manifest);
-  const metadata = manifest.ultramodern;
-  if (metadata === undefined) return undefined;
-  object(metadata);
-  return Object.hasOwn(metadata, 'supportArtifacts')
-    ? parseSupportArtifacts(metadata.supportArtifacts)
-    : undefined;
+  return readArtifactMetadata(
+    manifest,
+    'supportArtifacts',
+    parseSupportArtifacts,
+  );
+}
+
+export function readNativeArtifacts(
+  manifest: unknown,
+): NativeArtifacts | undefined {
+  return readArtifactMetadata(
+    manifest,
+    'nativeArtifacts',
+    parseNativeArtifacts,
+  );
 }
 
 export function selectSupportRequests(
@@ -175,19 +293,49 @@ export function selectSupportRequests(
   );
 }
 
+/**
+ * Select the admitted native Core archive for an exact Core request. Without
+ * a native descriptor a consumer keeps its registry request and cannot carry
+ * a native archive.
+ */
+export function selectNativeCoreRequest(
+  dependencies: Record<string, string>,
+  native: NativeArtifacts | undefined,
+): Record<string, string> {
+  const request = dependencies[NATIVE_ROUTER_CORE];
+  if (request === undefined) return dependencies;
+  if (!native) {
+    assert(
+      !request.startsWith(`${releaseBase}native-renderers-`),
+      `${NATIVE_ROUTER_CORE}: native Core input requires native descriptor`,
+    );
+    return dependencies;
+  }
+  const pin = native.packages[NATIVE_ROUTER_CORE];
+  assert(
+    request === pin.version || request === pin.request,
+    `${NATIVE_ROUTER_CORE}: direct input ${request} differs from native descriptor`,
+  );
+  return { ...dependencies, [NATIVE_ROUTER_CORE]: pin.request };
+}
+
 export function resolvePackageSource(
   options: UltramodernWorkspaceOptions,
 ): ResolvedPackageSource {
-  const supportArtifacts = readSupportArtifacts(
-    JSON.parse(
-      fs.readFileSync(path.join(createPackageRoot, 'package.json'), 'utf8'),
-    ),
+  const createManifest: unknown = JSON.parse(
+    fs.readFileSync(path.join(createPackageRoot, 'package.json'), 'utf8'),
   );
+  const supportArtifacts = readSupportArtifacts(createManifest);
+  const nativeArtifacts = readNativeArtifacts(createManifest);
+  const artifacts = {
+    ...(supportArtifacts ? { supportArtifacts } : {}),
+    ...(nativeArtifacts ? { nativeArtifacts } : {}),
+  };
   const strategy = options.packageSource?.strategy ?? 'install';
   if (strategy === 'workspace') {
     return {
       strategy,
-      ...(supportArtifacts ? { supportArtifacts } : {}),
+      ...artifacts,
       modernPackageVersion: WORKSPACE_PACKAGE_VERSION,
       registry: options.packageSource?.registry,
       aliasScope: options.packageSource?.aliasScope,
@@ -202,7 +350,7 @@ export function resolvePackageSource(
 
   return {
     strategy,
-    ...(supportArtifacts ? { supportArtifacts } : {}),
+    ...artifacts,
     modernPackageVersion:
       options.packageSource?.modernPackageVersion ?? options.modernVersion,
     registry,

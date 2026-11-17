@@ -8,12 +8,21 @@ import {
 } from '@modern-js/backend-federation-contracts';
 import { specifierRenderer } from '@modern-js/ultramodern-app-tools';
 import semver from '@modern-js/utils/semver';
-import { readSupportArtifacts, selectSupportRequests } from '../package-source';
+import {
+  NATIVE_ROUTER_CORE,
+  readNativeArtifacts,
+  readSupportArtifacts,
+  selectNativeCoreRequest,
+  selectSupportRequests,
+} from '../package-source';
 import {
   getRendererGenerationProfile,
   isApplicationRenderer,
 } from '../renderer-profile';
-import { toolingSupportDependencies } from '../tooling-support';
+import {
+  nativeCoreDependencies,
+  toolingSupportDependencies,
+} from '../tooling-support';
 import type { RendererGenerationProfile, WorkspaceRenderer } from '../types';
 import {
   MODULE_FEDERATION_NODE_VERSION,
@@ -426,6 +435,10 @@ function assertRendererDependencyOwnership(
     renderer !== 'react' && renderer !== 'none'
       ? (generation ?? getRendererGenerationProfile(renderer))
       : undefined;
+  // Native renderer profiles select their own Core; every other consumer
+  // records the native descriptor exactly where it hosts the admitted Core.
+  if (!nativeGeneration || owner.kind === 'workspace-tooling')
+    assertNativeCoreHost(manifest);
   const groups = [
     'dependencies',
     'devDependencies',
@@ -494,6 +507,32 @@ function assertRendererDependencyOwnership(
   }
 }
 
+function assertNativeCoreHost(manifest: JsonRecord): void {
+  const native = readNativeArtifacts(manifest);
+  for (const group of ['dependencies', 'devDependencies'] as const) {
+    const requests = manifest[group] ?? {};
+    assert(
+      selectNativeCoreRequest(requests, native)[NATIVE_ROUTER_CORE] ===
+        requests[NATIVE_ROUTER_CORE],
+      `${manifest.name} ${group}.${NATIVE_ROUTER_CORE} must use the exact native Core request`,
+    );
+  }
+  const request = nativeCoreDependencies(
+    { ...manifest.dependencies, ...manifest.devDependencies },
+    native,
+  )[NATIVE_ROUTER_CORE];
+  assert(
+    native === undefined || request !== undefined,
+    `${manifest.name} records a native descriptor without an installed ${NATIVE_ROUTER_CORE} owner`,
+  );
+  assert(
+    request === undefined ||
+      manifest.dependencies?.[NATIVE_ROUTER_CORE] === request ||
+      manifest.devDependencies?.[NATIVE_ROUTER_CORE] === request,
+    `${manifest.name} must host the admitted native ${NATIVE_ROUTER_CORE}`,
+  );
+}
+
 /** Check authored ABI declarations before config-derived metadata is staged. */
 export function assertAuthoredRendererDependencyPins(
   manifest: JsonRecord,
@@ -525,7 +564,13 @@ export function assertAuthoredRendererDependencyPins(
     )
       pins[name] = version;
   }
-  const selectedPins = selectSupportRequests(pins, support);
+  // A React consumer's Core ABI is the admitted native archive when recorded.
+  const native =
+    generation.renderer === 'react' ? readNativeArtifacts(manifest) : undefined;
+  const supportPins = selectSupportRequests(pins, support);
+  const selectedPins = native
+    ? selectNativeCoreRequest(supportPins, native)
+    : supportPins;
   for (const group of [
     'dependencies',
     'devDependencies',
@@ -565,6 +610,16 @@ export function assertAuthoredRendererDependencyPins(
         assert(
           resolved === expected,
           `${manifest.name} ${group}.${name} must use the exact support request`,
+        );
+        continue;
+      }
+      if (native && name === NATIVE_ROUTER_CORE) {
+        assert(
+          resolved ===
+            (group === 'peerDependencies'
+              ? native.packages[name].version
+              : expected),
+          `${manifest.name} ${group}.${name} must use the exact native Core request`,
         );
         continue;
       }

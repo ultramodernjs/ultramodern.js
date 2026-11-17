@@ -14,6 +14,7 @@ test('canonical patch and source port are digest pinned', () => {
       provenance.patchSha256,
     ],
     ['./source.patch', provenance.sourcePatchSha256],
+    ['./route-path-types.patch', provenance.routePathTypesPatchSha256],
   ])
     assert.equal(
       createHash('sha256')
