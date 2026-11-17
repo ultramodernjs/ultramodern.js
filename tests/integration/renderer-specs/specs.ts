@@ -2,7 +2,11 @@ import { ChildProcess, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import puppeteer, { type Browser, type Page } from 'puppeteer';
+import puppeteer, {
+  type Browser,
+  type HTTPResponse,
+  type Page,
+} from 'puppeteer';
 import { checkBundle } from '../../../scripts/ultramodern-renderers/bundle-check.mjs';
 import {
   getPort,
@@ -96,6 +100,7 @@ export function defineRendererSpecs(options: RendererSpecOptions) {
   let page: Page;
   let pageErrors: string[];
   let documentRequests: string[];
+  let failedRequests: string[];
   let sockets: string[];
 
   /** Owns one block's browser, server and temporary deploy directories. */
@@ -166,6 +171,7 @@ export function defineRendererSpecs(options: RendererSpecOptions) {
     beforeEach(async () => {
       pageErrors = [];
       documentRequests = [];
+      failedRequests = [];
       page = await browser.newPage();
       page.on('pageerror', error => pageErrors.push(String(error)));
       page.on('console', message => {
@@ -174,6 +180,19 @@ export function defineRendererSpecs(options: RendererSpecOptions) {
       page.on('request', request => {
         if (request.resourceType() === 'document')
           documentRequests.push(request.url());
+      });
+      page.on('requestfailed', request =>
+        failedRequests.length < 80
+          ? failedRequests.push(
+              `${request.resourceType()} ${request.url()}: ${request.failure()?.errorText}`,
+            )
+          : undefined,
+      );
+      page.on('response', response => {
+        if (response.status() >= 400 && failedRequests.length < 80)
+          failedRequests.push(
+            `${response.request().resourceType()} ${response.url()}: HTTP ${response.status()}`,
+          );
       });
       sockets = [];
       const cdp = await page.createCDPSession();
@@ -249,15 +268,156 @@ export function defineRendererSpecs(options: RendererSpecOptions) {
    * it longer.
    */
   async function openHydrated(pathname: string, timeout = 15_000) {
+    const startedAt = Date.now();
     const response = await page.goto(`${origin}${pathname}`, {
       waitUntil: 'domcontentloaded',
     });
-    await page.waitForSelector(`${id('native-increment')}[data-hydrated]`, {
-      timeout,
-    });
+    const navigationMs = Date.now() - startedAt;
+    try {
+      await page.waitForSelector(`${id('native-increment')}[data-hydrated]`, {
+        timeout,
+      });
+    } catch (error) {
+      throw await withHydrationEvidence(error, {
+        pathname,
+        response,
+        navigationMs,
+      });
+    }
     await page.click(id('native-increment'));
     await waitForText('native-count', '1', timeout);
     return response;
+  }
+
+  /**
+   * Diagnostic only; it changes no outcome. A counter that never marks itself
+   * hydrated leaves the server log silent (CI run 44019864531, Windows
+   * framework 5/6), so the failure carries what the page and the server can
+   * still tell: the document that arrived, the TanStack stream bootstrap
+   * state, every asset the page requested with its status, and whether the
+   * server answers the same document and its scripts now.
+   */
+  async function withHydrationEvidence(
+    error: unknown,
+    context: {
+      pathname: string;
+      response: HTTPResponse | null;
+      navigationMs: number;
+    },
+  ) {
+    const evidence: Record<string, unknown> = {
+      navigationMs: context.navigationMs,
+      response: context.response && {
+        status: context.response.status(),
+        contentType: context.response.headers()['content-type'],
+        transferEncoding: context.response.headers()['transfer-encoding'],
+        fromServiceWorker: context.response.fromServiceWorker(),
+      },
+      pageUrl: page.url(),
+      pageErrors,
+      failedRequests,
+      documentRequests,
+      sockets,
+    };
+    try {
+      evidence.page = await page.evaluate(() => {
+        const tsr: unknown = Reflect.get(window, '$_TSR');
+        const state = (name: string): unknown =>
+          tsr !== null && typeof tsr === 'object'
+            ? Reflect.get(tsr, name)
+            : undefined;
+        const buffer = state('buffer');
+        const increment = document.querySelector(
+          '[data-testid="native-increment"]',
+        );
+        const resources = performance
+          .getEntriesByType('resource')
+          .filter(
+            (entry): entry is PerformanceResourceTiming =>
+              entry instanceof PerformanceResourceTiming,
+          );
+        return {
+          readyState: document.readyState,
+          title: document.title,
+          nativeRoute:
+            document.querySelector('[data-testid="native-route"]') !== null,
+          increment: increment
+            ? {
+                hydrated: increment.hasAttribute('data-hydrated'),
+                html: increment.outerHTML.slice(0, 200),
+              }
+            : null,
+          // Deleted by the bootstrap itself once hydrated and stream-ended.
+          tsr:
+            tsr === undefined
+              ? 'absent'
+              : {
+                  initialized: Boolean(state('initialized')),
+                  hydrated: Boolean(state('hydrated')),
+                  streamEnded: Boolean(state('streamEnded')),
+                  buffered: Array.isArray(buffer) ? buffer.length : null,
+                  router: Boolean(state('router')),
+                },
+          scripts: [...document.scripts]
+            .map(script => script.src || `inline:${script.text.slice(0, 60)}`)
+            .slice(0, 40),
+          resources: resources
+            .map(
+              resource =>
+                `${resource.initiatorType} ${resource.name} status=${
+                  'responseStatus' in resource ? resource.responseStatus : '?'
+                } ${Math.round(resource.duration)}ms ${resource.transferSize}B`,
+            )
+            .slice(0, 80),
+          documentTail: document.documentElement.outerHTML.slice(-1500),
+        };
+      });
+    } catch (evaluateError) {
+      evidence.page = `unavailable: ${String(evaluateError)}`;
+    }
+    try {
+      const requestedAt = Date.now();
+      const again = await fetch(`${origin}${context.pathname}`, {
+        headers: { 'user-agent': browserUserAgent },
+        signal: AbortSignal.timeout(10_000),
+      });
+      const html = await again.text();
+      const scripts = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g)]
+        .map(match => match[1])
+        .slice(0, 12);
+      evidence.serverNow = {
+        status: again.status,
+        ms: Date.now() - requestedAt,
+        bytes: html.length,
+        hasIncrement: html.includes('data-testid="native-increment"'),
+        hasStreamEnd: html.includes('$_TSR.e()'),
+        scripts: await Promise.all(
+          scripts.map(async source => {
+            try {
+              const asset = await fetch(new URL(source, origin), {
+                signal: AbortSignal.timeout(10_000),
+              });
+              return `${source}: HTTP ${asset.status} ${asset.headers.get('content-type')} ${(await asset.text()).length}B`;
+            } catch (assetError) {
+              return `${source}: ${String(assetError)}`;
+            }
+          }),
+        ),
+        tail: html.slice(-600),
+      };
+    } catch (fetchError) {
+      evidence.serverNow = `unavailable: ${String(fetchError)}`;
+    }
+    const original = error instanceof Error ? error : new Error(String(error));
+    const described = new Error(
+      `${original.message}\nHydration evidence: ${JSON.stringify(evidence, null, 2)}`,
+      { cause: original },
+    );
+    described.name = original.name;
+    described.stack = `${described.name}: ${described.message}\n${
+      original.stack?.split('\n').slice(1).join('\n') ?? ''
+    }`;
+    return described;
   }
 
   async function clickAndWait(testId: string, target: string) {
