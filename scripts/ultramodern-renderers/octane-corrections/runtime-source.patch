@@ -4952,7 +4952,7 @@ index 344b066..d07a55b 100644
 +
 +export let hasRendererContexts = false;
 diff --git a/packages/octane/src/runtime.server.ts b/packages/octane/src/runtime.server.ts
-index 85aa4ac..66a48a4 100644
+index 85aa4ac80d..3da69d55a3 100644
 --- a/packages/octane/src/runtime.server.ts
 +++ b/packages/octane/src/runtime.server.ts
 @@ -1,45 +1,29 @@
@@ -9141,7 +9141,7 @@ index 85aa4ac..66a48a4 100644
  	/** Pending descendants to wake if the client claimed the guard before its reveal. */
  	abandoned?: string[] | undefined;
  	/** Recoverable render error retained for the public streaming onError callback. */
-@@ -10658,12 +11227,13 @@ interface StreamBoundary {
+@@ -10658,12 +11227,15 @@ interface StreamBoundary {
  	owners: string[];
  }
  
@@ -9154,10 +9154,12 @@ index 85aa4ac..66a48a4 100644
 -	hasUncapturedCatchGuards: boolean;
 +	/** Gates sentinel capture work; stale true values only cost one scan. */
 +	hasUncapturedSentinels: boolean;
++	/** Pending error ownership cannot commit before the sink accepts the shell. */
++	shellCommitted: boolean;
  	nextId: number;
  	token: string;
  	/** Boundary positions reached by the active full-tree pass, when tracked. */
-@@ -10676,6 +11246,7 @@ interface StreamState {
+@@ -10676,6 +11248,7 @@ interface StreamState {
  	replay: StreamBoundaryReplayEntry[] | null;
  }
  
@@ -9165,7 +9167,7 @@ index 85aa4ac..66a48a4 100644
  function hasPendingStreamBoundary(stream: StreamState): boolean {
  	for (const boundary of stream.boundaries.values()) {
  		if (boundary.state === 'pending') return true;
-@@ -10683,12 +11254,14 @@ function hasPendingStreamBoundary(stream: StreamState): boolean {
+@@ -10683,12 +11256,14 @@ function hasPendingStreamBoundary(stream: StreamState): boolean {
  	return false;
  }
  
@@ -9180,7 +9182,7 @@ index 85aa4ac..66a48a4 100644
  // Render-phase retries need the stream registry as it stood on entry to the
  // component. Copying every boundary at EVERY component multiplies a full wave's
  // work by the already-discovered boundary count. Checkpoint this pass-local log
-@@ -10704,6 +11277,7 @@ function recordStreamBoundaryMutation(stream: StreamState, key: string): void {
+@@ -10704,6 +11279,7 @@ function recordStreamBoundaryMutation(stream: StreamState, key: string): void {
  	});
  }
  
@@ -9188,7 +9190,7 @@ index 85aa4ac..66a48a4 100644
  function rewindStreamBoundaryReplay(stream: StreamState, checkpoint: number): void {
  	const replay = stream.replay;
  	if (replay === null) return;
-@@ -10721,8 +11295,11 @@ function rewindStreamBoundaryReplay(stream: StreamState, checkpoint: number): vo
+@@ -10721,8 +11297,11 @@ function rewindStreamBoundaryReplay(stream: StreamState, checkpoint: number): vo
  			boundary.errorReported = value.errorReported;
  			boundary.errorFlushed = value.errorFlushed;
  			boundary.abandoned = value.abandoned;
@@ -9202,7 +9204,7 @@ index 85aa4ac..66a48a4 100644
  			if (!stream.boundaries.has(saved.key)) restoredDeletion = true;
  			stream.boundaries.set(saved.key, boundary);
  		}
-@@ -10736,6 +11313,7 @@ function rewindStreamBoundaryReplay(stream: StreamState, checkpoint: number): vo
+@@ -10736,6 +11315,7 @@ function rewindStreamBoundaryReplay(stream: StreamState, checkpoint: number): vo
  	}
  }
  
@@ -9210,7 +9212,7 @@ index 85aa4ac..66a48a4 100644
  function recordStreamBoundaryOwners(stream: StreamState, childKey: string, owners: string[]): void {
  	// Retaining old memberships keeps restored owner paths reachable after replay.
  	for (const owner of owners) {
-@@ -10745,6 +11323,7 @@ function recordStreamBoundaryOwners(stream: StreamState, childKey: string, owner
+@@ -10745,6 +11325,7 @@ function recordStreamBoundaryOwners(stream: StreamState, childKey: string, owner
  	}
  }
  
@@ -9218,7 +9220,7 @@ index 85aa4ac..66a48a4 100644
  // Every boundary id includes a render-unique token. The counter proves
  // uniqueness for every stream produced by this module instance; the realm salt
  // prevents a second bundled copy/server isolate from restarting at the same
-@@ -10754,6 +11333,7 @@ function recordStreamBoundaryOwners(stream: StreamState, childKey: string, owner
+@@ -10754,6 +11335,7 @@ function recordStreamBoundaryOwners(stream: StreamState, childKey: string, owner
  // discovery order lives separately.
  let STREAM_REALM_SALT: string | null = null;
  
@@ -9226,7 +9228,7 @@ index 85aa4ac..66a48a4 100644
  function streamRealmSalt(): string {
  	if (STREAM_REALM_SALT !== null) return STREAM_REALM_SALT;
  	const crypto = (globalThis as any).crypto as { randomUUID?: () => string } | undefined;
-@@ -10762,18 +11342,22 @@ function streamRealmSalt(): string {
+@@ -10762,18 +11344,22 @@ function streamRealmSalt(): string {
  		Date.now().toString(36) + Math.random().toString(36).slice(2);
  	return (STREAM_REALM_SALT = entropy.replace(/[^a-zA-Z0-9_-]/g, ''));
  }
@@ -9249,7 +9251,7 @@ index 85aa4ac..66a48a4 100644
  function representedStreamBoundaryIds(html: string): Set<string> {
  	const prefix = STREAM_BOUNDARY_ATTR + '="';
  	const ids = new Set<string>();
-@@ -10788,6 +11372,7 @@ function representedStreamBoundaryIds(html: string): Set<string> {
+@@ -10788,6 +11374,7 @@ function representedStreamBoundaryIds(html: string): Set<string> {
  	}
  }
  
@@ -9257,7 +9259,7 @@ index 85aa4ac..66a48a4 100644
  // Once a boundary finalizes, only descendant entries whose template sentinel is
  // present in that FINAL segment remain reachable. A child registered while
  // rendering a fallback, or in content an errored outer boundary later dropped,
-@@ -10843,6 +11428,7 @@ function pruneUnrepresentedStreamDescendants(
+@@ -10843,6 +11430,7 @@ function pruneUnrepresentedStreamDescendants(
  	}
  }
  
@@ -9265,7 +9267,7 @@ index 85aa4ac..66a48a4 100644
  // Root suspension can abandon the entire pre-shell pass after it has already
  // registered boundaries. The first complete pass defines the shell that will
  // actually ship, so registrations not reached by that pass have no template
-@@ -10856,36 +11442,46 @@ function pruneStreamBoundariesAbsentFromShell(
+@@ -10856,36 +11444,48 @@ function pruneStreamBoundariesAbsentFromShell(
  	}
  }
  
@@ -9277,9 +9279,9 @@ index 85aa4ac..66a48a4 100644
 -// capture, and record mutations so a render-phase replay can undo the capture.
 -function captureCatchGuards(stream: StreamState, html: string): void {
 -	const guards = new Map<string, string>();
-+// behind another boundary. A tracked pending sentinel is committed the same way.
-+// Scan each retained body once, only while sentinels await capture, and record
-+// mutations so a render-phase replay can undo the capture.
++// behind another boundary. Pending error ownership commits only after the shell
++// is accepted: before that, an enclosing catch can still replace the whole root.
++// Record mutations so a render-phase replay can undo the capture.
 +function captureStreamSentinels(stream: StreamState, html: string): void {
 +	const sentinels = new Map<string, string>();
  	for (const [key, boundary] of stream.boundaries) {
@@ -9304,13 +9306,16 @@ index 85aa4ac..66a48a4 100644
 -		const key = guards.get(id);
 +		const key = sentinels.get(id);
  		if (key !== undefined) {
- 			recordStreamBoundaryMutation(stream, key);
+-			recordStreamBoundaryMutation(stream, key);
 -			stream.boundaries.get(key)!.catchGuardCaptured = true;
 -			guards.delete(id);
 +			const boundary = stream.boundaries.get(key)!;
-+			if (boundary.state === 'guard') boundary.catchGuardCaptured = true;
-+			else boundary.pendingCaptured = true;
-+			sentinels.delete(id);
++			if (boundary.state === 'guard' || stream.shellCommitted) {
++				recordStreamBoundaryMutation(stream, key);
++				if (boundary.state === 'guard') boundary.catchGuardCaptured = true;
++				else boundary.pendingCaptured = true;
++				sentinels.delete(id);
++			}
  		}
  		offset = end + 1;
  	}
@@ -9322,7 +9327,7 @@ index 85aa4ac..66a48a4 100644
  // A boundary is one range whose opening comment, `open`, carries its state
  // (hydration-protocol.ts). A presentation-binding view labels the range with
  // the arm it rendered (0 content, 1 pending) instead, and its arm keeps a range
-@@ -10906,15 +11502,18 @@ function ssrTryArm(
+@@ -10906,15 +11506,18 @@ function ssrTryArm(
  		: content;
  }
  
@@ -9341,7 +9346,7 @@ index 85aa4ac..66a48a4 100644
  /**
   * Compiled `@try` / JSX `<Suspense>` boundary. `siteKey` is the compiler's
   * source-position hash; combined with the frame path + per-frame occurrence it
-@@ -11240,7 +11839,7 @@ export function ssrTry(
+@@ -11240,7 +11843,7 @@ export function ssrTry(
  					};
  					recordStreamBoundaryMutation(stream, key);
  					stream.boundaries.set(key, entry);
@@ -9350,7 +9355,7 @@ index 85aa4ac..66a48a4 100644
  					if (ownerKeys.length !== 0) recordStreamBoundaryOwners(stream, key, ownerKeys);
  				}
  				if (!entry.catchGuardCaptured) {
-@@ -11278,7 +11877,7 @@ export function ssrTry(
+@@ -11278,7 +11881,7 @@ export function ssrTry(
  					const seeds = isolateSerial(serialStart);
  					if (!entry.serverOwnedStatic) entry.seeds = seeds;
  					pruneUnrepresentedStreamDescendants(stream!, key, entry.html);
@@ -9359,7 +9364,7 @@ index 85aa4ac..66a48a4 100644
  				} else {
  					// Later passes re-render from cache; the segment already has these.
  					isolateSerial(serialStart);
-@@ -11342,6 +11941,10 @@ export function ssrTry(
+@@ -11342,6 +11945,10 @@ export function ssrTry(
  							ancestors: ancestorKeys,
  							owners: ownerKeys,
  						};
@@ -9370,7 +9375,7 @@ index 85aa4ac..66a48a4 100644
  						recordStreamBoundaryMutation(stream, key);
  						stream.boundaries.set(key, entry);
  						if (ownerKeys.length !== 0) recordStreamBoundaryOwners(stream, key, ownerKeys);
-@@ -11407,7 +12010,7 @@ export function ssrTry(
+@@ -11407,7 +12014,7 @@ export function ssrTry(
  						const abandoned = entry.catchGuardIdCount === undefined ? undefined : [];
  						pruneUnrepresentedStreamDescendants(stream!, key, entry.html, abandoned);
  						if (abandoned?.length) entry.abandoned = abandoned;
@@ -9379,7 +9384,7 @@ index 85aa4ac..66a48a4 100644
  					}
  					if (entry.catchGuardIdCount !== undefined) {
  						restoreOuterIds();
-@@ -11417,6 +12020,9 @@ export function ssrTry(
+@@ -11417,6 +12024,9 @@ export function ssrTry(
  					ID_COUNTER = entry.pendingIdOffset;
  					return pendingForm();
  				}
@@ -9389,7 +9394,7 @@ index 85aa4ac..66a48a4 100644
  				const idCount = Math.max(0, ID_COUNTER - outerIdCounter);
  				return bindingMarker === undefined
  					? ssrTryArm(caught, BOUNDARY_CLIENT + BOUNDARY_CLIENT_CAUGHT + idCount, 2, bindingMarker)
-@@ -11428,10 +12034,13 @@ export function ssrTry(
+@@ -11428,10 +12038,13 @@ export function ssrTry(
  						);
  			}
  			// Only a Suspense boundary, or one that owns its suspension and already
@@ -9405,7 +9410,7 @@ index 85aa4ac..66a48a4 100644
  				(pendFn === null && entry === undefined)
  			)
  				throw e;
-@@ -11496,6 +12105,7 @@ export function ssrTry(
+@@ -11496,6 +12109,7 @@ export function ssrTry(
  	}
  }
  
@@ -9413,7 +9418,7 @@ index 85aa4ac..66a48a4 100644
  // The inline client swap runtime, emitted ONCE (before the first segment).
  // $OCTRC(id, namespaceCarrier): stash the segment's seed JSON on window.$OCTS, remove the
  // fallback (template's siblings up to the balanced block close), move the
-@@ -11513,10 +12123,12 @@ export function ssrTry(
+@@ -11513,10 +12127,12 @@ export function ssrTry(
  // truthy second argument removes only a server-owned permanent-static sentinel,
  // retaining its already-flushed fallback because no client graph can recover it.
  let STREAM_RUNTIME_JS: string | undefined;
@@ -9426,7 +9431,7 @@ index 85aa4ac..66a48a4 100644
  function streamRuntimeJs(): string {
  	return (STREAM_RUNTIME_JS ??=
  		'(function(){if(window.$OCTRC)return;var d=document;var S=window.$OCTS=window.$OCTS||{},E;' +
-@@ -11605,6 +12217,7 @@ function streamRuntimeJs(): string {
+@@ -11605,6 +12221,7 @@ function streamRuntimeJs(): string {
  		'})();');
  }
  
@@ -9434,7 +9439,7 @@ index 85aa4ac..66a48a4 100644
  /**
   * Optional streaming animation driver. The ordinary swap remains the transport
   * authority: animation only schedules that same swap after the old snapshot.
-@@ -11616,6 +12229,7 @@ function streamRuntimeJs(): string {
+@@ -11616,6 +12233,7 @@ function streamRuntimeJs(): string {
   * entering. All participating callbacks then publish the same swap plan once.
   */
  let STREAM_VIEW_TRANSITION_RUNTIME_JS: string | undefined;
@@ -9442,7 +9447,7 @@ index 85aa4ac..66a48a4 100644
  function streamViewTransitionRuntimeJs(): string {
  	return (STREAM_VIEW_TRANSITION_RUNTIME_JS ??= `(function(){
  var w=window,d=document;
-@@ -11825,6 +12439,7 @@ function drain(){
+@@ -11825,6 +12443,7 @@ function drain(){
  })();`);
  }
  
@@ -9450,7 +9455,7 @@ index 85aa4ac..66a48a4 100644
  interface StreamSink {
  	/**
  	 * Returns a promise only when the transport applies pressure. `terminal`
-@@ -11845,6 +12460,7 @@ interface StreamSink {
+@@ -11845,6 +12464,7 @@ interface StreamSink {
  	fatal(err: unknown): void;
  }
  
@@ -9458,7 +9463,7 @@ index 85aa4ac..66a48a4 100644
  /**
   * A live source of externally-produced HTML (typically framework data
   * `<script>` tags materializing as loaders settle) merged natively into a
-@@ -11907,6 +12523,7 @@ export interface StreamInjectionSource {
+@@ -11907,6 +12527,7 @@ export interface StreamInjectionSource {
  	renderComplete?(): void;
  }
  
@@ -9466,7 +9471,7 @@ index 85aa4ac..66a48a4 100644
  export interface StreamOptions extends RenderOptions {
  	onShellReady?: () => void;
  	/**
-@@ -11935,6 +12552,7 @@ export interface StreamOptions extends RenderOptions {
+@@ -11935,6 +12556,7 @@ export interface StreamOptions extends RenderOptions {
  	injection?: StreamInjectionSource;
  }
  
@@ -9474,7 +9479,7 @@ index 85aa4ac..66a48a4 100644
  function needsAutomaticSignalInjection(options: RenderOptions | undefined): boolean {
  	return (
  		options?.streamedSignals !== undefined &&
-@@ -11942,6 +12560,7 @@ function needsAutomaticSignalInjection(options: RenderOptions | undefined): bool
+@@ -11942,6 +12564,7 @@ function needsAutomaticSignalInjection(options: RenderOptions | undefined): bool
  	);
  }
  
@@ -9482,7 +9487,7 @@ index 85aa4ac..66a48a4 100644
  async function prepareAutomaticSignalInjection(options: StreamOptions): Promise<StreamOptions> {
  	const config = options.streamedSignals!;
  	const { createAutomaticStreamedSignalInjection } = await import('./server/streamed-signals.js');
-@@ -11954,6 +12573,7 @@ async function prepareAutomaticSignalInjection(options: StreamOptions): Promise<
+@@ -11954,6 +12577,7 @@ async function prepareAutomaticSignalInjection(options: StreamOptions): Promise<
  	};
  }
  
@@ -9490,7 +9495,7 @@ index 85aa4ac..66a48a4 100644
  function withStream<T>(stream: StreamState | null, fn: () => T): T {
  	const prev = STREAM;
  	STREAM = stream;
-@@ -11964,18 +12584,21 @@ function withStream<T>(stream: StreamState | null, fn: () => T): T {
+@@ -11964,18 +12588,21 @@ function withStream<T>(stream: StreamState | null, fn: () => T): T {
  	}
  }
  
@@ -9512,7 +9517,7 @@ index 85aa4ac..66a48a4 100644
  // A document render's markup is the root `<html>` element wrapped only by
  // hydration block markers — a prefix scan bounded by wrapper depth, so the
  // common fragment path pays a few byte compares, not a body scan. Streaming
-@@ -11992,6 +12615,7 @@ function isDocumentRoot(body: string): boolean {
+@@ -11992,6 +12619,7 @@ function isDocumentRoot(body: string): boolean {
  	return next === 62 /* > */ || next === 32 || next === 9 || next === 10 || next === 13;
  }
  
@@ -9520,7 +9525,7 @@ index 85aa4ac..66a48a4 100644
  // A fragment can author its own leading <head> even when a surrounding server
  // template supplies <html>. That head receives hoisted metadata, but does not
  // make this an <html> root or cause the streaming doctype to be emitted.
-@@ -12003,6 +12627,7 @@ function isLeadingHeadRoot(body: string): boolean {
+@@ -12003,6 +12631,7 @@ function isLeadingHeadRoot(body: string): boolean {
  	return next === 62 /* > */ || next === 32 || next === 9 || next === 10 || next === 13;
  }
  
@@ -9528,7 +9533,7 @@ index 85aa4ac..66a48a4 100644
  // Locate the insertion point just inside a document's opening <head> tag —
  // where renderer-owned leading styles and hoisted head elements belong in
  // document mode. Quote-aware so an attribute value containing '>' cannot
-@@ -12021,6 +12646,7 @@ function documentHeadInsertionPoint(body: string): number {
+@@ -12021,6 +12650,7 @@ function documentHeadInsertionPoint(body: string): number {
  	}
  }
  
@@ -9536,7 +9541,7 @@ index 85aa4ac..66a48a4 100644
  function documentTagEnd(body: string, from: number): number {
  	let quote = 0;
  	for (let i = from; i < body.length; i++) {
-@@ -12033,6 +12659,7 @@ function documentTagEnd(body: string, from: number): number {
+@@ -12033,6 +12663,7 @@ function documentTagEnd(body: string, from: number): number {
  	return -1;
  }
  
@@ -9544,7 +9549,7 @@ index 85aa4ac..66a48a4 100644
  // Only a leading fragment <head> takes this path. Quoted attributes, comments,
  // and raw script/style text can contain "</head>" without closing the element.
  // Walk markup tags (quote-aware via documentTagEnd) rather than searching raw
-@@ -12069,6 +12696,7 @@ function findFragmentHeadClose(body: string, from: number): number {
+@@ -12069,6 +12700,7 @@ function findFragmentHeadClose(body: string, from: number): number {
  	return -1;
  }
  
@@ -9552,7 +9557,7 @@ index 85aa4ac..66a48a4 100644
  function segmentChunk(b: StreamBoundary, nonceAttr: string): string {
  	let seedScript = '';
  	if (b.seeds.length > 0) {
-@@ -12129,6 +12757,7 @@ function segmentChunk(b: StreamBoundary, nonceAttr: string): string {
+@@ -12129,6 +12761,7 @@ function segmentChunk(b: StreamBoundary, nonceAttr: string): string {
  	);
  }
  
@@ -9560,7 +9565,7 @@ index 85aa4ac..66a48a4 100644
  /**
   * Float sheet resources discovered after the shell flushed: the REAL tags ride
   * the wave inside a hidden carrier — a consumer without JS still gets working
-@@ -12153,6 +12782,7 @@ function floatResourceChunk(tags: string, carrierId: string, nonceAttr: string):
+@@ -12153,6 +12786,7 @@ function floatResourceChunk(tags: string, carrierId: string, nonceAttr: string):
  	);
  }
  
@@ -9568,7 +9573,7 @@ index 85aa4ac..66a48a4 100644
  function boundaryErrorChunk(b: StreamBoundary, nonceAttr: string): string {
  	const serverOwnedStatic = b.serverOwnedStatic ? ',1' : '';
  	return (
-@@ -12166,6 +12796,7 @@ function boundaryErrorChunk(b: StreamBoundary, nonceAttr: string): string {
+@@ -12166,6 +12800,7 @@ function boundaryErrorChunk(b: StreamBoundary, nonceAttr: string): string {
  	);
  }
  
@@ -9576,7 +9581,7 @@ index 85aa4ac..66a48a4 100644
  function createInjectionCanceler(
  	injection: StreamInjectionSource | undefined,
  ): (error: unknown) => void {
-@@ -12182,6 +12813,7 @@ function createInjectionCanceler(
+@@ -12182,6 +12817,7 @@ function createInjectionCanceler(
  	};
  }
  
@@ -9584,25 +9589,35 @@ index 85aa4ac..66a48a4 100644
  /** The shared streaming engine both public APIs drive. */
  async function runStream(
  	component: ServerComponent,
-@@ -12198,7 +12830,7 @@ async function runStream(
+@@ -12198,7 +12834,8 @@ async function runStream(
  	const stream: StreamState = {
  		boundaries: new Map(),
  		boundaryChildren: new Map(),
 -		hasUncapturedCatchGuards: false,
 +		hasUncapturedSentinels: false,
++		shellCommitted: false,
  		nextId: 0,
  		token: createStreamToken(),
  		activePassBoundaryKeys: null,
-@@ -12607,7 +13239,7 @@ async function runStream(
+@@ -12607,7 +13244,16 @@ async function runStream(
  		}
  		const shellWrite = write(pass.vtCandidates ? vtSsrStrip(shell, pass.rawHtml) : shell);
  		if (shellWrite !== undefined) await shellWrite;
 -		if (stream.hasUncapturedCatchGuards) captureCatchGuards(stream, pass.body);
-+		if (stream.hasUncapturedSentinels) captureStreamSentinels(stream, pass.body);
++		stream.shellCommitted = true;
++		if (stream.hasUncapturedSentinels) {
++			captureStreamSentinels(stream, pass.body);
++			// Pre-shell retries can finish a parent while the root is still blocked.
++			// Its retained segment commits nested fallbacks with the accepted shell.
++			for (const boundary of stream.boundaries.values()) {
++				if (!stream.hasUncapturedSentinels) break;
++				if (boundary.state === 'done') captureStreamSentinels(stream, boundary.html);
++			}
++		}
  	} catch (err) {
  		try {
  			completeInjection();
-@@ -12874,6 +13506,7 @@ async function runStream(
+@@ -12874,6 +13520,7 @@ async function runStream(
  	sink.allReady();
  }
  
@@ -9610,7 +9625,7 @@ index 85aa4ac..66a48a4 100644
  /**
   * React `react-dom/server` `renderToPipeableStream` (Node streams). Returns
   * `{ pipe, abort }`; chunks buffer until `pipe(destination)` is called.
-@@ -13189,6 +13822,7 @@ export function renderToPipeableStream(
+@@ -13189,6 +13836,7 @@ export function renderToPipeableStream(
  	};
  }
  
@@ -9618,7 +9633,7 @@ index 85aa4ac..66a48a4 100644
  /**
   * React `react-dom/server` `renderToReadableStream` (web streams). Resolves
   * with the ReadableStream once the shell is ready (rejects on a shell error);
-@@ -13434,6 +14068,7 @@ export function renderToReadableStream(
+@@ -13434,6 +14082,7 @@ export function renderToReadableStream(
  	});
  }
  
@@ -9626,7 +9641,7 @@ index 85aa4ac..66a48a4 100644
  // ---------------------------------------------------------------------------
  // Resource hints — server mirrors of React DOM's preload / preinit /
  // preconnect / prefetchDNS. Each emits one deduped tag into the render's HEAD
-@@ -13450,6 +14085,7 @@ function emitHeadHint(key: string, html: string): void {
+@@ -13450,6 +14099,7 @@ function emitHeadHint(key: string, html: string): void {
  	(HEAD.hintHtml ??= new Map()).set(key, html);
  }
  
@@ -9634,7 +9649,7 @@ index 85aa4ac..66a48a4 100644
  /** The option keys React recognizes on resource hints; everything else drops. */
  const KNOWN_HINT_OPTIONS = new Set([
  	'as',
-@@ -13464,6 +14100,7 @@ const KNOWN_HINT_OPTIONS = new Set([
+@@ -13464,6 +14114,7 @@ const KNOWN_HINT_OPTIONS = new Set([
  	'media',
  ]);
  
@@ -9642,7 +9657,7 @@ index 85aa4ac..66a48a4 100644
  function hintAttrs(
  	opts: Record<string, unknown> | undefined,
  	skipAs: boolean,
-@@ -13487,10 +14124,12 @@ function hintAttrs(
+@@ -13487,10 +14138,12 @@ function hintAttrs(
  	return out;
  }
  
@@ -9655,7 +9670,7 @@ index 85aa4ac..66a48a4 100644
  /** React DOM `preload(href, {as, …})`. */
  export function preload(href: string, options: { as: string } & Record<string, unknown>): void {
  	const hints = hostedResourceHints();
-@@ -13568,6 +14207,7 @@ export function preload(href: string, options: { as: string } & Record<string, u
+@@ -13568,6 +14221,7 @@ export function preload(href: string, options: { as: string } & Record<string, u
  	);
  }
  
@@ -9663,7 +9678,7 @@ index 85aa4ac..66a48a4 100644
  /** React DOM `preinit(href, {as: 'style'|'script', …})`. */
  /**
   * React DOM `preinit(href, {as, …})` — routes through the Float resource emits
-@@ -13615,6 +14255,7 @@ export function preinit(href: string, options: { as: string } & Record<string, u
+@@ -13615,6 +14269,7 @@ export function preinit(href: string, options: { as: string } & Record<string, u
  	}
  }
  
@@ -9671,7 +9686,7 @@ index 85aa4ac..66a48a4 100644
  /** React DOM `preconnect(href, {crossOrigin?})`. */
  export function preconnect(href: string, options?: { crossOrigin?: string }): void {
  	const hints = hostedResourceHints();
-@@ -13645,6 +14286,7 @@ export function preconnect(href: string, options?: { crossOrigin?: string }): vo
+@@ -13645,6 +14300,7 @@ export function preconnect(href: string, options?: { crossOrigin?: string }): vo
  	);
  }
  
@@ -9679,7 +9694,7 @@ index 85aa4ac..66a48a4 100644
  /** React DOM `prefetchDNS(href)`. */
  export function prefetchDNS(href: string): void {
  	const hints = hostedResourceHints();
-@@ -13671,6 +14313,7 @@ export function prefetchDNS(href: string): void {
+@@ -13671,6 +14327,7 @@ export function prefetchDNS(href: string): void {
  	);
  }
  
@@ -9687,7 +9702,7 @@ index 85aa4ac..66a48a4 100644
  /** Attribute serialization for Float resources; href/src/rel/async/precedence are owned by the emit. */
  function resourceAttrs(attrs: Record<string, unknown>, tag: 'link' | 'script'): string {
  	let out = '';
-@@ -13685,6 +14328,7 @@ function resourceAttrs(attrs: Record<string, unknown>, tag: 'link' | 'script'):
+@@ -13685,6 +14342,7 @@ function resourceAttrs(attrs: Record<string, unknown>, tag: 'link' | 'script'):
  	return out;
  }
  
@@ -9695,7 +9710,7 @@ index 85aa4ac..66a48a4 100644
  /**
   * Compiler target for `<link rel="stylesheet" href precedence>` (React Float).
   * Dedupes by href across the pass; groups by precedence in first-encounter
-@@ -13736,6 +14380,7 @@ export function ssrStylesheetResource(
+@@ -13736,6 +14394,7 @@ export function ssrStylesheetResource(
  	return '';
  }
  
@@ -9703,7 +9718,7 @@ index 85aa4ac..66a48a4 100644
  /**
   * Compiler target for `<style href precedence>` (React Float style resource).
   * Shares the stylesheet dedupe namespace and precedence grouping with link
-@@ -13802,6 +14447,7 @@ export function ssrStyleResource(
+@@ -13802,6 +14461,7 @@ export function ssrStyleResource(
  	return '';
  }
  
@@ -9711,7 +9726,7 @@ index 85aa4ac..66a48a4 100644
  /** Compiler target for `<script async src>` resources (React Float). */
  export function ssrScriptResource(attrs: Record<string, unknown> | null): string {
  	if (HEAD === null || attrs == null) return '';
-@@ -13821,6 +14467,7 @@ export function ssrScriptResource(attrs: Record<string, unknown> | null): string
+@@ -13821,6 +14481,7 @@ export function ssrScriptResource(attrs: Record<string, unknown> | null): string
  	return '';
  }
  
@@ -9719,7 +9734,7 @@ index 85aa4ac..66a48a4 100644
  /** React DOM `preloadModule(href, options?)` — `<link rel="modulepreload">`, keyed by href. */
  export function preloadModule(href: string, options?: Record<string, unknown>): void {
  	const hints = hostedResourceHints();
-@@ -13853,6 +14500,7 @@ export function preloadModule(href: string, options?: Record<string, unknown>):
+@@ -13853,6 +14514,7 @@ export function preloadModule(href: string, options?: Record<string, unknown>):
  	);
  }
  
@@ -9727,7 +9742,7 @@ index 85aa4ac..66a48a4 100644
  /**
   * React DOM `preinitModule(href, options?)` — `<script type="module" async src>`.
   * Only the `script` destination exists for module preinit; others fail closed.
-@@ -13885,3 +14533,646 @@ export function preinitModule(
+@@ -13885,3 +14547,646 @@ export function preinitModule(
  			'"></script>',
  	);
  }
