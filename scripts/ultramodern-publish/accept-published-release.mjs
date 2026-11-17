@@ -63,7 +63,10 @@ export function acceptanceArtifactNames({
 
 function originalAttempts(expected) {
   const runId = positive(expected.runId, 'Original run');
-  const producerAttempt = positive(expected.producerAttempt, 'Producer attempt');
+  const producerAttempt = positive(
+    expected.producerAttempt,
+    'Producer attempt',
+  );
   const publicationAttempt = positive(
     expected.publicationAttempt,
     'Publication attempt',
@@ -461,7 +464,10 @@ export async function main(command, environment = process.env) {
     'Tractor attempt',
   );
   const baseline = fs
-    .readFileSync('scripts/ultramodern-publish/tractor-baseline-revision', 'utf8')
+    .readFileSync(
+      'scripts/ultramodern-publish/tractor-baseline-revision',
+      'utf8',
+    )
     .trim();
   const tractorRunAttempt = assertAcceptedTractorExecution({
     artifactName,

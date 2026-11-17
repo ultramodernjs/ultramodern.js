@@ -102,8 +102,7 @@ test('native cancellation suppresses implicit success while always requires an e
 
 test('implicit success suppresses a job with a skipped transitive ancestor', () => {
   const withoutAlways = structuredClone(publishWorkflow);
-  withoutAlways.jobs[handoff].if =
-    publishConditionWithoutAlways;
+  withoutAlways.jobs[handoff].if = publishConditionWithoutAlways;
 
   assert.equal(
     evaluateJobSchedule({
@@ -189,8 +188,7 @@ test('dry runs and unsuccessful direct needs fail closed', () => {
 
 test('unknown references, missing results, and dependency cycles fail closed', () => {
   const unknownReference = structuredClone(publishWorkflow);
-  unknownReference.jobs[handoff].if =
-    'always() && secrets.TOKEN';
+  unknownReference.jobs[handoff].if = 'always() && secrets.TOKEN';
   assert.equal(
     evaluateJobSchedule({
       workflow: unknownReference,

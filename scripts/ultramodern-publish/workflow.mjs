@@ -6,8 +6,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { isDirectRun } from './lib/direct-run.mjs';
 import { assertRegistrySourceCommitUnpublished } from './lib/prepare-bleedingdev-packages/registry.mjs';
-import { readPreviousReleaseAcceptance } from './lib/release-acceptance-gate.mjs';
 import { verifyReleaseArtifacts } from './lib/prepare-bleedingdev-packages/release-artifacts.mjs';
+import { readPreviousReleaseAcceptance } from './lib/release-acceptance-gate.mjs';
 
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const sha256 = file =>

@@ -17,7 +17,7 @@ export async function verifySupportWorkspace({
   readGithub,
   signal,
 }) {
-  const receipts = [];
+  const selectedImporters = [];
   let descriptor;
   for (const importer of supportWorkspaceImporters(root)) {
     const manifest = JSON.parse(
@@ -42,18 +42,29 @@ export async function verifySupportWorkspace({
         );
       descriptor = manifest.ultramodern.supportArtifacts;
     }
-    if (!selected.length) continue;
-    receipts.push(
-      await verifySupportConsumer({
+    if (selected.length) {
+      selectedImporters.push({
+        importer,
+        descriptor: manifest.ultramodern?.supportArtifacts,
+      });
+    }
+  }
+  // Each importer is verified on its own installed graph and scratch
+  // directory and only reads the workspace, so all of them run at once: the
+  // wait is the artifact and GitHub reads, not the checks. The receipts keep
+  // the importers' order.
+  const receipts = await Promise.all(
+    selectedImporters.map(({ importer, descriptor: importerDescriptor }) =>
+      verifySupportConsumer({
         root: importer,
         workspaceRoot: root,
-        descriptor: manifest.ultramodern?.supportArtifacts,
+        descriptor: importerDescriptor,
         fetchArtifact,
         readGithub,
         signal,
       }),
-    );
-  }
+    ),
+  );
   assert(
     receipts.length,
     'Release acceptance requires actual selected support importers; registry fallback is not accepted',

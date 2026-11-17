@@ -34,11 +34,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from '../../packages/toolkit/utils/compiled/js-yaml/index.js';
-import {
-  conditionCalls,
-  evaluateJobSchedule,
-  parseJobCondition,
-} from './github-job-condition.mjs';
+import { evaluateJobSchedule } from './github-job-condition.mjs';
 import {
   findUnloadableImports,
   listTrackedFiles,
@@ -766,7 +762,10 @@ function collectPublishOutcomeErrors(workflow, relativePath) {
       `${relativePath} record-publish-outcome must expose its exact artifact name`,
     );
   }
-  return [...errors, ...collectReleaseAcceptanceHandoffErrors(workflow, relativePath)];
+  return [
+    ...errors,
+    ...collectReleaseAcceptanceHandoffErrors(workflow, relativePath),
+  ];
 }
 
 // The dispatch the dry run can never reach, pinned byte for byte: the
@@ -860,7 +859,11 @@ const releaseAcceptanceJobs = Object.freeze({
   'verify-publication': [],
   'accept-published': ['verify-publication'],
   'tractor-downstream': ['verify-publication'],
-  'record-outcome': ['verify-publication', 'accept-published', 'tractor-downstream'],
+  'record-outcome': [
+    'verify-publication',
+    'accept-published',
+    'tractor-downstream',
+  ],
   'release-record': ['verify-publication', 'record-outcome'],
 });
 
@@ -902,7 +905,9 @@ function collectReleaseAcceptanceErrors(workflow, relativePath) {
     const needs = normalizeNeeds(jobs[jobId]);
     if (
       required.some(need => !needs.includes(need)) ||
-      isObject(jobs[jobId]) && 'if' in jobs[jobId] && jobId !== 'verify-publication'
+      (isObject(jobs[jobId]) &&
+        'if' in jobs[jobId] &&
+        jobId !== 'verify-publication')
     ) {
       errors.push(
         `${relativePath} job ${jobId} must need ${required.join(', ') || 'nothing'} and run only on their implicit success`,
@@ -932,7 +937,11 @@ function collectReleaseAcceptanceErrors(workflow, relativePath) {
   if (
     typeof authorize !== 'string' ||
     !runsFor(owner) ||
-    !runsFor({ ...owner, actor: 'github-actions[bot]', triggering_actor: 'github-actions[bot]' }) ||
+    !runsFor({
+      ...owner,
+      actor: 'github-actions[bot]',
+      triggering_actor: 'github-actions[bot]',
+    }) ||
     !runsFor({ ...owner, actor: 'github-actions[bot]' }) ||
     runsFor({ ...owner, actor: 'someone-else' }) ||
     runsFor({ ...owner, triggering_actor: 'someone-else' }) ||
@@ -1182,7 +1191,11 @@ const bleedingdevRequiredNeeds = Object.freeze({
   ],
   'qualify-sidecars': ['publish-security', 'prepare-sidecars'],
   'reconcile-sidecars': ['prepare-release', 'publish-security'],
-  'validate-release': ['qualify-source', 'reconcile-sidecars', 'rehearse-tractor'],
+  'validate-release': [
+    'qualify-source',
+    'reconcile-sidecars',
+    'rehearse-tractor',
+  ],
   'start-release-acceptance': ['accept-release', 'publish'],
 });
 

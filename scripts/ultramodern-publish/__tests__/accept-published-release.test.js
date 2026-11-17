@@ -247,7 +247,8 @@ test('the acceptance run is dispatched by the owner or by start-release-acceptan
     { run_attempt: 2 },
   ])
     assert.throws(
-      () => api.assertAcceptanceExecutor({ ...executor, ...patch }, environment),
+      () =>
+        api.assertAcceptanceExecutor({ ...executor, ...patch }, environment),
       undefined,
       JSON.stringify(patch),
     );
@@ -278,7 +279,7 @@ test('the original published identity cannot be relabeled as the acceptance invo
 });
 
 test('registry verification keeps the original signed invocation and refuses missing packages', async () => {
-  const { api, release, expected } = await fixture();
+  const { api, release } = await fixture();
   const environment = {
     GITHUB_REPOSITORY: repository,
     GITHUB_REPOSITORY_ID: String(repositoryId),

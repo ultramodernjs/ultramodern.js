@@ -98,7 +98,10 @@ test('the published cohort is awaited once, after the frozen publication CLI, be
   // No other job waits on npm: the publish job ends at the last upload and
   // the Tractor callee reads the cohort verify-publication handed off.
   const tractor = read('ultramodern-tractor-downstream');
-  assert.equal(tractor.on.workflow_call.inputs.wait_for_registry_cohort, undefined);
+  assert.equal(
+    tractor.on.workflow_call.inputs.wait_for_registry_cohort,
+    undefined,
+  );
   for (const workflow of [tractor, read('publish-bleedingdev'), acceptance])
     for (const job of Object.values(workflow.jobs))
       for (const step of job.steps ?? [])
@@ -923,7 +926,17 @@ test('each active publication gate rejects unsuccessful or absent required resul
       'record-publish-outcome',
       [...outcomeNeeds, 'validate-release'],
     ],
-    ['cohort', true, 'validate-release', ['qualify-source', 'reconcile-sidecars', 'accept-release', 'rehearse-tractor']],
+    [
+      'cohort',
+      true,
+      'validate-release',
+      [
+        'qualify-source',
+        'reconcile-sidecars',
+        'accept-release',
+        'rehearse-tractor',
+      ],
+    ],
   ];
   for (const [mode, dryRun, jobId, required] of requirements) {
     const schedules = publicationSchedules(workflow, mode, dryRun);
@@ -2519,7 +2532,8 @@ test('release jobs and steps reject continue-on-error', () => {
       error.includes('must not set continue-on-error'),
     );
   const jobHeader = '    name: Start the published release acceptance\n';
-  const stepHeader = '      - name: Dispatch the published release acceptance\n';
+  const stepHeader =
+    '      - name: Dispatch the published release acceptance\n';
   assert.ok(content.includes(jobHeader));
   assert.ok(content.includes(stepHeader));
 
@@ -2701,7 +2715,10 @@ test('trigger path filters must run an edit of the workflow itself', () => {
 
 test('only start-release-acceptance holds actions: write, and it only dispatches the published acceptance', () => {
   const read = relativePath =>
-    fs.readFileSync(new URL(`../../../${relativePath}`, import.meta.url), 'utf8');
+    fs.readFileSync(
+      new URL(`../../../${relativePath}`, import.meta.url),
+      'utf8',
+    );
   const acceptancePath = '.github/workflows/accept-bleedingdev-release.yml';
   for (const [label, mutate, pattern] of [
     [

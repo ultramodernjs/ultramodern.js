@@ -20,7 +20,12 @@ const handedOff = [
   job(publicationJobName, 'success', 2),
   job(handoffJobName, 'success', 2),
 ];
-const acceptance = (status, conclusion, id = 900, created_at = '2026-11-17T12:00:00Z') => ({
+const acceptance = (
+  status,
+  conclusion,
+  id = 900,
+  created_at = '2026-11-17T12:00:00Z',
+) => ({
   id,
   display_title: acceptanceRunName(live.id),
   status,
@@ -55,10 +60,15 @@ test('a live cohort waits while the previous cohort is still being accepted', ()
 test('a cohort that never started or lost its acceptance blocks with the exact re-dispatch', () => {
   const never = assess({
     jobs: {
-      300: [job(publicationJobName, 'success', 2), job(handoffJobName, 'failure', 2)],
+      300: [
+        job(publicationJobName, 'success', 2),
+        job(handoffJobName, 'failure', 2),
+      ],
     },
     artifacts: [
-      { name: 'bleedingdev-release-identity-run-300-attempt-1-publication-attempt-2' },
+      {
+        name: 'bleedingdev-release-identity-run-300-attempt-1-publication-attempt-2',
+      },
     ],
   });
   assert.equal(never.status, 'blocked');
@@ -104,7 +114,10 @@ test('the newest acceptance of the newest live cohort decides', () => {
   assert.equal(
     assess({
       acceptanceRuns: [
-        { ...acceptance('completed', 'success'), display_title: acceptanceRunName(299) },
+        {
+          ...acceptance('completed', 'success'),
+          display_title: acceptanceRunName(299),
+        },
       ],
     }).status,
     'blocked',
@@ -118,14 +131,19 @@ test('dry runs, failed publications and in-run acceptance do not hold a cohort',
       publishRuns: [{ id: 301, status: 'completed' }, live],
       jobs: {
         301: [job(publicationJobName, 'skipped')],
-        300: [job(publicationJobName, 'success'), job('Accept the exact published registry cohort', 'success')],
+        300: [
+          job(publicationJobName, 'success'),
+          job('Accept the exact published registry cohort', 'success'),
+        ],
       },
     }).status,
     'clear',
   );
   assert.equal(
-    assess({ publishRuns: [{ id: 302, status: 'completed' }], jobs: { 302: [job(publicationJobName, 'failure')] } })
-      .status,
+    assess({
+      publishRuns: [{ id: 302, status: 'completed' }],
+      jobs: { 302: [job(publicationJobName, 'failure')] },
+    }).status,
     'clear',
   );
 });
