@@ -10,9 +10,11 @@ test('candidate bundle inputs are independent of the current published consumer 
   const { sidecarNameProvenance, sidecarProfileRecipes } = await import(
     '../sidecar-profiles.mjs'
   );
-  const { assertRecipeConsumers, assertRecipeGraph } = await import(
-    '../../ultramodern-supply/verify-sidecars.mjs'
-  );
+  const {
+    assertRecipeConsumers,
+    assertRecipeGraph,
+    assertRepositoryRecipeConsumers,
+  } = await import('../../ultramodern-supply/verify-sidecars.mjs');
   const root = path.resolve(__dirname, '../../..');
   const read = file =>
     JSON.parse(
@@ -38,11 +40,9 @@ test('candidate bundle inputs are independent of the current published consumer 
       ...manifest,
       name: manifest.name.replace('@modern-js/', '@bleedingdev/modern-js-'),
     }));
-  assertRecipeGraph(active);
-  assertRecipeConsumers(active, {
-    generatorPins: [],
-    publishedManifests: manifests,
-  });
+  // Some active recipes are reached only through generated workspace policy.
+  // Check the actual release consumer roots, not just dependency fields.
+  assertRepositoryRecipeConsumers(manifests);
   const candidates = [
     'mf-cohort',
     'tanstack-redact',

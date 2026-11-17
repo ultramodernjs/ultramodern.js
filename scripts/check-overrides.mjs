@@ -406,24 +406,41 @@ export function findUnscopedOverrides(overrides) {
  */
 export function findForcedMajors(lockfileText, readManifest) {
   const lockfile = parse(lockfileText);
-  const targets = new Set(
-    Object.keys(lockfile.overrides ?? {}).map(
-      key => parseOverrideKey(key).target.name,
+  const overrides = Object.entries(lockfile.overrides ?? {}).map(
+    ([key, value]) => ({
+      target: parseOverrideKey(key).target,
+      value: String(value),
+    }),
+  );
+  const targets = new Set(overrides.map(({ target }) => target.name));
+  const rangedAliases = Map.groupBy(
+    overrides.filter(
+      ({ target, value }) =>
+        target.range &&
+        semver.validRange(target.range) &&
+        value.startsWith('npm:'),
     ),
+    ({ target }) => target.name,
   );
   const violations = [];
   const judge = (dependent, name, declared, edge) => {
     const resolved = String(edge).replace(/\(.*$/, '');
+    // A ranged npm alias is also expected to stay on the dependency's API line.
+    const alias = rangedAliases
+      .get(name)
+      ?.some(({ value }) => honours(resolved, value));
+    const version = alias ? parseSpec(resolved).range : resolved;
     if (
-      !semver.valid(resolved) ||
+      !semver.valid(version) ||
       !semver.validRange(declared) ||
-      semver.satisfies(resolved, declared) ||
-      semver.satisfies(resolved, majorOf(declared))
+      semver.satisfies(version, declared) ||
+      semver.satisfies(version, majorOf(declared))
     ) {
       return;
     }
+    const identity = alias ? resolved : `${name}@${resolved}`;
     violations.push(
-      `${dependent} declares ${name}@${declared} but resolves ${name}@${resolved}, another major. ` +
+      `${dependent} declares ${name}@${declared} but resolves ${identity}, another major. ` +
         `Scope the ${name} override to the major it fixes, or drop ${dependent}.`,
     );
   };

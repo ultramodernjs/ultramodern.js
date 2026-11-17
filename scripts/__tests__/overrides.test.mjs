@@ -416,7 +416,19 @@ snapshots:
     dependencies:
       picomatch: '@bleedingdev/picomatch-v4@4.0.8'
 `;
+  const installed = name => ({
+    dependencies: { picomatch: name === 'micromatch' ? '^2.3.1' : '^4.0.3' },
+  });
   assert.deepEqual(findOverrideViolations(lockfile, new Map()), []);
+  assert.deepEqual(findForcedMajors(lockfile, installed), []);
+  const wrongLine = lockfile.replace(
+    "picomatch: '@bleedingdev/picomatch@2.3.3'",
+    "picomatch: '@bleedingdev/picomatch-v4@4.0.8'",
+  );
+  assert.deepEqual(findForcedMajors(wrongLine, installed), [
+    'micromatch@4.0.8 declares picomatch@^2.3.1 but resolves @bleedingdev/picomatch-v4@4.0.8, another major. ' +
+      'Scope the picomatch override to the major it fixes, or drop micromatch@4.0.8.',
+  ]);
   for (const [fresh, stale, selector] of [
     ['@bleedingdev/picomatch@2.3.3', '2.3.2', '>=2.0.0 <2.3.3'],
     ['@bleedingdev/picomatch-v4@4.0.8', '4.0.7', '>=4.0.0 <4.0.8'],
