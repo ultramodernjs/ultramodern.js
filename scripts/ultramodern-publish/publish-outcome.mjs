@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Consumer: publish-bleedingdev.yml `record-publish-outcome` create command;
-// exports also support fail-closed publish-outcome artifact discovery.
+// Consumers: publish-bleedingdev.yml `record-publish-outcome` (dry runs) and
+// accept-published-release.mjs `outcome` (live cohorts, recorded by the
+// accept-bleedingdev-release.yml run that accepted the published cohort).
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,7 +19,9 @@ const { assertNonEmptyString: assertBaseNonEmptyString, assertPlainObject } =
   validationKit;
 
 const publishOutcomeSchema = 'bleedingdev.ultramodern.publish-outcome';
-const publishOutcomeSchemaVersion = 6;
+// Version 7: a live outcome is recorded by the separate run that accepted the
+// published cohort and names that execution beside the original publication.
+const publishOutcomeSchemaVersion = 7;
 const publishOutcomeArtifactPrefix = 'bleedingdev-publish-outcome';
 const digestPattern = /^[a-f0-9]{64}$/u;
 const commitPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u;
@@ -316,7 +319,7 @@ function validateProducer({
 }
 
 function createPublishOutcome({
-  acceptanceRecovery,
+  acceptanceExecution,
   cohortDigestPath,
   dryRun,
   manifestDigestPath,
@@ -362,44 +365,54 @@ function createPublishOutcome({
       'Publication run attempt must not follow workflow outcome attempt',
     );
   }
-  const expectedArtifactName = publishOutcomeArtifactName({
-    runId: normalizedRunId,
-    runAttempt: normalizedRunAttempt,
-  });
-  let recovery;
-  if (acceptanceRecovery !== undefined) {
-    assertPlainObject(acceptanceRecovery, 'Acceptance recovery');
+  // A dry run records its own run. A live cohort is accepted, and its outcome
+  // recorded, by a separate execution after npm accepted every tarball; that
+  // execution is named beside the original publication, never instead of it.
+  let acceptance = null;
+  if (dryRun) {
+    if (acceptanceExecution !== undefined) {
+      throw new Error('A dry run has no published acceptance execution');
+    }
+  } else {
+    assertPlainObject(acceptanceExecution, 'Published acceptance execution');
     assertSourceCommit(
-      acceptanceRecovery.sourceCommit,
-      'Recovery tooling commit',
+      acceptanceExecution.sourceCommit,
+      'Published acceptance tooling commit',
     );
-    const recoveryRunId = runIdString(
-      acceptanceRecovery.runId,
-      'Recovery run id',
+    const acceptanceRunId = runIdString(
+      acceptanceExecution.runId,
+      'Published acceptance run id',
     );
-    const recoveryAttempt = positiveInteger(
-      acceptanceRecovery.runAttempt,
-      'Recovery run attempt',
+    const acceptanceAttempt = positiveInteger(
+      acceptanceExecution.runAttempt,
+      'Published acceptance run attempt',
     );
     const tractorRunAttempt = positiveInteger(
-      acceptanceRecovery.tractorRunAttempt,
-      'Recovered Tractor run attempt',
+      acceptanceExecution.tractorRunAttempt,
+      'Published Tractor run attempt',
     );
-    if (tractorRunAttempt > recoveryAttempt) {
-      throw new Error('Recovered Tractor attempt cannot follow its outcome');
+    if (tractorRunAttempt > acceptanceAttempt) {
+      throw new Error('Published Tractor attempt cannot follow its outcome');
     }
-    if (dryRun || recoveryRunId === normalizedRunId) {
+    if (acceptanceRunId === normalizedRunId) {
       throw new Error(
-        'Acceptance recovery must name a separate live acceptance run',
+        'Published acceptance must name a run separate from the publication',
       );
     }
-    recovery = {
-      result: 'tractor-downstream',
-      sourceCommit: acceptanceRecovery.sourceCommit,
+    acceptance = {
+      sourceCommit: acceptanceExecution.sourceCommit,
       tractorRunAttempt,
-      workflowRun: { id: recoveryRunId, attempt: recoveryAttempt },
+      workflowRun: { id: acceptanceRunId, attempt: acceptanceAttempt },
     };
   }
+  const recordingRun = acceptance?.workflowRun ?? {
+    id: normalizedRunId,
+    attempt: normalizedRunAttempt,
+  };
+  const expectedArtifactName = publishOutcomeArtifactName({
+    runId: recordingRun.id,
+    runAttempt: recordingRun.attempt,
+  });
   const normalizedProducerAttempt = validateProducer({
     artifactIdentity: producerArtifactIdentity,
     publicationRunAttempt: normalizedPublicationAttempt ?? normalizedRunAttempt,
@@ -440,12 +453,8 @@ function createPublishOutcome({
   }
   const outcome = {
     schema: publishOutcomeSchema,
-    // Version 7 preserves the original publication and separately identifies
-    // the execution that supplied its missing Tractor acceptance.
-    schemaVersion: recovery ? 7 : publishOutcomeSchemaVersion,
-    artifactName: recovery
-      ? `bleedingdev-recovered-publish-outcome-run-${recovery.workflowRun.id}-attempt-${recovery.workflowRun.attempt}`
-      : expectedArtifactName,
+    schemaVersion: publishOutcomeSchemaVersion,
+    artifactName: expectedArtifactName,
     dryRun,
     source: { commit: sourceCommit, repository },
     release: { tag, version },
@@ -460,7 +469,7 @@ function createPublishOutcome({
       runIdentity: producerRunIdentity,
     },
     evidence,
-    ...(recovery ? { acceptanceRecovery: recovery } : {}),
+    acceptance,
   };
   fs.mkdirSync(path.dirname(path.resolve(outPath)), { recursive: true });
   fs.writeFileSync(outPath, `${JSON.stringify(outcome, null, 2)}\n`);
@@ -513,118 +522,65 @@ function appendGithubOutputs(filePath, outputs) {
   fs.appendFileSync(filePath, `${lines.join('\n')}\n`);
 }
 
-const evidenceOptions = new Set([
-  '--cohort-digest',
-  '--manifest',
-  '--manifest-digest',
-  '--operational-evidence',
-  '--published-receipt',
-  '--receipt',
-  '--tractor-baseline-revision',
-  '--tractor-report',
-  '--tractor-report-sha256',
-]);
-
-function evidencePaths(values, { dryRun } = {}) {
-  const publishedReceipt = values.get('--published-receipt');
-  const tractorBaselineRevision = values.get('--tractor-baseline-revision');
-  const tractorReport = values.get('--tractor-report');
-  const tractorReportSha256 = values.get('--tractor-report-sha256');
-  if (dryRun === false && publishedReceipt === undefined) {
-    throw new Error('Non-dry publish outcome requires --published-receipt');
+// The CLI records only a dry run's outcome. A live cohort's outcome is
+// recorded by accept-published-release.mjs, which names the run that
+// accepted the published cohort.
+async function main(argv = process.argv.slice(2)) {
+  const [command, ...args] = argv;
+  if (command !== 'create') {
+    throw new Error('Command must be create');
   }
-  if (dryRun === true && publishedReceipt !== undefined) {
-    throw new Error('Dry-run publish outcome must not bind published evidence');
-  }
-  const tractorValues = [
-    tractorBaselineRevision,
-    tractorReportSha256,
-    tractorReport,
-  ];
-  if (
-    tractorValues.some(value => value === undefined) &&
-    tractorValues.some(value => value !== undefined)
-  ) {
+  const values = parseOptions(
+    args,
+    new Set([
+      '--cohort-digest',
+      '--dry-run',
+      '--github-output',
+      '--manifest',
+      '--manifest-digest',
+      '--operational-evidence',
+      '--out',
+      '--producer-artifact-identity',
+      '--producer-run-attempt',
+      '--producer-run-identity',
+      '--receipt',
+      '--repository',
+      '--run-attempt',
+      '--run-id',
+      '--source-commit',
+      '--tag',
+      '--version',
+    ]),
+  );
+  if (!booleanValue(required(values, '--dry-run'), '--dry-run')) {
     throw new Error(
-      '--tractor-baseline-revision, --tractor-report, and --tractor-report-sha256 must be provided together',
+      'A live outcome is recorded by accept-published-release.mjs outcome',
     );
   }
-  if (dryRun === false && tractorReport === undefined) {
-    throw new Error(
-      'Non-dry publish outcome requires Tractor acceptance evidence',
-    );
-  }
-  if (dryRun === true && tractorReport !== undefined) {
-    throw new Error('Dry-run publish outcome must not bind Tractor evidence');
-  }
-  return {
+  const outcome = createPublishOutcome({
     cohortDigestPath: path.resolve(required(values, '--cohort-digest')),
+    dryRun: true,
     manifestDigestPath: path.resolve(required(values, '--manifest-digest')),
     manifestPath: path.resolve(required(values, '--manifest')),
     operationalEvidencePath: path.resolve(
       required(values, '--operational-evidence'),
     ),
-    publishedReceiptPath:
-      publishedReceipt === undefined
-        ? undefined
-        : path.resolve(publishedReceipt),
+    outPath: path.resolve(required(values, '--out')),
+    producerArtifactIdentity: required(values, '--producer-artifact-identity'),
+    producerRunAttempt: required(values, '--producer-run-attempt'),
+    producerRunIdentity: required(values, '--producer-run-identity'),
     receiptPath: path.resolve(required(values, '--receipt')),
-    tractorBaselineRevision,
-    tractorReportPath:
-      tractorReport === undefined ? undefined : path.resolve(tractorReport),
-    tractorReportSha256,
-  };
-}
-
-async function main(argv = process.argv.slice(2)) {
-  const [command, ...args] = argv;
-  if (command === 'create') {
-    const values = parseOptions(
-      args,
-      new Set([
-        ...evidenceOptions,
-        '--dry-run',
-        '--github-output',
-        '--out',
-        '--publication-run-attempt',
-        '--producer-artifact-identity',
-        '--producer-run-attempt',
-        '--producer-run-identity',
-        '--repository',
-        '--run-attempt',
-        '--run-id',
-        '--source-commit',
-        '--tag',
-        '--version',
-      ]),
-    );
-    const dryRun = booleanValue(required(values, '--dry-run'), '--dry-run');
-    const outcome = createPublishOutcome({
-      ...evidencePaths(values, { dryRun }),
-      dryRun,
-      outPath: path.resolve(required(values, '--out')),
-      publicationRunAttempt: dryRun
-        ? undefined
-        : required(values, '--publication-run-attempt'),
-      producerArtifactIdentity: required(
-        values,
-        '--producer-artifact-identity',
-      ),
-      producerRunAttempt: required(values, '--producer-run-attempt'),
-      producerRunIdentity: required(values, '--producer-run-identity'),
-      repository: required(values, '--repository'),
-      runAttempt: required(values, '--run-attempt'),
-      runId: required(values, '--run-id'),
-      sourceCommit: required(values, '--source-commit'),
-      tag: required(values, '--tag'),
-      version: required(values, '--version'),
-    });
-    appendGithubOutputs(values.get('--github-output'), {
-      artifact_name: outcome.artifactName,
-    });
-    return 0;
-  }
-  throw new Error('Command must be create');
+    repository: required(values, '--repository'),
+    runAttempt: required(values, '--run-attempt'),
+    runId: required(values, '--run-id'),
+    sourceCommit: required(values, '--source-commit'),
+    tag: required(values, '--tag'),
+    version: required(values, '--version'),
+  });
+  appendGithubOutputs(values.get('--github-output'), {
+    artifact_name: outcome.artifactName,
+  });
+  return 0;
 }
 
 if (isDirectRun(import.meta.url)) {

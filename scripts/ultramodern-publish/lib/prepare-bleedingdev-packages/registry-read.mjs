@@ -110,7 +110,12 @@ function isRegistryNotFoundError(error) {
 
 // Every registry read must see the origin, not a CDN or npm-cache copy: the
 // post-publish poll is waiting for a version that a cached packument (or a
-// cached 404 on the attestations endpoint) would never show.
+// cached 404 on the attestations endpoint) would never show. The request
+// headers alone do not reach it: registry.npmjs.org answers a plain packument
+// GET from its CDN copy (cf-cache-status HIT, up to max-age=300 old) whatever
+// cache-control the client sends. `?write=true` is the packument the npm CLI
+// reads before it writes, and the CDN passes it to the origin
+// (cf-cache-status DYNAMIC). The attestations endpoint is already DYNAMIC.
 const registryOriginRequestInit = Object.freeze({
   cache: 'no-store',
   headers: Object.freeze({
@@ -123,7 +128,7 @@ const registryOriginRequestInit = Object.freeze({
 
 function pinnedRegistryPackageMetadataUrl(packageName) {
   assertNonEmptyString(packageName, 'Registry package name');
-  return `${npmRegistryOrigin}/${encodeURIComponent(packageName)}`;
+  return `${npmRegistryOrigin}/${encodeURIComponent(packageName)}?write=true`;
 }
 
 async function fetchRegistryPackageMetadata(

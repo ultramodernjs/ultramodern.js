@@ -55,6 +55,7 @@ const sensitiveWorkflowPaths = new Set([
   '.github/workflows/native-renderer-artifacts.yml',
   '.github/workflows/support-artifacts.yml',
   '.github/workflows/publish-bleedingdev.yml',
+  '.github/workflows/accept-bleedingdev-release.yml',
   '.github/workflows/ultramodern-nightly.yml',
   '.github/workflows/workflow-security.yml',
   '.github/workflows/superapp-certification.yml',
@@ -677,6 +678,11 @@ function collectBareJobImportErrors(workflow, relativePath, options) {
   );
 }
 
+const actionExpression = name => ['${{', name, '}}'].join(' ');
+
+// Consumer: publish-bleedingdev.yml. A dry run records its own outcome; a
+// live cohort ends once npm accepted every tarball and hands the published
+// checks to accept-bleedingdev-release.yml through start-release-acceptance.
 function collectPublishOutcomeErrors(workflow, relativePath) {
   if (
     relativePath !== bleedingdevPublishWorkflowPath &&
@@ -688,11 +694,11 @@ function collectPublishOutcomeErrors(workflow, relativePath) {
   const outcomeJob = workflow.jobs?.['record-publish-outcome'];
   if (!isObject(outcomeJob)) {
     return [
-      `${relativePath} dry-run and publish branches must converge on record-publish-outcome`,
+      `${relativePath} the dry-run branch must converge on record-publish-outcome`,
     ];
   }
   const needs = new Set(normalizeNeeds(outcomeJob));
-  for (const requiredJob of ['accept-release', 'publish', 'validate-release']) {
+  for (const requiredJob of ['accept-release', 'validate-release', 'publish']) {
     if (!needs.has(requiredJob)) {
       errors.push(
         `${relativePath} record-publish-outcome must depend on ${requiredJob}`,
@@ -702,14 +708,13 @@ function collectPublishOutcomeErrors(workflow, relativePath) {
   const condition = typeof outcomeJob.if === 'string' ? outcomeJob.if : '';
   for (const requiredCondition of [
     'always()',
+    'inputs.dry_run == true',
     "needs.validate-release.result == 'success'",
-    "needs.publish.result == 'success'",
-    "needs.validate-release.result == 'skipped'",
     "needs.publish.result == 'skipped'",
   ]) {
     if (!condition.includes(requiredCondition)) {
       errors.push(
-        `${relativePath} record-publish-outcome must gate both exclusive successful branch results`,
+        `${relativePath} record-publish-outcome must record only a successful dry run`,
       );
       break;
     }
@@ -728,7 +733,7 @@ function collectPublishOutcomeErrors(workflow, relativePath) {
       `${relativePath} record-publish-outcome must create exactly one structured outcome`,
     );
   } else if (
-    !runIncludes(createSteps[0], '--dry-run') ||
+    !runIncludes(createSteps[0], '--dry-run true') ||
     !runIncludes(createSteps[0], '--producer-run-identity') ||
     !runIncludes(createSteps[0], '--source-commit') ||
     !runIncludes(createSteps[0], '--version') ||
@@ -742,7 +747,7 @@ function collectPublishOutcomeErrors(workflow, relativePath) {
   if (
     uploads.length !== 1 ||
     uploads[0].with?.name !==
-      ['${{', 'steps.publish-outcome.outputs.artifact_name', '}}'].join(' ') ||
+      actionExpression('steps.publish-outcome.outputs.artifact_name') ||
     typeof uploads[0].with?.path !== 'string' ||
     !uploads[0].with.path
       .split('\n')
@@ -753,7 +758,6 @@ function collectPublishOutcomeErrors(workflow, relativePath) {
       `${relativePath} record-publish-outcome must upload exactly one deterministically named outcome artifact`,
     );
   }
-  const actionExpression = name => ['${{', name, '}}'].join(' ');
   if (
     outcomeJob.outputs?.artifact_name !==
     actionExpression('steps.publish-outcome.outputs.artifact_name')
@@ -762,24 +766,264 @@ function collectPublishOutcomeErrors(workflow, relativePath) {
       `${relativePath} record-publish-outcome must expose its exact artifact name`,
     );
   }
+  return [...errors, ...collectReleaseAcceptanceHandoffErrors(workflow, relativePath)];
+}
 
-  const changeRecordJob = workflow.jobs?.['publish-change-record'];
-  if (!isObject(changeRecordJob)) {
-    errors.push(
-      `${relativePath} authenticated publish outcome must converge on publish-change-record`,
-    );
-    return errors;
+// The dispatch the dry run can never reach, pinned byte for byte: the
+// repository, the trusted ref, the one workflow it may start and the attempts
+// the follow-up authenticates.
+const releaseAcceptanceDispatch =
+  'gh workflow run accept-bleedingdev-release.yml --repo "$GITHUB_REPOSITORY" --ref main-ultramodern -f original_run_id="$GITHUB_RUN_ID" -f producer_run_attempt="$PRODUCER_RUN_ATTEMPT" -f publication_run_attempt="$PUBLICATION_RUN_ATTEMPT"';
+
+function collectReleaseAcceptanceHandoffErrors(workflow, relativePath) {
+  const job = workflow.jobs?.['start-release-acceptance'];
+  if (!isObject(job)) {
+    return [
+      `${relativePath} a live cohort must hand its published checks to accept-bleedingdev-release.yml through start-release-acceptance`,
+    ];
   }
-  const changeRecordNeeds = normalizeNeeds(changeRecordJob);
+  const errors = [];
   if (
-    changeRecordNeeds.length !== 1 ||
-    changeRecordNeeds[0] !== 'record-publish-outcome'
+    !isObject(job.permissions) ||
+    JSON.stringify(Object.entries(job.permissions)) !==
+      JSON.stringify([['actions', 'write']])
   ) {
     errors.push(
-      `${relativePath} publish-change-record must depend only on record-publish-outcome`,
+      `${relativePath} start-release-acceptance must hold exactly actions: write and nothing else`,
     );
   }
-  const changeRecordPermissions = changeRecordJob.permissions;
+  const steps = Array.isArray(job.steps) ? job.steps.filter(isObject) : [];
+  const dispatches = steps.filter(step => runIncludes(step, 'gh workflow run'));
+  const commands = dispatches.flatMap(step =>
+    normalizeShellContinuations(stripShellComments(String(step.run)))
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.startsWith('gh ')),
+  );
+  if (
+    steps.some(step => step.uses !== undefined) ||
+    dispatches.length !== 1 ||
+    commands.length !== 1 ||
+    commands[0] !== releaseAcceptanceDispatch ||
+    dispatches[0].env?.GH_TOKEN !== actionExpression('github.token') ||
+    dispatches[0].env?.PRODUCER_RUN_ATTEMPT !==
+      actionExpression('needs.accept-release.outputs.producer_run_attempt') ||
+    dispatches[0].env?.PUBLICATION_RUN_ATTEMPT !==
+      actionExpression('needs.publish.outputs.publication_run_attempt')
+  ) {
+    errors.push(
+      `${relativePath} start-release-acceptance must check out nothing and run only: ${releaseAcceptanceDispatch}`,
+    );
+  }
+  const successful = {
+    'accept-release': 'success',
+    publish: 'success',
+  };
+  const context = dryRun => ({
+    github: {
+      actor: 'BleedingDev',
+      ref: 'refs/heads/main-ultramodern',
+      repository_owner: 'ultramodernjs',
+      triggering_actor: 'BleedingDev',
+    },
+    inputs: { mode: 'cohort', dry_run: dryRun },
+    vars: {},
+  });
+  const schedules = (results, dryRun = false) =>
+    evaluateJobSchedule({
+      workflow,
+      jobId: 'start-release-acceptance',
+      results,
+      context: context(dryRun),
+    });
+  if (
+    !schedules(successful) ||
+    schedules(successful, true) ||
+    ['accept-release', 'publish'].some(need =>
+      ['failure', 'cancelled', 'skipped'].some(result =>
+        schedules({ ...successful, [need]: result }),
+      ),
+    )
+  ) {
+    errors.push(
+      `${relativePath} start-release-acceptance must start exactly when a live cohort's publish job passed`,
+    );
+  }
+  return errors;
+}
+
+// Consumer: accept-bleedingdev-release.yml — the published checks of one live
+// cohort, its authenticated outcome and the only repository write.
+const releaseAcceptanceWorkflowPath =
+  '.github/workflows/accept-bleedingdev-release.yml';
+const releaseAcceptanceJobs = Object.freeze({
+  'verify-publication': [],
+  'accept-published': ['verify-publication'],
+  'tractor-downstream': ['verify-publication'],
+  'record-outcome': ['verify-publication', 'accept-published', 'tractor-downstream'],
+  'release-record': ['verify-publication', 'record-outcome'],
+});
+
+function collectReleaseAcceptanceErrors(workflow, relativePath) {
+  if (relativePath !== releaseAcceptanceWorkflowPath) {
+    return [];
+  }
+  const errors = [];
+  const jobs = isObject(workflow.jobs) ? workflow.jobs : {};
+  const triggers = isObject(workflow.on) ? Object.keys(workflow.on) : [];
+  if (JSON.stringify(triggers) !== JSON.stringify(['workflow_dispatch'])) {
+    errors.push(`${relativePath} must be started only by workflow_dispatch`);
+  }
+  if (
+    workflow.concurrency?.group !==
+      `accept-bleedingdev-release-${actionExpression('inputs.original_run_id')}` ||
+    workflow.concurrency?.['cancel-in-progress'] !== false
+  ) {
+    errors.push(
+      `${relativePath} must run once per publish run in its own concurrency group, never the live-publication lock, and never cancel`,
+    );
+  }
+  if (
+    workflow['run-name'] !==
+    `Accept published release from run ${actionExpression('inputs.original_run_id')}`
+  ) {
+    errors.push(
+      `${relativePath} run-name must name the original publish run; the next cohort's gate finds it by that name`,
+    );
+  }
+  const actualJobs = Object.keys(jobs).sort();
+  const expectedJobs = Object.keys(releaseAcceptanceJobs).sort();
+  if (JSON.stringify(actualJobs) !== JSON.stringify(expectedJobs)) {
+    errors.push(
+      `${relativePath} job set must be exactly ${expectedJobs.join(', ')}`,
+    );
+  }
+  for (const [jobId, required] of Object.entries(releaseAcceptanceJobs)) {
+    const needs = normalizeNeeds(jobs[jobId]);
+    if (
+      required.some(need => !needs.includes(need)) ||
+      isObject(jobs[jobId]) && 'if' in jobs[jobId] && jobId !== 'verify-publication'
+    ) {
+      errors.push(
+        `${relativePath} job ${jobId} must need ${required.join(', ') || 'nothing'} and run only on their implicit success`,
+      );
+    }
+  }
+  const authorize = jobs['verify-publication']?.if;
+  const owner = {
+    actor: 'BleedingDev',
+    ref: 'refs/heads/main-ultramodern',
+    repository: 'ultramodernjs/ultramodern.js',
+    repository_id: '1151231350',
+    triggering_actor: 'BleedingDev',
+  };
+  const runsFor = github => {
+    try {
+      return evaluateJobSchedule({
+        workflow,
+        jobId: 'verify-publication',
+        results: {},
+        context: { github, inputs: {}, vars: {} },
+      });
+    } catch {
+      return undefined;
+    }
+  };
+  if (
+    typeof authorize !== 'string' ||
+    !runsFor(owner) ||
+    !runsFor({ ...owner, actor: 'github-actions[bot]', triggering_actor: 'github-actions[bot]' }) ||
+    !runsFor({ ...owner, actor: 'github-actions[bot]' }) ||
+    runsFor({ ...owner, actor: 'someone-else' }) ||
+    runsFor({ ...owner, triggering_actor: 'someone-else' }) ||
+    runsFor({ ...owner, ref: 'refs/heads/other' }) ||
+    runsFor({ ...owner, repository: 'fork/ultramodern.js' }) ||
+    runsFor({ ...owner, repository_id: '1' })
+  ) {
+    errors.push(
+      `${relativePath} verify-publication must run only in this repository on main-ultramodern for the owner or start-release-acceptance`,
+    );
+  }
+  const verifySteps = Array.isArray(jobs['verify-publication']?.steps)
+    ? jobs['verify-publication'].steps.filter(isObject)
+    : [];
+  for (const command of ['authorize', 'verify-registry']) {
+    if (
+      verifySteps.filter(step =>
+        runIncludes(step, `accept-published-release.mjs ${command}`),
+      ).length !== 1
+    ) {
+      errors.push(
+        `${relativePath} verify-publication must authenticate the original run and verify the registry cohort exactly once (${command})`,
+      );
+    }
+  }
+  if (
+    jobs['tractor-downstream']?.uses !==
+      './.github/workflows/ultramodern-tractor-downstream.yml' ||
+    jobs['tractor-downstream']?.with?.mode !== 'published' ||
+    (isObject(jobs['tractor-downstream']?.with) &&
+      'tractor_ref' in jobs['tractor-downstream'].with)
+  ) {
+    errors.push(
+      `${relativePath} job tractor-downstream must call ultramodern-tractor-downstream.yml in published mode without a tractor_ref; the baseline lives in ${tractorBaselinePinPath}`,
+    );
+  }
+  for (const [jobId, job] of Object.entries(jobs)) {
+    if (!isObject(job)) continue;
+    for (const scope of elevatedPermissionScopes(job.permissions, [
+      'actions',
+      'contents',
+      'id-token',
+    ])) {
+      if (!(jobId === 'release-record' && scope === 'contents')) {
+        errors.push(
+          `${relativePath} job ${jobId} must not grant ${scope}: write; only release-record writes contents`,
+        );
+      }
+    }
+  }
+  for (const scope of elevatedPermissionScopes(workflow.permissions, [
+    'actions',
+    'contents',
+    'id-token',
+  ])) {
+    errors.push(
+      `${relativePath} must not grant ${scope}: write at the workflow level`,
+    );
+  }
+
+  const recordJob = jobs['record-outcome'];
+  const recordSteps = Array.isArray(recordJob?.steps)
+    ? recordJob.steps.filter(isObject)
+    : [];
+  const outcomeSteps = recordSteps.filter(step =>
+    runIncludes(step, 'accept-published-release.mjs outcome'),
+  );
+  const outcomeUploads = recordSteps.filter(step =>
+    actionMatches(step, 'actions/upload-artifact'),
+  );
+  if (
+    outcomeSteps.length !== 1 ||
+    outcomeSteps[0].id !== 'outcome' ||
+    outcomeUploads.length !== 1 ||
+    outcomeUploads[0].with?.name !==
+      actionExpression('steps.outcome.outputs.artifact_name') ||
+    typeof outcomeUploads[0].with?.path !== 'string' ||
+    !outcomeUploads[0].with.path
+      .split('\n')
+      .map(value => value.trim())
+      .includes('.modern/bleedingdev-publish/publish-outcome.json') ||
+    recordJob?.outputs?.artifact_name !==
+      actionExpression('steps.outcome.outputs.artifact_name')
+  ) {
+    errors.push(
+      `${relativePath} record-outcome must create exactly one authenticated outcome and upload it under its exact name`,
+    );
+  }
+
+  const changeRecordJob = jobs['release-record'];
+  const changeRecordPermissions = changeRecordJob?.permissions;
   if (
     !isObject(changeRecordPermissions) ||
     changeRecordPermissions.actions !== 'read' ||
@@ -787,10 +1031,10 @@ function collectPublishOutcomeErrors(workflow, relativePath) {
     Object.keys(changeRecordPermissions).length !== 2
   ) {
     errors.push(
-      `${relativePath} publish-change-record must grant only actions: read and contents: write`,
+      `${relativePath} release-record must grant only actions: read and contents: write`,
     );
   }
-  const changeRecordSteps = Array.isArray(changeRecordJob.steps)
+  const changeRecordSteps = Array.isArray(changeRecordJob?.steps)
     ? changeRecordJob.steps.filter(isObject)
     : [];
   const outcomeDownloads = changeRecordSteps.filter(step =>
@@ -802,14 +1046,14 @@ function collectPublishOutcomeErrors(workflow, relativePath) {
     outcomeDownload.with?.['github-token'] !==
       actionExpression('github.token') ||
     outcomeDownload.with?.name !==
-      actionExpression('needs.record-publish-outcome.outputs.artifact_name') ||
+      actionExpression('needs.record-outcome.outputs.artifact_name') ||
     outcomeDownload.with?.path !== '.modern/bleedingdev-publish' ||
     outcomeDownload.with?.repository !==
       actionExpression('github.repository') ||
     outcomeDownload.with?.['run-id'] !== actionExpression('github.run_id')
   ) {
     errors.push(
-      `${relativePath} publish-change-record must download the authenticated publish outcome artifact`,
+      `${relativePath} release-record must download the authenticated publish outcome artifact`,
     );
   }
   const generateChangeRecordSteps = changeRecordSteps.filter(step =>
@@ -829,66 +1073,38 @@ function collectPublishOutcomeErrors(workflow, relativePath) {
     runIncludes(generateChangeRecordSteps[0], '--version')
   ) {
     errors.push(
-      `${relativePath} publish-change-record must derive record identity from the verified release manifest`,
+      `${relativePath} release-record must derive record identity from the verified release manifest`,
     );
   }
+  return errors;
+}
 
-  let changeRecordCondition;
-  try {
-    changeRecordCondition = parseJobCondition(changeRecordJob.if);
-  } catch {
-    changeRecordCondition = undefined;
-  }
-  const successfulPublishResults = {
-    'accept-published': 'success',
-    'accept-release': 'success',
-    'prepare-release': 'success',
-    publish: 'success',
-    'publish-security': 'success',
-    'publish-sidecars': 'success',
-    'record-publish-outcome': 'success',
-    'tractor-downstream': 'success',
-    'validate-release': 'skipped',
-  };
-  const successfulPublishContext = {
-    github: {
-      actor: 'BleedingDev',
-      ref: 'refs/heads/main-ultramodern',
-      repository_owner: 'ultramodernjs',
-      triggering_actor: 'BleedingDev',
-    },
-    inputs: { mode: 'cohort', dry_run: false },
-    vars: {},
-  };
-  const schedulesChangeRecord = ({ context, results } = {}) =>
-    evaluateJobSchedule({
-      workflow,
-      jobId: 'publish-change-record',
-      results: results ?? successfulPublishResults,
-      context: context ?? successfulPublishContext,
-    });
-  if (
-    changeRecordCondition === undefined ||
-    !conditionCalls(changeRecordCondition, 'always') ||
-    !schedulesChangeRecord() ||
-    schedulesChangeRecord({
-      context: {
-        ...successfulPublishContext,
-        inputs: { mode: 'cohort', dry_run: true },
-      },
-    }) ||
-    ['failure', 'cancelled', 'skipped'].some(result =>
-      schedulesChangeRecord({
-        results: {
-          ...successfulPublishResults,
-          'record-publish-outcome': result,
-        },
-      }),
-    )
-  ) {
+// GITHUB_TOKEN can start a workflow only through actions: write, and that
+// run's actor is github-actions[bot], which accept-bleedingdev-release.yml
+// admits. So exactly one job in the repository may hold it, and it only
+// dispatches that workflow (collectReleaseAcceptanceHandoffErrors).
+function collectActionsWriteErrors(workflow, relativePath) {
+  const errors = [];
+  if (elevatedPermissionScopes(workflow.permissions, ['actions']).length > 0) {
     errors.push(
-      `${relativePath} publish-change-record must survive the intentional branch skip, require a successful authenticated outcome, and reject dry-runs`,
+      `${relativePath} must not grant actions: write at the workflow level; only ${bleedingdevPublishWorkflowPath} start-release-acceptance may`,
     );
+  }
+  for (const [jobId, job] of Object.entries(
+    isObject(workflow.jobs) ? workflow.jobs : {},
+  )) {
+    if (
+      isObject(job) &&
+      elevatedPermissionScopes(job.permissions, ['actions']).length > 0 &&
+      !(
+        relativePath === bleedingdevPublishWorkflowPath &&
+        jobId === 'start-release-acceptance'
+      )
+    ) {
+      errors.push(
+        `${relativePath} job ${jobId} must not grant actions: write; only ${bleedingdevPublishWorkflowPath} start-release-acceptance may`,
+      );
+    }
   }
   return errors;
 }
@@ -900,14 +1116,16 @@ const bleedingdevPublishWorkflowPath =
   '.github/workflows/publish-bleedingdev.yml';
 
 // Consumer: publish-bleedingdev.yml — `publish` and `publish-sidecars` mint
-// npm OIDC tokens (id-token: write), while `publish-change-record` commits the
-// change record (contents: write). No other release job may hold either.
-const bleedingdevElevatedPermissionJobs = Object.freeze([
-  'publish',
-  'publish-change-record',
-  'publish-sidecars',
-]);
+// npm OIDC tokens (id-token: write), and `start-release-acceptance` starts the
+// published checks (actions: write). No release job writes contents; the
+// release record is written by accept-bleedingdev-release.yml.
+const bleedingdevElevatedPermissionJobs = Object.freeze({
+  publish: ['id-token'],
+  'publish-sidecars': ['id-token'],
+  'start-release-acceptance': ['actions'],
+});
 const bleedingdevGuardedPermissionScopes = Object.freeze([
+  'actions',
   'contents',
   'id-token',
 ]);
@@ -915,14 +1133,12 @@ const bleedingdevGuardedPermissionScopes = Object.freeze([
 // Consumer: publish-bleedingdev.yml — the closed release job graph, so a new job
 // cannot be smuggled between the acceptance, publish, outcome, and record gates.
 const bleedingdevPublishJobs = Object.freeze([
-  'accept-published',
   'accept-release',
   'effect-compiler-payload',
   'integration',
   'prepare-release',
   'prepare-sidecars',
   'publish',
-  'publish-change-record',
   'publish-sidecars',
   'publish-security',
   'qualify-source',
@@ -931,24 +1147,24 @@ const bleedingdevPublishJobs = Object.freeze([
   'reconcile-sidecars',
   'record-publish-outcome',
   'rehearse-tractor',
-  'tractor-downstream',
+  'start-release-acceptance',
   'validate-release',
 ]);
 
-// Consumer: publish-bleedingdev.yml — fail-fast edges. The seconds-long
-// registry gates must finish before the clean-room acceptance starts, and a
-// dry run is green only when the Tractor rehearsal is.
+// Consumer: publish-bleedingdev.yml — the gates every expensive or
+// authoritative job needs. Builds, tests and acceptance start only after the
+// validated dispatch; nothing reaches npm, and no dry run is green, without
+// the registry reconciliation and the Tractor rehearsal.
 const bleedingdevRequiredNeeds = Object.freeze({
-  'effect-compiler-payload': ['publish-security'],
-  integration: ['effect-compiler-payload'],
+  integration: ['publish-security', 'effect-compiler-payload'],
   'qualify-source-compute': ['effect-compiler-payload'],
-  'prepare-release': ['effect-compiler-payload'],
-  'accept-release': ['reconcile-sidecars'],
+  'prepare-release': ['publish-security', 'effect-compiler-payload'],
   publish: [
     'publish-security',
     'integration',
     'qualify-source-compute',
     'qualify-source',
+    'reconcile-sidecars',
     'accept-release',
     'rehearse-tractor',
     'publish-sidecars',
@@ -958,6 +1174,7 @@ const bleedingdevRequiredNeeds = Object.freeze({
     'integration',
     'qualify-source-compute',
     'qualify-source',
+    'reconcile-sidecars',
     'accept-release',
     'rehearse-tractor',
     'prepare-sidecars',
@@ -965,7 +1182,8 @@ const bleedingdevRequiredNeeds = Object.freeze({
   ],
   'qualify-sidecars': ['publish-security', 'prepare-sidecars'],
   'reconcile-sidecars': ['prepare-release', 'publish-security'],
-  'validate-release': ['qualify-source', 'rehearse-tractor'],
+  'validate-release': ['qualify-source', 'reconcile-sidecars', 'rehearse-tractor'],
+  'start-release-acceptance': ['accept-release', 'publish'],
 });
 
 // Consumer: publish-bleedingdev.yml — @bleedingdev/* publishes latest-only.
@@ -992,10 +1210,8 @@ const bleedingdevCohortJobs = Object.freeze([
   'validate-release',
   'rehearse-tractor',
   'publish',
-  'accept-published',
-  'tractor-downstream',
+  'start-release-acceptance',
   'record-publish-outcome',
-  'publish-change-record',
 ]);
 const bleedingdevSidecarJobs = Object.freeze([
   'prepare-sidecars',
@@ -1203,7 +1419,11 @@ function collectBleedingdevModeScheduleErrors(workflow, relativePath) {
       results: {
         ...successfulResults,
         ...(jobId === 'record-publish-outcome'
-          ? { 'validate-release': 'skipped' }
+          ? {
+              publish: 'skipped',
+              'publish-sidecars': 'skipped',
+              'start-release-acceptance': 'skipped',
+            }
           : {}),
         ...overrides,
       },
@@ -1212,7 +1432,9 @@ function collectBleedingdevModeScheduleErrors(workflow, relativePath) {
         inputs: {
           ...context.inputs,
           mode,
-          dry_run: jobId === 'validate-release',
+          // The two jobs that run only in a cohort dry run.
+          dry_run:
+            jobId === 'validate-release' || jobId === 'record-publish-outcome',
         },
         ...contextOverrides,
       },
@@ -1288,6 +1510,7 @@ function collectBleedingdevModeScheduleErrors(workflow, relativePath) {
       'integration',
       'qualify-source-compute',
       'qualify-source',
+      'reconcile-sidecars',
       'accept-release',
       'rehearse-tractor',
     ],
@@ -1351,8 +1574,7 @@ function collectBleedingdevModeScheduleErrors(workflow, relativePath) {
   }
   for (const [jobId, prerequisites] of Object.entries({
     publish: [...publicationPrerequisites.cohort, 'publish-sidecars'],
-    'accept-published': ['publish', 'accept-release'],
-    'tractor-downstream': ['prepare-release', 'publish'],
+    'start-release-acceptance': ['publish', 'accept-release'],
     'qualify-sidecars': ['publish-security', 'prepare-sidecars'],
   })) {
     const mode = jobId === 'qualify-sidecars' ? 'sidecars' : 'cohort';
@@ -1370,58 +1592,43 @@ function collectBleedingdevModeScheduleErrors(workflow, relativePath) {
       );
     }
   }
-  const liveCohort = { ...inactiveSidecars, 'validate-release': 'skipped' };
+  // A dry run records its own outcome; a live cohort records it in
+  // accept-bleedingdev-release.yml, so the recorder never runs live.
   const dryCohort = {
     ...inactiveSidecars,
     'validate-release': 'success',
     'publish-sidecars': 'skipped',
     publish: 'skipped',
-    'accept-published': 'skipped',
-    'tractor-downstream': 'skipped',
+    'start-release-acceptance': 'skipped',
   };
-  for (const [dryRun, results, prerequisites] of [
+  const dryRun = { inputs: { ...context.inputs, dry_run: true } };
+  if (
+    !schedule('record-publish-outcome', 'cohort', dryCohort, dryRun) ||
+    schedule(
+      'record-publish-outcome',
+      'cohort',
+      { ...inactiveSidecars, 'validate-release': 'skipped' },
+      { inputs: { ...context.inputs, dry_run: false } },
+    ) ||
     [
-      false,
-      liveCohort,
-      [
-        'publish-security',
-        'accept-release',
-        'rehearse-tractor',
-        'publish-sidecars',
-        'publish',
-        'accept-published',
-        'tractor-downstream',
-      ],
-    ],
-    [
-      true,
-      dryCohort,
-      [
-        'publish-security',
-        'accept-release',
-        'rehearse-tractor',
-        'validate-release',
-      ],
-    ],
-  ]) {
-    const overrides = { inputs: { ...context.inputs, dry_run: dryRun } };
-    if (
-      !schedule('record-publish-outcome', 'cohort', results, overrides) ||
-      prerequisites.some(need =>
-        badResults.some(result =>
-          schedule(
-            'record-publish-outcome',
-            'cohort',
-            { ...results, [need]: result },
-            overrides,
-          ),
+      'publish-security',
+      'accept-release',
+      'rehearse-tractor',
+      'validate-release',
+    ].some(need =>
+      badResults.some(result =>
+        schedule(
+          'record-publish-outcome',
+          'cohort',
+          { ...dryCohort, [need]: result },
+          dryRun,
         ),
-      )
-    ) {
-      errors.push(
-        `${relativePath} cohort publish outcome must require every successful branch prerequisite and reject failed, cancelled, skipped or missing results`,
-      );
-    }
+      ),
+    )
+  ) {
+    errors.push(
+      `${relativePath} the dry-run publish outcome must require every successful dry-run prerequisite, reject failed, cancelled, skipped or missing results, and never run for a live cohort`,
+    );
   }
 
   return errors;
@@ -1628,18 +1835,25 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
     );
   }
   for (const [jobId, job] of Object.entries(jobs)) {
-    if (!isObject(job) || bleedingdevElevatedPermissionJobs.includes(jobId)) {
+    if (!isObject(job)) {
       continue;
     }
+    const allowed = Object.hasOwn(bleedingdevElevatedPermissionJobs, jobId)
+      ? bleedingdevElevatedPermissionJobs[jobId]
+      : [];
     for (const scope of elevatedPermissionScopes(
       job.permissions,
       bleedingdevGuardedPermissionScopes,
     )) {
-      errors.push(
-        `${relativePath} job ${jobId} must not grant ${scope}: write; confined to ${bleedingdevElevatedPermissionJobs.join(
-          ', ',
-        )}`,
-      );
+      if (!allowed.includes(scope)) {
+        errors.push(
+          `${relativePath} job ${jobId} must not grant ${scope}: write; confined to ${Object.entries(
+            bleedingdevElevatedPermissionJobs,
+          )
+            .map(([owner, scopes]) => `${owner} (${scopes.join(', ')})`)
+            .join(', ')}`,
+        );
+      }
     }
   }
 
@@ -1791,7 +2005,7 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
   // workflow YAML turns each advance into a workflow edit, and a workflow edit
   // landing during a publish run makes GitHub refuse that run's GITHUB_TOKEN
   // the release tag. Both lanes read the one reviewed pin file instead.
-  for (const jobId of ['rehearse-tractor', 'tractor-downstream']) {
+  for (const jobId of ['rehearse-tractor']) {
     if (
       jobs[jobId]?.uses !==
         './.github/workflows/ultramodern-tractor-downstream.yml' ||
@@ -3193,6 +3407,15 @@ export function validateWorkflowContent(relativePath, content, options = {}) {
   }
   for (const message of collectPublishOutcomeErrors(workflow, relativePath)) {
     push('publish-outcome-contract', message);
+  }
+  for (const message of collectReleaseAcceptanceErrors(
+    workflow,
+    relativePath,
+  )) {
+    push('release-acceptance-contract', message);
+  }
+  for (const message of collectActionsWriteErrors(workflow, relativePath)) {
+    push('actions-write-dispatch', message);
   }
   for (const message of collectIntegrationGateErrors(workflow, relativePath)) {
     push('integration-gate', message);

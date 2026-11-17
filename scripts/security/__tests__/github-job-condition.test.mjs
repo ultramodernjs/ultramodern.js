@@ -8,19 +8,23 @@ import {
   parseJobCondition,
 } from '../github-job-condition.mjs';
 
-const publishWorkflow = yaml.load(
-  fs.readFileSync(
-    new URL(
-      '../../../.github/workflows/publish-bleedingdev.yml',
-      import.meta.url,
+const readWorkflow = name =>
+  yaml.load(
+    fs.readFileSync(
+      new URL(`../../../.github/workflows/${name}.yml`, import.meta.url),
+      'utf8',
     ),
-    'utf8',
-  ),
-);
+  );
+const publishWorkflow = readWorkflow('publish-bleedingdev');
+const acceptanceWorkflow = readWorkflow('accept-bleedingdev-release');
 
+// start-release-acceptance runs in cohort mode, where the sidecar-mode jobs
+// upstream of publish are skipped.
+const handoff = 'start-release-acceptance';
 const publishConditionWithoutAlways = `
   inputs.mode == 'cohort' &&
-  needs.record-publish-outcome.result == 'success' &&
+  needs.accept-release.result == 'success' &&
+  needs.publish.result == 'success' &&
   github.actor == 'BleedingDev' &&
   github.triggering_actor == 'BleedingDev' &&
   github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern') &&
@@ -39,14 +43,19 @@ const successfulContext = {
 };
 
 const resultsWithSkippedAncestor = {
-  'accept-published': 'success',
   'accept-release': 'success',
+  'effect-compiler-payload': 'success',
+  integration: 'success',
   'prepare-release': 'success',
+  'prepare-sidecars': 'skipped',
   publish: 'success',
   'publish-security': 'success',
-  'record-publish-outcome': 'success',
-  'tractor-downstream': 'success',
-  'validate-release': 'skipped',
+  'publish-sidecars': 'success',
+  'qualify-sidecars': 'skipped',
+  'qualify-source': 'success',
+  'qualify-source-compute': 'success',
+  'reconcile-sidecars': 'success',
+  'rehearse-tractor': 'success',
 };
 
 test('rejects conditions outside the restricted grammar', () => {
@@ -93,13 +102,13 @@ test('native cancellation suppresses implicit success while always requires an e
 
 test('implicit success suppresses a job with a skipped transitive ancestor', () => {
   const withoutAlways = structuredClone(publishWorkflow);
-  withoutAlways.jobs['publish-change-record'].if =
+  withoutAlways.jobs[handoff].if =
     publishConditionWithoutAlways;
 
   assert.equal(
     evaluateJobSchedule({
       workflow: withoutAlways,
-      jobId: 'publish-change-record',
+      jobId: handoff,
       results: resultsWithSkippedAncestor,
       context: successfulContext,
     }),
@@ -111,7 +120,7 @@ test('always plus a successful direct need survives a skipped ancestor', () => {
   assert.equal(
     evaluateJobSchedule({
       workflow: publishWorkflow,
-      jobId: 'publish-change-record',
+      jobId: handoff,
       results: resultsWithSkippedAncestor,
       context: successfulContext,
     }),
@@ -130,7 +139,7 @@ test('the pinned maintainer guard ignores string case and rejects other actors',
     assert.equal(
       evaluateJobSchedule({
         workflow: publishWorkflow,
-        jobId: 'publish-change-record',
+        jobId: handoff,
         results: resultsWithSkippedAncestor,
         context: {
           ...successfulContext,
@@ -151,7 +160,7 @@ test('dry runs and unsuccessful direct needs fail closed', () => {
   assert.equal(
     evaluateJobSchedule({
       workflow: publishWorkflow,
-      jobId: 'publish-change-record',
+      jobId: handoff,
       results: resultsWithSkippedAncestor,
       context: {
         ...successfulContext,
@@ -165,10 +174,10 @@ test('dry runs and unsuccessful direct needs fail closed', () => {
     assert.equal(
       evaluateJobSchedule({
         workflow: publishWorkflow,
-        jobId: 'publish-change-record',
+        jobId: handoff,
         results: {
           ...resultsWithSkippedAncestor,
-          'record-publish-outcome': result,
+          publish: result,
         },
         context: successfulContext,
       }),
@@ -180,12 +189,12 @@ test('dry runs and unsuccessful direct needs fail closed', () => {
 
 test('unknown references, missing results, and dependency cycles fail closed', () => {
   const unknownReference = structuredClone(publishWorkflow);
-  unknownReference.jobs['publish-change-record'].if =
+  unknownReference.jobs[handoff].if =
     'always() && secrets.TOKEN';
   assert.equal(
     evaluateJobSchedule({
       workflow: unknownReference,
-      jobId: 'publish-change-record',
+      jobId: handoff,
       results: resultsWithSkippedAncestor,
       context: successfulContext,
     }),
@@ -225,17 +234,19 @@ test('unknown references, missing results, and dependency cycles fail closed', (
 });
 
 test('the release record fails the run instead of hiding behind continue-on-error', () => {
-  for (const [jobId, job] of Object.entries(publishWorkflow.jobs)) {
-    assert.equal('continue-on-error' in job, false, jobId);
-    for (const step of job.steps ?? []) {
-      assert.equal(
-        'continue-on-error' in step,
-        false,
-        `${jobId}: ${step.name}`,
-      );
+  for (const workflow of [publishWorkflow, acceptanceWorkflow]) {
+    for (const [jobId, job] of Object.entries(workflow.jobs)) {
+      assert.equal('continue-on-error' in job, false, jobId);
+      for (const step of job.steps ?? []) {
+        assert.equal(
+          'continue-on-error' in step,
+          false,
+          `${jobId}: ${step.name}`,
+        );
+      }
     }
   }
-  const recovery = publishWorkflow.jobs['publish-change-record'].steps.find(
+  const recovery = acceptanceWorkflow.jobs['release-record'].steps.find(
     step => step.if === 'failure()',
   );
   assert.match(recovery.run, /gh run rerun \$GITHUB_RUN_ID --failed/u);

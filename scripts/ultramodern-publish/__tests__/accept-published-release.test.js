@@ -4,33 +4,29 @@ const test = require('node:test');
 const repository = 'ultramodernjs/ultramodern.js';
 const repositoryId = 1151231350;
 const runId = '39078116263';
-const attempt = '1';
+const producerAttempt = '1';
+const publicationAttempt = '2';
 const sourceCommit = '10a6ecde904554e3e0db1eaf56d0d4a5f350a04a';
-const requiredJobs = [
-  'Validate publish security',
-  'Test the release source and publication tooling',
-  'Build the immutable @bleedingdev release bundle',
-  'Confirm qualified source and integration',
-  'Rehearse Tractor against the immutable bundle / Exact cohort passes Tractor Node and workerd acceptance',
-  'Clean-room acceptance of the immutable release bundle / Clean-room acceptance of the immutable release bundle',
+const publicationJobs = [
   'Publish the qualified stable sidecars',
   'Publish accepted @bleedingdev tarballs',
-  'Accept the exact published registry cohort',
 ];
 
 async function fixture() {
-  const api = await import('../recover-published-acceptance.mjs');
+  const api = await import('../accept-published-release.mjs');
+  // The automatic acceptance authorizes while the original run is still
+  // finishing start-release-acceptance.
   const run = {
     id: Number(runId),
-    run_attempt: 1,
+    run_attempt: 2,
     repository: { full_name: repository, id: repositoryId },
     head_repository: { id: repositoryId },
     path: '.github/workflows/publish-bleedingdev.yml',
     head_branch: 'main-ultramodern',
     head_sha: sourceCommit,
     event: 'workflow_dispatch',
-    status: 'completed',
-    conclusion: 'failure',
+    status: 'in_progress',
+    conclusion: null,
     actor: { login: 'BleedingDev' },
     triggering_actor: { login: 'BleedingDev' },
   };
@@ -39,21 +35,21 @@ async function fixture() {
     conclusion,
     status: 'completed',
     run_id: Number(runId),
-    run_attempt: 1,
+    run_attempt: 2,
     head_sha: sourceCommit,
   });
   const jobs = [
-    ...requiredJobs.map(name => job(name, 'success')),
-    job(
-      'Accept the exact published cohort in Tractor / Exact cohort passes Tractor Node and workerd acceptance',
-      'failure',
-    ),
-    job('Publish the cohort change record', 'skipped'),
+    ...publicationJobs.map(name => job(name, 'success')),
+    {
+      ...job('Start the published release acceptance', null),
+      status: 'in_progress',
+    },
   ];
-  const names = api.recoveryArtifactNames(runId, attempt);
-  const artifacts = [names.identity, names.qualification, names.published].map(
-    name => ({
-      name,
+  const expected = { runId, producerAttempt, publicationAttempt };
+  const names = api.acceptanceArtifactNames(expected);
+  const artifacts = [
+    {
+      name: names.identity,
       expired: false,
       digest: `sha256:${'a'.repeat(64)}`,
       workflow_run: {
@@ -62,8 +58,8 @@ async function fixture() {
         repository_id: repositoryId,
         head_repository_id: repositoryId,
       },
-    }),
-  );
+    },
+  ];
   const release = {
     source: { repository, commit: sourceCommit },
     release: { version: '3.9.3-ultramodern.8', tag: 'latest' },
@@ -75,10 +71,10 @@ async function fixture() {
     schemaVersion: 2,
     dryRun: false,
     releaseRunId: runId,
-    publicationRunAttempt: attempt,
-    producerRunAttempt: attempt,
-    producerArtifactIdentity: `run-${runId}-attempt-${attempt}`,
-    producerRunIdentity: `github:${repository}:run:${runId}:attempt:${attempt}`,
+    publicationRunAttempt: publicationAttempt,
+    producerRunAttempt: producerAttempt,
+    producerArtifactIdentity: `run-${runId}-attempt-${producerAttempt}`,
+    producerRunIdentity: `github:${repository}:run:${runId}:attempt:${producerAttempt}`,
     source: release.source,
     release: release.release,
     manifestSha256: release.manifestSha256,
@@ -92,77 +88,105 @@ async function fixture() {
     artifacts,
     release,
     identity,
-    expected: {
-      runId,
-      attempt,
-      receiptSha256: identity.acceptanceReceiptSha256,
-    },
+    expected: { ...expected, receiptSha256: identity.acceptanceReceiptSha256 },
   };
 }
 
-test('only the completed original fork publication with successful ERP can recover Tractor', async () => {
+test('artifact names keep the producer and publication attempts apart', async () => {
+  const { api } = await fixture();
+  assert.deepEqual(
+    api.acceptanceArtifactNames({
+      runId,
+      producerAttempt: '1',
+      publicationAttempt: '2',
+    }),
+    {
+      identity: `bleedingdev-release-identity-run-${runId}-attempt-1-publication-attempt-2`,
+      bundle: `bleedingdev-accepted-publication-run-${runId}-attempt-1-publication-attempt-2`,
+    },
+  );
+  assert.throws(() =>
+    api.acceptanceArtifactNames({
+      runId,
+      producerAttempt: '0',
+      publicationAttempt: '1',
+    }),
+  );
+});
+
+test('only an owner-dispatched main publish whose npm jobs passed in the publication attempt is accepted', async () => {
   const { api, run, jobs, artifacts, expected } = await fixture();
   assert.equal(
-    api.assertRecoverablePublication(run, jobs, artifacts, expected).identity,
-    `bleedingdev-release-identity-run-${runId}-attempt-1-publication-attempt-1`,
+    api.assertPublishedRun(run, jobs, artifacts, expected).identity,
+    `bleedingdev-release-identity-run-${runId}-attempt-1-publication-attempt-2`,
   );
+  // Finished, red only in its handoff, or re-run later: npm still holds it.
+  for (const patch of [
+    { status: 'completed', conclusion: 'success' },
+    { status: 'completed', conclusion: 'failure' },
+    { run_attempt: 3 },
+  ])
+    api.assertPublishedRun({ ...run, ...patch }, jobs, artifacts, expected);
   for (const patch of [
     { event: 'pull_request' },
     { head_branch: 'feature' },
-    { status: 'in_progress' },
-    { conclusion: 'success' },
-    { run_attempt: 2 },
+    { run_attempt: 1 },
     { path: '.github/workflows/other.yml' },
     { repository: { full_name: repository, id: 99 } },
     { head_repository: { id: 99 } },
     { actor: { login: 'someone-else' } },
     { triggering_actor: { login: 'someone-else' } },
+    { actor: { login: 'github-actions[bot]' } },
   ])
-    assert.throws(() =>
-      api.assertRecoverablePublication(
-        { ...run, ...patch },
-        jobs,
-        artifacts,
-        expected,
-      ),
+    assert.throws(
+      () =>
+        api.assertPublishedRun({ ...run, ...patch }, jobs, artifacts, expected),
+      undefined,
+      JSON.stringify(patch),
     );
-  for (const patch of [
-    { conclusion: 'failure' },
-    { conclusion: 'cancelled' },
-    { run_attempt: 2 },
-    { head_sha: 'e'.repeat(40) },
-  ]) {
-    const changed = jobs.map(job =>
-      job.name === 'Accept the exact published registry cohort'
-        ? { ...job, ...patch }
-        : job,
-    );
-    assert.throws(() =>
-      api.assertRecoverablePublication(run, changed, artifacts, expected),
-    );
-  }
+  for (const name of publicationJobs)
+    for (const patch of [
+      { conclusion: 'failure' },
+      { conclusion: 'skipped' },
+      { status: 'in_progress' },
+      { run_attempt: 1 },
+      { head_sha: 'e'.repeat(40) },
+    ]) {
+      const changed = jobs.map(job =>
+        job.name === name ? { ...job, ...patch } : job,
+      );
+      assert.throws(
+        () => api.assertPublishedRun(run, changed, artifacts, expected),
+        undefined,
+        `${name} ${JSON.stringify(patch)}`,
+      );
+    }
   assert.throws(
-    () =>
-      api.assertRecoverablePublication(
-        run,
-        [...jobs, jobs[0]],
-        artifacts,
-        expected,
-      ),
+    () => api.assertPublishedRun(run, [...jobs, jobs[0]], artifacts, expected),
     /duplicate/,
   );
   assert.throws(
-    () =>
-      api.assertRecoverablePublication(run, jobs.slice(1), artifacts, expected),
+    () => api.assertPublishedRun(run, jobs.slice(1), artifacts, expected),
     /Missing/,
+  );
+  // The bundle can never come from a later attempt than its publication.
+  assert.throws(
+    () =>
+      api.assertPublishedRun(run, jobs, artifacts, {
+        ...expected,
+        producerAttempt: '3',
+        publicationAttempt: '2',
+      }),
+    /producer attempt cannot follow/,
   );
 });
 
-test('expired, duplicate, wrong-source and foreign-run artifacts fail closed', async () => {
+test('expired, duplicate, wrong-source and foreign-run identity artifacts fail closed', async () => {
   const { api, run, jobs, artifacts, expected } = await fixture();
   for (const patch of [
     { expired: true },
     { digest: undefined },
+    { name: `${artifacts[0].name.replace('attempt-2', 'attempt-1')}` },
     { workflow_run: { ...artifacts[0].workflow_run, id: 99 } },
     {
       workflow_run: { ...artifacts[0].workflow_run, head_sha: 'f'.repeat(40) },
@@ -170,31 +194,71 @@ test('expired, duplicate, wrong-source and foreign-run artifacts fail closed', a
     { workflow_run: { ...artifacts[0].workflow_run, head_repository_id: 99 } },
   ])
     assert.throws(() =>
-      api.assertRecoverablePublication(
+      api.assertPublishedRun(
         run,
         jobs,
-        [{ ...artifacts[0], ...patch }, ...artifacts.slice(1)],
+        [{ ...artifacts[0], ...patch }],
         expected,
       ),
     );
   assert.throws(
     () =>
-      api.assertRecoverablePublication(
-        run,
-        jobs,
-        [...artifacts, artifacts[0]],
-        expected,
-      ),
+      api.assertPublishedRun(run, jobs, [...artifacts, artifacts[0]], expected),
     /duplicate/,
   );
 });
 
-test('the original published identity cannot be relabeled as a recovery invocation', async () => {
+test('the acceptance run is dispatched by the owner or by start-release-acceptance only', async () => {
+  const { api } = await fixture();
+  const environment = { GITHUB_SHA: '3'.repeat(40), GITHUB_RUN_ATTEMPT: '1' };
+  const executor = {
+    repository: { id: repositoryId },
+    head_repository: { id: repositoryId },
+    path: '.github/workflows/accept-bleedingdev-release.yml',
+    event: 'workflow_dispatch',
+    head_branch: 'main-ultramodern',
+    head_sha: environment.GITHUB_SHA,
+    actor: { login: 'github-actions[bot]' },
+    triggering_actor: { login: 'github-actions[bot]' },
+    run_attempt: 1,
+  };
+  api.assertAcceptanceExecutor(executor, environment);
+  // The owner re-runs the automatic run, or dispatches it again.
+  api.assertAcceptanceExecutor(
+    { ...executor, triggering_actor: { login: 'BleedingDev' } },
+    environment,
+  );
+  api.assertAcceptanceExecutor(
+    {
+      ...executor,
+      actor: { login: 'BleedingDev' },
+      triggering_actor: { login: 'BleedingDev' },
+    },
+    environment,
+  );
+  for (const patch of [
+    { actor: { login: 'someone-else' } },
+    { triggering_actor: { login: 'someone-else' } },
+    { path: '.github/workflows/recover-bleedingdev-acceptance.yml' },
+    { event: 'workflow_run' },
+    { head_branch: 'feature' },
+    { head_sha: '4'.repeat(40) },
+    { head_repository: { id: 99 } },
+    { run_attempt: 2 },
+  ])
+    assert.throws(
+      () => api.assertAcceptanceExecutor({ ...executor, ...patch }, environment),
+      undefined,
+      JSON.stringify(patch),
+    );
+});
+
+test('the original published identity cannot be relabeled as the acceptance invocation', async () => {
   const { api, release, identity, expected } = await fixture();
   api.assertOriginalPublishedIdentity(identity, release, expected);
   for (const patch of [
     { releaseRunId: '999' },
-    { publicationRunAttempt: '2' },
+    { publicationRunAttempt: '1' },
     { producerRunAttempt: '2' },
     { producerArtifactIdentity: 'run-999-attempt-1' },
     { producerRunIdentity: `github:${repository}:run:999:attempt:1` },
@@ -222,19 +286,35 @@ test('registry verification keeps the original signed invocation and refuses mis
     GITHUB_RUN_ID: '999',
     GITHUB_RUN_ATTEMPT: '2',
   };
-  const expectation = api.originalRegistryExpectation(
-    release,
-    environment,
-    expected,
-  );
+  const expectation = api.originalRegistryExpectation(release, environment, {
+    runId,
+    attempt: publicationAttempt,
+  });
   assert.deepEqual(expectation.invocation, {
     repository,
     runId,
-    runAttempt: attempt,
+    runAttempt: publicationAttempt,
     exactAttempt: true,
   });
   assert.equal(expectation.source.commit, sourceCommit);
   assert.equal(environment.GITHUB_RUN_ID, '999');
+  // A recovery publish signs its own later HEAD, not the manifest commit.
+  const recoveryHead = '5'.repeat(40);
+  assert.equal(
+    api.originalRegistryExpectation(release, environment, {
+      runId,
+      attempt: publicationAttempt,
+      sourceCommit: recoveryHead,
+    }).source.commit,
+    recoveryHead,
+  );
+  assert.throws(() =>
+    api.originalRegistryExpectation(release, environment, {
+      runId,
+      attempt: publicationAttempt,
+      sourceCommit: 'main',
+    }),
+  );
   const packages = [
     { targetName: '@bleedingdev/a' },
     { targetName: '@bleedingdev/b' },
@@ -271,9 +351,93 @@ test('registry verification keeps the original signed invocation and refuses mis
   );
 });
 
-async function verifyAttestedRecovery({
+test('the cohort verifier waits for a package npm does not show yet, then authenticates its exact invocation', async () => {
+  const { api, release } = await fixture();
+  const { validateRegistryCohort, verifyRegistryPackage } = await import(
+    '../lib/prepare-bleedingdev-packages/registry.mjs'
+  );
+  const packages = ['a', 'b'].map(name => ({
+    targetName: `@bleedingdev/${name}`,
+    version: release.release.version,
+  }));
+  const cohort = { ...release, packages };
+  const expectation = api.originalRegistryExpectation(
+    release,
+    { GITHUB_REPOSITORY: repository },
+    { runId, attempt: publicationAttempt },
+  );
+  const reads = new Map();
+  const waits = [];
+  let authenticated;
+  const result = await api.verifyPublishedCohort(cohort, expectation, {
+    validate: (manifest, options) =>
+      validateRegistryCohort(manifest, options, {
+        verifyRegistryDistTag: async (_name, tag, version) => {
+          assert.equal(tag, 'latest');
+          assert.equal(version, release.release.version);
+        },
+        verifyRegistryPackage: (item, polled, { deadline }) =>
+          verifyRegistryPackage(item, polled, {
+            deadline,
+            // npm lists `b` only on its third read.
+            lookupRegistryPackageDist: async name => {
+              const count = (reads.get(name) ?? 0) + 1;
+              reads.set(name, count);
+              return name.endsWith('/b') && count < 3 ? null : { name };
+            },
+            verifyRegistryPackageDist: async (
+              _item,
+              dist,
+              polledExpectation,
+            ) => {
+              assert.equal(polledExpectation, expectation);
+              return dist;
+            },
+            wait: async delay => waits.push(delay),
+          }),
+      }),
+    authenticate: (manifest, states, exact) => {
+      authenticated = { manifest, states, exact };
+      return 'authenticated';
+    },
+  });
+  assert.equal(result, 'authenticated');
+  assert.equal(reads.get('@bleedingdev/a'), 1);
+  assert.equal(reads.get('@bleedingdev/b'), 3);
+  assert.equal(waits.length, 2);
+  assert.equal(authenticated.manifest, cohort);
+  assert.equal(authenticated.exact, expectation);
+  assert.deepEqual(
+    [...authenticated.states],
+    packages.map(item => [
+      item.targetName,
+      { exists: true, dist: { name: item.targetName } },
+    ]),
+  );
+  // A package npm never shows fails the run instead of being skipped.
+  await assert.rejects(
+    api.verifyPublishedCohort(cohort, expectation, {
+      validate: (manifest, options) =>
+        validateRegistryCohort(manifest, options, {
+          verifyRegistryDistTag: async () => {},
+          verifyRegistryPackage: (item, polled, { deadline }) =>
+            verifyRegistryPackage(item, polled, {
+              deadline,
+              lookupRegistryPackageDist: async name =>
+                name.endsWith('/b') ? null : { name },
+              verifyRegistryPackageDist: async (_item, dist) => dist,
+              wait: async () => {},
+            }),
+        }),
+      authenticate: () => assert.fail('nothing missing may be authenticated'),
+    }),
+    /@bleedingdev\/b@3\.9\.3-ultramodern\.8 is not present in the registry/u,
+  );
+});
+
+async function verifyAttestedPublication({
   change = statement => statement,
-  originalAttempt = attempt,
+  originalAttempt = publicationAttempt,
   rejectSignature = false,
 } = {}) {
   const { api, release, expected } = await fixture();
@@ -302,7 +466,7 @@ async function verifyAttestedRecovery({
       GITHUB_RUN_ID: '999',
       GITHUB_RUN_ATTEMPT: '2',
     },
-    { ...expected, attempt: originalAttempt },
+    { runId: expected.runId, attempt: originalAttempt },
   );
   const visited = [];
   const result = await api.verifyOriginalPublicationProvenance(
@@ -395,12 +559,12 @@ async function verifyAttestedRecovery({
   return result;
 }
 
-test('recovery authenticates every signed original source/run/attempt instead of historical equivalence', async () => {
-  const result = await verifyAttestedRecovery();
+test('acceptance authenticates every signed original source/run/attempt instead of historical equivalence', async () => {
+  const result = await verifyAttestedPublication();
   assert.equal(result.length, 2);
   assert(result.every(item => item.sourceCommit === sourceCommit));
   await assert.rejects(
-    verifyAttestedRecovery({
+    verifyAttestedPublication({
       change: statement => {
         statement.predicate.buildDefinition.resolvedDependencies[0].digest.gitCommit =
           'f'.repeat(40);
@@ -410,7 +574,7 @@ test('recovery authenticates every signed original source/run/attempt instead of
     /source commit.*does not match accepted commit/,
   );
   await assert.rejects(
-    verifyAttestedRecovery({
+    verifyAttestedPublication({
       change: statement => {
         statement.predicate.runDetails.metadata.invocationId = `https://github.com/${repository}/actions/runs/999/attempts/1`;
         return statement;
@@ -419,7 +583,7 @@ test('recovery authenticates every signed original source/run/attempt instead of
     /workflow run 999, expected 39078116263/,
   );
   await assert.rejects(
-    verifyAttestedRecovery({
+    verifyAttestedPublication({
       originalAttempt: '2',
       change: statement => {
         statement.predicate.runDetails.metadata.invocationId = `https://github.com/${repository}/actions/runs/${runId}/attempts/1`;
@@ -429,7 +593,7 @@ test('recovery authenticates every signed original source/run/attempt instead of
     /does not match fresh producer attempt 2/,
   );
   await assert.rejects(
-    verifyAttestedRecovery({
+    verifyAttestedPublication({
       change: statement => {
         statement.subject[0].digest.sha512 = Buffer.alloc(64, 2).toString(
           'hex',
@@ -440,7 +604,7 @@ test('recovery authenticates every signed original source/run/attempt instead of
     /does not match the accepted tarball integrity/,
   );
   await assert.rejects(
-    verifyAttestedRecovery({
+    verifyAttestedPublication({
       change: statement => {
         statement.predicate.buildDefinition.externalParameters.workflow.path =
           '.github/workflows/recover-bleedingdev-acceptance.yml';
@@ -450,12 +614,12 @@ test('recovery authenticates every signed original source/run/attempt instead of
     /workflow path.*does not match trusted path/,
   );
   await assert.rejects(
-    verifyAttestedRecovery({ rejectSignature: true }),
+    verifyAttestedPublication({ rejectSignature: true }),
     /Invalid attestation signature/,
   );
 });
 
-test('record-only retries retain the actual successful Tractor attempt', async () => {
+test('record-only retries retain the actual successful Tractor attempt of this acceptance run', async () => {
   const { api } = await fixture();
   const baseline = '1'.repeat(40);
   const artifactName = `ultramodern-tractor-downstream-acceptance-${baseline}-attempt-1`;
@@ -467,7 +631,7 @@ test('record-only retries retain the actual successful Tractor attempt', async (
     sourceCommit: '2'.repeat(40),
     jobs: [
       {
-        name: 'Recover only the missing published Tractor acceptance / Exact cohort passes Tractor Node and workerd acceptance',
+        name: 'Accept the exact published cohort in Tractor / Exact cohort passes Tractor Node and workerd acceptance',
         status: 'completed',
         conclusion: 'success',
         run_id: 999,
@@ -489,7 +653,7 @@ test('record-only retries retain the actual successful Tractor attempt', async (
       },
     ],
   };
-  assert.equal(api.assertRecoveredTractorExecution(options), 1);
+  assert.equal(api.assertAcceptedTractorExecution(options), 1);
   for (const patch of [
     { conclusion: 'failure' },
     { run_attempt: 2 },
@@ -497,20 +661,20 @@ test('record-only retries retain the actual successful Tractor attempt', async (
     { head_sha: sourceCommit },
   ]) {
     assert.throws(() =>
-      api.assertRecoveredTractorExecution({
+      api.assertAcceptedTractorExecution({
         ...options,
         jobs: [{ ...options.jobs[0], ...patch }],
       }),
     );
   }
   assert.throws(() =>
-    api.assertRecoveredTractorExecution({ ...options, runAttempt: '0' }),
+    api.assertAcceptedTractorExecution({ ...options, runAttempt: '0' }),
   );
   assert.throws(() =>
-    api.assertRecoveredTractorExecution({ ...options, artifacts: [] }),
+    api.assertAcceptedTractorExecution({ ...options, artifacts: [] }),
   );
   assert.throws(() =>
-    api.assertRecoveredTractorExecution({
+    api.assertAcceptedTractorExecution({
       ...options,
       artifactName: artifactName.replace('-attempt-1', '-attempt-3'),
     }),

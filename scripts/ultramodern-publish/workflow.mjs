@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { isDirectRun } from './lib/direct-run.mjs';
 import { assertRegistrySourceCommitUnpublished } from './lib/prepare-bleedingdev-packages/registry.mjs';
+import { readPreviousReleaseAcceptance } from './lib/release-acceptance-gate.mjs';
 import { verifyReleaseArtifacts } from './lib/prepare-bleedingdev-packages/release-artifacts.mjs';
 
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -95,40 +96,33 @@ function createPublishedIdentity(env) {
   );
 }
 
-function verifyPublishedIdentity(env) {
-  const manifest = JSON.parse(
-    fs.readFileSync(env.BLEEDINGDEV_RELEASE_MANIFEST, 'utf8'),
-  );
-  const identity = JSON.parse(
-    fs.readFileSync(env.BLEEDINGDEV_RELEASE_IDENTITY, 'utf8'),
-  );
-  if (
-    identity.schema !== 'bleedingdev.ultramodern.published-release-identity' ||
-    identity.schemaVersion !== 2 ||
-    identity.dryRun !== false ||
-    identity.releaseRunId !== env.GITHUB_RUN_ID ||
-    String(identity.publicationRunAttempt) !== env.PUBLICATION_RUN_ATTEMPT ||
-    identity.producerRunIdentity !== env.PRODUCER_RUN_IDENTITY ||
-    identity.manifestSha256 !== sha256(env.BLEEDINGDEV_RELEASE_MANIFEST) ||
-    identity.acceptanceReceiptSha256 !==
-      sha256(env.BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT) ||
-    identity.cohortDigest !== manifest.cohortDigest ||
-    identity.release.version !== manifest.release.version ||
-    identity.release.tag !== manifest.release.tag ||
-    identity.source.commit !== manifest.source.commit ||
-    identity.source.repository !== manifest.source.repository
-  ) {
-    throw new Error(
-      'Published release identity does not bind the downloaded exact release',
-    );
+function assertPreviousReleaseSettled(env) {
+  const { status, message } = readPreviousReleaseAcceptance(env);
+  const summary = [
+    '## Previous live cohort',
+    '',
+    `- ${{ clear: 'Settled', failed: 'NOT ACCEPTED', blocked: 'Blocks this cohort' }[status]}: ${message}`,
+    '',
+  ].join('\n');
+  if (env.GITHUB_STEP_SUMMARY) {
+    fs.appendFileSync(env.GITHUB_STEP_SUMMARY, summary);
   }
+  if (status === 'blocked') {
+    throw new Error(message);
+  }
+  if (status === 'failed') {
+    console.log(`::error title=Previous cohort not accepted::${message}`);
+    return;
+  }
+  console.log(message);
 }
 
 function summarizeDelivery(env) {
   const outcome = JSON.parse(
     fs.readFileSync(env.BLEEDINGDEV_PUBLISH_OUTCOME, 'utf8'),
   );
-  const runUrl = `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`;
+  const runUrl = id =>
+    `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${id}`;
   const yesno = (label, value) =>
     value ? `passed (${label})` : 'skipped (dry run)';
   const lines = [];
@@ -137,7 +131,7 @@ function summarizeDelivery(env) {
   lines.push(
     outcome.dryRun
       ? `- Mode: dry run rehearsal of \`${outcome.release.version}\` — nothing below is promotable`
-      : `- Mode: live publish of \`${outcome.release.version}\` @ \`${outcome.source.commit}\` ([this run](${runUrl}))`,
+      : `- Mode: live publish of \`${outcome.release.version}\` @ \`${outcome.source.commit}\` ([publication](${runUrl(outcome.workflowRun.id)}), [published acceptance](${runUrl(outcome.acceptance.workflowRun.id)}))`,
   );
   lines.push(
     `- Immutable bundle / ERP-10 accepted (source): ${
@@ -145,7 +139,7 @@ function summarizeDelivery(env) {
     }`,
   );
   lines.push(
-    `- npm \`${outcome.release.tag}\` cohort converged: ${yesno('accept-published', !outcome.dryRun)}`,
+    `- npm \`${outcome.release.tag}\` cohort converged: ${yesno('verify-publication', !outcome.dryRun)}`,
   );
   lines.push(
     `- npm resolves the accepted ERP-10 closure: ${yesno('accept-published', outcome.evidence.publishedAcceptance !== null)}`,
@@ -175,7 +169,7 @@ const commands = Object.freeze({
   'reject-published-source': rejectPublishedSource,
   'verify-bundle': verifyBundle,
   'create-published-identity': createPublishedIdentity,
-  'verify-published-identity': verifyPublishedIdentity,
+  'assert-previous-release-settled': assertPreviousReleaseSettled,
   'summarize-delivery': summarizeDelivery,
   'source-commit': sourceCommit,
 });

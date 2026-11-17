@@ -42,14 +42,6 @@ on:
         description: Exact UltraModern release-bundle artifact name from this run
         required: true
         type: string
-      wait_for_registry_cohort:
-        description: >-
-          Block on the exact published cohort becoming verifiable in the
-          registry before acceptance. Required only when the caller schedules
-          this acceptance before its own registry-cohort gate has passed.
-        required: false
-        type: boolean
-        default: false
     outputs:
       baseline_revision:
         description: Immutable Tractor revision exercised by the acceptance
@@ -89,27 +81,16 @@ jobs:
       evidence_artifact_name: ${{ steps.evidence.outputs.artifact_name }}
       report_sha256: ${{ steps.evidence.outputs.report_sha256 }}
     steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-
-      # Fail closed before anything is checked out: an unknown mode, or a
-      # rehearsal asked to wait on a published cohort that by definition does
-      # not exist yet, is a caller mistake.
+      # Fail closed before anything is checked out: an unknown mode is a
+      # caller mistake.
       - name: Validate the acceptance mode
         env:
           MODE: ${{ inputs.mode }}
-          WAIT_FOR_REGISTRY_COHORT: ${{ inputs.wait_for_registry_cohort }}
         run: |
           case "$MODE" in
             published|source) ;;
             *) echo "::error::unsupported Tractor acceptance mode: $MODE" >&2; exit 1 ;;
           esac
-          if [[ "$MODE" == "source" && "$WAIT_FOR_REGISTRY_COHORT" == "true" ]]; then
-            echo "::error::a source-mode rehearsal never waits on the published registry cohort" >&2
-            exit 1
-          fi
 
       - name: Validate retained adoption inputs and publication run
         if: github.event_name == 'workflow_dispatch' && inputs.release_bundle_artifact == ''
@@ -134,8 +115,17 @@ jobs:
               .event == "workflow_dispatch" and
               .path == ".github/workflows/publish-bleedingdev.yml"
             '
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PRODUCER_RUN_ID/jobs?filter=latest&per_page=100" |
-            jq -e 'any(.jobs[]; .name == "Publish accepted @bleedingdev tarballs" and .conclusion == "success")'
+          jobs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PRODUCER_RUN_ID/jobs?filter=latest&per_page=100")"
+          jq -e 'any(.jobs[]; .name == "Publish accepted @bleedingdev tarballs" and .conclusion == "success")' <<< "$jobs"
+          # A green publish run proves only that npm accepted the tarballs. The
+          # published cohort is accepted by a green accept-bleedingdev-release
+          # run for it, or, for a run that accepted in-run, by its own job.
+          if ! jq -e 'any(.jobs[]; .name == "Accept the exact published registry cohort" and .conclusion == "success")' <<< "$jobs" >/dev/null; then
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/accept-bleedingdev-release.yml/runs?status=success&per_page=100" |
+              jq -e --arg title "Accept published release from run $PRODUCER_RUN_ID" '
+                any(.workflow_runs[]; .display_title == $title and .conclusion == "success" and .head_branch == "main-ultramodern" and .event == "workflow_dispatch")
+              '
+          fi
 
       - name: Checkout acceptance runner
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -214,26 +204,6 @@ jobs:
           version: 2026.11.8
           cache_save: false
           working_directory: tractor
-
-      - name: Install publication CLI dependencies
-        if: inputs.wait_for_registry_cohort
-        working-directory: modernjs
-        run: mise exec -- pnpm install --frozen-lockfile --ignore-scripts --prod --filter modern-js-monorepo --package-import-method=clone-or-copy
-
-      # Same retry shape as publish-bleedingdev.yml's "Wait for the exact
-      # registry cohort". The version and tag come from the downloaded manifest,
-      # which the publishing workflow already bound to its dispatch inputs
-      # before publishing.
-      - name: Wait for the exact registry cohort
-        if: inputs.wait_for_registry_cohort
-        working-directory: modernjs
-        env:
-          # Mirrors BLEEDINGDEV_PUBLISH_CONCURRENCY in publish-bleedingdev.yml.
-          PUBLISH_CONCURRENCY: '8'
-          RELEASE_DIR: .modern/bleedingdev-publish
-        run: |
-          bash scripts/ultramodern-publish/wait-for-registry-cohort.sh \
-            "$RELEASE_DIR" "$PUBLISH_CONCURRENCY"
 
       - name: Provision Tractor acceptance dependencies
         working-directory: modernjs
