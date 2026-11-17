@@ -80,7 +80,7 @@ test('only the reviewed support baseline keeps its exact owned selections', () =
     /unexpected old edge devDependencies.@effect\/opentelemetry/,
   );
   const forgedMetadata = structuredClone(accepted);
-  forgedMetadata.ultramodern.supportArtifacts.producer.runAttempt = 2;
+  forgedMetadata.ultramodern.supportArtifacts.producer.runAttempt += 1;
   assert.throws(
     () => invoke({ current: forgedMetadata }),
     /unverified supportArtifacts metadata/,
@@ -145,7 +145,87 @@ test('only the reviewed support baseline keeps its exact owned selections', () =
   );
 });
 
+test('the shipped support-v3 activation stays current only through the reviewed baseline', () => {
+  // Activation 92307d27 shipped these exact support selections; the accepted
+  // cohort's main source is the reviewed baseline carrying them unchanged.
+  const activation = '92307d27ccf49a83bf0027aacd492e90b5b01c12';
+  const priorV2 = 'c4a6393979e763cf94cdcd18337e5047a8577d63';
+  let files = 0;
+  let selections = 0;
+  for (const [file, names] of Object.entries(artifactOwners.supportArtifacts)) {
+    // Native-owned selections need their own native authority.
+    if (artifactOwners.nativeArtifacts[file]) continue;
+    const shipped = showAt(activation, file);
+    const descriptor = shipped.ultramodern.supportArtifacts;
+    assert.equal(descriptor.protocol, 'ultramodern.support-artifacts.v3');
+    assert.deepEqual(
+      [
+        descriptor.producer.source,
+        descriptor.producer.runId,
+        descriptor.producer.runAttempt,
+      ],
+      ['d62b29f5039311ec122012887ce6bf7c4a527d6e', 43934193068, 2],
+    );
+    const expected = showAt(sourceRevision, file);
+    const bound = {
+      revision: supportBaselineRevision,
+      manifest: showAt(supportBaselineRevision, file),
+    };
+    const invoke = (current, supportBaseline = bound) =>
+      planManifestUpdate({
+        path: file,
+        expected,
+        current,
+        sourceRevision,
+        supportBaseline,
+      });
+    const kept = invoke(shipped);
+    assert.equal(kept.changes.length, 0, `${file}: shipped state is current`);
+    for (const name of names)
+      for (const field of ['dependencies', 'devDependencies']) {
+        const value = shipped[field]?.[name];
+        if (value === undefined) continue;
+        assert.equal(value, descriptor.packages[name].request);
+        assert.equal(
+          kept.edges.find(edge => edge.field === field && edge.name === name)
+            ?.status,
+          'current',
+        );
+        selections++;
+        // Another run attempt of the same producer is not the shipped bytes.
+        const forged = structuredClone(shipped);
+        forged[field][name] = value.replace(/-\d+\/(?=[^/]+$)/u, '-9/');
+        assert.notEqual(forged[field][name], value);
+        assert.throws(() => invoke(forged), /unexpected old edge/);
+        // The superseded v2 selection is no longer reviewed authority.
+        const v2 = structuredClone(shipped);
+        v2[field][name] = showAt(priorV2, file)[field][name];
+        assert.notEqual(v2[field][name], value);
+        assert.throws(() => invoke(v2), /unexpected old edge/);
+      }
+    const forgedMetadata = structuredClone(shipped);
+    forgedMetadata.ultramodern.supportArtifacts.producer.source = 'f'.repeat(
+      40,
+    );
+    assert.throws(
+      () => invoke(forgedMetadata),
+      /unverified supportArtifacts metadata/,
+    );
+    // Only the reviewed revision binds; even the activation commit or the
+    // prior v2 baseline presented as the baseline grant nothing.
+    for (const revision of [activation, priorV2])
+      assert.throws(
+        () => invoke(shipped, { ...bound, revision }),
+        /unreviewed support baseline revision/,
+      );
+    files++;
+  }
+  assert(files > 15 && selections > 20);
+});
+
 test('only the reviewed native baseline keeps its exact owned selections', () => {
+  const supersededNative = 'ea6b64f23735f29a2cb2a4647c04d2dc3a185cbc';
+  const nativeActivation = 'c40bbf9976ff568bad06be140dad2613fe25dafb';
   const nativeOnly = Object.keys(artifactOwners.nativeArtifacts).filter(
     file => !artifactOwners.supportArtifacts[file],
   );
@@ -153,7 +233,7 @@ test('only the reviewed native baseline keeps its exact owned selections', () =>
   for (const file of nativeOnly) {
     const accepted = showAt(nativeBaselineRevision, file);
     const prior = accepted.ultramodern.nativeArtifacts;
-    assert.equal(prior.producer.runId, 43904193604);
+    assert.equal(prior.producer.runId, 43993884470);
     assert.equal(prior.producer.runAttempt, 1);
     const expected = showAt(sourceRevision, file);
     const bound = { revision: nativeBaselineRevision, manifest: accepted };
@@ -219,6 +299,20 @@ test('only the reviewed native baseline keeps its exact owned selections', () =>
           () => invoke(forged, { ...bound, manifest: forged }),
           /unexpected old edge/,
         );
+        if (field === 'peerDependencies') continue;
+        // A later native run (stand-in id) needs admission, not the baseline.
+        const later = structuredClone(accepted);
+        later[field][name] = pin.request.replace(
+          '-43993884470-1/',
+          '-44131000000-1/',
+        );
+        assert.notEqual(later[field][name], to);
+        assert.throws(() => invoke(later), /unexpected old edge/);
+        // The superseded native run is no longer reviewed authority.
+        const superseded = structuredClone(accepted);
+        superseded[field][name] = showAt(supersededNative, file)[field][name];
+        assert.notEqual(superseded[field][name], to);
+        assert.throws(() => invoke(superseded), /unexpected old edge/);
       }
     assert(selections >= 2, `${file}: native selections`);
     const forgedMetadata = structuredClone(accepted);
@@ -227,7 +321,7 @@ test('only the reviewed native baseline keeps its exact owned selections', () =>
       () => invoke(forgedMetadata),
       /unverified nativeArtifacts metadata/,
     );
-    for (const revision of ['f'.repeat(40), supportBaselineRevision])
+    for (const revision of ['f'.repeat(40), supersededNative, nativeActivation])
       assert.throws(
         () => invoke(accepted, { revision, manifest: accepted }),
         /unreviewed native baseline revision/,
@@ -295,6 +389,136 @@ test('only the reviewed native baseline keeps its exact owned selections', () =>
       /unexpected old edge devDependencies\.octane|unverified nativeArtifacts/,
     );
   }
+});
+
+test('every native owner keeps the shipped native activation exactly', () => {
+  // Activation c40bbf99 shipped native run 43993884470; the reviewed baseline
+  // carries the same descriptor and owned selections for every owner.
+  const activation = 'c40bbf9976ff568bad06be140dad2613fe25dafb';
+  const fields = ['dependencies', 'devDependencies', 'peerDependencies'];
+  let selections = 0;
+  for (const [file, names] of Object.entries(artifactOwners.nativeArtifacts)) {
+    const shipped = showAt(activation, file);
+    const baseline = showAt(nativeBaselineRevision, file);
+    const descriptor = shipped.ultramodern.nativeArtifacts;
+    assert.deepEqual(
+      [
+        descriptor.producer.source,
+        descriptor.producer.runId,
+        descriptor.producer.runAttempt,
+      ],
+      ['ea6b64f23735f29a2cb2a4647c04d2dc3a185cbc', 43993884470, 1],
+    );
+    assert.deepEqual(baseline.ultramodern.nativeArtifacts, descriptor);
+    const supportBaseline = artifactOwners.supportArtifacts[file]
+      ? {
+          revision: supportBaselineRevision,
+          manifest: showAt(supportBaselineRevision, file),
+        }
+      : undefined;
+    const kept = planManifestUpdate({
+      path: file,
+      expected: showAt(sourceRevision, file),
+      current: shipped,
+      sourceRevision,
+      supportBaseline,
+      nativeBaseline: { revision: nativeBaselineRevision, manifest: baseline },
+    });
+    assert.equal(kept.changes.length, 0, `${file}: shipped state is current`);
+    for (const name of names)
+      for (const field of fields) {
+        const value = shipped[field]?.[name];
+        if (value === undefined) continue;
+        const pin = descriptor.packages[name];
+        assert.equal(
+          value,
+          field === 'peerDependencies' ? pin.version : pin.request,
+        );
+        assert.equal(baseline[field][name], value);
+        selections++;
+      }
+  }
+  assert(selections > 20);
+});
+
+test('accepts only the exact reviewed server compiler owner move', () => {
+  const utils = 'packages/server/utils/package.json';
+  const extensions = 'packages/solutions/app-tools-extensions/package.json';
+  const shipped = '0024faeea760417227135429fe2727ae471abbe4';
+  for (const file of [utils, extensions]) {
+    const expected = showAt(sourceRevision, file);
+    const current = showAt(shipped, file);
+    const supportBaseline = {
+      revision: supportBaselineRevision,
+      manifest: showAt(supportBaselineRevision, file),
+    };
+    const invoke = manifest =>
+      planManifestUpdate({
+        path: file,
+        expected,
+        current: manifest,
+        sourceRevision,
+        supportBaseline,
+      });
+    assert.equal(invoke(current).changes.length, 0, `${file}: shipped`);
+    // The updater never performs the move itself.
+    if (file === utils) {
+      const result = invoke(current);
+      assert.deepEqual(
+        result.edges
+          .filter(edge => edge.field === 'dependencies')
+          .filter(edge =>
+            ['reviewed-addition', 'reviewed-removal'].includes(edge.status),
+          )
+          .map(edge => [edge.name, edge.from, edge.to ?? null, edge.status])
+          .sort(([a], [b]) => a.localeCompare(b)),
+        [
+          [
+            '@modern-js/app-tools-extensions',
+            null,
+            'workspace:*',
+            'reviewed-addition',
+          ],
+          ['@rslib/core', '1.0.3', null, 'reviewed-removal'],
+          ['typescript', '7.0.2', null, 'reviewed-removal'],
+        ],
+      );
+    }
+  }
+  const current = showAt(shipped, extensions);
+  const expected = showAt(sourceRevision, extensions);
+  const invoke = manifest =>
+    planManifestUpdate({
+      path: extensions,
+      expected,
+      current: manifest,
+      sourceRevision,
+      supportBaseline: {
+        revision: supportBaselineRevision,
+        manifest: showAt(supportBaselineRevision, extensions),
+      },
+    });
+  for (const [name, wrong] of [
+    ['@rslib/core', '1.0.6'],
+    ['typescript', '^7.0.2'],
+  ]) {
+    const bad = structuredClone(current);
+    bad.dependencies[name] = wrong;
+    assert.throws(
+      () => invoke(bad),
+      new RegExp(
+        `unreviewed transition dependencies\\.${name.replace('/', '\\/')}`,
+      ),
+    );
+  }
+  // Right names in the wrong field, or an unreviewed neighbour, grant nothing.
+  const misplaced = structuredClone(current);
+  misplaced.peerDependencies.typescript = misplaced.dependencies.typescript;
+  delete misplaced.dependencies.typescript;
+  assert.throws(() => invoke(misplaced), /edge names changed/);
+  const surprise = structuredClone(current);
+  surprise.dependencies['@rslib/api-extractor'] = '1.0.7';
+  assert.throws(() => invoke(surprise), /edge names changed/);
 });
 
 test('framework declaration plugin peer and development input stay raw exact', () => {
@@ -1353,8 +1577,8 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     }
   }
   assert(reviewedEdges > 50);
-  // Prior accepted v2 manifests move to the newly admitted v3 descriptor only
-  // through the reviewed baseline commit's exact owned support selections.
+  // Shipped v3 manifests move to a newly admitted descriptor only through the
+  // reviewed baseline commit's exact owned support selections.
   const supportOnly = await admitArtifactDescriptors({
     ...options,
     nativeDescriptor: undefined,
@@ -1373,7 +1597,8 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     );
     const prior = baseline.ultramodern?.supportArtifacts;
     if (!prior) continue;
-    assert.equal(prior.protocol, 'ultramodern.support-artifacts.v2');
+    assert.equal(prior.protocol, 'ultramodern.support-artifacts.v3');
+    assert.equal(prior.producer.runId, 43934193068);
     const expected = JSON.parse(
       execFileSync('git', ['-C', root, 'show', `${sourceRevision}:${file}`], {
         encoding: 'utf8',
@@ -1389,7 +1614,8 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
         supportBaseline,
       });
     const bound = { revision: supportBaselineRevision, manifest: baseline };
-    // Fails without the reviewed baseline: v2 is not v3 authority.
+    // Fails without the reviewed baseline: the shipped run is not the newly
+    // admitted one.
     assert.throws(() => invoke(baseline), /unexpected old|unverified|tuple/);
     const result = invoke(baseline, bound);
     assert.deepEqual(result.manifest.ultramodern.supportArtifacts, supportV3);
@@ -1428,7 +1654,7 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
       );
     const baseline = show(nativeBaselineRevision);
     const prior = baseline.ultramodern.nativeArtifacts;
-    assert.equal(prior.producer.runId, 43904193604);
+    assert.equal(prior.producer.runId, 43993884470);
     const expected = show(sourceRevision);
     const current = structuredClone(baseline);
     const supportBound = { revision: supportBaselineRevision };

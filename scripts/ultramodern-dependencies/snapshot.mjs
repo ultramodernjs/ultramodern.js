@@ -6,19 +6,21 @@ export const queriedAt = {
 export const rslibPatchSha256 =
   'bd0c8f1b4c4681eeb0d1ea0123c252ad41b17f01be1ca171bd8c42ca2d652e44';
 
-// Immutable reviewed commit carrying the accepted support-v2 activation
-// (producer source 48b9eef7, run 43912289696 attempt 1). Its manifests are a
-// baseline only for support-owned metadata and the exact support edges that
-// select that descriptor; they grant no other edge or URL authority.
+// Immutable reviewed merge (PR #322) of the accepted cohort's main source,
+// carrying the shipped support-v3 activation 92307d27 (producer source
+// d62b29f5, run 43934193068 attempt 2). Its manifests are a baseline only for
+// support-owned metadata and the exact support edges that select that
+// descriptor; they grant no other edge or URL authority.
 export const supportBaselineRevision =
-  'c4a6393979e763cf94cdcd18337e5047a8577d63';
+  '0024faeea760417227135429fe2727ae471abbe4';
 
-// Immutable reviewed merge (PR #316) carrying the accepted native activation
-// (producer source 48b9eef7, run 43904193604 attempt 1). Its manifests are a
-// baseline only for native-owned metadata and the exact native edges that
-// select that descriptor; they grant no other edge or URL authority.
+// The same accepted main source, carrying the shipped native activation
+// c40bbf99 (producer source ea6b64f2, run 43993884470 attempt 1). Its
+// manifests are a baseline only for native-owned metadata and the exact native
+// edges that select that descriptor; they grant no other edge or URL authority.
+// A later native run needs admission, never this baseline.
 export const nativeBaselineRevision =
-  'ea6b64f23735f29a2cb2a4647c04d2dc3a185cbc';
+  '0024faeea760417227135429fe2727ae471abbe4';
 
 // Owning source and actual packed runtime/type qualification establish this
 // consolidation. Corrected OTel distribution and release acceptance stay separate.
@@ -108,6 +110,7 @@ const solidDeclarationsCommit = 'a08a714015d1a8403e6b328049317027c19674a9';
 const svgrDeclarationsCommit = '7c27dc97387bbac67c051c9865bce114d04779b8';
 const declarationPluginSupportCommit =
   'ca40fbecaff494fe71a9960960ff84f394a4933f';
+const serverCompilerOwnerCommit = '3961f60e3ffef65183ecea01d803a6b552c19239';
 const appTools = 'packages/solutions/app-tools/package.json';
 const ultramodernAppTools =
   'packages/solutions/ultramodern-app-tools/package.json';
@@ -185,6 +188,59 @@ export const reviewedTransitions = Object.freeze([
       null,
       '1.0.7',
     ),
+  ),
+  // The server compiler moved from server-utils into app-tools-extensions,
+  // which now owns its Rslib and TypeScript runtime inputs; server-utils
+  // depends on that owner instead of the reverse.
+  reviewedTransition(
+    serverCompilerOwnerCommit,
+    'packages/server/utils/package.json',
+    'dependencies',
+    '@modern-js/app-tools-extensions',
+    null,
+    'workspace:*',
+  ),
+  ...[
+    ['@rslib/core', '1.0.3'],
+    ['typescript', '7.0.2'],
+  ].map(([name, from]) =>
+    reviewedTransition(
+      serverCompilerOwnerCommit,
+      'packages/server/utils/package.json',
+      'dependencies',
+      name,
+      from,
+      null,
+    ),
+  ),
+  reviewedTransition(
+    serverCompilerOwnerCommit,
+    appToolsExtensions,
+    'dependencies',
+    '@modern-js/server-utils',
+    'workspace:*',
+    null,
+  ),
+  ...[
+    ['@rslib/core', '1.0.7'],
+    ['typescript', '7.0.2'],
+  ].map(([name, to]) =>
+    reviewedTransition(
+      serverCompilerOwnerCommit,
+      appToolsExtensions,
+      'dependencies',
+      name,
+      null,
+      to,
+    ),
+  ),
+  reviewedTransition(
+    serverCompilerOwnerCommit,
+    appToolsExtensions,
+    'devDependencies',
+    '@rslib/core',
+    '1.0.3',
+    null,
   ),
 ]);
 
