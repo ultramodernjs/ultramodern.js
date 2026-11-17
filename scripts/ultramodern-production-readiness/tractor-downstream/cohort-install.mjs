@@ -97,6 +97,90 @@ function admitTractorEffectDependencies(
   return admitted;
 }
 
+// Match the packed generator's readBundledFrameworkManifests: only dependency
+// and optional-dependency edges establish the create bundle's peer context.
+// Read authenticated archives, never this checkout's sources or installed graph.
+function readPackedToolingManifests(release, createManifest) {
+  const packages = new Map(
+    release.packages?.map(item => [item.sourceName, item]),
+  );
+  const manifests = new Map([
+    ['@modern-js/ultramodern-create', createManifest],
+  ]);
+  for (const [owner, manifest] of manifests) {
+    for (const [name, request] of Object.entries({
+      ...manifest.dependencies,
+      ...manifest.optionalDependencies,
+    })) {
+      if (!name.startsWith('@modern-js/') || !release.aliases[name]) continue;
+      const expected = `npm:${release.aliases[name]}@${release.release.version}`;
+      if (request !== expected) {
+        throw new Error(
+          `Packed framework edge ${owner} -> ${name} must select ${expected}`,
+        );
+      }
+      if (manifests.has(name)) continue;
+      const item = packages.get(name);
+      if (!item) {
+        throw new Error(
+          `Packed create bundle is missing framework owner ${name}`,
+        );
+      }
+      const packed = inspectNpmTarball(
+        readVerifiedPackageArtifactBytes(item, item.artifactPath),
+      );
+      if (
+        packed.packageJson.name !== release.aliases[name] ||
+        packed.packageJson.version !== release.release.version ||
+        packed.packageJson.ultramodern?.sourceName !== name
+      ) {
+        throw new Error(
+          `Packed framework owner ${name} differs from the cohort`,
+        );
+      }
+      manifests.set(name, packed.packageJson);
+    }
+  }
+  return manifests;
+}
+
+// Match toolingSupportDependencies: walk installed bundle owners, including
+// optional peer reuse, but never transitive devDependencies or unbundled peers.
+function importerToolingSupport(manifest, manifests, support) {
+  const hosts = {};
+  const seen = new Set();
+  const queue = Object.keys({
+    ...manifest.dependencies,
+    ...manifest.devDependencies,
+  });
+  for (const name of queue) {
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const owner = manifests.get(name);
+    if (!owner) continue;
+    for (const [peer, request] of Object.entries(
+      owner.peerDependencies ?? {},
+    )) {
+      const pin = support.packages[peer];
+      if (!pin) continue;
+      if (request !== pin.version && request !== pin.request) {
+        throw new Error(
+          `Packed tooling peer ${name} -> ${peer} differs from the support descriptor`,
+        );
+      }
+      hosts[peer] = pin.request;
+    }
+    queue.push(
+      ...Object.keys({
+        ...owner.dependencies,
+        ...owner.optionalDependencies,
+        ...owner.peerDependencies,
+      }).filter(dependency => manifests.has(dependency)),
+    );
+  }
+  return hosts;
+}
+
 /** Select the exact supplied bundle through the consumer's native pnpm catalog. */
 export function prepareTractorCohortInstallation(
   workspace,
@@ -178,6 +262,10 @@ export function prepareTractorCohortInstallation(
     ]),
   );
   Object.assign(nativeDependencies, supportRequests);
+  const toolingManifests = readPackedToolingManifests(
+    release,
+    packed.packageJson,
+  );
   const nativePackages = Object.keys(nativeDependencies);
   const expectedExclusions = [
     ...cohort.targetNames.map(name => `${name}@${version}`),
@@ -229,7 +317,6 @@ export function prepareTractorCohortInstallation(
     throw new Error('Tractor requires a native catalogs.ultramodern entry');
   }
   const requested = new Set();
-  const supportHosts = new Set(['rsbuild-plugin-dts']);
   const consumerManifests = collectPackageJsonFiles(workspace).map(file => ({
     file,
     manifest: JSON.parse(fs.readFileSync(file, 'utf8')),
@@ -238,12 +325,13 @@ export function prepareTractorCohortInstallation(
   for (const { file, manifest } of consumerManifests) {
     for (const block of dependencyBlocks) {
       for (const [name, specifier] of Object.entries(manifest[block] ?? {})) {
-        if (Object.hasOwn(supportRequests, name)) {
-          if (block === 'optionalDependencies')
-            throw new Error(
-              `Tractor support artifact ${name} must not be an optional dependency`,
-            );
-          supportHosts.add(name);
+        if (
+          Object.hasOwn(supportRequests, name) &&
+          block === 'optionalDependencies'
+        ) {
+          throw new Error(
+            `Tractor support artifact ${name} must not be an optional dependency`,
+          );
         }
         if (!name.startsWith('@modern-js/')) continue;
         if (!cohort.aliases[name]) {
@@ -339,10 +427,20 @@ export function prepareTractorCohortInstallation(
         }
       }
     }
-    if (path.dirname(file) === workspace) {
-      manifest.devDependencies ??= {};
-      for (const name of supportHosts)
-        manifest.devDependencies[name] = supportRequests[name];
+    for (const [name, request] of Object.entries(
+      importerToolingSupport(manifest, toolingManifests, supportArtifacts),
+    )) {
+      // Application runtime ownership takes precedence over a tooling host.
+      // The root has no renderer/runtime ownership in the generator contract.
+      if (
+        path.dirname(file) === workspace ||
+        manifest.dependencies?.[name] !== request
+      ) {
+        manifest.devDependencies ??= {};
+        manifest.devDependencies[name] = request;
+        if (manifest.dependencies) delete manifest.dependencies[name];
+      }
+      if (manifest.peerDependencies) delete manifest.peerDependencies[name];
       ownsSupport = true;
     }
     if (ownsSupport) {

@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const test = require('node:test');
 const { createProcessEnv, runCommand } = require('../../lib/process-kit');
 
@@ -215,9 +216,6 @@ async function writeCandidateCreatePackage(
   dependencies,
   { supportArtifacts = true } = {},
 ) {
-  const { inspectNpmTarball } = await import(
-    '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs'
-  );
   const { createTemplateRequiredFiles } = await import(
     '../../ultramodern-publish/lib/prepare-bleedingdev-packages/constants.mjs'
   );
@@ -249,6 +247,33 @@ async function writeCandidateCreatePackage(
     }),
   );
   const artifactPath = path.join(root, 'candidate.tgz');
+  next.createPackage = await packFixturePackage(
+    packageDir,
+    artifactPath,
+    '@modern-js/ultramodern-create',
+  );
+}
+
+async function packFixturePackage(packageDir, artifactPath, sourceName) {
+  const { inspectNpmTarball } = await import(
+    '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs'
+  );
+  const manifestFile = path.join(packageDir, 'package.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  for (const group of [
+    'dependencies',
+    'devDependencies',
+    'optionalDependencies',
+    'peerDependencies',
+  ]) {
+    if (manifest[group])
+      manifest[group] = Object.fromEntries(
+        Object.entries(manifest[group]).sort(([left], [right]) =>
+          left < right ? -1 : left > right ? 1 : 0,
+        ),
+      );
+  }
+  fs.writeFileSync(manifestFile, JSON.stringify(manifest));
   const priorCopyfile = process.env.COPYFILE_DISABLE;
   process.env.COPYFILE_DISABLE = '1';
   try {
@@ -264,11 +289,12 @@ async function writeCandidateCreatePackage(
     else process.env.COPYFILE_DISABLE = priorCopyfile;
   }
   const bytes = fs.readFileSync(artifactPath);
-  next.createPackage = {
-    ...inspectNpmTarball(bytes),
-    sourceName: '@modern-js/ultramodern-create',
-    targetName: '@bleedingdev/modern-js-ultramodern-create',
-    version: next.release.version,
+  const inspection = inspectNpmTarball(bytes);
+  return {
+    ...inspection,
+    sourceName,
+    targetName: inspection.packageJson.name,
+    version: inspection.packageJson.version,
     artifactPath,
     size: bytes.length,
     sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
@@ -276,6 +302,447 @@ async function writeCandidateCreatePackage(
     integrity: `sha512-${crypto.createHash('sha512').update(bytes).digest('base64')}`,
   };
 }
+
+function toolingProducerOptions(next) {
+  return {
+    producerEffectDependencies,
+    producerReactDependencies,
+    minimumReleaseAgeExclude: [
+      ...Object.values(next.aliases).map(
+        name => `${name}@${next.release.version}`,
+      ),
+      ...(next.sidecars?.packages ?? []).map(
+        ({ name, version }) => `${name}@${version}`,
+      ),
+    ].sort(),
+    trustPolicy: 'no-downgrade',
+    trustPolicyIgnoreAfter: 1440,
+    trustPolicyExclude: [],
+  };
+}
+
+test('cohort staging projects packed tooling hosts per importer, including optional peer reuse', async t => {
+  const { prepareTractorCohortInstallation } = await cohortInstallPromise;
+  const root = fixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeAuthenticatedCohort(root);
+  const next = structuredClone(release);
+  const support = await supportArtifactsDescriptor();
+  const framework = {
+    runtime: {},
+    'fixture-tools': {
+      peerDependencies: {
+        'rsbuild-plugin-dts': support.packages['rsbuild-plugin-dts'].version,
+        '@modern-js/fixture-solid': '*',
+        '@modern-js/fixture-unbundled': '*',
+      },
+      peerDependenciesMeta: {
+        '@modern-js/fixture-solid': { optional: true },
+        '@modern-js/fixture-unbundled': { optional: true },
+      },
+      devDependencies: { '@modern-js/fixture-tests': 'workspace:*' },
+    },
+    'fixture-solid': {
+      peerDependencies: { 'solid-js': support.packages['solid-js'].version },
+    },
+    'fixture-library': {
+      peerDependencies: {
+        'rsbuild-plugin-dts': support.packages['rsbuild-plugin-dts'].version,
+      },
+    },
+    'fixture-headless': {},
+    'fixture-tests': {
+      peerDependencies: {
+        '@rstest/core': support.packages['@rstest/core'].version,
+      },
+    },
+    'fixture-unbundled': {
+      peerDependencies: {
+        'ioredis-mock': support.packages['ioredis-mock'].version,
+      },
+    },
+  };
+  for (const name of ['ultramodern-create', ...Object.keys(framework)]) {
+    next.aliases[`@modern-js/${name}`] = `@bleedingdev/modern-js-${name}`;
+  }
+  next.cohortProjection.value.aliases = { ...next.aliases };
+  const select = name =>
+    `npm:${next.aliases[`@modern-js/${name}`]}@${next.release.version}`;
+  await writeCandidateCreatePackage(root, next, {
+    '@effect/tsgo': '0.69.0',
+    '@modern-js/fixture-tools': select('fixture-tools'),
+    '@modern-js/fixture-solid': select('fixture-solid'),
+    '@modern-js/fixture-library': select('fixture-library'),
+    '@modern-js/fixture-headless': select('fixture-headless'),
+  });
+  next.packages = [next.createPackage];
+  for (const [name, dependencies] of Object.entries(framework)) {
+    const packageDir = path.join(root, `archives/${name}/package`);
+    fs.mkdirSync(packageDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(packageDir, 'package.json'),
+      JSON.stringify({
+        name: next.aliases[`@modern-js/${name}`],
+        version: next.release.version,
+        publishConfig: { access: 'public' },
+        ultramodern: { sourceName: `@modern-js/${name}` },
+        ...dependencies,
+        // Packed devDependencies are not rewritten/installable framework edges.
+        devDependencies: dependencies.devDependencies
+          ? { '@modern-js/fixture-tests': select('fixture-tests') }
+          : undefined,
+      }),
+    );
+    next.packages.push(
+      await packFixturePackage(
+        packageDir,
+        path.join(root, `${name}.tgz`),
+        `@modern-js/${name}`,
+      ),
+    );
+  }
+  next.publishOrder = Object.values(next.aliases);
+  const importers = {
+    'package.json': {
+      devDependencies: {
+        '@modern-js/ultramodern-create': 'catalog:ultramodern',
+      },
+    },
+    'apps/shell-super-app/package.json': {
+      dependencies: {
+        '@tanstack/react-router': 'https://wrong.invalid/router.tgz',
+      },
+      devDependencies: {
+        '@modern-js/fixture-tools': 'catalog:ultramodern',
+        'rsbuild-plugin-dts': 'https://wrong.invalid/dts.tgz',
+      },
+    },
+    'apps/ui-only/package.json': {
+      devDependencies: {
+        '@modern-js/fixture-tools': 'catalog:ultramodern',
+      },
+    },
+    'apps/headless/package.json': {
+      devDependencies: {
+        '@modern-js/fixture-headless': 'catalog:ultramodern',
+      },
+    },
+    'packages/shared-library/package.json': {
+      devDependencies: {
+        '@modern-js/fixture-library': 'catalog:ultramodern',
+      },
+    },
+    'apps/solid-runtime/package.json': {
+      dependencies: { 'solid-js': support.packages['solid-js'].version },
+      devDependencies: { '@modern-js/fixture-tools': 'catalog:ultramodern' },
+    },
+  };
+  for (const [relative, manifest] of Object.entries(importers)) {
+    const file = path.join(root, relative);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const existing = fs.existsSync(file)
+      ? JSON.parse(fs.readFileSync(file, 'utf8'))
+      : {};
+    fs.writeFileSync(file, JSON.stringify({ ...existing, ...manifest }));
+  }
+  const { stringify } = await import('yaml');
+  fs.writeFileSync(
+    path.join(root, 'pnpm-workspace.yaml'),
+    stringify({
+      catalogs: {
+        ultramodern: Object.fromEntries(
+          Object.keys(next.aliases).map(name => [name, 'old']),
+        ),
+      },
+    }),
+  );
+  const options = toolingProducerOptions(next);
+  const { compilerBootstrapSelectors } = await import(
+    '../published-create-proof/package-cohort.mjs'
+  );
+  options.minimumReleaseAgeExclude.push(
+    ...compilerBootstrapSelectors(next.createPackage.packageJson),
+  );
+  options.minimumReleaseAgeExclude.sort();
+  const tools = next.packages.find(
+    item => item.sourceName === '@modern-js/fixture-tools',
+  );
+  const originalBytes = fs.readFileSync(tools.artifactPath);
+  fs.writeFileSync(
+    tools.artifactPath,
+    Buffer.concat([originalBytes, Buffer.from('tamper')]),
+  );
+  const before = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
+  assert.throws(
+    () => prepareTractorCohortInstallation(root, next, options),
+    /tarball size mismatch/u,
+  );
+  assert.equal(
+    fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
+    before,
+  );
+  fs.writeFileSync(tools.artifactPath, originalBytes);
+  prepareTractorCohortInstallation(root, next, options);
+  const expectedHosts = {
+    'package.json': ['rsbuild-plugin-dts', 'solid-js'],
+    'apps/shell-super-app/package.json': ['rsbuild-plugin-dts', 'solid-js'],
+    'apps/ui-only/package.json': ['rsbuild-plugin-dts', 'solid-js'],
+    'apps/headless/package.json': [],
+    'packages/shared-library/package.json': ['rsbuild-plugin-dts'],
+    'apps/solid-runtime/package.json': ['rsbuild-plugin-dts'],
+  };
+  for (const [relative, names] of Object.entries(expectedHosts)) {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(root, relative), 'utf8'),
+    );
+    assert.deepEqual(
+      Object.keys(manifest.devDependencies)
+        .filter(name => Object.hasOwn(support.packages, name))
+        .sort(),
+      names,
+      relative,
+    );
+    for (const name of names) {
+      assert.equal(
+        manifest.devDependencies[name],
+        support.packages[name].request,
+        `${relative}: ${name}`,
+      );
+    }
+    if (names.length)
+      assert.deepEqual(manifest.ultramodern.supportArtifacts, support);
+    assert.equal(
+      manifest.pnpm,
+      undefined,
+      'No importer peer-resolution workaround',
+    );
+  }
+  assert.equal(
+    JSON.parse(
+      fs.readFileSync(
+        path.join(root, 'apps/shell-super-app/package.json'),
+        'utf8',
+      ),
+    ).dependencies['@tanstack/react-router'],
+    support.packages['@tanstack/react-router'].request,
+  );
+  assert.equal(
+    JSON.parse(
+      fs.readFileSync(
+        path.join(root, 'apps/solid-runtime/package.json'),
+        'utf8',
+      ),
+    ).dependencies['solid-js'],
+    support.packages['solid-js'].request,
+  );
+  const staged = Object.keys(importers).map(file =>
+    fs.readFileSync(path.join(root, file), 'utf8'),
+  );
+  prepareTractorCohortInstallation(root, next, options);
+  assert.deepEqual(
+    Object.keys(importers).map(file =>
+      fs.readFileSync(path.join(root, file), 'utf8'),
+    ),
+    staged,
+  );
+});
+
+test('cohort staging matches the supplied authenticated packed generator for every importer', {
+  skip: !process.env.ULTRAMODERN_TRACTOR_TEST_BUNDLE,
+}, async t => {
+  const { prepareTractorCohortInstallation } = await cohortInstallPromise;
+  const { readReleaseManifest } = await import(
+    '../../ultramodern-publish/lib/source-create-proof/release-manifest.mjs'
+  );
+  const { inspectNpmTarball, readVerifiedPackageArtifactBytes } = await import(
+    '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs'
+  );
+  const { compilerBootstrapSelectors, reviewedCompilerTrustExclusions } =
+    await import('../published-create-proof/package-cohort.mjs');
+  const { stringify } = await import('yaml');
+  const next = readReleaseManifest({
+    manifestPath: path.join(
+      process.env.ULTRAMODERN_TRACTOR_TEST_BUNDLE,
+      'manifest.json',
+    ),
+  });
+  const root = fixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  // Run the unmodified packed helper, with its own manifest resolver, without
+  // installing or building anything. Only authenticated archived files enter
+  // this isolated producer tree; other importer directories stay independent.
+  const producerRoot = path.join(root, 'packed-producer');
+  fs.mkdirSync(path.join(producerRoot, 'template-workspace'), {
+    recursive: true,
+  });
+  for (const item of next.packages) {
+    const packed = inspectNpmTarball(
+      readVerifiedPackageArtifactBytes(item, item.artifactPath),
+    );
+    const packageRoot =
+      item === next.createPackage
+        ? producerRoot
+        : path.join(producerRoot, 'node_modules', item.sourceName);
+    fs.mkdirSync(packageRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(packageRoot, 'package.json'),
+      JSON.stringify(packed.packageJson),
+    );
+    if (item !== next.createPackage) continue;
+    for (const [relative, bytes] of packed.fileContents) {
+      if (!relative.startsWith('dist/esm-node/') || !relative.endsWith('.js'))
+        continue;
+      const file = path.join(producerRoot, relative);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, bytes);
+    }
+    fs.writeFileSync(
+      path.join(producerRoot, 'release-cohort.json'),
+      packed.fileContents.get('release-cohort.json'),
+    );
+  }
+  const packedModule = relative =>
+    import(
+      pathToFileURL(path.join(producerRoot, 'dist/esm-node', relative)).href
+    );
+  const { toolingSupportDependencies, readBundledFrameworkManifests } =
+    await packedModule('ultramodern-workspace/tooling-support.js');
+  const { ULTRAMODERN_PACKAGE_PINS: pins } = await packedModule(
+    'ultramodern-workspace/versions.js',
+  );
+  const support = next.createPackage.packageJson.ultramodern.supportArtifacts;
+  const manifests = readBundledFrameworkManifests(
+    producerRoot,
+    next.cohortProjection.value,
+  );
+  const appTools = Object.fromEntries(
+    [
+      '@modern-js/app-tools',
+      '@modern-js/app-tools-extensions',
+      '@modern-js/ultramodern-app-tools',
+    ].map(name => [name, 'catalog:ultramodern']),
+  );
+  const importers = {
+    'package.json': {
+      devDependencies: {
+        '@modern-js/ultramodern-create': 'catalog:ultramodern',
+      },
+    },
+    'apps/shell-super-app/package.json': {
+      dependencies: {
+        '@tanstack/react-router': 'https://wrong.invalid/router.tgz',
+      },
+      devDependencies: appTools,
+    },
+    'apps/ui-only/package.json': { devDependencies: appTools },
+    'apps/headless/package.json': {
+      dependencies: { '@modern-js/plugin-bff': 'catalog:ultramodern' },
+      devDependencies: appTools,
+    },
+    'packages/shared-contracts/package.json': {
+      dependencies: {
+        '@modern-js/bff-effect': 'catalog:ultramodern',
+        '@modern-js/runtime-extensions': 'catalog:ultramodern',
+        '@modern-js/plugin-bff': 'catalog:ultramodern',
+        '@effect/opentelemetry':
+          support.packages['@effect/opentelemetry'].request,
+      },
+    },
+  };
+  for (const [relative, manifest] of Object.entries(importers)) {
+    const file = path.join(root, relative);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ name: relative, ...manifest }));
+  }
+  fs.writeFileSync(
+    path.join(root, 'pnpm-workspace.yaml'),
+    stringify({
+      catalogs: {
+        ultramodern: Object.fromEntries(
+          Object.keys(next.aliases).map(name => [name, 'old']),
+        ),
+      },
+    }),
+  );
+  const selectors = compilerBootstrapSelectors(next.createPackage.packageJson);
+  const options = toolingProducerOptions(next);
+  options.producerEffectDependencies = {
+    ...pins.bffEffectDependencies,
+    '@effect/opentelemetry': support.packages['@effect/opentelemetry'].request,
+    '@effect/tsgo': pins.appDevDependencies['@effect/tsgo'],
+  };
+  options.producerReactDependencies = {
+    react: pins.appDependencies.react,
+    'react-dom': pins.appDependencies['react-dom'],
+    '@types/react': pins.appDevDependencies['@types/react'],
+    '@types/react-dom': pins.appDevDependencies['@types/react-dom'],
+  };
+  options.minimumReleaseAgeExclude.push(...selectors);
+  options.minimumReleaseAgeExclude.sort();
+  options.trustPolicyExclude = reviewedCompilerTrustExclusions(selectors);
+  prepareTractorCohortInstallation(root, next, options);
+  assert.equal(
+    JSON.parse(
+      fs.readFileSync(
+        path.join(root, 'apps/shell-super-app/package.json'),
+        'utf8',
+      ),
+    ).devDependencies['rsbuild-plugin-dts'],
+    support.packages['rsbuild-plugin-dts'].request,
+    'The failing Tractor shell must own its exact direct DTS tooling host',
+  );
+  for (const [relative, authored] of Object.entries(importers)) {
+    const expected = toolingSupportDependencies(
+      {
+        ...authored.dependencies,
+        ...authored.devDependencies,
+      },
+      support,
+      manifests,
+    );
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(root, relative), 'utf8'),
+    );
+    const selected = Object.fromEntries(
+      Object.entries(manifest.devDependencies ?? {}).filter(([name]) =>
+        Object.hasOwn(support.packages, name),
+      ),
+    );
+    const tooling = Object.fromEntries(
+      Object.entries(expected).filter(
+        ([name]) =>
+          authored.dependencies?.[name] !== support.packages[name].request,
+      ),
+    );
+    assert.deepEqual(selected, tooling, relative);
+    for (const [name, request] of Object.entries(expected)) {
+      assert.equal(
+        manifest.dependencies?.[name] ?? manifest.devDependencies?.[name],
+        request,
+        `${relative}: ${name}`,
+      );
+    }
+    if (relative.startsWith('apps/')) {
+      assert.equal(
+        manifest.devDependencies['rsbuild-plugin-dts'],
+        support.packages['rsbuild-plugin-dts'].request,
+      );
+      assert.equal(
+        manifest.devDependencies['solid-js'],
+        support.packages['solid-js'].request,
+      );
+    }
+    if (Object.keys(expected).length)
+      assert.deepEqual(manifest.ultramodern.supportArtifacts, support);
+    t.diagnostic(`${relative}: ${Object.keys(selected).sort().join(', ')}`);
+  }
+  const { parse } = await import('yaml');
+  const stagedPolicy = parse(
+    fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
+  );
+  assert.equal(stagedPolicy.autoInstallPeers, undefined);
+  assert.equal(stagedPolicy.resolvePeersFromWorkspaceRoot, undefined);
+});
 
 const bootstrapVersion = '3.5.0-ultramodern.77';
 const bootstrapSpecifier = `@bleedingdev/modern-js-ultramodern-create@${bootstrapVersion}`;
@@ -1783,7 +2250,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       Object.keys(installedRoot.devDependencies)
         .filter(name => Object.hasOwn(supportArtifacts.packages, name))
         .sort(),
-      Object.keys(hostSupport).sort(),
+      ['rsbuild-plugin-dts'],
       'Only required and already-selected support packages are installed at the root',
     );
     assert.deepEqual(
@@ -1925,7 +2392,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
         devDependencies: {
           ...JSON.parse(beforeManifest).devDependencies,
           ...producerReactDependencies,
-          ...hostSupport,
+          'rsbuild-plugin-dts': hostSupport['rsbuild-plugin-dts'],
         },
         ultramodern: { authored: 'preserved', supportArtifacts },
         packageManager: 'pnpm@12.11.2',
