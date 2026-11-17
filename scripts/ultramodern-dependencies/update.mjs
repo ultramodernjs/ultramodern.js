@@ -495,6 +495,7 @@ export function planManifestUpdate({
         });
         continue;
       }
+      // An exact reviewed addition has no old edge for version policy to move.
       let edge = excludedFixture(file)
         ? {
             name,
@@ -502,15 +503,16 @@ export function planManifestUpdate({
             status: 'fixture',
             reason: 'semantic/synthetic fixture',
           }
-        : replacement({ file, field, name, value });
-      if (added.has(name) && edge.status === 'unknown')
-        edge = {
-          ...edge,
-          from: null,
-          to: value,
-          status: 'reviewed-addition',
-          reason: 'exact reviewed dependency addition',
-        };
+        : added.has(name)
+          ? {
+              name,
+              from: null,
+              to: value,
+              target: targets[name] ?? null,
+              status: 'reviewed-addition',
+              reason: 'exact reviewed dependency addition',
+            }
+          : replacement({ file, field, name, value });
       const artifact = admittedPin(name);
       const prior = excludedFixture(file) ? undefined : priorPin(field, name);
       if (

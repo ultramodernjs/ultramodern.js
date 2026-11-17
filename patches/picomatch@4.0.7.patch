@@ -1,0 +1,803 @@
+diff --git a/lib/parse.js b/lib/parse.js
+index 29207512c60183b4bb9bf5112be3b9b5f4a9a9fd..b58119aadc149ad0c24a2c0a5ebfa8ddabba9773 100644
+--- a/lib/parse.js
++++ b/lib/parse.js
+@@ -1,6 +1,7 @@
+ 'use strict';
+ 
+ const constants = require('./constants');
++const analyzeRepetition = require('./repetition');
+ const utils = require('./utils');
+ 
+ /**
+@@ -284,7 +285,7 @@ const repeatedExtglobRecursion = pattern => {
+   return depth;
+ };
+ 
+-const analyzeRepeatedExtglob = (body, options) => {
++const analyzeRepeatedExtglob = (body, options, source, type) => {
+   if (options.maxExtglobRecursion === false) {
+     return { risky: false };
+   }
+@@ -343,7 +344,19 @@ const analyzeRepeatedExtglob = (body, options) => {
+       : { risky: true };
+   }
+ 
+-  return { risky: false };
++  // A body that is one nested repeated extglob within an explicit whole-number
++  // depth is the nesting this option admits. Other values take the analysis.
++  if (Number.isInteger(max) && max >= 1 && branches.length === 1 && repeatedExtglobRecursion(branches[0]) > 0) {
++    return { risky: false };
++  }
++
++  const repetition = analyzeRepetition(source, options.flags || (options.nocase ? 'i' : ''));
++
++  if (repetition.rewrite) {
++    return { risky: true, safeOutput: repetition.rewrite[type] };
++  }
++
++  return { risky: repetition.risky === true, once: repetition.once === true };
+ };
+ 
+ /**
+@@ -533,15 +546,18 @@ const parse = (input, options) => {
+     increment('parens');
+     push({ type, value, output: state.output ? '' : ONE_CHAR });
+     push({ type: 'paren', extglob: true, value: advance(), output });
++    token.bodyOutput = state.output;
+     extglobs.push(token);
+   };
+ 
+   const extglobClose = token => {
+     const literal = input.slice(token.startIndex, state.index + 1);
+     const body = input.slice(token.startIndex + 2, state.index);
+-    const analysis = analyzeRepeatedExtglob(body, opts);
++    const repeated = token.type === 'plus' || token.type === 'star';
++    const source = repeated && state.output.startsWith(token.bodyOutput) ? state.output.slice(token.bodyOutput.length) : undefined;
++    const analysis = repeated ? analyzeRepeatedExtglob(body, opts, source, token.type) : { risky: false };
+ 
+-    if ((token.type === 'plus' || token.type === 'star') && analysis.risky) {
++    if (analysis.risky) {
+       const safeOutput = analysis.safeOutput
+         ? (token.output ? '' : ONE_CHAR) + (opts.capture ? `(${analysis.safeOutput})` : analysis.safeOutput)
+         : undefined;
+@@ -565,6 +581,11 @@ const parse = (input, options) => {
+       return;
+     }
+ 
++    // One iteration matches the same text, so the loop is not compiled.
++    if (analysis.once) {
++      token.close = token.type === 'star' ? ')?' : ')';
++    }
++
+     let output = token.close + (opts.capture ? ')' : '');
+     let rest;
+ 
+diff --git a/lib/repetition.js b/lib/repetition.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..d7bb60af2a17c68cce728675658ba94b5ef79ae5
+--- /dev/null
++++ b/lib/repetition.js
+@@ -0,0 +1,722 @@
++'use strict';
++
++/**
++ * A repeated extglob compiles to a regex loop, `(?:B)+` or `(?:B)*`. A
++ * backtracking engine needs exponential time on a failing input when two
++ * different paths through that loop consume the same text, that is, when its
++ * iterations can split one text in more than one way. This module reads the
++ * compiled body B, the regex source that actually runs, and classifies the
++ * loop:
++ *
++ * - `safe`: no two paths through the loop consume the same text.
++ * - `once`: one iteration of B matches every text the loop matches, so the
++ *   loop compiles as one iteration.
++ * - `rewrite`: an equivalent unambiguous source for the loop.
++ * - `risky`: anything else, including source this reader does not model and
++ *   searches that exceed their budget.
++ */
++
++const MAX_CHAR = 0xffff;
++const ANY = [[0, MAX_CHAR]];
++const LETTERS = [[65, 90], [97, 122]];
++const NON_ASCII = [[128, MAX_CHAR]];
++const UNICODE_FOLDS = [[[75, 75], [107, 107], [0x212a, 0x212a]], [[83, 83], [115, 115], [0x17f, 0x17f]]];
++const LINE_TERMINATORS = [[10, 10], [13, 13], [0x2028, 0x2029]];
++const SEPARATORS = [[47, 47], [92, 92]];
++const DOT_CHAR = [[46, 46]];
++const MAX_DEPTH = 256;
++const MAX_POSITIONS = 512;
++const MAX_UNROLL = 16;
++
++// Lookaheads that the star and globstar tokens put before each character.
++// They reject only at the start of input or at a path separator.
++const SEPARATOR_LOOKAHEADS = ['(?!(?:^|\\/)', '(?!(?:^|[\\\\/])'];
++
++class Unmodeled extends Error {}
++
++const unmodeled = () => {
++  throw new Unmodeled();
++};
++
++/**
++ * Character sets are sorted, disjoint `[lo, hi]` ranges of UTF-16 code units.
++ */
++
++const normalize = ranges => {
++  const sorted = ranges.slice().sort((a, b) => a[0] - b[0]);
++  const merged = [];
++
++  for (const [lo, hi] of sorted) {
++    const last = merged[merged.length - 1];
++
++    if (last && lo <= last[1] + 1) {
++      last[1] = Math.max(last[1], hi);
++    } else {
++      merged.push([lo, hi]);
++    }
++  }
++
++  return merged;
++};
++
++const complement = set => {
++  const result = [];
++  let next = 0;
++
++  for (const [lo, hi] of set) {
++    if (lo > next) result.push([next, lo - 1]);
++    next = hi + 1;
++  }
++
++  if (next <= MAX_CHAR) result.push([next, MAX_CHAR]);
++  return result;
++};
++
++const subtract = (set, removed) => complement(normalize(complement(set).concat(removed)));
++
++const intersects = (a, b) => {
++  let i = 0;
++  let j = 0;
++
++  while (i < a.length && j < b.length) {
++    if (a[i][1] < b[j][0]) {
++      i++;
++    } else if (b[j][1] < a[i][0]) {
++      j++;
++    } else {
++      return true;
++    }
++  }
++
++  return false;
++};
++
++const within = (a, b) => subtract(a, b).length === 0;
++const unit = code => [[code, code]];
++
++// Case-insensitive matching widens a set. ASCII letters gain their other
++// case, and a non-ASCII character may match any non-ASCII character. Under
++// the `u` flag, `k` and `s` also fold with U+212A and U+017F.
++const foldCase = (set, unicode) => {
++  const ranges = set.slice();
++
++  for (const [lo, hi] of set) {
++    for (const [from, to] of LETTERS) {
++      const start = Math.max(lo, from);
++      const end = Math.min(hi, to);
++      if (start <= end) ranges.push([start ^ 32, end ^ 32]);
++    }
++  }
++
++  if (intersects(set, NON_ASCII)) {
++    ranges.push(...NON_ASCII);
++  }
++
++  if (unicode) {
++    for (const group of UNICODE_FOLDS) {
++      if (intersects(set, group)) ranges.push(...group);
++    }
++  }
++
++  return normalize(ranges);
++};
++
++/**
++ * Reads the regex source picomatch emits: literals, escapes, classes, `.`,
++ * groups, lookarounds, anchors, alternation and quantifiers. Lookarounds and
++ * anchors read as zero-width `look` nodes. Backreferences, deep nesting and
++ * other syntax are unmodeled. Every alternation keeps the source span of each
++ * branch and whether it contains a capturing group; the last is the top level.
++ */
++
++const parseRegex = (source, dotAll, unicode) => {
++  const alternations = [];
++  let captures = 0;
++  let depth = 0;
++  let i = 0;
++
++  const hex = length => {
++    const digits = source.slice(i, i + length);
++    if (digits.length !== length || !/^[0-9a-fA-F]+$/.test(digits)) return;
++    i += length;
++    return parseInt(digits, 16);
++  };
++
++  // Returns `{ code }`, `{ set }` or `{ look }` for the escape at `i`.
++  const escape = inClass => {
++    const ch = source[i + 1];
++    if (ch === undefined) unmodeled();
++    i += 2;
++
++    switch (ch) {
++      case 'd': return { set: [[48, 57]] };
++      case 'w': return { set: normalize([[48, 57], [95, 95]].concat(LETTERS)) };
++      case 'D':
++      case 'W':
++      case 's':
++      case 'S': return { set: ANY };
++      case 't': return { code: 9 };
++      case 'n': return { code: 10 };
++      case 'v': return { code: 11 };
++      case 'f': return { code: 12 };
++      case 'r': return { code: 13 };
++      case 'b': return inClass ? { code: 8 } : { look: true };
++      case 'B': return inClass ? unmodeled() : { look: true };
++      case '0': return /[0-9]/.test(source[i] || '') ? unmodeled() : { code: 0 };
++      case 'x':
++      case 'u': {
++        if (unicode && ch === 'u' && source[i] === '{') unmodeled();
++        const code = hex(ch === 'x' ? 2 : 4);
++        return { code: code === undefined ? ch.charCodeAt(0) : code };
++      }
++      default:
++        if (/[1-9ck]/.test(ch) || (unicode && /[pP]/.test(ch))) unmodeled();
++        return { code: ch.charCodeAt(0) };
++    }
++  };
++
++  const classAtom = () => {
++    if (source[i] === '\\') return escape(true);
++    return { code: source.charCodeAt(i++) };
++  };
++
++  const parseClass = () => {
++    i++;
++    const negated = source[i] === '^';
++    if (negated) i++;
++    const ranges = [];
++
++    while (source[i] !== ']') {
++      if (i >= source.length) unmodeled();
++      const lo = classAtom();
++
++      if (source[i] === '-' && i + 1 < source.length && source[i + 1] !== ']' && lo.code !== undefined) {
++        i++;
++        const hi = classAtom();
++
++        if (hi.code === undefined) {
++          ranges.push(...unit(lo.code), ...unit(45), ...hi.set);
++        } else {
++          if (hi.code < lo.code) unmodeled();
++          ranges.push([lo.code, hi.code]);
++        }
++        continue;
++      }
++
++      ranges.push(...(lo.set || unit(lo.code)));
++    }
++
++    i++;
++    const set = normalize(ranges);
++    return negated ? complement(set) : set;
++  };
++
++  const quantifier = () => {
++    const ch = source[i];
++    if (ch === '*') return { min: 0, max: Infinity, length: 1 };
++    if (ch === '+') return { min: 1, max: Infinity, length: 1 };
++    if (ch === '?') return { min: 0, max: 1, length: 1 };
++
++    const match = /^\{(\d+)(,(\d*))?\}/.exec(source.slice(i, i + 32));
++    if (!match) return;
++    const min = Number(match[1]);
++    const max = match[2] === undefined ? min : match[3] === '' ? Infinity : Number(match[3]);
++    if (max < min) unmodeled();
++    return { min, max, length: match[0].length };
++  };
++
++  const atom = () => {
++    const start = i;
++    const ch = source[i];
++
++    if (ch === '(') {
++      let look = false;
++
++      if (source.startsWith('(?:', i)) {
++        i += 3;
++      } else if (/^\(\?<?[=!]/.test(source.slice(i, i + 4))) {
++        look = true;
++        i += source[i + 2] === '<' ? 4 : 3;
++      } else if (source[i + 1] === '?') {
++        unmodeled();
++      } else {
++        captures++;
++        i++;
++      }
++
++      if (++depth > MAX_DEPTH) unmodeled();
++      const node = alternation();
++      depth--;
++      if (source[i] !== ')') unmodeled();
++      i++;
++      return look ? { type: 'look', source: source.slice(start, i) } : node;
++    }
++
++    if (ch === '[') {
++      return { type: 'char', set: parseClass() };
++    }
++
++    if (ch === '\\') {
++      const value = escape(false);
++      if (value.look) return { type: 'look', source: source.slice(start, i) };
++      return { type: 'char', set: value.set || unit(value.code) };
++    }
++
++    if (ch === '^' || ch === '$') {
++      i++;
++      return { type: 'look', source: ch };
++    }
++
++    if (quantifier() !== undefined) unmodeled();
++    i++;
++
++    if (ch === '.') {
++      return { type: 'char', set: dotAll ? ANY : complement(LINE_TERMINATORS) };
++    }
++
++    return { type: 'char', set: unit(ch.charCodeAt(0)) };
++  };
++
++  const sequence = () => {
++    const nodes = [];
++
++    while (i < source.length && source[i] !== '|' && source[i] !== ')') {
++      const group = source[i] === '(';
++      let node = atom();
++      const repeat = quantifier();
++
++      if (repeat !== undefined) {
++        i += repeat.length;
++        if (source[i] === '?') i++;
++        if (node.type !== 'look') node = { type: 'repeat', min: repeat.min, max: repeat.max, node };
++      }
++
++      // An unquantified group of one branch matches as its items in place.
++      if (group && node.type === 'seq') {
++        nodes.push(...node.nodes);
++      } else {
++        nodes.push(node);
++      }
++    }
++
++    return nodes.length === 1 ? nodes[0] : { type: 'seq', nodes };
++  };
++
++  const alternation = () => {
++    const spans = [];
++
++    for (;;) {
++      const start = i;
++      const before = captures;
++      const node = sequence();
++      spans.push({ node, start, end: i, text: source.slice(start, i), capture: captures > before });
++      if (source[i] !== '|') break;
++      i++;
++    }
++
++    alternations.push(spans);
++    return spans.length === 1 ? spans[0].node : { type: 'alt', nodes: spans.map(span => span.node) };
++  };
++
++  const root = alternation();
++  if (i !== source.length) unmodeled();
++  return { root, branches: alternations[alternations.length - 1], alternations };
++};
++
++// Removes each branch that repeats an earlier branch of its alternation and
++// has no capturing group. The alternation already tried that text.
++const withoutRepeatedBranches = (source, alternations) => {
++  const removed = [];
++
++  for (const spans of alternations) {
++    const seen = new Set();
++
++    for (const span of spans) {
++      if (seen.has(span.text) && !span.capture) removed.push([span.start - 1, span.end]);
++      seen.add(span.text);
++    }
++  }
++
++  removed.sort((a, b) => a[0] - b[0]);
++  let result = '';
++  let index = 0;
++
++  for (const [start, end] of removed) {
++    if (start < index) continue;
++    result += source.slice(index, start);
++    index = end;
++  }
++
++  return result + source.slice(index);
++};
++
++const nullable = node => {
++  if (node.type === 'char') return false;
++  if (node.type === 'look') return true;
++  if (node.type === 'alt') return node.nodes.some(nullable);
++  if (node.type === 'seq') return node.nodes.every(nullable);
++  return node.min === 0 || nullable(node.node);
++};
++
++const chars = (node, fold) => {
++  if (node.type === 'char') return fold(node.set);
++  if (node.type === 'look') return [];
++  if (node.type === 'repeat') return chars(node.node, fold);
++  return normalize([].concat(...node.nodes.map(child => chars(child, fold))));
++};
++
++/**
++ * Glushkov positions of `(?:root)+`: each character test with the positions
++ * that may follow it. The regex engine walks the syntax, so two syntax paths
++ * between the same positions, such as nested unbounded quantifiers, or two
++ * empty alternatives are ambiguous even where the position automaton is not.
++ */
++
++const buildPositions = (root, fold, budget) => {
++  const sets = [];
++  const follow = [];
++
++  const spend = () => {
++    if (--budget.steps < 0) unmodeled();
++  };
++
++  const link = (from, to) => {
++    for (const a of from) {
++      for (const b of to) {
++        spend();
++        if (follow[a].has(b)) budget.ambiguous = true;
++        follow[a].add(b);
++      }
++    }
++  };
++
++  const visit = node => {
++    spend();
++
++    if (node.type === 'char') {
++      if (sets.length >= MAX_POSITIONS) unmodeled();
++      sets.push(fold(node.set));
++      follow.push(new Set());
++      return { nullable: false, first: [sets.length - 1], last: [sets.length - 1] };
++    }
++
++    if (node.type === 'look') {
++      return { nullable: true, first: [], last: [] };
++    }
++
++    if (node.type === 'alt') {
++      const result = { nullable: false, first: [], last: [] };
++
++      for (const child of node.nodes) {
++        const value = visit(child);
++        if (value.nullable && result.nullable) budget.ambiguous = true;
++        result.nullable = result.nullable || value.nullable;
++        result.first.push(...value.first);
++        result.last.push(...value.last);
++      }
++
++      return result;
++    }
++
++    if (node.type === 'seq') {
++      const result = { nullable: true, first: [], last: [] };
++
++      for (const child of node.nodes) {
++        const value = visit(child);
++        link(result.last, value.first);
++        if (result.nullable) result.first.push(...value.first);
++        result.last = value.nullable ? result.last.concat(value.last) : value.last;
++        result.nullable = result.nullable && value.nullable;
++      }
++
++      return result;
++    }
++
++    const { min, max } = node;
++
++    if (max === 1 || (max === Infinity && min <= 1)) {
++      const value = visit(node.node);
++      if (max === Infinity) link(value.last, value.first);
++      return { nullable: min === 0 || value.nullable, first: value.first, last: value.last };
++    }
++
++    // Other counts unroll as `x{2,4}` = `xx(?:x(?:x)?)?` and `x{2,}` = `xx+`,
++    // which keeps one syntax path per iteration count.
++    if (min > MAX_UNROLL || (max !== Infinity && max > MAX_UNROLL)) unmodeled();
++
++    const nodes = [];
++    let tail;
++
++    if (max === Infinity) {
++      tail = { type: 'repeat', min: 1, max: Infinity, node: node.node };
++    } else {
++      for (let count = max - min; count > 0; count--) {
++        const optional = tail === undefined ? node.node : { type: 'seq', nodes: [node.node, tail] };
++        tail = { type: 'repeat', min: 0, max: 1, node: optional };
++      }
++    }
++
++    for (let count = max === Infinity ? min - 1 : min; count > 0; count--) nodes.push(node.node);
++    if (tail !== undefined) nodes.push(tail);
++    return visit({ type: 'seq', nodes });
++  };
++
++  visit({ type: 'repeat', min: 1, max: Infinity, node: root });
++  return { sets, follow: follow.map(set => [...set]) };
++};
++
++// True when two different paths leave one position, consume the same text
++// and reach one position again. Every position lies on the loop, so such a
++// pair repeats once per iteration.
++const hasAmbiguousPaths = ({ sets, follow }, budget) => {
++  const size = sets.length;
++  const seen = new Set();
++  const queue = [];
++
++  for (let p = 0; p < size; p++) {
++    seen.add(p * size + p);
++    queue.push(p, p);
++  }
++
++  for (let index = 0; index < queue.length; index += 2) {
++    const p = queue[index];
++    const q = queue[index + 1];
++
++    for (const a of follow[p]) {
++      for (const b of follow[q]) {
++        if (--budget.steps < 0) unmodeled();
++        if (!intersects(sets[a], sets[b])) continue;
++
++        if (a === b) {
++          if (p !== q) return true;
++          continue;
++        }
++
++        const key = a * size + b;
++
++        if (!seen.has(key)) {
++          seen.add(key);
++          queue.push(a, b);
++        }
++      }
++    }
++  }
++
++  return false;
++};
++
++// The characters an unbounded star item accepts wherever another item's
++// character stood, or undefined when the item is not such a star. `atStart`
++// says the star may begin an iteration.
++const starChars = (node, atStart) => {
++  if (node.type !== 'repeat' || node.min > 1 || node.max !== Infinity) return;
++  const inner = node.node;
++  if (inner.type === 'char') return inner.set;
++
++  if (
++    inner.type === 'seq' &&
++    inner.nodes.length === 2 &&
++    inner.nodes[0].type === 'look' &&
++    inner.nodes[1].type === 'char' &&
++    SEPARATOR_LOOKAHEADS.some(prefix => inner.nodes[0].source.startsWith(prefix))
++  ) {
++    // The lookahead passes at a non-separator after the input start. A star
++    // that may begin an iteration may also see the input start.
++    return subtract(inner.nodes[1].set, atStart ? SEPARATORS.concat(DOT_CHAR) : SEPARATORS);
++  }
++};
++
++const items = node => (node.type === 'seq' ? node.nodes : [node]);
++
++/**
++ * The branches as words when every item is one literal character, read up to
++ * case folding. Under folding, each character becomes its fold class, keyed
++ * by its lowest unit; classes are equal or disjoint.
++ */
++
++const literalWords = (branches, fold) => {
++  const words = [];
++
++  for (const branch of branches) {
++    let word = '';
++
++    for (const item of items(branch.node)) {
++      if (item.type !== 'char') return;
++      const set = fold(item.set);
++      if (set.length > 3 || set.some(([lo, hi]) => lo !== hi)) return;
++      word += String.fromCharCode(set[0][0]);
++    }
++
++    words.push(word);
++  }
++
++  return words;
++};
++
++// No word is a prefix of another. Sorted order puts any prefix directly
++// before a word it prefixes.
++const prefixFree = words => {
++  const sorted = words.slice().sort();
++  return sorted.every((word, j) => j === 0 || !word.startsWith(sorted[j - 1]));
++};
++
++// A loop over a prefix code or a suffix code reads every text in one way, from
++// the left or from the right, so no two paths consume the same text.
++const isLiteralCode = (branches, fold) => {
++  const words = literalWords(branches, fold);
++  if (words === undefined) return false;
++  return prefixFree(words) || prefixFree(words.map(word => word.split('').reverse().join('')));
++};
++
++// True when the star at index `k` of `node` accepts every character of the
++// node's other items and every set in `others` except `others[skip]`.
++const absorbs = (node, k, others, skip, fold) => {
++  const list = items(node);
++  const accepted = list[k] && starChars(list[k], list.slice(0, k).every(nullable));
++  if (accepted === undefined) return false;
++
++  return list.every((item, j) => j === k || within(chars(item, fold), accepted)) &&
++    others.every((set, j) => j === skip || within(set, accepted));
++};
++
++/**
++ * Sorts the branches of a loop by how they absorb neighboring iterations. A
++ * branch `P S R`, with S a star that accepts every character of the other
++ * items, absorbs them into S:
++ *
++ * - With one branch, one iteration matches every concatenation of
++ *   iterations: in `x1 x2 ... xn`, P matches as in x1, R as in xn, and S
++ *   consumes everything between. Lookarounds in P and R see the same
++ *   absolute positions as in x1 and xn.
++ * - A prefix branch `P S` absorbs every later iteration and a suffix branch
++ *   `S R` every earlier one. With only prefix or only suffix branches, one
++ *   iteration again matches every concatenation.
++ *
++ * `once` holds when one iteration matches the same text as the loop. Such a
++ * loop is ambiguous, since a text and its repetition both match.
++ */
++
++const absorbingForms = (branches, fold) => {
++  const forms = { once: false, prefix: [], suffix: [], other: [] };
++
++  if (branches.length === 1) {
++    const node = branches[0].node;
++    forms.once = items(node).some((item, k) => absorbs(node, k, [], -1, fold));
++    forms.other.push(branches[0]);
++    return forms;
++  }
++
++  const sets = branches.map(branch => chars(branch.node, fold));
++
++  branches.forEach((branch, index) => {
++    if (absorbs(branch.node, items(branch.node).length - 1, sets, index, fold)) {
++      forms.prefix.push(branch);
++    } else if (absorbs(branch.node, 0, sets, index, fold)) {
++      forms.suffix.push(branch);
++    } else {
++      forms.other.push(branch);
++    }
++  });
++
++  forms.once = forms.other.length === 0 && (forms.prefix.length === 0 || forms.suffix.length === 0);
++  return forms;
++};
++
++/**
++ * Rewrites a loop with prefix or suffix branches as
++ * `(?:suffix)?(?:other)*(?:prefix)?`, where the loop over `other` must
++ * itself be safe. Capturing groups keep their count and order: branches with
++ * groups are not reordered among themselves or repeated in the source.
++ */
++
++const rewrite = (branches, forms, flags) => {
++  const { prefix, suffix, other } = forms;
++  const text = list => list.map(branch => branch.text).join('|');
++  const capture = list => list.some(branch => branch.capture);
++  const order = suffix.concat(other, prefix).filter(branch => branch.capture).map(branch => branches.indexOf(branch));
++
++  if (
++    prefix.length + suffix.length === 0 ||
++    order.some((index, j) => j > 0 && index < order[j - 1]) ||
++    (other.length > 0 && !analyzeRepetition(text(other), flags).safe)
++  ) {
++    return { risky: true };
++  }
++
++  const before = suffix.length > 0 ? `(?:${text(suffix)})` : '';
++  const loop = other.length > 0 ? `(?:${text(other)})` : '';
++  const after = prefix.length > 0 ? `(?:${text(prefix)})` : '';
++  const alternatives = [];
++
++  if (before) alternatives.push(before + (loop && `${loop}*`) + (after && `${after}?`));
++  if (loop) alternatives.push(`${loop}+` + (after && `${after}?`));
++  if (after) alternatives.push(after);
++
++  // The one-or-more form repeats `other` after a suffix and `prefix` after
++  // anything else.
++  const repeated = (before && capture(other)) || (alternatives.length > 1 && capture(prefix));
++
++  return {
++    rewrite: {
++      star: `(?:${before && `${before}?`}${loop && `${loop}*`}${after && `${after}?`})`,
++      plus: repeated ? undefined : `(?:${alternatives.join('|')})`
++    }
++  };
++};
++
++/**
++ * Classifies the loop over the compiled body `source` for the regex `flags`.
++ * Returns `{ safe }`, `{ once }`, `{ rewrite: { star, plus } }` or
++ * `{ risky }`. Cheap certificates come first: a literal code is safe and an
++ * absorbing loop is `once`. Other bodies take the position search, and an
++ * ambiguous body is read again without repeated branches before a rewrite.
++ */
++
++const analyzeRepetition = (source, flags) => {
++  const text = String(flags);
++  const unicode = /[uv]/.test(text);
++
++  // The `v` flag reads classes as set expressions, which are not modeled.
++  if (typeof source !== 'string' || (text.includes('v') && source.includes('['))) {
++    return { risky: true };
++  }
++
++  const fold = text.includes('i') ? set => foldCase(set, unicode) : set => set;
++  const budget = { steps: 4096 + 64 * source.length, ambiguous: false };
++
++  try {
++    const { root, branches, alternations } = parseRegex(source, text.includes('s'), unicode);
++
++    if (isLiteralCode(branches, fold)) {
++      return { safe: true };
++    }
++
++    const forms = absorbingForms(branches, fold);
++
++    if (forms.once) {
++      return { once: true };
++    }
++
++    const positions = buildPositions(root, fold, budget);
++
++    if (!budget.ambiguous && !hasAmbiguousPaths(positions, budget)) {
++      return { safe: true };
++    }
++
++    const reduced = withoutRepeatedBranches(source, alternations);
++
++    if (reduced !== source) {
++      const result = analyzeRepetition(reduced, flags);
++      if (result.safe) return { rewrite: { star: `(?:${reduced})*`, plus: `(?:${reduced})+` } };
++      if (result.once) return { rewrite: { star: `(?:${reduced})?`, plus: `(?:${reduced})` } };
++      return result;
++    }
++
++    return rewrite(branches, forms, flags);
++  } catch (err) {
++    if (err instanceof Unmodeled) return { risky: true };
++    throw err;
++  }
++};
++
++module.exports = analyzeRepetition;

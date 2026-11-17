@@ -68,6 +68,8 @@ allowBuilds:
 patchedDependencies:
   'rsbuild-plugin-dts@1.0.7': patches/rsbuild-plugin-dts@1.0.7.patch
   '@svgr/babel-plugin-transform-svg-component@8.0.0': patches/@svgr__babel-plugin-transform-svg-component@8.0.0.patch
+  'picomatch@2.3.2': patches/picomatch@2.3.2.patch
+  'picomatch@4.0.7': patches/picomatch@4.0.7.patch
   'braces@3.0.3': patches/braces@3.0.3.patch
   '@module-federation/sdk@2.9.3': patches/@module-federation__sdk@2.9.3.patch
 overrides:

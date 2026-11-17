@@ -1,10 +1,12 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRsbuild, rspack } from '@rsbuild/core';
+import { resolveNativeCompilerEnvironment } from '../src/build-config/native-compiler-profile';
 import {
   configureUltramodernTypeChecker,
   missingJsxRuntimeHint,
@@ -139,9 +141,11 @@ test('the checker preserves real TypeScript and Effect failures and their exit c
   }
 });
 
-test('every checker subprocess preserves explicit assignment or defaults to Go without changing the parent environment', async () => {
+test('every checker subprocess uses the workspace typecheck profile without changing the parent environment', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'native-checker-env-'));
   const previous = process.env.TSRS_CHECKER_ASSIGNMENT;
+  const previousFast = process.env.TSRS_FAST;
+  delete process.env.TSRS_FAST;
   const configFile = path.join(root, 'tsconfig.json');
   const probe = path.join(root, 'probe.cjs');
   const log = path.join(root, 'children.jsonl');
@@ -152,7 +156,7 @@ test('every checker subprocess preserves explicit assignment or defaults to Go w
       `#!/usr/bin/env node
 const fs = require('node:fs');
 const args = process.argv.slice(2);
-fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ assignment: process.env.TSRS_CHECKER_ASSIGNMENT, args }) + '\\n');
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ assignment: process.env.TSRS_CHECKER_ASSIGNMENT, fast: process.env.TSRS_FAST, args }) + '\\n');
 if (args.includes('--showConfig')) console.log(JSON.stringify({ files: ['index.ts'], references: [{ path: './lib' }] }));
 else if (!args.includes('--build')) { console.log('error TS2322: TypeScript diagnostic'); console.error('error TS99999: Effect diagnostic'); process.exit(2); }
 `,
@@ -188,8 +192,13 @@ else if (!args.includes('--build')) { console.log('error TS2322: TypeScript diag
         .trim()
         .split('\n')
         .map(line => JSON.parse(line));
+      // The fast preset keeps an explicit assignment and otherwise uses its own.
       expect(
-        children.every(child => child.assignment === (assignment || 'go')),
+        children.every(
+          child =>
+            child.fast === '1' &&
+            child.assignment === (assignment || undefined),
+        ),
       ).toBe(true);
       expect(children.some(child => child.args.includes('--showConfig'))).toBe(
         true,
@@ -207,6 +216,8 @@ else if (!args.includes('--build')) { console.log('error TS2322: TypeScript diag
   } finally {
     if (previous === undefined) delete process.env.TSRS_CHECKER_ASSIGNMENT;
     else process.env.TSRS_CHECKER_ASSIGNMENT = previous;
+    if (previousFast === undefined) delete process.env.TSRS_FAST;
+    else process.env.TSRS_FAST = previousFast;
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
@@ -623,6 +634,104 @@ test('checks and rebuilds referenced projects without overriding their emit cont
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test.each([undefined, { fast: false }])(
+  'references prepared by the workspace typecheck (%o) stay current for app checks',
+  async typecheck => {
+    // tsrs treats tsbuildinfo written under another performance profile as
+    // absent. Parallel app builds then rewrote these shared declarations in
+    // place while sibling checks read them: TS2306 "is not a module".
+    const root = fs.realpathSync.native(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'native-reference-profile-')),
+    );
+    const previousFast = process.env.TSRS_FAST;
+    const previousAssignment = process.env.TSRS_CHECKER_ASSIGNMENT;
+    delete process.env.TSRS_FAST;
+    delete process.env.TSRS_CHECKER_ASSIGNMENT;
+    const write = (file: string, value: string | object) => {
+      const target = path.join(root, file);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(
+        target,
+        typeof value === 'string' ? value : JSON.stringify(value),
+      );
+    };
+    const moduleOptions = {
+      allowImportingTsExtensions: true,
+      module: 'preserve',
+      moduleResolution: 'bundler',
+      strict: true,
+      types: [],
+    };
+    try {
+      write('package.json', { private: true, ultramodern: { typecheck } });
+      write('packages/shared/tsconfig.json', {
+        compilerOptions: {
+          composite: true,
+          declaration: true,
+          emitDeclarationOnly: true,
+          outDir: '../../node_modules/.cache/tsgo/declarations/shared',
+          tsBuildInfoFile: '../../node_modules/.cache/tsgo/shared.tsbuildinfo',
+          ...moduleOptions,
+        },
+        include: ['src'],
+      });
+      write(
+        'packages/shared/src/catalog.ts',
+        'export const products = [{ name: "tractor" }];',
+      );
+      write('apps/web/package.json', { private: true });
+      write('apps/web/tsconfig.json', {
+        compilerOptions: moduleOptions,
+        include: ['src'],
+        references: [{ path: '../../packages/shared' }],
+      });
+      write(
+        'apps/web/src/index.ts',
+        "import { products } from '../../../packages/shared/src/catalog.ts';\nexport const names = products.map(product => product.name);",
+      );
+      // The installed typecheck command prepares references before app builds.
+      execFileSync(
+        compilerCommand.executable,
+        [
+          ...compilerCommand.args,
+          '--build',
+          path.join(root, 'packages/shared/tsconfig.json'),
+          '--pretty',
+          'false',
+          '--stopBuildOnErrors',
+        ],
+        { cwd: root, env: resolveNativeCompilerEnvironment(root) },
+      );
+      const outputs = [
+        'node_modules/.cache/tsgo/shared.tsbuildinfo',
+        'node_modules/.cache/tsgo/declarations/shared/src/catalog.d.ts',
+      ].map(file => path.join(root, file));
+      const snapshot = () =>
+        outputs.map(file => ({
+          file: path.relative(root, file),
+          sha256: createHash('sha256')
+            .update(fs.readFileSync(file))
+            .digest('hex'),
+          mtimeMs: fs.statSync(file).mtimeMs,
+        }));
+      const prepared = snapshot();
+      await new UltramodernNativeTypeChecker({
+        build: false,
+        compiler: () => compilerCommand,
+        configFile: path.join(root, 'apps/web/tsconfig.json'),
+      }).check();
+      expect(snapshot()).toEqual(prepared);
+    } finally {
+      if (previousFast === undefined) delete process.env.TSRS_FAST;
+      else process.env.TSRS_FAST = previousFast;
+      if (previousAssignment === undefined) {
+        delete process.env.TSRS_CHECKER_ASSIGNMENT;
+      } else process.env.TSRS_CHECKER_ASSIGNMENT = previousAssignment;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 
 test.each(['selected', 'effect-go'])(
   '%s ordinary project checks build references but emit no app output and surface compiler failures',

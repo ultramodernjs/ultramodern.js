@@ -4,3 +4,4 @@ export {
   resolveEffectTsgoCompiler,
   resolveEffectTsrsCompiler,
 } from './build-environment';
+export { resolveNativeCompilerEnvironment } from './native-compiler-profile';

@@ -14,6 +14,7 @@ import { refreshTsgoCheckerConfig } from '@modern-js/builder';
 import type { Rspack, RspackChain } from '@rsbuild/core';
 import { type ParseError, parse, printParseErrorCode } from 'jsonc-parser';
 import { resolveEffectTsgoCompiler } from './build-config/build-environment';
+import { resolveNativeCompilerEnvironment } from './build-config/native-compiler-profile';
 
 const execute = promisify(execFile);
 const name = 'UltramodernNativeTypeChecker';
@@ -269,13 +270,12 @@ export class UltramodernNativeTypeChecker {
           : [...command.args, ...args],
         {
           cwd: path.dirname(this.options.configFile),
-          // Apply to every command, including explicit paths and TSRS_BINARY.
-          // Keep caller selection; do not change the dev server's environment.
-          env: {
-            ...process.env,
-            TSRS_CHECKER_ASSIGNMENT:
-              process.env.TSRS_CHECKER_ASSIGNMENT || 'go',
-          },
+          // Apply to every command, including explicit paths and TSRS_BINARY,
+          // without changing the dev server's environment. The workspace
+          // typecheck profile keeps the references it prepared current here.
+          env: resolveNativeCompilerEnvironment(
+            path.dirname(this.options.configFile),
+          ),
           maxBuffer: 16 * 1024 * 1024,
           ...(inspect ? { timeout: 10_000 } : {}),
         },

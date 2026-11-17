@@ -18,7 +18,7 @@ export function readCoreArchive(
 ) {
   assert(
     filename && path.isAbsolute(filename),
-    'Packed React support qualification requires SUPPORT_REACT_CORE_ARCHIVE: absolute path to the actual corrected @tanstack/router-core@1.171.39 archive (reviewed patch 546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8)',
+    `Packed React support qualification requires SUPPORT_REACT_CORE_ARCHIVE: absolute path to the actual corrected @tanstack/router-core@1.171.39 archive (reviewed patch ${inputs.corePatchSha256})`,
   );
   assert(fs.statSync(filename).isFile(), 'Core archive must be a regular file');
   return fs.readFileSync(filename);

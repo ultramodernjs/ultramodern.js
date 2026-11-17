@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { yaml } from '@modern-js/utils';
 import { generateUltramodernWorkspace } from '../src/ultramodern-workspace';
 import { shellApp } from '../src/ultramodern-workspace/descriptors';
@@ -238,6 +239,11 @@ const typecheckScript = path.resolve(
   __dirname,
   '../templates/workspace-scripts/ultramodern-typecheck.mjs',
 );
+// The build type checker's compiler profile, shared with the installed command.
+const compilerProfileSource = path.resolve(
+  __dirname,
+  '../../../solutions/app-tools-extensions/src/build-config/native-compiler-profile.ts',
+);
 
 const autoBuildCheckers = String(
   Math.min(8, Math.max(4, os.availableParallelism() - 2)),
@@ -277,10 +283,14 @@ function runInstalledTypecheck({
         exports: { './config': './config.mjs' },
       }),
     );
+    // Node strips types only outside node_modules; keep the real profile there.
+    const compilerProfile = path.join(fixture, 'native-compiler-profile.mts');
+    fs.copyFileSync(compilerProfileSource, compilerProfile);
     fs.writeFileSync(
       path.join(provider, 'config.mjs'),
       `import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
+export { resolveNativeCompilerEnvironment } from ${JSON.stringify(pathToFileURL(compilerProfile).href)};
 export function resolveEffectTsgoCompiler({ from }) {
   assert.equal(from.href, pathToFileURL(${JSON.stringify(path.join(root, 'package.json'))}).href);
   assert.equal(typeof process.env.EFFECT_TSGO_BIN, 'string');

@@ -3,6 +3,7 @@ export {
   getBuildConfigEnvironment,
   resolveEffectTsgoCompiler,
   resolveEffectTsrsCompiler,
+  resolveNativeCompilerEnvironment,
 } from './build-config/public';
 export { createRemoteManifestUrl } from './build-config/remote-address';
 export { createNativeModuleCache } from './config/native-module-cache';
