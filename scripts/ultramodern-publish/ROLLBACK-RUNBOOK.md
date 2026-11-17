@@ -101,7 +101,11 @@ A failed run is not a rollback. Re-drive it in this order:
    `bleedingdev-source-qualification` receipt, and `prepare-release` requires
    it to name the recovered manifest's own source commit. A run whose
    qualification never passed uploaded no receipt, so its bundle cannot be
-   promoted; re-dispatch from source instead.
+   promoted; re-dispatch from source instead. The receipt also records the
+   integration evidence that qualified the commit: `in-run`, or `reused` with
+   the pull request Integration Test run, attempt, tested commit and tree.
+   Only schema version 2 receipts verify, so a producer run from before that
+   schema can be finished with path 1 only.
 3. **The release bytes themselves are wrong:** this is a rollback. Use the
    deprecate-and-republish path above with a new revision; never recover bad
    bytes.

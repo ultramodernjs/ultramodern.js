@@ -231,6 +231,70 @@ test('unknown references, missing results, and dependency cycles fail closed', (
   );
 });
 
+test('direct need outputs are read from { result, outputs } and fail closed otherwise', () => {
+  const workflow = {
+    jobs: {
+      select: {},
+      other: {},
+      target: {
+        needs: ['select', 'other'],
+        if: "always() && needs.select.result == 'success' && needs.select.outputs.decision == 'reuse'",
+      },
+      indirect: {
+        needs: 'target',
+        if: "always() && needs.select.outputs.decision == 'reuse'",
+      },
+    },
+  };
+  const schedule = (results, jobId = 'target') =>
+    evaluateJobSchedule({
+      workflow,
+      jobId,
+      results,
+      context: successfulContext,
+    });
+  assert.equal(
+    schedule({ select: { result: 'success', outputs: { decision: 'reuse' } } }),
+    true,
+  );
+  assert.equal(
+    schedule({ select: { result: 'success', outputs: { decision: 'run' } } }),
+    false,
+  );
+  // A bare result string, a missing output and a non-string output stay missing.
+  assert.equal(schedule({ select: 'success' }), false);
+  assert.equal(schedule({ select: { result: 'success', outputs: {} } }), false);
+  assert.equal(
+    schedule({
+      select: { result: 'success', outputs: { decision: ['reuse'] } },
+    }),
+    false,
+  );
+  // Only direct needs expose outputs.
+  assert.equal(
+    schedule(
+      {
+        select: { result: 'success', outputs: { decision: 'reuse' } },
+        target: 'success',
+      },
+      'indirect',
+    ),
+    false,
+  );
+  // An output is never a result, and a result path is never an output.
+  workflow.jobs.target.if =
+    "always() && needs.select.outputs.result == 'success'";
+  assert.equal(
+    schedule({ select: { result: 'success', outputs: { decision: 'reuse' } } }),
+    false,
+  );
+  workflow.jobs.target.if = "always() && needs.select.outputs == 'reuse'";
+  assert.equal(
+    schedule({ select: { result: 'success', outputs: { decision: 'reuse' } } }),
+    false,
+  );
+});
+
 test('the release record fails the run instead of hiding behind continue-on-error', () => {
   for (const workflow of [publishWorkflow, acceptanceWorkflow]) {
     for (const [jobId, job] of Object.entries(workflow.jobs)) {

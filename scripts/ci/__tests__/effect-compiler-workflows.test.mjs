@@ -636,7 +636,15 @@ test('every fresh build stages the complete payload before selecting a compiler'
 // The payload starts beside publish-security and authorizes nothing; every
 // release job that builds from it still waits for the validated dispatch.
 const publishPayloadNeeds = Object.freeze({
-  integration: ['publish-security', 'effect-compiler-payload'],
+  'select-integration-evidence': [
+    'publish-security',
+    'effect-compiler-payload',
+  ],
+  integration: [
+    'publish-security',
+    'effect-compiler-payload',
+    'select-integration-evidence',
+  ],
   'qualify-source-compute': ['publish-security', 'effect-compiler-payload'],
   'prepare-release': ['publish-security', 'effect-compiler-payload'],
 });
@@ -672,7 +680,10 @@ test('publish invokes one producer; nested integration reuses it rather than col
   assert.match(integration.jobs.integration.if, /result == 'success'/);
 });
 
-test('recovery retains current-source integration and compiler qualification; sidecars do not build a compiler', () => {
+// A recovery dispatch qualifies HEAD's publication tooling like any cohort:
+// it runs integration on HEAD, or reuses a pull request run that
+// select-integration-evidence proved on HEAD's identical tree.
+test('recovery retains current-source integration evidence and compiler qualification; sidecars do not build a compiler', () => {
   assertPublishPayloadNeeds();
   assert.match(
     publish.jobs['effect-compiler-payload'].if,
@@ -694,10 +705,19 @@ test('recovery retains current-source integration and compiler qualification; si
     vars: { BLEEDINGDEV_PUBLISH_BRANCH: 'main-ultramodern' },
     inputs: { mode: 'cohort', recovery_run_id: '123', dry_run: false },
   };
-  const results = Object.fromEntries(
-    Object.keys(publish.jobs).map(id => [id, 'success']),
+  const results = {
+    ...Object.fromEntries(Object.keys(publish.jobs).map(id => [id, 'success'])),
+    'select-integration-evidence': {
+      result: 'success',
+      outputs: { decision: 'run' },
+    },
+  };
+  assert.doesNotMatch(
+    publish.jobs['select-integration-evidence'].if,
+    /recovery_run_id/,
   );
   for (const jobId of [
+    'select-integration-evidence',
     'integration',
     'qualify-source-compute',
     'prepare-release',
@@ -718,6 +738,7 @@ test('recovery retains current-source integration and compiler qualification; si
       );
   }
   for (const jobId of [
+    'select-integration-evidence',
     'integration',
     'qualify-source-compute',
     'prepare-release',
@@ -733,7 +754,30 @@ test('recovery retains current-source integration and compiler qualification; si
         false,
         `${jobId} rejects publish-security ${result}`,
       );
-  for (const jobId of ['qualify-source', 'publish', 'publish-sidecars'])
+  const reused = {
+    ...results,
+    'select-integration-evidence': {
+      result: 'success',
+      outputs: { decision: 'reuse' },
+    },
+    integration: 'skipped',
+  };
+  for (const jobId of ['qualify-source', 'publish', 'publish-sidecars']) {
+    assert.equal(
+      evaluateJobSchedule({ workflow: publish, jobId, results, context }),
+      true,
+      `${jobId} accepts recovery integration run on HEAD`,
+    );
+    assert.equal(
+      evaluateJobSchedule({
+        workflow: publish,
+        jobId,
+        results: reused,
+        context,
+      }),
+      true,
+      `${jobId} accepts a reused run proved on HEAD's tree`,
+    );
     for (const result of ['failure', 'cancelled', 'skipped'])
       assert.equal(
         evaluateJobSchedule({
@@ -745,6 +789,7 @@ test('recovery retains current-source integration and compiler qualification; si
         false,
         `${jobId} rejects recovery integration ${result}`,
       );
+  }
 });
 
 test('native and release qualification run isolated fake contracts before native compilation', () => {

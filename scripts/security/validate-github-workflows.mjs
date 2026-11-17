@@ -1156,6 +1156,7 @@ const bleedingdevPublishJobs = Object.freeze([
   'reconcile-sidecars',
   'record-publish-outcome',
   'rehearse-tractor',
+  'select-integration-evidence',
   'start-release-acceptance',
   'validate-release',
 ]);
@@ -1165,11 +1166,20 @@ const bleedingdevPublishJobs = Object.freeze([
 // validated dispatch; nothing reaches npm, and no dry run is green, without
 // the registry reconciliation and the Tractor rehearsal.
 const bleedingdevRequiredNeeds = Object.freeze({
-  integration: ['publish-security', 'effect-compiler-payload'],
+  'select-integration-evidence': [
+    'publish-security',
+    'effect-compiler-payload',
+  ],
+  integration: [
+    'publish-security',
+    'effect-compiler-payload',
+    'select-integration-evidence',
+  ],
   'qualify-source-compute': ['publish-security', 'effect-compiler-payload'],
   'prepare-release': ['publish-security', 'effect-compiler-payload'],
   publish: [
     'publish-security',
+    'select-integration-evidence',
     'integration',
     'qualify-source-compute',
     'qualify-source',
@@ -1180,6 +1190,7 @@ const bleedingdevRequiredNeeds = Object.freeze({
   ],
   'publish-sidecars': [
     'publish-security',
+    'select-integration-evidence',
     'integration',
     'qualify-source-compute',
     'qualify-source',
@@ -1214,6 +1225,7 @@ const elevatedPermissionScopes = (permissions, scopes) =>
 // remain explicit instead of inheriting GitHub's implicit success().
 const bleedingdevCohortJobs = Object.freeze([
   'effect-compiler-payload',
+  'select-integration-evidence',
   'integration',
   'qualify-source-compute',
   'qualify-source',
@@ -1230,6 +1242,28 @@ const bleedingdevSidecarJobs = Object.freeze([
   'prepare-sidecars',
   'qualify-sidecars',
 ]);
+
+// Consumer: publish-bleedingdev.yml — integration authorizes a receipt or a
+// publication in exactly two ways: this run executed it and it passed, or it
+// was skipped because select-integration-evidence succeeded and proved a pull
+// request run on the identical tree. The clause is byte-identical in
+// qualify-source and both OIDC jobs, so a dry run's evaluation of
+// qualify-source proves the expression the OIDC jobs use.
+const bleedingdevIntegrationEvidenceClause =
+  "needs.select-integration-evidence.result == 'success' && ((needs.integration.result == 'success' && needs.select-integration-evidence.outputs.decision == 'run') || (needs.integration.result == 'skipped' && needs.select-integration-evidence.outputs.decision == 'reuse'))";
+const bleedingdevIntegrationEvidenceJobs = Object.freeze([
+  'qualify-source',
+  'publish-sidecars',
+  'publish',
+]);
+const integrationRunResult = Object.freeze({
+  result: 'success',
+  outputs: Object.freeze({ decision: 'run' }),
+});
+const integrationReuseResult = Object.freeze({
+  result: 'success',
+  outputs: Object.freeze({ decision: 'reuse' }),
+});
 
 function collectBleedingdevModeInputErrors(workflow, relativePath) {
   const errors = [];
@@ -1406,9 +1440,10 @@ function collectBleedingdevModeInputErrors(workflow, relativePath) {
 function collectBleedingdevModeScheduleErrors(workflow, relativePath) {
   const errors = [];
   const jobs = workflow.jobs ?? {};
-  const successfulResults = Object.fromEntries(
-    Object.keys(jobs).map(jobId => [jobId, 'success']),
-  );
+  const successfulResults = {
+    ...Object.fromEntries(Object.keys(jobs).map(jobId => [jobId, 'success'])),
+    'select-integration-evidence': integrationRunResult,
+  };
   const context = {
     github: {
       actor: 'BleedingDev',
@@ -1520,6 +1555,7 @@ function collectBleedingdevModeScheduleErrors(workflow, relativePath) {
   const publicationPrerequisites = {
     cohort: [
       'publish-security',
+      'select-integration-evidence',
       'integration',
       'qualify-source-compute',
       'qualify-source',
@@ -1602,6 +1638,42 @@ function collectBleedingdevModeScheduleErrors(workflow, relativePath) {
     ) {
       errors.push(
         `${relativePath} job ${jobId} must require successful prerequisites; failure, cancellation or skip must never authorize publication or a sidecar qualification receipt`,
+      );
+    }
+  }
+  // Both OIDC jobs accept a reused integration run only through a successful
+  // reuse decision with integration skipped, and nothing else.
+  for (const jobId of ['publish-sidecars', 'publish']) {
+    const reused = {
+      ...inactiveSidecars,
+      'select-integration-evidence': integrationReuseResult,
+      integration: 'skipped',
+    };
+    if (
+      !schedule(jobId, 'cohort', reused) ||
+      ['success', 'failure', 'cancelled'].some(result =>
+        schedule(jobId, 'cohort', { ...reused, integration: result }),
+      ) ||
+      schedule(jobId, 'cohort', {
+        ...inactiveSidecars,
+        'select-integration-evidence': integrationReuseResult,
+      }) ||
+      schedule(jobId, 'cohort', {
+        ...inactiveSidecars,
+        integration: 'skipped',
+      }) ||
+      ['failure', 'cancelled', 'skipped'].some(result =>
+        schedule(jobId, 'cohort', {
+          ...reused,
+          'select-integration-evidence': {
+            result,
+            outputs: { decision: 'reuse' },
+          },
+        }),
+      )
+    ) {
+      errors.push(
+        `${relativePath} job ${jobId} must accept skipped integration only with a successful reuse decision, and in-run integration only with a run decision`,
       );
     }
   }
@@ -1897,8 +1969,10 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
       }
     }
   }
-  // The release reaches integration through needs on its own commit, never
-  // by polling another run's check.
+  // The release reaches integration through needs on its own commit: either
+  // this run executes integration-test.yml, or select-integration-evidence,
+  // which takes no dispatch input, proves a same-repository pull request run
+  // of it on the identical tree. No other run's check is polled.
   if (
     jobs.integration?.uses !== `./${integrationWorkflowPath}` ||
     !normalizeNeeds(jobs['qualify-source']).includes('integration')
@@ -1910,15 +1984,47 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
   const qualificationNeeds = normalizeNeeds(jobs['qualify-source']);
   const computeNeeds = normalizeNeeds(jobs['qualify-source-compute']);
   if (
-    qualificationNeeds.length !== 2 ||
+    qualificationNeeds.length !== 3 ||
     !qualificationNeeds.includes('qualify-source-compute') ||
+    !qualificationNeeds.includes('select-integration-evidence') ||
     computeNeeds.length !== 2 ||
     !computeNeeds.includes('effect-compiler-payload') ||
     !computeNeeds.includes('publish-security')
   ) {
     errors.push(
-      `${relativePath} qualify-source must join integration and compiler-dependent qualify-source-compute before issuing a receipt`,
+      `${relativePath} qualify-source must join integration, its evidence selection and compiler-dependent qualify-source-compute before issuing a receipt`,
     );
+  }
+  const selector = jobs['select-integration-evidence'];
+  const selectorSteps = Array.isArray(selector?.steps) ? selector.steps : [];
+  const selectorCommands = selectorSteps.filter(step =>
+    runIncludes(step, 'integration-evidence.mjs'),
+  );
+  if (
+    selector?.uses !== undefined ||
+    selector?.permissions !== undefined ||
+    selectorCommands.length !== 1 ||
+    stripShellComments(String(selectorCommands[0].run)).trim() !==
+      'node scripts/ultramodern-publish/integration-evidence.mjs select' ||
+    selectorCommands[0].id !== 'select' ||
+    JSON.stringify(selectorSteps).includes('inputs.') ||
+    JSON.stringify(selectorSteps).includes('github.event')
+  ) {
+    errors.push(
+      `${relativePath} select-integration-evidence must run only the fixed integration-evidence.mjs select command with the workflow's read-only permissions and no dispatch input`,
+    );
+  }
+  for (const jobId of bleedingdevIntegrationEvidenceJobs) {
+    const condition = typeof jobs[jobId]?.if === 'string' ? jobs[jobId].if : '';
+    if (
+      condition.split(bleedingdevIntegrationEvidenceClause).length !== 2 ||
+      condition.split('needs.integration.result').length !== 3 ||
+      condition.split('needs.select-integration-evidence.').length !== 4
+    ) {
+      errors.push(
+        `${relativePath} job ${jobId} must gate on the one integration evidence clause, byte-identical in qualify-source, publish-sidecars and publish`,
+      );
+    }
   }
   const qualificationContext = {
     github: {
@@ -1933,8 +2039,14 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
   const qualificationResults = {
     'publish-security': 'success',
     'effect-compiler-payload': 'success',
+    'select-integration-evidence': integrationRunResult,
     integration: 'success',
     'qualify-source-compute': 'success',
+  };
+  const reuseResults = {
+    ...qualificationResults,
+    'select-integration-evidence': integrationReuseResult,
+    integration: 'skipped',
   };
   const schedulesQualification = (results, context = qualificationContext) =>
     evaluateJobSchedule({
@@ -1943,22 +2055,81 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
       results,
       context,
     });
+  const selection = (result, decision) =>
+    decision === undefined ? { result } : { result, outputs: { decision } };
   if (
     !schedulesQualification(qualificationResults) ||
+    !schedulesQualification(reuseResults) ||
     ['integration', 'qualify-source-compute'].some(jobId =>
       ['failure', 'cancelled', 'skipped'].some(result =>
         schedulesQualification({ ...qualificationResults, [jobId]: result }),
       ),
     ) ||
-    ['actor', 'triggering_actor'].some(field =>
-      schedulesQualification(qualificationResults, {
-        ...qualificationContext,
-        github: { ...qualificationContext.github, [field]: 'someone-else' },
+    ['failure', 'cancelled', 'success'].some(result =>
+      schedulesQualification({ ...reuseResults, integration: result }),
+    ) ||
+    ['failure', 'cancelled', 'skipped'].some(result =>
+      [undefined, 'run', 'reuse'].some(decision =>
+        [reuseResults, qualificationResults].some(results =>
+          schedulesQualification({
+            ...results,
+            'select-integration-evidence': selection(result, decision),
+          }),
+        ),
+      ),
+    ) ||
+    [undefined, '', 'skip', 'REUSED'].some(decision =>
+      schedulesQualification({
+        ...reuseResults,
+        'select-integration-evidence': selection('success', decision),
       }),
-    )
+    ) ||
+    schedulesQualification({
+      ...reuseResults,
+      'qualify-source-compute': 'skipped',
+    }) ||
+    schedulesQualification(reuseResults, {
+      ...qualificationContext,
+      inputs: { ...qualificationContext.inputs, mode: 'sidecars' },
+    }) ||
+    ['actor', 'triggering_actor'].some(field =>
+      [qualificationResults, reuseResults].some(results =>
+        schedulesQualification(results, {
+          ...qualificationContext,
+          github: { ...qualificationContext.github, [field]: 'someone-else' },
+        }),
+      ),
+    ) ||
+    evaluateJobSchedule({
+      workflow,
+      jobId: 'qualify-source',
+      results: reuseResults,
+      context: qualificationContext,
+      cancelled: true,
+    })
   ) {
     errors.push(
-      `${relativePath} qualify-source must require successful integration and qualification; failure, cancellation or skip must never authorize a source receipt`,
+      `${relativePath} qualify-source must require successful qualification and either successful in-run integration or a skipped integration with a successful reuse decision; failure, cancellation or any other skip must never authorize a source receipt`,
+    );
+  }
+  const schedulesIntegration = selected =>
+    evaluateJobSchedule({
+      workflow,
+      jobId: 'integration',
+      results: {
+        ...qualificationResults,
+        'select-integration-evidence': selected,
+      },
+      context: qualificationContext,
+    });
+  if (
+    !schedulesIntegration(integrationRunResult) ||
+    schedulesIntegration(integrationReuseResult) ||
+    schedulesIntegration(selection('success')) ||
+    schedulesIntegration(selection('failure', 'run'))
+  ) {
+    errors.push(
+      `${relativePath} integration must run exactly when select-integration-evidence succeeded and decided run`,
     );
   }
   const receiptSteps = workflowSteps(workflow).filter(
