@@ -3132,7 +3132,9 @@ five previously invalid advisory rows remain non-authorizing historical prose.
     {"path":"packages/cli/plugin-bff/src/cli/generator.ts","owner":"bleedingdev","reason":"2026-11-17: Unite the app-tools gated server roots with API/shared for builds only and pass actual emitted files through the existing after hook; preserve dev cross-project sources and inherited compilation-line ownership.","dispositions":["extension-point"]},
     {"path":"packages/server/utils/package.json","owner":"bleedingdev","reason":"2026-11-17: Replace misplaced compiler implementation dependencies with the fork-owned engine and remove the fork-added compiler export; retain a development Rslib dependency for the existing package build configuration.","dispositions":["extension-point"]},
     {"path":"packages/server/utils/src/common/index.ts","owner":"bleedingdev","reason":"2026-11-17: Keep absolute-path validation and the public compile bridge while delegating all compilation and provider policy to the sole fork-owned server compiler.","dispositions":["extension-point"]},
-    {"path":"packages/server/utils/tests/ts.test.ts","owner":"bleedingdev","reason":"2026-11-17: Assert that blocking compiler diagnostics prevent JavaScript output through the native public compile bridge, replacing the former unchecked-emission expectation.","dispositions":["inline-patch"]}
+    {"path":"packages/server/utils/tests/ts.test.ts","owner":"bleedingdev","reason":"2026-11-17: Assert that blocking compiler diagnostics prevent JavaScript output through the native public compile bridge, replacing the former unchecked-emission expectation.","dispositions":["inline-patch"]},
+    {"path":"packages/cli/plugin-bff/tests/bffBuildHooks.test.ts","owner":"bleedingdev","reason":"2026-11-17: Exercise one native BFF/server compiler owner in all modes and registration orders, build-only root unions, combined aliases and the actual emitted-file hook result; preserve inherited test identity.","dispositions":["inline-patch"]},
+    {"path":"packages/solutions/app-tools/tests/serverBuild.test.ts","owner":"bleedingdev","reason":"2026-11-17: Prove lazy gated server roots, current exclusions, no-BFF compilation and ownership claims before or after setup without overlapping writers; preserve inherited test identity.","dispositions":["inline-patch"]}
   ]
 }
 ```
@@ -5165,6 +5167,8 @@ five previously invalid advisory rows remain non-authorizing historical prose.
 | `packages/server/utils/package.json` | bleedingdev | 2026-11-17: Replace misplaced compiler implementation dependencies with the fork-owned engine and remove the fork-added compiler export; retain a development Rslib dependency for the existing package build configuration. | `extension-point` |
 | `packages/server/utils/src/common/index.ts` | bleedingdev | 2026-11-17: Keep absolute-path validation and the public compile bridge while delegating all compilation and provider policy to the sole fork-owned server compiler. | `extension-point` |
 | `packages/server/utils/tests/ts.test.ts` | bleedingdev | 2026-11-17: Assert that blocking compiler diagnostics prevent JavaScript output through the native public compile bridge, replacing the former unchecked-emission expectation. | `inline-patch` |
+| `packages/cli/plugin-bff/tests/bffBuildHooks.test.ts` | bleedingdev | 2026-11-17: Exercise one native BFF/server compiler owner in all modes and registration orders, build-only root unions, combined aliases and the actual emitted-file hook result; preserve inherited test identity. | `inline-patch` |
+| `packages/solutions/app-tools/tests/serverBuild.test.ts` | bleedingdev | 2026-11-17: Prove lazy gated server roots, current exclusions, no-BFF compilation and ownership claims before or after setup without overlapping writers; preserve inherited test identity. | `inline-patch` |
 <!-- /fork-evidence:table -->
 
 ### 2026-10-11 published stable Modern.js v3.9.3 integration
