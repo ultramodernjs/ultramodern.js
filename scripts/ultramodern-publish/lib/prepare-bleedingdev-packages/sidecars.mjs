@@ -34,6 +34,7 @@ import {
   inspectNpmTarball,
 } from './release-artifacts.mjs';
 import { verifySidecar, reconstructSidecarRecipe } from '../../../ultramodern-supply/verify-sidecars.mjs';
+import { sidecarNameProvenance } from '../../sidecar-profiles.mjs';
 
 const { readJsonFile } = fsKit;
 const recipes = JSON.parse(
@@ -48,15 +49,16 @@ const recipeByRoot = new Map(
 const SIDECAR_PACKAGE_ROOTS = recipes.map(recipe => `packages/sidecar/${recipe.id}`);
 
 // The code-reviewed registry chronology each sidecar name must satisfy before a
-// published version is reused: the same schema as the cohort's policies.
+// published version is reused: the same schema as the cohort's policies. A name
+// only a reviewed candidate set introduces carries its pinned bootstrap there.
 function sidecarProvenancePolicy(name) {
-  const recipe = recipes.find(candidate => candidate.fork.name === name);
-  if (!recipe?.provenance) {
+  const provenance = sidecarNameProvenance(name);
+  if (!provenance) {
     throw new Error(
-      `${name} has no provenance policy in scripts/ultramodern-supply/sidecars.json`,
+      `${name} has no provenance policy in scripts/ultramodern-supply/sidecars.json or a reviewed candidate set`,
     );
   }
-  return recipe.provenance;
+  return provenance;
 }
 
 // Upstream CLI contracts that must survive republication verbatim.
@@ -373,12 +375,12 @@ function sidecarPublishOrder(sidecars) {
 async function stageSidecarPackage(
   sidecar,
   stageDir,
-  { repoRoot = defaultRepoRoot } = {},
+  { repoRoot = defaultRepoRoot, aliasTargets = [] } = {},
 ) {
   const packageDir = path.join(stageDir, stagedDirectoryName(sidecar.name));
   fs.rmSync(packageDir, { force: true, recursive: true });
   if (sidecar.recipeOnly) {
-    if (sidecar.reviewedRecipe) await reconstructSidecarRecipe(sidecar.reviewedRecipe, { materializeTo: packageDir });
+    if (sidecar.reviewedRecipe) await reconstructSidecarRecipe(sidecar.reviewedRecipe, { aliasTargets, materializeTo: packageDir });
     else await verifySidecar(path.basename(sidecar.root), { materializeTo: packageDir });
   } else {
     fs.mkdirSync(packageDir, { recursive: true });
@@ -423,8 +425,10 @@ async function stageSidecarPackages(sidecars, outDir) {
   const stageDir = path.join(outDir, sidecarStagingDirectory);
   fs.mkdirSync(stageDir, { recursive: true });
   const staged = [];
+  // A reviewed bundle reconstructs its aliases only from its own closed recipe set.
+  const aliasTargets = sidecars.flatMap(sidecar => (sidecar.reviewedRecipe ? [sidecar.reviewedRecipe] : []));
   for (const sidecar of sidecars) {
-    staged.push(await stageSidecarPackage(sidecar, stageDir));
+    staged.push(await stageSidecarPackage(sidecar, stageDir, { aliasTargets }));
   }
   return staged;
 }

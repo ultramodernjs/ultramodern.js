@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const { withFixtureBootstraps } = require('./sidecar-bootstrap-fixture.js');
 
 const repoRoot = path.resolve(__dirname, '../../..');
 const cohortAliasConsumer = '@bleedingdev/modern-js-image';
@@ -973,13 +974,15 @@ test('--check-registry fails on a missing sidecar name before any bundle exists'
   assert.deepEqual(checked, committed);
 });
 
-test('bundle-free sidecar registry checks read only their closed profile', async () => {
+test('bundle-free sidecar registry checks read only their closed profile', async t => {
+  withFixtureBootstraps(t);
   const { checkSidecarRegistry, parseArgs } = await importCli();
   const parserNames = [
     '@bleedingdev/braces',
     '@bleedingdev/fast-glob',
     '@bleedingdev/find-workspaces',
     '@bleedingdev/micromatch',
+    '@bleedingdev/picomatch',
     '@bleedingdev/rsbuild-plugin-source-build',
     '@bleedingdev/ultracite',
   ];
@@ -987,6 +990,7 @@ test('bundle-free sidecar registry checks read only their closed profile', async
     ['mf-sdk', ['@bleedingdev/mf-sdk']],
     ['tanstack-redact', ['@bleedingdev/tanstack-redact']],
     ['parser', parserNames],
+    ['picomatch-4', ['@bleedingdev/picomatch-v4']],
   ]) {
     const options = parseArgs([
       '--mode',

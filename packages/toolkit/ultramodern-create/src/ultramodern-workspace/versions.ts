@@ -103,6 +103,10 @@ export const PNPM_VERSION = '12.21.0';
 // Braces has no upstream depth-guard release; this reviewed sidecar
 // carries the reviewed parser and AST walker fix. Sharp uses its native fix.
 export const BRACES_FORK_VERSION = '3.0.4';
+// The generated resolver policy is also a runtime consumer of exact sidecars.
+export const ULTRAMODERN_SIDECAR_OVERRIDES = {
+  'braces@>=3.0.0 <3.0.4': `npm:@bleedingdev/braces@${BRACES_FORK_VERSION}`,
+} as const;
 export const SHARP_VERSION = '0.35.5';
 // Required exact peer of @modern-js/app-tools-extensions' native server
 // compiler; support metadata selects the corrected archive for this version.

@@ -15,7 +15,6 @@ import type { JsonValue, WorkspaceApp } from './types';
 import { isRecord } from './types';
 import {
   BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
-  BRACES_FORK_VERSION,
   CLOUDFLARE_COMPATIBILITY_DATE,
   COMPILER_TRUST_EXCEPTIONS,
   EFFECT_VERSION,
@@ -24,6 +23,7 @@ import {
   RSLIB_CORE_VERSION,
   SHARP_VERSION,
   ULTRAMODERN_PACKAGE_PINS,
+  ULTRAMODERN_SIDECAR_OVERRIDES,
 } from './versions';
 
 export function workspaceSupportPackageExtensions(
@@ -253,7 +253,7 @@ export const ULTRAMODERN_WORKSPACE_POLICY = {
     // Published native dependency edges do not inherit repository overrides.
     // Apply the fixes to every vulnerable edge in generated workspaces.
     overrides: {
-      'braces@>=3.0.0 <3.0.4': `npm:@bleedingdev/braces@${BRACES_FORK_VERSION}`,
+      ...ULTRAMODERN_SIDECAR_OVERRIDES,
       'sharp@>=0.35.0 <0.35.5': SHARP_VERSION,
       'axios@>=1.0.0 <1.21.1': '1.21.1',
       'brace-expansion@>=5.0.0 <5.0.13': '5.0.13',

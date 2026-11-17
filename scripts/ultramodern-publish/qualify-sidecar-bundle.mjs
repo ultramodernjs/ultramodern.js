@@ -32,6 +32,7 @@ const profileProbeMains = {
   'mf-sdk': packedMfSdkProbeMain,
   'mf-cohort': packedMfCohortProbeMain,
   'tanstack-redact': packedRedactProbeMain,
+  'picomatch-4': packedPicomatchProbeMain,
 };
 const dependencyBlocks = [
   'dependencies',
@@ -403,9 +404,45 @@ export function runChild(
   });
 }
 
+// Both compatible majors use the same installed-byte and API expectations.
+async function packedPicomatchProbeMain() {
+  const assert = (await import('node:assert/strict')).default;
+  const fs = (await import('node:fs')).default;
+  const path = (await import('node:path')).default;
+  const { createRequire } = await import('node:module');
+  const manifestPath = path.join(process.cwd(), 'package.json');
+  const requirePacked = createRequire(manifestPath);
+  const expected = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const selected = [
+    '@bleedingdev/picomatch',
+    '@bleedingdev/picomatch-v4',
+  ].filter(name => Object.hasOwn(expected.dependencies, name));
+  assert.equal(selected.length, 1, 'install one reviewed matcher per profile');
+  const [name] = selected;
+  const directory = path.dirname(requirePacked.resolve(name));
+  const installed = JSON.parse(
+    fs.readFileSync(path.join(directory, 'package.json'), 'utf8'),
+  );
+  assert.equal(installed.name, name);
+  assert.equal(installed.version, expected.dependencies[name]);
+  // Verified bundle installation has already compared the packed bytes.
+  assert.equal(
+    typeof requirePacked(path.join(directory, 'lib/repetition.js')),
+    'function',
+  );
+  const picomatch = requirePacked(name);
+  for (const windows of [false, true]) {
+    const options = { windows };
+    assert.ok(picomatch.isMatch('src/main.ts', 'src/*.{js,ts}', options));
+    assert.ok(!picomatch.isMatch('src/main.css', 'src/*.{js,ts}', options));
+    assert.ok(picomatch.isMatch('bluegreen', '+(green|blue)', options));
+    assert.ok(!picomatch.isMatch('red', '+(green|blue)', options));
+  }
+}
+
 // Serialized into the installed project's own process: no repository package
 // resolution, NODE_PATH, or linked dependency directory can satisfy a probe.
-async function packedApiProbeMain() {
+async function packedApiProbeMain(picomatchProbe) {
   const assert = (await import('node:assert/strict')).default;
   const fs = (await import('node:fs')).default;
   const path = (await import('node:path')).default;
@@ -471,6 +508,37 @@ async function packedApiProbeMain() {
     ).sort(),
     ['src/a.js', 'src/b.ts'],
   );
+
+  // GHSA-fc5q-39xc-vjpf: the glob chain must load the corrected picomatch line.
+  const expected = JSON.parse(
+    fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
+  ).dependencies;
+  const installedFrom = (from, name) => {
+    const manifestPath = createRequire(from).resolve(`${name}/package.json`);
+    return {
+      dir: fs.realpathSync(path.dirname(manifestPath)),
+      manifest: JSON.parse(fs.readFileSync(manifestPath, 'utf8')),
+    };
+  };
+  const globMicromatch = installedFrom(
+    requireInstalledPackage.resolve('@bleedingdev/fast-glob'),
+    'micromatch',
+  );
+  assert.equal(globMicromatch.manifest.name, '@bleedingdev/micromatch');
+  assert.equal(
+    globMicromatch.manifest.version,
+    expected['@bleedingdev/micromatch'],
+  );
+  const matcherPicomatch = installedFrom(
+    path.join(globMicromatch.dir, 'index.js'),
+    'picomatch',
+  );
+  assert.equal(matcherPicomatch.manifest.name, '@bleedingdev/picomatch');
+  assert.equal(
+    matcherPicomatch.manifest.version,
+    expected['@bleedingdev/picomatch'],
+  );
+  await picomatchProbe();
   const workspace = path.join(fixture, 'workspace');
   const a = { name: 'a', version: '1.0.0', dependencies: { b: 'workspace:*' } };
   const b = { name: 'b', version: '1.0.0' };
@@ -697,9 +765,17 @@ export async function qualifyPackedSidecars(
       timeoutMs: 30_000,
     });
     const probePath = path.join(workspace, 'probe.mjs');
+    const probeHelper = {
+      'mf-cohort': packedMfSdkProbeMain,
+      parser: packedPicomatchProbeMain,
+    }[profile];
+    const probe = profileProbeMains[profile] ?? packedApiProbeMain;
+    const helperDeclaration = probeHelper
+      ? `const probeHelper = ${probeHelper.toString()};\n`
+      : '';
     fs.writeFileSync(
       probePath,
-      `${profile === 'mf-cohort' ? `const sdkProbe = ${packedMfSdkProbeMain.toString()};\n` : ''}await (${(profileProbeMains[profile] ?? packedApiProbeMain).toString()})(${profile === 'mf-cohort' ? 'sdkProbe' : ''});\n`,
+      `${helperDeclaration}await (${probe.toString()})(${probeHelper ? 'probeHelper' : ''});\n`,
     );
     await run(
       process.execPath,

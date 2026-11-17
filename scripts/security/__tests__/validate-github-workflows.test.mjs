@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -1444,10 +1445,35 @@ test('release validator accepts matching profile overrides and inherited profile
   );
 });
 
+test('every dispatchable sidecar profile passes the actual publish input shell guard', () => {
+  const workflow = yaml.load(fs.readFileSync(publishWorkflowPath, 'utf8'));
+  const step = workflow.jobs['publish-security'].steps.find(
+    item => item.name === 'Validate publish inputs',
+  );
+  const guard = profile => {
+    const result = spawnSync('bash', ['-e', '-c', step.run], {
+      env: {
+        PATH: process.env.PATH,
+        PUBLISH_MODE: 'sidecars',
+        SIDECAR_PROFILE: profile,
+      },
+      encoding: 'utf8',
+    });
+    assert.ifError(result.error);
+    return result;
+  };
+  for (const profile of workflow.on.workflow_dispatch.inputs.sidecar_profile
+    .options) {
+    const result = guard(profile);
+    assert.equal(result.status, 0, `${profile}: ${result.stderr}`);
+  }
+  assert.equal(guard('unreviewed-profile').status, 1);
+});
+
 test('release validator rejects SDK cohort inputs and unknown sidecar profiles', () => {
   const parserGuard = '[[ "$SIDECAR_PROFILE" == parser ]]';
   const sidecarGuard =
-    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == tanstack-redact || "$SIDECAR_PROFILE" == mf-cohort ]]';
+    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == tanstack-redact || "$SIDECAR_PROFILE" == mf-cohort || "$SIDECAR_PROFILE" == picomatch-4 ]] || exit 1';
   for (const [label, guard, replacement] of [
     ['SDK in cohort mode', parserGuard, sidecarGuard],
     ['unguarded cohort profile', parserGuard, 'true'],
