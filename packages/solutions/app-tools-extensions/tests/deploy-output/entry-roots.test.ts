@@ -61,17 +61,24 @@ for (const entry of ['api/index.ts', 'api/custom.mjs']) {
           const result = await traceDeployFiles(options);
           traced = new Set(
             [...result.fileList].map(file =>
-              path.relative(
-                outputDirectory,
-                path.resolve(options.base ?? '/', file),
-              ),
+              path
+                .relative(
+                  outputDirectory,
+                  path.resolve(options.base ?? '/', file),
+                )
+                .split(path.sep)
+                .join('/'),
             ),
           );
           return result;
         },
       });
       expect(
-        entries.map(file => path.relative(outputDirectory, file)).sort(),
+        entries
+          .map(file =>
+            path.relative(outputDirectory, file).split(path.sep).join('/'),
+          )
+          .sort(),
       ).toEqual(
         [
           emitted,
