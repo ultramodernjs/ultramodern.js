@@ -298,7 +298,7 @@ function reviewedSourcePins(read) {
     ],
     [`${reactRouter}support-adapter.mjs`]: [
       `@tanstack/router-core@${core} archive`,
-      `reviewed patch ${native('@tanstack/router-core').patchSha256}`,
+      'reviewed patch ${inputs.corePatchSha256}',
     ],
     'scripts/ultramodern-support-artifacts/prepare-react-core.mjs': [
       coreTarball,
