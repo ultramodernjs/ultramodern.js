@@ -20,6 +20,18 @@ test('v3 React source, registry, license and patch bind the qualified owning inp
     ),
   );
   const react = inputs['@tanstack/react-router'];
+  assert.equal(
+    p.sha256(
+      fs.readFileSync(
+        new URL(
+          '../../patches/@tanstack__router-core@1.171.39.patch',
+          import.meta.url,
+        ),
+      ),
+    ),
+    owning.corePatchSha256,
+    'React qualification must select the current reviewed Core correction',
+  );
   assert.equal(react.version, '1.170.46');
   assert.equal(react.upstream.request, owning.identities[0].tarball);
   assert.equal(react.upstream.integrity, owning.identities[0].integrity);
