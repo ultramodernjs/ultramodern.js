@@ -46,28 +46,34 @@ function manifestAt(directory) {
     manifest: JSON.parse(bytes),
   };
 }
-function owningManifest(entry, expectedName) {
-  let directory = path.dirname(fs.realpathSync(entry));
-  for (;;) {
-    const filename = path.join(directory, 'package.json');
-    if (fs.existsSync(filename)) {
-      const owner = manifestAt(directory);
-      if (owner.manifest.name) {
-        assert.equal(
-          owner.manifest.name,
-          expectedName,
-          `Wrong owning manifest for ${entry}`,
-        );
-        return { ...owner, entry: fs.realpathSync(entry) };
-      }
-    }
-    const parent = path.dirname(directory);
-    assert(
-      parent !== directory && path.basename(directory) !== 'node_modules',
-      `No owning manifest for ${entry}`,
-    );
-    directory = parent;
-  }
+function owningManifest(entry, expectedName, filename) {
+  const owner = manifestAt(path.dirname(filename));
+  assert.equal(
+    owner.manifest.name,
+    expectedName,
+    `Wrong owning manifest for ${entry}`,
+  );
+  const resolved = fs.realpathSync(entry);
+  const relative = path.relative(owner.directory, resolved);
+  assert(
+    relative !== '..' &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative),
+    `Resolved entry escapes owning package ${expectedName}: ${entry}`,
+  );
+  return { ...owner, entry: resolved };
+}
+function installedManifest(owner, name) {
+  assert.match(
+    name,
+    /^(?:@[\w.-]+\/)?[\w.-]+$/u,
+    'Invalid installed dependency name',
+  );
+  assert(!['.', '..'].includes(name), 'Invalid installed dependency name');
+  return createRequire(owner.filename)
+    .resolve.paths(name)
+    ?.map(directory => path.join(directory, name, 'package.json'))
+    .find(filename => fs.existsSync(filename));
 }
 // Resolution only: no require(), import(), lifecycle scripts, or package execution.
 function dependencyName(owner, name, catalogs) {
@@ -117,24 +123,20 @@ function resolvePackage(owner, name, specifier, catalogs) {
       throw error;
     }
   }
-  return owningManifest(entry, dependencyName(owner, name, catalogs));
+  const candidate = installedManifest(owner, name);
+  assert(candidate, `No owning manifest for ${name} at ${owner.directory}`);
+  return owningManifest(
+    entry,
+    dependencyName(owner, name, catalogs),
+    candidate,
+  );
 }
 function resolveDependency(owner, name, catalogs) {
-  assert.match(
-    name,
-    /^(?:@[\w.-]+\/)?[\w.-]+$/u,
-    'Invalid installed dependency name',
-  );
-  assert(!['.', '..'].includes(name), 'Invalid installed dependency name');
-  const require = createRequire(owner.filename);
   // Node supplies the search paths, so this works for ordinary and pnpm-linked
   // layouts without knowing store names. Import-only / subpath-only packages
   // may hide both "." and "./package.json"; their real manifest still owns the
   // dependency edges being traversed, but is not reported as a public entry.
-  const candidate = require.resolve
-    .paths(name)
-    ?.map(directory => path.join(directory, name, 'package.json'))
-    .find(filename => fs.existsSync(filename));
+  const candidate = installedManifest(owner, name);
   if (!candidate) {
     const optional =
       has(owner.manifest, 'optionalDependencies', name) ||
@@ -157,6 +159,7 @@ function resolveDependency(owner, name, catalogs) {
     const resolved = owningManifest(
       candidate,
       dependencyName(owner, name, catalogs),
+      candidate,
     );
     return { ...resolved, entry: null };
   }
