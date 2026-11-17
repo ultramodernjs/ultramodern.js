@@ -7,7 +7,6 @@ import { parseAllDocuments } from 'yaml';
 import { parsePnpmLockfile } from '../lib/parse-pnpm-lockfile.mjs';
 
 const fields = ['dependencies', 'optionalDependencies'];
-const identity = 'braces@3.0.3';
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const record = value =>
   value && typeof value === 'object' && !Array.isArray(value);
@@ -15,6 +14,10 @@ const sorted = values =>
   [...values].sort((a, b) =>
     JSON.stringify(a).localeCompare(JSON.stringify(b)),
   );
+const packageNamePattern =
+  /^(?:@[a-z0-9][a-z0-9_.-]*\/)?[a-z0-9][a-z0-9_.-]*$/u;
+const exactVersionPattern =
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?$/u;
 
 function within(root, target) {
   const relative = path.relative(root, target);
@@ -53,59 +56,93 @@ function yamlDocuments(source, label) {
   });
 }
 
-/** Prove the repository's raw production graph uses the authenticated patched payload. */
-export function inspectInstalledBracesGraph({
+function correctedVersions(packageName, versions) {
+  assert.ok(
+    record(versions) && Object.keys(versions).length > 0,
+    `Expected corrected ${packageName} versions`,
+  );
+  const corrected = new Map();
+  for (const [version, entry] of Object.entries(versions).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    assert.match(
+      version,
+      exactVersionPattern,
+      `Expected exact corrected ${packageName} version: ${version}`,
+    );
+    assert.ok(record(entry), `Expected ${packageName}@${version} correction`);
+    const { expectedIntegrity, patchSha256, referenceFiles } = entry;
+    assert.match(
+      expectedIntegrity,
+      /^sha512-[A-Za-z0-9+/]+={0,2}$/u,
+      `Expected authenticated ${packageName}@${version} integrity`,
+    );
+    assert.match(
+      patchSha256,
+      /^[a-f0-9]{64}$/u,
+      `Expected canonical ${packageName}@${version} patch hash`,
+    );
+    assert.ok(
+      referenceFiles instanceof Map && referenceFiles.size > 0,
+      `Expected authenticated ${packageName}@${version} reference files`,
+    );
+    const reference = new Map();
+    for (const [name, bytes] of referenceFiles) {
+      assert.ok(
+        typeof name === 'string' &&
+          name !== '' &&
+          !name.includes('\\') &&
+          !path.posix.isAbsolute(name) &&
+          name
+            .split('/')
+            .every(part => part !== '' && part !== '.' && part !== '..'),
+        `Unsafe reference file: ${name}`,
+      );
+      assert.ok(
+        Buffer.isBuffer(bytes) || bytes instanceof Uint8Array,
+        `Expected reference bytes for ${name}`,
+      );
+      reference.set(name, Buffer.from(bytes));
+    }
+    const referenceManifest = JSON.parse(
+      reference.get('package.json')?.toString('utf8') ?? 'null',
+    );
+    assert.equal(
+      referenceManifest?.name,
+      packageName,
+      'Reference package must retain its upstream name',
+    );
+    assert.equal(
+      referenceManifest?.version,
+      version,
+      'Reference package must retain its upstream version',
+    );
+    const identity = `${packageName}@${version}`;
+    corrected.set(version, {
+      version,
+      identity,
+      expectedIntegrity,
+      patchSha256,
+      reference,
+      snapshot: `${identity}(patch_hash=${patchSha256})`,
+    });
+  }
+  return corrected;
+}
+
+/** Prove every raw and installed production occurrence uses its authenticated patched payload. */
+export function inspectInstalledCorrectionGraph({
   root,
-  expectedIntegrity,
-  patchSha256,
-  referenceFiles,
+  packageName,
+  versions,
 }) {
   assert.equal(typeof root, 'string', 'Expected repository root');
-  assert.match(
-    expectedIntegrity,
-    /^sha512-[A-Za-z0-9+/]+={0,2}$/u,
-    'Expected authenticated braces integrity',
-  );
-  assert.match(
-    patchSha256,
-    /^[a-f0-9]{64}$/u,
-    'Expected canonical braces patch hash',
-  );
   assert.ok(
-    referenceFiles instanceof Map && referenceFiles.size > 0,
-    'Expected authenticated braces reference files',
+    typeof packageName === 'string' && packageNamePattern.test(packageName),
+    `Expected corrected package name: ${packageName}`,
   );
-  const reference = new Map();
-  for (const [name, bytes] of referenceFiles) {
-    assert.ok(
-      typeof name === 'string' &&
-        name !== '' &&
-        !name.includes('\\') &&
-        !path.posix.isAbsolute(name) &&
-        name
-          .split('/')
-          .every(part => part !== '' && part !== '.' && part !== '..'),
-      `Unsafe reference file: ${name}`,
-    );
-    assert.ok(
-      Buffer.isBuffer(bytes) || bytes instanceof Uint8Array,
-      `Expected reference bytes for ${name}`,
-    );
-    reference.set(name, Buffer.from(bytes));
-  }
-  const referenceManifest = JSON.parse(
-    reference.get('package.json')?.toString('utf8') ?? 'null',
-  );
-  assert.equal(
-    referenceManifest?.name,
-    'braces',
-    'Reference package must retain its upstream name',
-  );
-  assert.equal(
-    referenceManifest?.version,
-    '3.0.3',
-    'Reference package must retain its upstream version',
-  );
+  const corrected = correctedVersions(packageName, versions);
+  const prefix = `${packageName}@`;
   const repository = fs.realpathSync(root);
   const observed = new Map();
   const resolutions = new Map();
@@ -189,26 +226,28 @@ export function inspectInstalledBracesGraph({
   );
   assert.equal(workspaceDocuments.length, 1, 'Expected one workspace document');
   const workspace = workspaceDocuments[0];
-  const patchPath = workspace.patchedDependencies?.[identity];
-  assert.equal(
-    typeof patchPath,
-    'string',
-    'Workspace must register the exact braces patch',
-  );
-  assert.ok(
-    !path.isAbsolute(patchPath) && !patchPath.includes('\\'),
-    'Unsafe braces patch path',
-  );
-  const patchFile = path.resolve(repository, patchPath);
-  assert.ok(
-    within(repository, patchFile) && fs.realpathSync(patchFile) === patchFile,
-    'Braces patch escaped its physical repository',
-  );
-  assert.equal(
-    digest(read(patchFile)),
-    patchSha256,
-    'Canonical braces patch bytes differ',
-  );
+  for (const { identity, patchSha256 } of corrected.values()) {
+    const patchPath = workspace.patchedDependencies?.[identity];
+    assert.equal(
+      typeof patchPath,
+      'string',
+      `Workspace must register the exact ${identity} patch`,
+    );
+    assert.ok(
+      !path.isAbsolute(patchPath) && !patchPath.includes('\\'),
+      `Unsafe ${identity} patch path`,
+    );
+    const patchFile = path.resolve(repository, patchPath);
+    assert.ok(
+      within(repository, patchFile) && fs.realpathSync(patchFile) === patchFile,
+      `${identity} patch escaped its physical repository`,
+    );
+    assert.equal(
+      digest(read(patchFile)),
+      patchSha256,
+      `Canonical ${identity} patch bytes differ`,
+    );
+  }
   const lock = parsePnpmLockfile(lockSource);
   assert.ok(
     record(lock?.importers) &&
@@ -216,30 +255,41 @@ export function inspectInstalledBracesGraph({
       record(lock?.snapshots),
     'Expected complete pnpm lock graph',
   );
-  assert.equal(
-    lock.patchedDependencies?.[identity],
-    patchSha256,
-    'Lock must register the exact braces patch hash',
-  );
-  const expectedSnapshot = `${identity}(patch_hash=${patchSha256})`;
-  const assertBracesReference = key => {
-    if (key.startsWith('braces@')) {
+  for (const { identity, patchSha256 } of corrected.values())
+    assert.equal(
+      lock.patchedDependencies?.[identity],
+      patchSha256,
+      `Lock must register the exact ${identity} patch hash`,
+    );
+  const admitted = reference =>
+    [...corrected.values()].some(
+      ({ snapshot }) =>
+        reference.startsWith(`${snapshot})`) ||
+        reference.startsWith(`${snapshot}(`),
+    );
+  const assertCorrectedReference = key => {
+    if (key.startsWith(prefix)) {
       assert.ok(
-        key === expectedSnapshot || key.startsWith(`${expectedSnapshot}(`),
-        `Unpatched or unexpected braces snapshot: ${key}`,
+        [...corrected.values()].some(
+          ({ snapshot }) => key === snapshot || key.startsWith(`${snapshot}(`),
+        ),
+        `Unpatched or unexpected ${packageName} snapshot: ${key}`,
       );
     }
-    for (const match of key.matchAll(/\(braces@/gu)) {
+    for (
+      let index = key.indexOf(`(${prefix}`);
+      index !== -1;
+      index = key.indexOf(`(${prefix}`, index + 1)
+    ) {
       assert.ok(
-        key.slice(match.index + 1).startsWith(`${expectedSnapshot})`) ||
-          key.slice(match.index + 1).startsWith(`${expectedSnapshot}(`),
-        `Unpatched braces peer context: ${key}`,
+        admitted(key.slice(index + 1)),
+        `Unpatched ${packageName} peer context: ${key}`,
       );
     }
   };
   const documents = yamlDocuments(lockSource, 'lockfile');
   const mergedRecords = new Map();
-  let bracesRecords = 0;
+  const packageRecords = new Map();
   for (const document of documents) {
     for (const section of ['packages', 'snapshots']) {
       for (const [key, value] of Object.entries(document[section] ?? {})) {
@@ -251,19 +301,21 @@ export function inspectInstalledBracesGraph({
             `Conflicting raw lock record: ${context}`,
           );
         mergedRecords.set(context, value);
-        if (section === 'packages' && key.startsWith('braces@')) {
-          bracesRecords += 1;
+        if (section === 'packages' && key.startsWith(prefix)) {
+          const version = key.slice(prefix.length);
+          const correction = corrected.get(version);
           assert.equal(
             key,
-            identity,
-            `Unexpected braces package record: ${key}`,
+            correction?.identity,
+            `Unexpected ${packageName} package record: ${key}`,
           );
           assert.equal(
             value.resolution?.integrity,
-            expectedIntegrity,
-            'Braces upstream integrity differs',
+            correction.expectedIntegrity,
+            `${correction.identity} upstream integrity differs`,
           );
-        } else if (section === 'snapshots') assertBracesReference(key);
+          packageRecords.set(version, (packageRecords.get(version) ?? 0) + 1);
+        } else if (section === 'snapshots') assertCorrectedReference(key);
       }
     }
     for (const section of ['importers', 'snapshots']) {
@@ -277,23 +329,27 @@ export function inspectInstalledBracesGraph({
           for (const [name, entry] of Object.entries(value[field] ?? {})) {
             const version = section === 'importers' ? entry.version : entry;
             const key = snapshotKey(name, version);
-            if (name === 'braces')
+            if (name === packageName)
               assert.ok(
-                key.startsWith('braces@'),
-                `Unexpected braces alias: ${parentKey} > ${key}`,
+                key.startsWith(prefix),
+                `Unexpected ${packageName} alias: ${parentKey} > ${key}`,
               );
-            assertBracesReference(key);
-            if (key.startsWith('braces@'))
+            assertCorrectedReference(key);
+            if (key.startsWith(prefix))
               assert.ok(
                 Object.hasOwn(lock.snapshots, key),
-                `Missing raw braces snapshot: ${key}`,
+                `Missing raw ${packageName} snapshot: ${key}`,
               );
           }
         }
       }
     }
   }
-  assert.ok(bracesRecords > 0, 'No braces package record was found');
+  for (const { version, identity } of corrected.values())
+    assert.ok(
+      packageRecords.has(version),
+      `No ${identity} package record was found`,
+    );
 
   const nodes = new Map();
   const reverse = new Map();
@@ -383,7 +439,7 @@ export function inspectInstalledBracesGraph({
   }
   const relevant = new Set(
     [...nodes.values()]
-      .filter(node => node.key?.startsWith('braces@'))
+      .filter(node => node.key?.startsWith(prefix))
       .map(node => node.id),
   );
   const pending = [...relevant];
@@ -440,7 +496,7 @@ export function inspectInstalledBracesGraph({
       `Missing installed dependency: ${parent} > ${dependencyKey}`,
     );
   };
-  const listPayload = directory => {
+  const listPayload = (directory, reference) => {
     const files = [];
     const walk = (current, prefix = '') => {
       for (const name of fs.readdirSync(current).sort()) {
@@ -449,18 +505,18 @@ export function inspectInstalledBracesGraph({
         const stat = fs.lstatSync(file);
         assert.ok(
           !stat.isSymbolicLink(),
-          `Braces payload contains a symbolic link: ${file}`,
+          `${packageName} payload contains a symbolic link: ${file}`,
         );
         if (stat.isDirectory()) {
           assert.ok(
             [...reference.keys()].some(key => key.startsWith(`${relative}/`)),
-            `Unexpected braces payload directory: ${relative}`,
+            `Unexpected ${packageName} payload directory: ${relative}`,
           );
           walk(file, relative);
         } else {
           assert.ok(
             stat.isFile(),
-            `Braces payload is not a regular file: ${file}`,
+            `${packageName} payload is not a regular file: ${file}`,
           );
           files.push(relative);
         }
@@ -469,7 +525,7 @@ export function inspectInstalledBracesGraph({
     walk(directory);
     return files.sort();
   };
-  const targets = new Set();
+  const targets = new Map();
   const identities = [];
   const physicalQueue = [...nodes.values()]
     .filter(node => node.importer !== undefined && relevant.has(node.id))
@@ -554,23 +610,37 @@ export function inspectInstalledBracesGraph({
         version: value.version ?? null,
         snapshot: child.key ?? `importer:${child.importer}`,
       });
-      if (value.name === 'braces') {
-        targets.add(resolved.physical);
+      if (value.name === packageName) {
+        const correction = corrected.get(value.version);
+        assert.ok(
+          correction && child.key?.startsWith(correction.snapshot),
+          `Installed ${packageName} version is not corrected: ${resolved.physical}`,
+        );
+        if (targets.has(resolved.physical))
+          assert.equal(
+            targets.get(resolved.physical),
+            correction.version,
+            `Installed ${packageName} payload changed version: ${resolved.physical}`,
+          );
+        targets.set(resolved.physical, correction.version);
         if (!payloads.has(resolved.physical)) {
-          const files = listPayload(resolved.physical);
+          const files = listPayload(resolved.physical, correction.reference);
           assert.deepEqual(
             files,
-            [...reference.keys()].sort(),
-            `Installed braces payload file set differs: ${resolved.physical}`,
+            [...correction.reference.keys()].sort(),
+            `Installed ${correction.identity} payload file set differs: ${resolved.physical}`,
           );
           for (const file of files)
             assert.ok(
               read(path.join(resolved.physical, file)).equals(
-                reference.get(file),
+                correction.reference.get(file),
               ),
-              `Installed braces payload bytes differ: ${resolved.physical}/${file}`,
+              `Installed ${correction.identity} payload bytes differ: ${resolved.physical}/${file}`,
             );
-          payloads.set(resolved.physical, files);
+          payloads.set(resolved.physical, {
+            files,
+            reference: correction.reference,
+          });
         }
       }
       physicalQueue.push({
@@ -580,10 +650,11 @@ export function inspectInstalledBracesGraph({
       });
     }
   }
-  assert.ok(
-    targets.size > 0,
-    'No installed production consumer reaches patched braces',
-  );
+  for (const { version, identity } of corrected.values())
+    assert.ok(
+      [...targets.values()].includes(version),
+      `No installed production consumer reaches patched ${identity}`,
+    );
   const assertUnchanged = () => {
     for (const [file, expected] of observed) {
       if (expected.directory) {
@@ -616,16 +687,21 @@ export function inspectInstalledBracesGraph({
         state,
         `Installed dependency edge changed: ${parent} > ${dependencyKey}`,
       );
-    for (const [directory, files] of payloads)
+    for (const [directory, { files, reference }] of payloads)
       assert.deepEqual(
-        listPayload(directory),
+        listPayload(directory, reference),
         files,
-        `Installed braces payload file set changed: ${directory}`,
+        `Installed ${packageName} payload file set changed: ${directory}`,
       );
   };
   assertUnchanged();
   return {
-    targets: [...targets].sort(),
+    targets: [...targets]
+      .map(([target, version]) => ({ root: target, version }))
+      .sort(
+        (a, b) =>
+          a.root.localeCompare(b.root) || a.version.localeCompare(b.version),
+      ),
     identities: sorted(identities),
     digests: [...observed]
       .filter(([, value]) => value.sha256 !== undefined)

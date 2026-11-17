@@ -6,15 +6,18 @@
 // advisory. It replaces per-package range floors in sidecars; a vulnerable
 // version anywhere in the production closure fails here with the advisory and
 // the fix, whichever package pulled it in.
+//
+// The repository picomatch correction is the only acknowledgement that is not
+// an exception entry: it needs installed-byte proof from
+// repository-correction.mjs, and only the repository CLI enables it.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import processKit from '../lib/process-kit.js';
 import {
-  assertBracesCorrectionPolicy,
-  bracesCorrection,
-  prepareRepositoryBracesCorrection,
-} from './braces-correction.mjs';
+  picomatchCorrection,
+  prepareRepositoryCorrection,
+} from './repository-correction.mjs';
 
 const { runCommand } = processKit;
 
@@ -38,12 +41,11 @@ function readAdvisoryExceptions(exceptionsPath = defaultExceptionsPath) {
   }
   const byId = new Map();
   for (const entry of entries) {
-    if (entry?.id === bracesCorrection.id || entry?.correction !== undefined) {
-      assertBracesCorrectionPolicy(entry);
-      if (byId.has(entry.id))
-        throw new Error(`duplicate correction ${entry.id}`);
-      byId.set(entry.id, entry);
-      continue;
+    // Only installed-byte proof may acknowledge a repository correction.
+    if (entry?.id === picomatchCorrection.id) {
+      throw new Error(
+        `${exceptionsPath}: ${entry.id} is a repository correction and cannot be waived by an exception`,
+      );
     }
     const keys = Object.keys(entry ?? {})
       .sort()
@@ -152,14 +154,11 @@ async function assertNoHighAdvisories({
     );
   }
 
-  const correctionPolicy = exceptions.get(bracesCorrection.id);
+  // Proven before the audit and rechecked after it, so the acknowledged
+  // findings come from the same lockfile and installed bytes as the proof.
   const correction =
-    correctionPolicy && allowRepositoryCorrections === true
-      ? await prepareRepositoryBracesCorrection({
-          cwd,
-          exception: correctionPolicy,
-          now,
-        })
+    allowRepositoryCorrections === true
+      ? await prepareRepositoryCorrection({ cwd, now })
       : undefined;
   const policyBefore = fs.readFileSync(exceptionsPath);
   const advisories = parseAuditReport(
@@ -170,13 +169,26 @@ async function assertNoHighAdvisories({
   }
   correction?.assertUnchanged();
   const acknowledged = [];
+  const corrections = [];
   const blocking = [];
   for (const advisory of advisories) {
     const exception = exceptions.get(advisory.github_advisory_id);
     const uncovered = uncoveredPaths(advisory, exception);
-    if (exception?.correction !== undefined) {
-      if (correction?.acknowledges(advisory)) acknowledged.push(advisory);
-      else blocking.push(formatAdvisory(advisory, uncovered[0]));
+    if (advisory.github_advisory_id === picomatchCorrection.id) {
+      let refusal = 'repository correction is not enabled in this context';
+      if (correction) {
+        try {
+          const { paths } = correction.acknowledges(advisory);
+          acknowledged.push(advisory);
+          corrections.push({ ...correction.proof, findingPaths: paths });
+          continue;
+        } catch (error) {
+          refusal = error.message;
+        }
+      }
+      blocking.push(
+        `${formatAdvisory(advisory, findingPaths(advisory)[0])}\n  correction refused: ${refusal}`,
+      );
     } else if (
       exception?.package === advisory.module_name &&
       findingPaths(advisory).length > 0 &&
@@ -195,11 +207,7 @@ async function assertNoHighAdvisories({
   return {
     auditLevel: 'high',
     acknowledged: acknowledged.map(advisory => advisory.github_advisory_id),
-    ...(acknowledged.some(
-      advisory => advisory.github_advisory_id === bracesCorrection.id,
-    )
-      ? { corrections: [correction.proof] }
-      : {}),
+    ...(corrections.length > 0 ? { corrections } : {}),
   };
 }
 
@@ -219,9 +227,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           remediation: proof.remediation,
           expires: proof.expires,
           proofSha256: proof.proofSha256,
-          patchSha256: proof.patchSha256,
-          upstreamIntegrity: proof.upstreamIntegrity,
-          sourceFiles: proof.sourceFiles,
+          versions: proof.versions,
+          installedTargets: proof.targets.length,
+          findingPaths: proof.findingPaths.length,
+          sourceFiles: proof.sourceFiles.map(({ path, sha256 }) => ({
+            path,
+            sha256,
+          })),
         }),
       );
     console.log(

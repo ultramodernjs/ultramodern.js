@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   assertNoHighAdvisories,
   readAdvisoryExceptions,
@@ -194,47 +195,126 @@ test('the committed exceptions are well formed', async () => {
   assert.ok(readAdvisoryExceptions() instanceof Map);
 });
 
-test('release contexts cannot acknowledge the repository braces correction', async () => {
-  const report = JSON.stringify({
-    advisories: {
-      braces: {
-        github_advisory_id: 'GHSA-vfj7-8cjw-p6xm',
-        module_name: 'braces',
-        severity: 'high',
-        findings: [{ version: '3.0.3', paths: ['root>micromatch>braces'] }],
-      },
+const picomatchReport = JSON.stringify({
+  advisories: {
+    picomatch: {
+      github_advisory_id: 'GHSA-fc5q-39xc-vjpf',
+      module_name: 'picomatch',
+      severity: 'high',
+      findings: [
+        { version: '2.3.2', paths: ['.>micromatch>picomatch'] },
+        { version: '4.0.7', paths: ['.>vite>picomatch'] },
+      ],
     },
-  });
-  const { runCommandImpl } = auditReturning(report);
-  await assert.rejects(
-    assertNoHighAdvisories({
-      cwd: '/scratch',
-      now,
-      runCommandImpl,
-      allowRepositoryCorrections: false,
-    }),
-    /found 1 high or critical advisory/u,
-  );
+  },
 });
 
-test('legacy broad exceptions cannot substitute for the closed braces correction', async () => {
+test('release contexts cannot acknowledge the repository picomatch correction', async () => {
+  for (const allowRepositoryCorrections of [false, undefined, 'true', 1]) {
+    const { runCommandImpl } = auditReturning(picomatchReport);
+    await withExceptions([], async exceptionsPath => {
+      await assert.rejects(
+        assertNoHighAdvisories({
+          cwd: '/scratch',
+          exceptionsPath,
+          now,
+          runCommandImpl,
+          allowRepositoryCorrections,
+        }),
+        /found 1 high or critical advisory:\nhigh GHSA-fc5q-39xc-vjpf[\s\S]*correction refused: repository correction is not enabled/u,
+      );
+    });
+  }
+});
+
+test('no exception entry can waive the repository picomatch correction', async () => {
+  for (const entry of [
+    {
+      id: 'GHSA-fc5q-39xc-vjpf',
+      package: 'picomatch',
+      parents: ['micromatch', 'vite'],
+      reason: 'test',
+      expires: '2026-12-01',
+    },
+    {
+      id: 'GHSA-fc5q-39xc-vjpf',
+      package: 'picomatch',
+      version: '2.3.2',
+      parents: ['micromatch'],
+      correction: 'repository-picomatch-extglob-correction',
+      owner: 'bleedingdev',
+      reason: 'test',
+      remediation: 'test',
+      expires: '2026-12-01',
+    },
+  ]) {
+    const { calls, runCommandImpl } = auditReturning(picomatchReport);
+    await withExceptions([entry], async exceptionsPath => {
+      assert.throws(
+        () => readAdvisoryExceptions(exceptionsPath),
+        /repository correction and cannot be waived/u,
+      );
+      await assert.rejects(
+        assertNoHighAdvisories({
+          cwd: '/scratch',
+          exceptionsPath,
+          now,
+          runCommandImpl,
+        }),
+        /cannot be waived/u,
+      );
+    });
+    assert.equal(calls.length, 0);
+  }
+  // The retired correction shape is no longer an accepted exception form.
   await withExceptions(
     [
       {
         id: 'GHSA-vfj7-8cjw-p6xm',
         package: 'braces',
-        parents: ['micromatch'],
+        version: '3.0.3',
+        parents: ['chokidar', 'micromatch'],
+        correction: 'repository-braces-depth-bound',
+        owner: 'bleedingdev',
         reason: 'test',
-        expires: '2026-11-06',
+        remediation: 'test',
+        expires: '2026-12-01',
       },
     ],
     async exceptionsPath => {
       assert.throws(
         () => readAdvisoryExceptions(exceptionsPath),
-        /closed fields/u,
+        /every exception needs exactly/u,
       );
     },
   );
+});
+
+test('the repository correction fails shut before auditing when it cannot be proven', async () => {
+  const root = fileURLToPath(new URL('../../../', import.meta.url));
+  for (const [cwd, when, pattern] of [
+    [
+      fs.realpathSync(process.env.OWNED_TEMP_DIR ?? os.tmpdir()),
+      now,
+      /restricted to its physical repository/u,
+    ],
+    [root, new Date('2027-02-18T00:00:00Z'), /expired 2027-02-17/u],
+  ]) {
+    const { calls, runCommandImpl } = auditReturning(picomatchReport);
+    await withExceptions([], async exceptionsPath => {
+      await assert.rejects(
+        assertNoHighAdvisories({
+          cwd,
+          exceptionsPath,
+          now: when,
+          runCommandImpl,
+          allowRepositoryCorrections: true,
+        }),
+        pattern,
+      );
+    });
+    assert.equal(calls.length, 0);
+  }
 });
 
 test('an empty finding cannot be acknowledged and policy mutation during audit fails', async () => {
