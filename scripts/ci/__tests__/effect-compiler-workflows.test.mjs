@@ -625,17 +625,33 @@ test('every fresh build stages the complete payload before selecting a compiler'
     ['qualify-source-compute', 'Qualify release source'],
     ['prepare-release', 'Build Packages'],
   ]) {
-    assert.equal(publish.jobs[id].needs, 'effect-compiler-payload');
+    assert.ok(
+      [publish.jobs[id].needs].flat().includes('effect-compiler-payload'),
+      id,
+    );
     assertHandoff(publish.jobs[id], build, true);
   }
 });
+
+// The payload starts beside publish-security and authorizes nothing; every
+// release job that builds from it still waits for the validated dispatch.
+const publishPayloadNeeds = Object.freeze({
+  integration: ['publish-security', 'effect-compiler-payload'],
+  'qualify-source-compute': ['effect-compiler-payload'],
+  'prepare-release': ['publish-security', 'effect-compiler-payload'],
+});
+const assertPublishPayloadNeeds = () => {
+  assert.equal(publish.jobs['effect-compiler-payload'].needs, undefined);
+  for (const [id, needs] of Object.entries(publishPayloadNeeds))
+    assert.deepEqual([publish.jobs[id].needs].flat(), needs, id);
+};
 
 test('publish invokes one producer; nested integration reuses it rather than colliding', () => {
   assert.equal(
     Object.values(publish.jobs).filter(job => job.uses === producerPath).length,
     1,
   );
-  assert.equal(publish.jobs.integration.needs, 'effect-compiler-payload');
+  assertPublishPayloadNeeds();
   assert.equal(publish.jobs.integration.with.compiler_payload_provided, true);
   assert.equal(
     integration.on.workflow_call.inputs.compiler_payload_provided.default,
@@ -657,10 +673,7 @@ test('publish invokes one producer; nested integration reuses it rather than col
 });
 
 test('recovery retains current-source integration and compiler qualification; sidecars do not build a compiler', () => {
-  assert.equal(
-    publish.jobs['effect-compiler-payload'].needs,
-    'publish-security',
-  );
+  assertPublishPayloadNeeds();
   assert.match(
     publish.jobs['effect-compiler-payload'].if,
     /inputs\.mode == 'cohort'/,
@@ -670,8 +683,6 @@ test('recovery retains current-source integration and compiler qualification; si
     /recovery_run_id/,
   );
   assert.doesNotMatch(publish.jobs.integration.if, /recovery_run_id/);
-  for (const id of ['qualify-source-compute', 'prepare-release'])
-    assert.equal(publish.jobs[id].needs, 'effect-compiler-payload');
   for (const id of ['prepare-sidecars', 'qualify-sidecars'])
     assert.ok(!publish.jobs[id].needs?.includes('effect-compiler-payload'));
   const context = {
@@ -706,6 +717,18 @@ test('recovery retains current-source integration and compiler qualification; si
         false,
       );
   }
+  for (const jobId of ['integration', 'prepare-release'])
+    for (const result of ['failure', 'cancelled', 'skipped'])
+      assert.equal(
+        evaluateJobSchedule({
+          workflow: publish,
+          jobId,
+          results: { ...results, 'publish-security': result },
+          context,
+        }),
+        false,
+        `${jobId} rejects publish-security ${result}`,
+      );
   for (const jobId of ['qualify-source', 'publish', 'publish-sidecars'])
     for (const result of ['failure', 'cancelled', 'skipped'])
       assert.equal(
