@@ -8,7 +8,13 @@ import {
   type UltramodernReleaseCohort,
 } from '../ultramodern-release-cohort';
 import { createPackageRoot } from './fs-io';
-import { type SupportArtifacts, selectSupportRequests } from './package-source';
+import {
+  NATIVE_ROUTER_CORE,
+  type NativeArtifacts,
+  type SupportArtifacts,
+  selectNativeCoreRequest,
+  selectSupportRequests,
+} from './package-source';
 import { isRecord } from './types';
 
 type FrameworkManifest = {
@@ -116,6 +122,11 @@ export function readBundledFrameworkManifests(
 }
 
 let bundledManifests: ReadonlyMap<string, FrameworkManifest> | undefined;
+const bundledFrameworkManifests = () =>
+  (bundledManifests ??= readBundledFrameworkManifests(
+    createPackageRoot,
+    hasCreateReleaseCohort() ? readCreateReleaseCohort() : undefined,
+  ));
 
 /** Exact support peers reached by this importer's installed framework tooling. */
 export function toolingSupportDependencies(
@@ -124,12 +135,7 @@ export function toolingSupportDependencies(
   manifests?: ReadonlyMap<string, FrameworkManifest>,
 ): Record<string, string> {
   if (!support) return {};
-  const bundle =
-    manifests ??
-    (bundledManifests ??= readBundledFrameworkManifests(
-      createPackageRoot,
-      hasCreateReleaseCohort() ? readCreateReleaseCohort() : undefined,
-    ));
+  const bundle = manifests ?? bundledFrameworkManifests();
   const hosts: Record<string, string> = {};
   const seen = new Set<string>();
   const queue = Object.keys(directDependencies);
@@ -149,6 +155,42 @@ export function toolingSupportDependencies(
         ...manifest.dependencies,
         ...manifest.optionalDependencies,
         ...manifest.peerDependencies,
+      }).filter(dependency => bundle.has(dependency)),
+    );
+  }
+  return hosts;
+}
+
+/**
+ * The admitted native Core for an importer that installs a framework owner
+ * peering it. Only installed edges count: an optional peer owner the importer
+ * does not declare is never installed and needs no Core host.
+ */
+export function nativeCoreDependencies(
+  directDependencies: Readonly<Record<string, string>>,
+  native: NativeArtifacts | undefined,
+  manifests?: ReadonlyMap<string, FrameworkManifest>,
+): Record<string, string> {
+  if (!native) return {};
+  const bundle = manifests ?? bundledFrameworkManifests();
+  const hosts: Record<string, string> = {};
+  const seen = new Set<string>();
+  const queue = Object.keys(directDependencies);
+  for (const name of queue) {
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const manifest = bundle.get(name);
+    if (!manifest) continue;
+    const peer = manifest.peerDependencies[NATIVE_ROUTER_CORE];
+    if (peer !== undefined)
+      Object.assign(
+        hosts,
+        selectNativeCoreRequest({ [NATIVE_ROUTER_CORE]: peer }, native),
+      );
+    queue.push(
+      ...Object.keys({
+        ...manifest.dependencies,
+        ...manifest.optionalDependencies,
       }).filter(dependency => bundle.has(dependency)),
     );
   }

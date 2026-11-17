@@ -15,7 +15,7 @@ import {
 } from './descriptors';
 import { readFileTemplate } from './fs-io';
 import { packageName, relativeRootFor } from './naming';
-import { selectSupportRequests } from './package-source';
+import { NATIVE_ROUTER_CORE, selectSupportRequests } from './package-source';
 import { ULTRAMODERN_WORKSPACE_POLICY } from './policy';
 import { hasNativeAppGeneration } from './renderer-generations';
 import {
@@ -23,7 +23,10 @@ import {
   resolveAppGenerationProfile,
   resolveWorkspaceRenderer,
 } from './renderer-profile';
-import { toolingSupportDependencies } from './tooling-support';
+import {
+  nativeCoreDependencies,
+  toolingSupportDependencies,
+} from './tooling-support';
 import type { JsonValue, ResolvedPackageSource, WorkspaceApp } from './types';
 import { NODE_VERSION, ULTRAMODERN_PACKAGE_PINS } from './versions';
 import {
@@ -35,6 +38,29 @@ import {
 
 const frameworkRequest = (packageSource: ResolvedPackageSource) =>
   packageSource.strategy === 'install' ? 'catalog:ultramodern' : 'workspace:*';
+
+/**
+ * Publisher-admitted metadata travels with the consumer that selects it: a
+ * native descriptor is recorded exactly where its Core archive is hosted.
+ */
+function artifactMetadata(
+  packageSource: ResolvedPackageSource,
+  requests: Readonly<Record<string, string>>,
+): Record<string, JsonValue> {
+  const { supportArtifacts, nativeArtifacts } = packageSource;
+  const hostsNativeCore =
+    nativeArtifacts !== undefined &&
+    requests[NATIVE_ROUTER_CORE] ===
+      nativeArtifacts.packages[NATIVE_ROUTER_CORE].request;
+  return supportArtifacts || hostsNativeCore
+    ? {
+        ultramodern: {
+          ...(supportArtifacts ? { supportArtifacts } : {}),
+          ...(hostsNativeCore ? { nativeArtifacts } : {}),
+        },
+      }
+    : {};
+}
 
 function rootSupportDependencies(
   packageSource: ResolvedPackageSource,
@@ -141,6 +167,14 @@ export function appDependencies(
     }
   }
 
+  // A React runtime installs the TanStack adapter, whose exact Core peer is
+  // the admitted native archive. Native renderer profiles own their Core.
+  if (renderer === 'react')
+    Object.assign(
+      dependencies,
+      nativeCoreDependencies(dependencies, packageSource.nativeArtifacts),
+    );
+
   return selectSupportRequests(dependencies, packageSource.supportArtifacts);
 }
 
@@ -245,6 +279,17 @@ export function createRootPackageJson(
           name !== 'miniflare',
       ),
     );
+    const devDependencies = {
+      ...rootDevDependencies,
+      typescript: ULTRAMODERN_PACKAGE_PINS.appDevDependencies.typescript,
+      [ULTRAMODERN_CREATE_PACKAGE]: frameworkRequest(packageSource),
+      '@modern-js/ultramodern-app-tools': frameworkRequest(packageSource),
+      ...rootSupportDependencies(packageSource),
+    };
+    Object.assign(
+      devDependencies,
+      nativeCoreDependencies(devDependencies, packageSource.nativeArtifacts),
+    );
     return {
       private: true,
       name: scope,
@@ -286,16 +331,8 @@ export function createRootPackageJson(
         topology: './topology/reference-topology.json',
         ownership: './topology/ownership.json',
       },
-      devDependencies: {
-        ...rootDevDependencies,
-        typescript: ULTRAMODERN_PACKAGE_PINS.appDevDependencies.typescript,
-        [ULTRAMODERN_CREATE_PACKAGE]: frameworkRequest(packageSource),
-        '@modern-js/ultramodern-app-tools': frameworkRequest(packageSource),
-        ...rootSupportDependencies(packageSource),
-      },
-      ...(packageSource.supportArtifacts
-        ? { ultramodern: { supportArtifacts: packageSource.supportArtifacts } }
-        : {}),
+      devDependencies,
+      ...artifactMetadata(packageSource, devDependencies),
     };
   }
   const shellFilter = `--filter ${packageName(scope, shellApp.packageSuffix)}`;
@@ -327,6 +364,7 @@ export function createRootPackageJson(
     typecheck: bridgeTypecheck,
     shells: [shellApp, ...additionalShells],
   });
+  const devDependencies = reactRootDevDependencies(packageSource);
   const workspacePackages = [
     'apps/*',
     'verticals/*',
@@ -382,27 +420,36 @@ export function createRootPackageJson(
       topology: './topology/reference-topology.json',
       ownership: './topology/ownership.json',
     },
-    devDependencies: {
-      ...ULTRAMODERN_PACKAGE_PINS.rootDevDependencies,
-      typescript: ULTRAMODERN_PACKAGE_PINS.appDevDependencies.typescript,
-      react: ULTRAMODERN_PACKAGE_PINS.appDependencies.react,
-      'react-dom': ULTRAMODERN_PACKAGE_PINS.appDependencies['react-dom'],
-      '@modern-js/app-tools': frameworkRequest(packageSource),
-      '@modern-js/runtime': frameworkRequest(packageSource),
-      '@modern-js/plugin-bff-extensions': frameworkRequest(packageSource),
-      '@modern-js/plugin-bff-build-extensions': frameworkRequest(packageSource),
-      '@modern-js/runtime-renderer-extensions': frameworkRequest(packageSource),
-      '@modern-js/ultramodern-app-tools': frameworkRequest(packageSource),
-      '@modern-js/app-tools-extensions': frameworkRequest(packageSource),
-      '@modern-js/bff-effect': frameworkRequest(packageSource),
-      '@modern-js/code-tools': frameworkRequest(packageSource),
-      [ULTRAMODERN_CREATE_PACKAGE]: frameworkRequest(packageSource),
-      '@modern-js/plugin-bff': frameworkRequest(packageSource),
-      ...rootSupportDependencies(packageSource),
-    },
-    ...(packageSource.supportArtifacts
-      ? { ultramodern: { supportArtifacts: packageSource.supportArtifacts } }
-      : {}),
+    devDependencies,
+    ...artifactMetadata(packageSource, devDependencies),
+  };
+}
+
+function reactRootDevDependencies(
+  packageSource: ResolvedPackageSource,
+): Record<string, string> {
+  const devDependencies: Record<string, string> = {
+    ...ULTRAMODERN_PACKAGE_PINS.rootDevDependencies,
+    typescript: ULTRAMODERN_PACKAGE_PINS.appDevDependencies.typescript,
+    react: ULTRAMODERN_PACKAGE_PINS.appDependencies.react,
+    'react-dom': ULTRAMODERN_PACKAGE_PINS.appDependencies['react-dom'],
+    '@modern-js/app-tools': frameworkRequest(packageSource),
+    '@modern-js/runtime': frameworkRequest(packageSource),
+    '@modern-js/plugin-bff-extensions': frameworkRequest(packageSource),
+    '@modern-js/plugin-bff-build-extensions': frameworkRequest(packageSource),
+    '@modern-js/runtime-renderer-extensions': frameworkRequest(packageSource),
+    '@modern-js/ultramodern-app-tools': frameworkRequest(packageSource),
+    '@modern-js/app-tools-extensions': frameworkRequest(packageSource),
+    '@modern-js/bff-effect': frameworkRequest(packageSource),
+    '@modern-js/code-tools': frameworkRequest(packageSource),
+    [ULTRAMODERN_CREATE_PACKAGE]: frameworkRequest(packageSource),
+    '@modern-js/plugin-bff': frameworkRequest(packageSource),
+    ...rootSupportDependencies(packageSource),
+  };
+  // The root hosts the generator bundle, whose TanStack adapter peers Core.
+  return {
+    ...devDependencies,
+    ...nativeCoreDependencies(devDependencies, packageSource.nativeArtifacts),
   };
 }
 
@@ -477,9 +524,7 @@ export function createAppPackage(
     ...(resolveWorkspaceRenderer(app) === 'react' && appSupportsFederation(app)
       ? { 'zephyr:dependencies': createZephyrDependencies(scope, app, remotes) }
       : {}),
-    ...(packageSource.supportArtifacts
-      ? { ultramodern: { supportArtifacts: packageSource.supportArtifacts } }
-      : {}),
+    ...artifactMetadata(packageSource, dependencies),
     dependencies,
     devDependencies: appDevDependencies(
       packageSource,

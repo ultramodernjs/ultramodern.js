@@ -214,7 +214,7 @@ async function writeCandidateCreatePackage(
   root,
   next,
   dependencies,
-  { supportArtifacts = true } = {},
+  { supportArtifacts = true, nativeArtifacts } = {},
 ) {
   const { createTemplateRequiredFiles } = await import(
     '../../ultramodern-publish/lib/prepare-bleedingdev-packages/constants.mjs'
@@ -238,10 +238,13 @@ async function writeCandidateCreatePackage(
       publishConfig: { access: 'public' },
       dependencies,
       devDependencies: { '@rslib/core': '1.0.7' },
-      ...(supportArtifacts
+      ...(supportArtifacts || nativeArtifacts
         ? {
             ultramodern: {
-              supportArtifacts: await supportArtifactsDescriptor(),
+              ...(supportArtifacts
+                ? { supportArtifacts: await supportArtifactsDescriptor() }
+                : {}),
+              ...(nativeArtifacts ? { nativeArtifacts } : {}),
             },
           }
         : {}),
@@ -614,6 +617,355 @@ test('cohort staging projects packed tooling hosts per importer, including optio
       fs.readFileSync(path.join(root, file), 'utf8'),
     ),
     staged,
+  );
+});
+
+// Fabricated native authority: protocol shape only, never a recipe or bytes.
+async function nativeArtifactsDescriptor(seed = 'f') {
+  const native = await import(
+    '../../ultramodern-renderers/native-artifacts/protocol.mjs'
+  );
+  const producer = {
+    repository: native.repository,
+    repositoryId: native.repositoryId,
+    workflow: native.workflow,
+    source: seed.repeat(40),
+    runId: 7,
+    runAttempt: 1,
+    tag: `native-renderers-${seed.repeat(40)}-7-1`,
+  };
+  return native.descriptorFor({
+    protocol: native.protocol,
+    producer,
+    packages: Object.fromEntries(
+      Object.entries(native.cohort).map(([name, version]) => [
+        name,
+        {
+          version,
+          request: native.releaseUrl(
+            producer,
+            native.assetFilename(name, version),
+          ),
+          integrity: native.integrity(Buffer.from(`${seed}${name}`)),
+          upstream: {
+            request: `https://registry.npmjs.org/${name}/-/${name.split('/').at(-1)}-${version}.tgz`,
+            integrity: native.integrity(Buffer.from(name)),
+            repository: 'unit/control',
+            commit: 'b'.repeat(40),
+            sourceArchiveIntegrity: native.integrity(Buffer.from('source')),
+            licenseSha256: 'c'.repeat(64),
+          },
+          patchSha256: 'd'.repeat(64),
+        },
+      ]),
+    ),
+  });
+}
+
+const nativeCoreName = '@tanstack/router-core';
+
+async function stageNativeCoreScenario(
+  t,
+  {
+    nativeArtifacts,
+    corePeer = nativeArtifacts?.packages[nativeCoreName].version ?? '1.171.39',
+    ownerNativeArtifacts = nativeArtifacts,
+    importers: authored = {},
+  } = {},
+) {
+  const root = fixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeAuthenticatedCohort(root);
+  const next = structuredClone(release);
+  const framework = {
+    'plugin-tanstack': {
+      peerDependencies: { [nativeCoreName]: corePeer },
+      ...(ownerNativeArtifacts
+        ? { ultramodern: { nativeArtifacts: ownerNativeArtifacts } }
+        : {}),
+    },
+    'renderer-solid': { peerDependencies: { [nativeCoreName]: corePeer } },
+    'ultramodern-app-tools': {
+      peerDependencies: { '@modern-js/renderer-solid': '*' },
+      peerDependenciesMeta: { '@modern-js/renderer-solid': { optional: true } },
+    },
+  };
+  // The cohort's runtime is packed but is not a create bundle owner.
+  const packed = { runtime: {}, ...framework };
+  for (const name of ['ultramodern-create', ...Object.keys(packed)])
+    next.aliases[`@modern-js/${name}`] = `@bleedingdev/modern-js-${name}`;
+  next.cohortProjection.value.aliases = { ...next.aliases };
+  const select = name =>
+    `npm:${next.aliases[`@modern-js/${name}`]}@${next.release.version}`;
+  await writeCandidateCreatePackage(
+    root,
+    next,
+    {
+      '@effect/tsgo': '0.69.0',
+      ...Object.fromEntries(
+        Object.keys(framework).map(name => [
+          `@modern-js/${name}`,
+          select(name),
+        ]),
+      ),
+    },
+    { nativeArtifacts },
+  );
+  next.packages = [next.createPackage];
+  for (const [name, manifest] of Object.entries(packed)) {
+    const packageDir = path.join(root, `archives/${name}/package`);
+    fs.mkdirSync(packageDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(packageDir, 'package.json'),
+      JSON.stringify({
+        name: next.aliases[`@modern-js/${name}`],
+        version: next.release.version,
+        publishConfig: { access: 'public' },
+        ...manifest,
+        ultramodern: {
+          ...manifest.ultramodern,
+          sourceName: `@modern-js/${name}`,
+        },
+      }),
+    );
+    next.packages.push(
+      await packFixturePackage(
+        packageDir,
+        path.join(root, `${name}.tgz`),
+        `@modern-js/${name}`,
+      ),
+    );
+  }
+  next.publishOrder = Object.values(next.aliases);
+  const importers = {
+    'package.json': {
+      devDependencies: {
+        '@modern-js/ultramodern-create': 'catalog:ultramodern',
+      },
+    },
+    'apps/shell-super-app/package.json': {
+      dependencies: { '@modern-js/plugin-tanstack': 'catalog:ultramodern' },
+      devDependencies: { [nativeCoreName]: '1.171.39' },
+    },
+    'verticals/remote/package.json': {
+      dependencies: { '@modern-js/plugin-tanstack': 'catalog:ultramodern' },
+    },
+    'verticals/api-only/package.json': {
+      devDependencies: {
+        '@modern-js/ultramodern-app-tools': 'catalog:ultramodern',
+      },
+    },
+    'packages/router-types/package.json': {
+      peerDependencies: { [nativeCoreName]: '^1.171.0' },
+    },
+    ...authored,
+  };
+  for (const [relative, manifest] of Object.entries(importers)) {
+    const file = path.join(root, relative);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const existing = fs.existsSync(file)
+      ? JSON.parse(fs.readFileSync(file, 'utf8'))
+      : {};
+    fs.writeFileSync(file, JSON.stringify({ ...existing, ...manifest }));
+  }
+  const { stringify } = await import('yaml');
+  fs.writeFileSync(
+    path.join(root, 'pnpm-workspace.yaml'),
+    stringify({
+      catalog: { [nativeCoreName]: '1.171.39' },
+      overrides: { [nativeCoreName]: '1.171.39' },
+      catalogs: {
+        ultramodern: Object.fromEntries(
+          Object.keys(next.aliases).map(name => [name, 'old']),
+        ),
+      },
+    }),
+  );
+  const options = toolingProducerOptions(next);
+  options.pnpmPackageExtensions = {
+    '@rslib/core@1.0.7': {
+      peerDependencies: { 'rsbuild-plugin-dts': '1.0.7' },
+    },
+  };
+  const { compilerBootstrapSelectors } = await import(
+    '../published-create-proof/package-cohort.mjs'
+  );
+  options.minimumReleaseAgeExclude.push(
+    ...compilerBootstrapSelectors(next.createPackage.packageJson),
+  );
+  options.minimumReleaseAgeExclude.sort();
+  const read = relative =>
+    JSON.parse(fs.readFileSync(path.join(root, relative), 'utf8'));
+  return { root, next, options, importers, read };
+}
+
+test('cohort staging hosts the packed producer native Core exactly where its peer owner installs', async t => {
+  const { prepareTractorCohortInstallation } = await cohortInstallPromise;
+  const nativeArtifacts = await nativeArtifactsDescriptor();
+  const core = nativeArtifacts.packages[nativeCoreName];
+  const stale = await nativeArtifactsDescriptor('e');
+  const { root, next, options, importers, read } =
+    await stageNativeCoreScenario(t, {
+      nativeArtifacts,
+      importers: {
+        'verticals/remote/package.json': {
+          dependencies: { '@modern-js/plugin-tanstack': 'catalog:ultramodern' },
+          ultramodern: { nativeArtifacts: stale },
+        },
+        'verticals/api-only/package.json': {
+          devDependencies: {
+            '@modern-js/ultramodern-app-tools': 'catalog:ultramodern',
+          },
+          ultramodern: { nativeArtifacts: stale },
+        },
+      },
+    });
+  const before = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
+  for (const [selector, message] of [
+    [nativeCoreName, /descriptor-backed host policy/u],
+    [`parent>${nativeCoreName}@1`, /descriptor-backed host policy/u],
+  ]) {
+    assert.throws(
+      () =>
+        prepareTractorCohortInstallation(root, next, {
+          ...options,
+          pnpmOverrides: { [selector]: core.request },
+        }),
+      message,
+    );
+    assert.equal(
+      fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
+      before,
+    );
+  }
+  prepareTractorCohortInstallation(root, next, options);
+  // The exact Core archive request is the verified packed producer's.
+  assert.equal(
+    core.request,
+    next.createPackage.packageJson.ultramodern.nativeArtifacts.packages[
+      nativeCoreName
+    ].request,
+  );
+  const shell = read('apps/shell-super-app/package.json');
+  assert.equal(shell.dependencies[nativeCoreName], core.request);
+  assert.equal(shell.devDependencies[nativeCoreName], undefined);
+  assert.deepEqual(shell.ultramodern, { nativeArtifacts });
+  const remote = read('verticals/remote/package.json');
+  assert.equal(remote.dependencies[nativeCoreName], core.request);
+  assert.deepEqual(remote.ultramodern, { nativeArtifacts });
+  const rootManifest = read('package.json');
+  assert.equal(rootManifest.devDependencies[nativeCoreName], core.request);
+  assert.equal(rootManifest.dependencies?.[nativeCoreName], undefined);
+  assert.deepEqual(rootManifest.ultramodern.nativeArtifacts, nativeArtifacts);
+  // An optional renderer peer owner the importer does not install needs no Core.
+  const apiOnly = read('verticals/api-only/package.json');
+  assert.equal(apiOnly.devDependencies[nativeCoreName], undefined);
+  assert.equal(apiOnly.dependencies?.[nativeCoreName], undefined);
+  assert.equal(apiOnly.ultramodern?.nativeArtifacts, undefined);
+  const types = read('packages/router-types/package.json');
+  assert.equal(types.peerDependencies[nativeCoreName], core.version);
+  assert.equal(types.ultramodern, undefined);
+  const { parse } = await import('yaml');
+  const policy = parse(
+    fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
+  );
+  assert.equal(policy.catalog[nativeCoreName], core.request);
+  assert.equal(policy.overrides[nativeCoreName], undefined);
+  const staged = Object.keys(importers).map(file =>
+    fs.readFileSync(path.join(root, file), 'utf8'),
+  );
+  prepareTractorCohortInstallation(root, next, options);
+  assert.deepEqual(
+    Object.keys(importers).map(file =>
+      fs.readFileSync(path.join(root, file), 'utf8'),
+    ),
+    staged,
+  );
+});
+
+test('cohort staging rejects invalid, mixed or unadmitted native Core authority', async t => {
+  const { prepareTractorCohortInstallation } = await cohortInstallPromise;
+  const nativeArtifacts = await nativeArtifactsDescriptor();
+  const invalid = structuredClone(nativeArtifacts);
+  invalid.packages[nativeCoreName].request = invalid.packages[
+    nativeCoreName
+  ].request.replace('native-renderers-', 'support-artifacts-');
+  for (const [scenario, message] of [
+    [{ nativeArtifacts: invalid }, /invalid native artifact descriptor/u],
+    [
+      {
+        nativeArtifacts,
+        ownerNativeArtifacts: await nativeArtifactsDescriptor('e'),
+      },
+      /records a different native artifact authority/u,
+    ],
+    [
+      { nativeArtifacts, corePeer: '1.171.38' },
+      /plugin-tanstack -> @tanstack\/router-core differs from the native descriptor/u,
+    ],
+    [
+      {
+        nativeArtifacts,
+        importers: {
+          'apps/shell-super-app/package.json': {
+            optionalDependencies: {
+              [nativeCoreName]:
+                nativeArtifacts.packages[nativeCoreName].request,
+            },
+          },
+        },
+      },
+      /router-core must not be an optional dependency/u,
+    ],
+    [
+      {
+        importers: {
+          'apps/shell-super-app/package.json': {
+            dependencies: {
+              [nativeCoreName]:
+                nativeArtifacts.packages[nativeCoreName].request,
+            },
+          },
+        },
+      },
+      /requires the packed producer native descriptor/u,
+    ],
+    [
+      {
+        importers: {
+          'verticals/remote/package.json': {
+            ultramodern: { nativeArtifacts },
+          },
+        },
+      },
+      /native artifact descriptor the packed producer does not admit/u,
+    ],
+  ]) {
+    const { root, next, options } = await stageNativeCoreScenario(t, scenario);
+    const before = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
+    assert.throws(
+      () => prepareTractorCohortInstallation(root, next, options),
+      message,
+    );
+    assert.equal(
+      fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
+      before,
+    );
+  }
+});
+
+test('cohort staging without a packed native descriptor keeps registry Core semantics', async t => {
+  const { prepareTractorCohortInstallation } = await cohortInstallPromise;
+  const { root, next, options, read } = await stageNativeCoreScenario(t);
+  prepareTractorCohortInstallation(root, next, options);
+  const shell = read('apps/shell-super-app/package.json');
+  assert.equal(shell.dependencies[nativeCoreName], undefined);
+  assert.equal(shell.devDependencies[nativeCoreName], '1.171.39');
+  assert.equal(shell.ultramodern?.nativeArtifacts, undefined);
+  assert.equal(read('package.json').devDependencies[nativeCoreName], undefined);
+  assert.equal(
+    read('packages/router-types/package.json').peerDependencies[nativeCoreName],
+    '^1.171.0',
   );
 });
 

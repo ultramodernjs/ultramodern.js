@@ -1,7 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { yaml } from '@modern-js/utils';
-import { readSupportArtifacts } from '../../ultramodern-workspace/package-source';
+import {
+  readNativeArtifacts,
+  readSupportArtifacts,
+} from '../../ultramodern-workspace/package-source';
 import type { ResolvedPackageSource } from '../../ultramodern-workspace/types';
 import { readOptionalJsonObject } from './json';
 
@@ -20,7 +23,11 @@ export function readWorkspacePackageSource(
   const manifestPath = path.join(workspaceRoot, 'package.json');
   const manifest = readOptionalJsonObject(manifestPath);
   const supportArtifacts = readSupportArtifacts(manifest);
-  const support = supportArtifacts ? { supportArtifacts } : {};
+  const nativeArtifacts = readNativeArtifacts(manifest);
+  const support = {
+    ...(supportArtifacts ? { supportArtifacts } : {}),
+    ...(nativeArtifacts ? { nativeArtifacts } : {}),
+  };
   const name = '@modern-js/ultramodern-create';
   let request =
     manifest.devDependencies?.[name] ?? manifest.dependencies?.[name];

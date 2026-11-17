@@ -7,7 +7,11 @@ import {
   isCreatePackageSourceCheckout,
   readCreateReleaseCohort,
 } from '../../ultramodern-release-cohort';
-import { readSupportArtifacts, type SupportArtifacts } from '../package-source';
+import {
+  readNativeArtifacts,
+  readSupportArtifacts,
+  type SupportArtifacts,
+} from '../package-source';
 import {
   ULTRAMODERN_WORKSPACE_POLICY,
   workspaceSupportPackageExtensions,
@@ -754,9 +758,16 @@ export function validateWorkspace(
   );
   const uniformRenderer =
     selectedRenderers.size === 1 ? [...selectedRenderers][0] : undefined;
+  // One native Core identity per workspace: the root records the authority.
+  const native = readNativeArtifacts(rootManifest);
   for (const member of members) {
     const manifest = readJson(member);
     if (support) assertSupportDependencyPolicies(manifest, support, member);
+    const memberNative = readNativeArtifacts(manifest);
+    assert(
+      memberNative === undefined || sameJson(memberNative, native),
+      `${member} native descriptor differs from the workspace native authority`,
+    );
     if (uniformRenderer) {
       if (member === 'package.json')
         assertWorkspaceRootToolingDependencies(

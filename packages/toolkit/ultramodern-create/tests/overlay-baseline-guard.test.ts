@@ -149,6 +149,48 @@ test('workspace catalog baseline changes fail with a typed violation', () => {
   }
 });
 
+test('an overlay cannot replace admitted native Core with the registry build', async () => {
+  const tempRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'um-native-core-overlay-'),
+  );
+  try {
+    const generatorDir = writeOverlayGenerator(
+      tempRoot,
+      'registry-core-overlay',
+      `
+const fs = require('node:fs');
+const path = require('node:path');
+module.exports = async context => {
+  const file = path.join(context.config.outputWorkspaceRoot, 'apps/shell-super-app/package.json');
+  const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+  manifest.dependencies['@tanstack/router-core'] = manifest.ultramodern.nativeArtifacts.packages['@tanstack/router-core'].version;
+  fs.writeFileSync(file, JSON.stringify(manifest, null, 2));
+};
+`,
+    );
+    await assert.rejects(
+      generateWithOverlay(path.join(tempRoot, 'workspace'), generatorDir),
+      (error: unknown) => {
+        assert.ok(
+          error instanceof OverlayBaselineRelaxationError,
+          String(error),
+        );
+        assert.ok(
+          error.violations.some(
+            violation =>
+              violation.kind === 'baseline-version-relaxation' &&
+              violation.detail.includes('@tanstack/router-core'),
+          ),
+          error.message,
+        );
+        return true;
+      },
+    );
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Octane pins TypeScript 7 while keeping its named AST tool separate', async () => {
   const tempRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), 'um-octane-ast-tool-'),

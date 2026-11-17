@@ -29,6 +29,9 @@ else
   );
 for (const file of fs.readdirSync(path.join(here, 'tests'))) {
   if (file === 'dehydration-hook-loads.test.ts') continue; // Core port of Start hook tests.
+  // Framework-owned route path type correction (route-path-types.patch).
+  if (file.startsWith('route-path-types.') || file === 'routePathFixtures.ts')
+    continue;
   const bytes = execFileSync(
     'git',
     [
