@@ -18,7 +18,11 @@ import { JSDOM } from 'jsdom';
 import { compile } from 'octane/compiler';
 import * as serverInternals from 'octane/internal/server';
 import * as serverNative from 'octane/server';
-import { createElement, decodeExternalSnapshot } from 'octane/server';
+import {
+  createElement,
+  decodeExternalSnapshot,
+  ErrorBoundary,
+} from 'octane/server';
 import {
   admitRendererContract,
   manifestFixture,
@@ -987,3 +991,107 @@ export default function Widget(props: { label: string }) {
     }
   },
 );
+
+test('an unavailable Worker remote streams its fallback while a healthy sibling remote completes the document', async () => {
+  const owners = { a: publication('a'), b: publication('b') };
+  const requests: string[] = [];
+  const runtimeB = createNativeWorkerFederationRuntime(
+    {
+      identity: owners.b.renderer.identities.index,
+      bundle: {},
+      resources: owners.b.resources,
+      bindings: {},
+    },
+    {
+      admitRendererContract,
+      registry: {
+        initialize(options) {
+          return createWorkerFederationHandler({
+            ...options,
+            publication: {
+              renderer: owners.b.renderer,
+              worker: options.publication,
+            },
+            exposes: {
+              './Widget': () => import('./fixtures/worker-federation-child'),
+            },
+          });
+        },
+      },
+    },
+  );
+  const transport = createWorkerFederationTransport({
+    admitRendererContract,
+    services: (['a', 'b'] as const).map(remote => ({
+      remote,
+      manifestUrl: owners[remote].resources.workerFederationManifestUrl!,
+      fragments: [
+        {
+          expose: './Widget',
+          boundaryId: `${remote}Container`,
+          paths: owners[remote].worker.exposes['./Widget'].paths,
+        },
+      ],
+      async fetch(request: Request) {
+        requests.push(`${remote} ${request.method}`);
+        if (request.method === 'GET')
+          return Response.json(owners[remote].manifest);
+        if (remote === 'a')
+          return new Response('Unavailable under test', { status: 503 });
+        const response = await runtimeB.handleRequest(request);
+        if (!response?.ok)
+          throw new Error('The healthy remote snapshot was rejected');
+        return response;
+      },
+    })),
+  });
+  const session = createRequestSession({
+    identity: owners.b.renderer.identities.index,
+    request: new Request('https://host.test/'),
+    platform: { kind: 'worker', bindings: {} },
+  });
+  const remote = (id: 'a' | 'b') =>
+    federatedComponent<{ label: string }>(`${id}/Widget`, {
+      timeout: 1000,
+      fallback: () =>
+        createElement('p', { 'data-fallback': id }, `Remote ${id} unavailable`),
+    });
+  const A = remote('a');
+  const B = remote('b');
+  const logged = rstest.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    const response = await renderOctaneApplication({
+      session,
+      document: {
+        documentId: 'unavailable-sibling-document',
+        nativeHydrationBuildId: 'host-native-client',
+      },
+      workerFederation: transport,
+      workerFederationLocale: 'en',
+      // A routed application renders every match inside a global catch.
+      App: () =>
+        createElement(ErrorBoundary, {
+          fallback: () =>
+            createElement('p', { 'data-route-error': '' }, 'Route failed'),
+          children: createElement('section', {
+            'data-worker-host': '',
+            children: [
+              createElement(A, { label: 'Remote A' }),
+              createElement(B, { label: 'Remote B' }),
+            ],
+          }),
+        }),
+    });
+    const html = await response.text();
+    expect(requests).toEqual(expect.arrayContaining(['a POST', 'b POST']));
+    expect(html).toContain('data-native-worker-child');
+    expect(html).toContain('Remote B');
+    expect(html).toContain('data-fallback="a"');
+    expect(html).toContain('$OCTRX');
+    expect(html).not.toContain('data-route-error');
+    expect((await session.completion).fallback).toBe(true);
+  } finally {
+    logged.mockRestore();
+    transport.dispose();
+  }
+});

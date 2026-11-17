@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 import {
   artifactOwners,
+  nativeBaselineRevision,
   sourceRevision,
   supportBaselineRevision,
   targets,
@@ -142,6 +143,158 @@ test('only the reviewed support baseline keeps its exact owned selections', () =
       }),
     /unexpected old edge devDependencies.effect/,
   );
+});
+
+test('only the reviewed native baseline keeps its exact owned selections', () => {
+  const nativeOnly = Object.keys(artifactOwners.nativeArtifacts).filter(
+    file => !artifactOwners.supportArtifacts[file],
+  );
+  assert.equal(nativeOnly.length, 4);
+  for (const file of nativeOnly) {
+    const accepted = showAt(nativeBaselineRevision, file);
+    const prior = accepted.ultramodern.nativeArtifacts;
+    assert.equal(prior.producer.runId, 43904193604);
+    assert.equal(prior.producer.runAttempt, 1);
+    const expected = showAt(sourceRevision, file);
+    const bound = { revision: nativeBaselineRevision, manifest: accepted };
+    const invoke = (current = accepted, nativeBaseline = bound) =>
+      planManifestUpdate({
+        path: file,
+        expected,
+        current,
+        sourceRevision,
+        nativeBaseline,
+      });
+    // Without the baseline the accepted descriptor is unverifiable.
+    assert.throws(
+      () =>
+        planManifestUpdate({
+          path: file,
+          expected,
+          current: accepted,
+          sourceRevision,
+        }),
+      /unexpected old edge|unverified nativeArtifacts/,
+    );
+    // Without a newer admission the accepted state stays, idempotently.
+    const kept = invoke();
+    assert.deepEqual(kept.manifest, accepted);
+    assert.equal(kept.changes.length, 0);
+    let selections = 0;
+    for (const name of artifactOwners.nativeArtifacts[file])
+      for (const field of [
+        'dependencies',
+        'devDependencies',
+        'peerDependencies',
+      ]) {
+        if (!Object.hasOwn(accepted[field] ?? {}, name)) continue;
+        const pin = prior.packages[name];
+        const to = field === 'peerDependencies' ? pin.version : pin.request;
+        assert.equal(accepted[field][name], to);
+        const edge = kept.edges.find(
+          edge => edge.field === field && edge.name === name,
+        );
+        assert.equal(edge.to, to);
+        assert.equal(edge.status, 'current');
+        assert.equal(
+          edge.reason,
+          'reviewed baseline native artifact selection',
+        );
+        selections++;
+        // An edge differing from the baseline descriptor's canonical selection
+        // is never accepted, in the consumer or in the baseline itself.
+        const forged = structuredClone(accepted);
+        forged[field][name] =
+          field === 'peerDependencies'
+            ? `${pin.version}-forged`
+            : pin.request.replace(/-\d+\/(?=[^/]+$)/u, '-9/');
+        assert.notEqual(forged[field][name], to);
+        assert.throws(
+          () => invoke(forged),
+          new RegExp(
+            `unexpected old edge ${field}\\.${name.replace('/', '\\/')}`,
+          ),
+        );
+        assert.throws(
+          () => invoke(forged, { ...bound, manifest: forged }),
+          /unexpected old edge/,
+        );
+      }
+    assert(selections >= 2, `${file}: native selections`);
+    const forgedMetadata = structuredClone(accepted);
+    forgedMetadata.ultramodern.nativeArtifacts.producer.runAttempt = 2;
+    assert.throws(
+      () => invoke(forgedMetadata),
+      /unverified nativeArtifacts metadata/,
+    );
+    for (const revision of ['f'.repeat(40), supportBaselineRevision])
+      assert.throws(
+        () => invoke(accepted, { revision, manifest: accepted }),
+        /unreviewed native baseline revision/,
+      );
+    // A self-consistent re-tagged baseline is not the sealed producer manifest.
+    const tag = prior.producer.tag;
+    const retagged = JSON.parse(
+      JSON.stringify(accepted).replaceAll(tag, tag.replace(/-1$/u, '-2')),
+    );
+    retagged.ultramodern.nativeArtifacts.producer.runAttempt = 2;
+    assert.throws(
+      () => invoke(retagged, { ...bound, manifest: retagged }),
+      /native baseline descriptor differs from its sealed manifest/,
+    );
+    // Arbitrary JSON capabilities are not native protocol descriptors.
+    const capability = structuredClone(accepted);
+    capability.ultramodern.nativeArtifacts.accepted = true;
+    assert.throws(
+      () => invoke(capability, { ...bound, manifest: capability }),
+      /native descriptor: unknown or missing fields/,
+    );
+  }
+  // Optional declarations never inherit the baseline selection.
+  const file = 'packages/runtime/renderer-octane/package.json';
+  const optional = value => {
+    const result = structuredClone(value);
+    result.optionalDependencies = { octane: result.devDependencies.octane };
+    delete result.devDependencies.octane;
+    return result;
+  };
+  const accepted = optional(showAt(nativeBaselineRevision, file));
+  assert.throws(
+    () =>
+      planManifestUpdate({
+        path: file,
+        expected: optional(showAt(sourceRevision, file)),
+        current: accepted,
+        sourceRevision,
+        nativeBaseline: {
+          revision: nativeBaselineRevision,
+          manifest: accepted,
+        },
+      }),
+    /unexpected old edge optionalDependencies\.octane/,
+  );
+  // Wrong owners never inherit baseline authority, even with the descriptor.
+  const prior = accepted.ultramodern.nativeArtifacts;
+  for (const path of [
+    'packages/runtime/renderer-solid/package.json',
+    'examples/unrelated/package.json',
+  ]) {
+    const manifest = {
+      devDependencies: { octane: prior.packages.octane.request },
+      ultramodern: { nativeArtifacts: prior },
+    };
+    assert.throws(
+      () =>
+        planManifestUpdate({
+          path,
+          expected: { devDependencies: { octane: '0.13.8' } },
+          current: manifest,
+          sourceRevision,
+          nativeBaseline: { revision: nativeBaselineRevision, manifest },
+        }),
+      /unexpected old edge devDependencies\.octane|unverified nativeArtifacts/,
+    );
+  }
 });
 
 test('framework declaration plugin peer and development input stay raw exact', () => {
@@ -1259,6 +1412,93 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     migratedFiles++;
   }
   assert(migratedFiles > 15 && migratedEdges > 20);
+  // Accepted native consumers move to a newly admitted native descriptor only
+  // through the reviewed native baseline's exact owned selections. Their
+  // support-owned parts are staged at the reviewed support baseline so this
+  // synthetic support descriptor (not the real one) can be admitted alongside.
+  const nativeNew = descriptors.nativeArtifacts;
+  const fields = ['dependencies', 'devDependencies', 'peerDependencies'];
+  let nativeEdges = 0;
+  for (const [file, names] of Object.entries(artifactOwners.nativeArtifacts)) {
+    const show = revision =>
+      JSON.parse(
+        execFileSync('git', ['-C', root, 'show', `${revision}:${file}`], {
+          encoding: 'utf8',
+        }),
+      );
+    const baseline = show(nativeBaselineRevision);
+    const prior = baseline.ultramodern.nativeArtifacts;
+    assert.equal(prior.producer.runId, 43904193604);
+    const expected = show(sourceRevision);
+    const current = structuredClone(baseline);
+    const supportBound = { revision: supportBaselineRevision };
+    if (artifactOwners.supportArtifacts[file]) {
+      supportBound.manifest = show(supportBaselineRevision);
+      current.ultramodern.supportArtifacts =
+        supportBound.manifest.ultramodern.supportArtifacts;
+      for (const name of artifactOwners.supportArtifacts[file])
+        for (const field of fields)
+          if (Object.hasOwn(supportBound.manifest[field] ?? {}, name))
+            current[field][name] = supportBound.manifest[field][name];
+    }
+    const nativeBound = {
+      revision: nativeBaselineRevision,
+      manifest: baseline,
+    };
+    const invoke = (manifest, artifactAuthority, nativeBaseline) =>
+      planManifestUpdate({
+        path: file,
+        expected,
+        current: manifest,
+        sourceRevision,
+        artifactAuthority,
+        supportBaseline: supportBound,
+        nativeBaseline,
+      });
+    assert.throws(
+      () => invoke(current, authority),
+      /unexpected old|unverified|tuple/,
+    );
+    // Without a newer native admission the accepted native state stays.
+    const kept = invoke(current, supportOnly, nativeBound);
+    assert.deepEqual(kept.manifest.ultramodern.nativeArtifacts, prior);
+    const result = invoke(current, authority, nativeBound);
+    assert.deepEqual(result.manifest.ultramodern.nativeArtifacts, nativeNew);
+    for (const name of names)
+      for (const field of fields) {
+        const value = baseline[field]?.[name];
+        if (value === undefined) continue;
+        const peer = field === 'peerDependencies';
+        const pin = prior.packages[name];
+        assert.equal(
+          value,
+          peer ? pin.version : pin.request,
+          `${file}:${name}`,
+        );
+        assert.equal(kept.manifest[field][name], value);
+        assert.equal(
+          result.manifest[field][name],
+          peer
+            ? nativeNew.packages[name].version
+            : nativeNew.packages[name].request,
+        );
+        nativeEdges++;
+        if (peer) continue;
+        const forged = structuredClone(current);
+        forged[field][name] = value.replace(/-\d+\/(?=[^/]+$)/u, '-9/');
+        assert.notEqual(forged[field][name], value);
+        assert.throws(
+          () => invoke(forged, authority, nativeBound),
+          /unexpected old|tuple/,
+        );
+      }
+    assert.equal(
+      invoke(result.manifest, authority, nativeBound).changes.length,
+      0,
+      `${file}: native transition converges`,
+    );
+  }
+  assert(nativeEdges > 20);
   // The batch reviews current source selections as well as manifest edges.
   // Stage the admitted synthetic descriptor and matching source URL selections,
   // then exercise the transition from the original dependency edges. These
