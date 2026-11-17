@@ -5,7 +5,10 @@ import { readFileSync } from 'node:fs';
 import { availableParallelism, constants as osConstants } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { resolveEffectTsgoCompiler } from '@modern-js/app-tools-extensions/config';
+import {
+  resolveEffectTsgoCompiler,
+  resolveNativeCompilerEnvironment,
+} from '@modern-js/app-tools-extensions/config';
 
 const args = process.argv.slice(2);
 const workspaceRoot = process.env.ULTRAMODERN_WORKSPACE_ROOT
@@ -77,16 +80,10 @@ function readArgs() {
 // project then cut check time by about 20% at the original peak memory.
 // tsrs builds 4 projects at once, so more checkers oversubscribe the cores.
 // Small machines keep tsrs's own 4.
-const TYPECHECK_DEFAULTS = { fast: true, checkers: 'auto', builders: undefined };
+// The fast preset is on by default; resolveNativeCompilerEnvironment owns it.
+const TYPECHECK_DEFAULTS = { checkers: 'auto', builders: undefined };
 const AUTO_BUILD_CHECKERS = { min: 4, max: 8, reservedCores: 2 };
-const TYPECHECK_CONFIG_KEYS = Object.keys(TYPECHECK_DEFAULTS);
-
-function parseFast(value, source) {
-  if (value === undefined || typeof value === 'boolean') return value;
-  if (value === '1' || value === 'true') return true;
-  if (value === '0' || value === 'false') return false;
-  fail(`${source} must be true or false (or 1 or 0), received ${JSON.stringify(value)}.`);
-}
+const TYPECHECK_CONFIG_KEYS = ['fast', 'checkers', 'builders'];
 
 function parseCount(value, source, { allowAuto }) {
   if (value === undefined || (allowAuto && value === 'auto')) return value;
@@ -118,11 +115,7 @@ function readProjectTypecheckConfig() {
   if (unknown.length > 0) {
     fail(`${source} has unknown settings: ${unknown.join(', ')}. Use ${TYPECHECK_CONFIG_KEYS.join(', ')}.`);
   }
-  if (config.fast !== undefined && typeof config.fast !== 'boolean') {
-    fail(`${source}.fast must be true or false, received ${JSON.stringify(config.fast)}.`);
-  }
   return {
-    fast: config.fast,
     checkers: parseCount(config.checkers, `${source}.checkers`, { allowAuto: true }),
     builders: parseCount(config.builders, `${source}.builders`, { allowAuto: false }),
   };
@@ -138,10 +131,6 @@ function nonEmptyEnvironment(name) {
 function resolveTypecheckSettings() {
   const project = readProjectTypecheckConfig();
   return {
-    fast:
-      parseFast(nonEmptyEnvironment('TSRS_FAST'), 'TSRS_FAST') ??
-      project.fast ??
-      TYPECHECK_DEFAULTS.fast,
     checkers:
       parseCount(nonEmptyEnvironment('ULTRAMODERN_TYPECHECK_CHECKERS'), 'ULTRAMODERN_TYPECHECK_CHECKERS', {
         allowAuto: true,
@@ -185,24 +174,17 @@ function performanceArgs(mode, passthrough, settings) {
   return performance;
 }
 
-// Effect-Go accepts --checkers and --builders and ignores TSRS_* variables,
-// so these settings stay valid on hosts without tsrs.
-function compilerEnvironment(settings) {
-  const env = { ...process.env, TSRS_FAST: settings.fast ? '1' : '0' };
-  const assignment = nonEmptyEnvironment('TSRS_CHECKER_ASSIGNMENT');
-  if (assignment) {
-    env.TSRS_CHECKER_ASSIGNMENT = assignment;
-  } else if (settings.fast) {
-    // An explicit assignment would switch off the preset's work stealing.
-    delete env.TSRS_CHECKER_ASSIGNMENT;
-  } else {
-    env.TSRS_CHECKER_ASSIGNMENT = 'locality';
-  }
-  return env;
-}
-
 const parsed = readArgs();
 const settings = resolveTypecheckSettings();
+// Effect-Go accepts --checkers and --builders and ignores TSRS_* variables,
+// so these settings stay valid on hosts without tsrs. The build type checker
+// uses the same profile, so it reuses the references this command prepares.
+let compilerEnvironment;
+try {
+  compilerEnvironment = resolveNativeCompilerEnvironment(workspaceRoot);
+} catch (error) {
+  fail(error.message);
+}
 const tsgoBin = resolveEffectTsgoCompiler({
   from: pathToFileURL(join(workspaceRoot, 'package.json')),
 });
@@ -231,7 +213,7 @@ const tsgoArgs =
 
 const result = spawnSync(tsgoBin, tsgoArgs, {
   stdio: 'inherit',
-  env: compilerEnvironment(settings),
+  env: compilerEnvironment,
 });
 
 if (result.error) {
