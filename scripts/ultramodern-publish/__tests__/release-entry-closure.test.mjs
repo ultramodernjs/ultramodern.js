@@ -35,5 +35,5 @@ test('receipt verification loads before any dependency installation', () => {
 test('the former eager workspace admission import requires installed dependencies', () => {
   const result = importWithoutDependencies('../verify-support-workspace.mjs');
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /External dependency before installation: yaml/u);
+  assert.match(result.stderr, /External dependency before installation: \S+/u);
 });

@@ -35,6 +35,54 @@ const frameworkOwner = manifest =>
   );
 const commitsDescriptor = manifest =>
   Object.hasOwn(manifest.ultramodern ?? {}, 'supportArtifacts');
+const contained = (root, directory) => {
+  const relative = path.relative(root, directory);
+  return (
+    relative !== '..' &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+};
+export function supportWorkspaceImporters(root) {
+  root = fs.realpathSync(root);
+  const workspace = path.join(root, 'pnpm-workspace.yaml');
+  const patterns = fs.existsSync(workspace)
+    ? (parseYaml(fs.readFileSync(workspace, 'utf8')).packages ?? [])
+    : [];
+  assert(Array.isArray(patterns), 'Workspace packages must be an array');
+  assert(
+    patterns.every(
+      pattern =>
+        typeof pattern === 'string' &&
+        !path.isAbsolute(pattern) &&
+        !pattern.split('/').includes('..'),
+    ),
+    'Invalid workspace package pattern',
+  );
+  const included = patterns
+    .filter(pattern => !pattern.startsWith('!'))
+    .map(pattern => `${pattern.replace(/\/$/u, '')}/package.json`);
+  const excluded = [
+    '**/node_modules/**',
+    '**/.git/**',
+    ...patterns
+      .filter(pattern => pattern.startsWith('!'))
+      .map(pattern => `${pattern.slice(1).replace(/\/$/u, '')}/package.json`),
+  ];
+  const members = fs
+    .globSync(included, { cwd: root, exclude: excluded })
+    .map(filename => fs.realpathSync(path.dirname(path.join(root, filename))));
+  for (const member of members)
+    assert(
+      contained(root, member) &&
+        !path
+          .relative(root, member)
+          .split(path.sep)
+          .some(part => ['node_modules', '.git'].includes(part)),
+      `Workspace importer escapes consumer boundary: ${member}`,
+    );
+  return [...new Set([root, ...members])].sort();
+}
 function manifestAt(directory) {
   directory = fs.realpathSync(directory);
   const filename = path.join(directory, 'package.json');
@@ -80,24 +128,39 @@ function installedManifest(owner, name) {
   );
 }
 // Resolution only: no require(), import(), lifecycle scripts, or package execution.
-function dependencyName(owner, name, catalogs) {
+function workspacePolicy(directory, catalogs) {
+  while (true) {
+    const filename = path.join(directory, 'pnpm-workspace.yaml');
+    if (fs.existsSync(filename)) {
+      if (!catalogs.has(filename)) {
+        const bytes = fs.readFileSync(filename);
+        catalogs.set(filename, { bytes, policy: parseYaml(bytes.toString()) });
+      }
+      return catalogs.get(filename).policy;
+    }
+    const parent = path.dirname(directory);
+    if (parent === directory) return undefined;
+    directory = parent;
+  }
+}
+const npmAlias = request =>
+  /^npm:((?:@[^/]+\/)?[^@]+)@(.+)$/u.exec(request ?? '');
+const intersects = (selector, request) =>
+  !selector ||
+  selector === request ||
+  (semver.validRange(selector) &&
+    semver.validRange(request) &&
+    semver.intersects(selector, request));
+function effectiveRequest(owner, name, catalogs, policy) {
+  // Linked packages can belong to another installation (including a shared
+  // pnpm store). Its nearest workspace, not the caller's, owns that policy.
+  policy = workspacePolicy(owner.directory, catalogs) ?? policy;
   let request = [...directBlocks, 'peerDependencies']
     .map(block => owner.manifest[block]?.[name])
     .find(value => typeof value === 'string');
   if (request?.startsWith('catalog:')) {
-    let directory = owner.directory;
-    let filename = path.join(directory, 'pnpm-workspace.yaml');
-    while (!fs.existsSync(filename)) {
-      const parent = path.dirname(directory);
-      assert(parent !== directory, `No pnpm workspace for ${name}`);
-      directory = parent;
-      filename = path.join(directory, 'pnpm-workspace.yaml');
-    }
-    if (!catalogs.has(filename)) {
-      const bytes = fs.readFileSync(filename);
-      catalogs.set(filename, { bytes, policy: parseYaml(bytes.toString()) });
-    }
-    const { policy } = catalogs.get(filename);
+    policy ??= workspacePolicy(owner.directory, catalogs);
+    assert(policy, `No pnpm workspace for ${name}`);
     const catalogName = request.slice('catalog:'.length);
     const catalog = catalogName
       ? policy?.catalogs?.[catalogName]
@@ -108,10 +171,47 @@ function dependencyName(owner, name, catalogs) {
       `pnpm catalog ${catalogName || 'default'} omits ${name}`,
     );
   }
-  const alias = /^npm:((?:@[^/]+\/)?[^@]+)@/u.exec(request ?? '');
-  return alias?.[1] ?? name;
+  // Support cohort authority is never rewritten by installer policy.
+  if (names.includes(name)) return request;
+  const matches = [];
+  for (const [selector, replacement] of Object.entries(
+    policy?.overrides ?? {},
+  )) {
+    // pnpm's parent delimiter excludes comparator ">"/">=" in ranges.
+    const delimiter = selector.search(/[^ |@]>/u);
+    const parent = delimiter < 0 ? null : selector.slice(0, delimiter + 1);
+    const target = delimiter < 0 ? selector : selector.slice(delimiter + 2);
+    const split = value => /^((?:@[^/]+\/)?[^@]+)(?:@(.+))?$/u.exec(value);
+    const parentMatch = parent && split(parent);
+    const targetMatch = split(target.replace(/:peer$/u, ''));
+    if (
+      parent &&
+      (!parentMatch ||
+        parentMatch[1] !== owner.manifest.name ||
+        (parentMatch[2] &&
+          !semver.satisfies(owner.manifest.version, parentMatch[2])))
+    )
+      continue;
+    if (!targetMatch || targetMatch[1] !== name) continue;
+    if (
+      target.endsWith(':peer') &&
+      !has(owner.manifest, 'peerDependencies', name)
+    )
+      continue;
+    const range = targetMatch[2];
+    if (!intersects(range, request)) continue;
+    matches.push({ parent: !!parent, range, replacement });
+  }
+  const scoped = matches.some(match => match.parent)
+    ? matches.filter(match => match.parent)
+    : matches;
+  // pnpm orders intersecting selectors last-first within the parent scope.
+  const chosen = scoped.sort((a, b) =>
+    intersects(b.range ?? '', a.range ?? '') ? -1 : 1,
+  )[0];
+  return chosen?.replacement ?? request;
 }
-function resolvePackage(owner, name, specifier, catalogs) {
+function resolvePackage(owner, name, specifier, catalogs, policy, peerChecks) {
   const require = createRequire(owner.filename);
   let entry;
   try {
@@ -129,17 +229,55 @@ function resolvePackage(owner, name, specifier, catalogs) {
   }
   const candidate = installedManifest(owner, name);
   assert(candidate, `No owning manifest for ${name} at ${owner.directory}`);
+  return resolvedManifest(
+    owner,
+    name,
+    entry,
+    candidate,
+    catalogs,
+    policy,
+    peerChecks,
+  );
+}
+function resolvedManifest(
+  owner,
+  name,
+  entry,
+  candidate,
+  catalogs,
+  policy,
+  peerChecks,
+) {
+  const request = effectiveRequest(owner, name, catalogs, policy);
+  const alias = npmAlias(request);
+  let expectedName = alias?.[1] ?? name;
+  const actual = manifestAt(path.dirname(candidate));
+  const deferredPeer =
+    peerChecks &&
+    !names.includes(name) &&
+    expectedName === name &&
+    actual.manifest.name !== name &&
+    has(owner.manifest, 'peerDependencies', name) &&
+    !directBlocks.some(block => has(owner.manifest, block, name));
+  if (deferredPeer) expectedName = actual.manifest.name;
   const resolved = owningManifest(
-    isBuiltin(entry) ? candidate : entry,
-    dependencyName(owner, name, catalogs),
+    !entry || isBuiltin(entry) ? candidate : entry,
+    expectedName,
     candidate,
   );
+  if (alias)
+    assert(
+      semver.validRange(alias[2]) &&
+        semver.satisfies(resolved.manifest.version, alias[2]),
+      `${name}: installed alias version differs from installer authority`,
+    );
+  if (deferredPeer) peerChecks.push({ owner, name, resolved, request });
   // Node's public entry is the builtin, not the separately installed npm
   // package. Its physical manifest still owns the declared dependency graph,
   // just as an import-only package does without a CommonJS entry.
-  return isBuiltin(entry) ? { ...resolved, entry: null } : resolved;
+  return !entry || isBuiltin(entry) ? { ...resolved, entry: null } : resolved;
 }
-function resolveDependency(owner, name, catalogs) {
+function resolveDependency(owner, name, catalogs, policy, peerChecks) {
   // Node supplies the search paths, so this works for ordinary and pnpm-linked
   // layouts without knowing store names. Import-only / subpath-only packages
   // may hide both "." and "./package.json"; their real manifest still owns the
@@ -156,7 +294,7 @@ function resolveDependency(owner, name, catalogs) {
     return null;
   }
   try {
-    return resolvePackage(owner, name, name, catalogs);
+    return resolvePackage(owner, name, name, catalogs, policy, peerChecks);
   } catch (error) {
     assert(
       ['ERR_PACKAGE_PATH_NOT_EXPORTED', 'MODULE_NOT_FOUND'].includes(
@@ -164,12 +302,15 @@ function resolveDependency(owner, name, catalogs) {
       ),
       error.message,
     );
-    const resolved = owningManifest(
+    return resolvedManifest(
+      owner,
+      name,
+      null,
       candidate,
-      dependencyName(owner, name, catalogs),
-      candidate,
+      catalogs,
+      policy,
+      peerChecks,
     );
-    return { ...resolved, entry: null };
   }
 }
 function publicSpecifiers(name) {
@@ -252,6 +393,7 @@ function freeze(value) {
  */
 export async function verifySupportConsumer({
   root,
+  workspaceRoot,
   descriptor,
   selectedPackages,
   fetchArtifact = fetch,
@@ -267,6 +409,15 @@ export async function verifySupportConsumer({
   // Snapshot caller JSON before awaiting network work.
   descriptor = structuredClone(descriptor);
   const consumer = manifestAt(path.resolve(root));
+  const memberRoots = new Set(
+    workspaceRoot === undefined
+      ? [consumer.directory]
+      : supportWorkspaceImporters(workspaceRoot),
+  );
+  assert(
+    memberRoots.has(consumer.directory),
+    'Consumer is not a workspace importer',
+  );
   const direct = names.filter(name =>
     directBlocks.some(block => has(consumer.manifest, block, name)),
   );
@@ -300,10 +451,18 @@ export async function verifySupportConsumer({
   const owners = [];
   const resolutions = [];
   const catalogs = new Map();
+  const policy = workspacePolicy(
+    workspaceRoot === undefined
+      ? consumer.directory
+      : fs.realpathSync(workspaceRoot),
+    catalogs,
+  );
+  const graphEdges = [];
+  const peerChecks = [];
   const selectedRoots = new Map(
     selectedNames.map(name => [
       name,
-      resolvePackage(consumer, name, name, catalogs),
+      resolvePackage(consumer, name, name, catalogs, policy),
     ]),
   );
   while (queue.length) {
@@ -315,7 +474,9 @@ export async function verifySupportConsumer({
       seen.size <= 20000,
       'Installed consumer graph exceeds bounded review size',
     );
-    const importer = owner.directory === consumer.directory;
+    const importer =
+      owner.directory === consumer.directory ||
+      (memberRoots.has(owner.directory) && !frameworkOwner(owner.manifest));
     const strictOwner =
       importer ||
       frameworkOwner(owner.manifest) ||
@@ -399,11 +560,20 @@ export async function verifySupportConsumer({
                 `${name}: upstream ${block} range does not admit selected support version`,
               );
             }
-            if (optionalUpstream && !resolveDependency(owner, name, catalogs))
+            if (
+              optionalUpstream &&
+              !resolveDependency(owner, name, catalogs, policy)
+            )
               continue;
           }
           for (const specifier of publicSpecifiers(name)) {
-            const resolved = resolvePackage(owner, name, specifier, catalogs);
+            const resolved = resolvePackage(
+              owner,
+              name,
+              specifier,
+              catalogs,
+              policy,
+            );
             assert.equal(
               resolved.manifest.version,
               protocol.cohort[name],
@@ -424,8 +594,10 @@ export async function verifySupportConsumer({
           }
         }
       }
-      if (!importer && strictOwner)
-        packedOwners.push(snapshot(owner, 'framework-peer'));
+      if (owner.directory !== consumer.directory && strictOwner)
+        packedOwners.push(
+          snapshot(owner, importer ? 'root-direct' : 'framework-peer'),
+        );
       owners.push({
         directory: owner.directory,
         name: owner.manifest.name,
@@ -446,16 +618,119 @@ export async function verifySupportConsumer({
       blocks.flatMap(block => Object.keys(owner.manifest[block] ?? {})),
     )) {
       if (names.includes(name)) continue;
-      const resolved = resolveDependency(owner, name, catalogs);
+      const resolved = resolveDependency(
+        owner,
+        name,
+        catalogs,
+        policy,
+        peerChecks,
+      );
       if (resolved) {
         assert(
           !names.includes(resolved.manifest.name),
           `${name}: private support correction alias is forbidden`,
         );
+        graphEdges.push({ owner, name, resolved });
         queue.push(resolved);
       }
     }
   }
+  // A plain peer range may be supplied under an npm alias, but only by an
+  // actual installer context that resolves this consumer and declares the host
+  // identity. Ordinary npm copies may differ physically; support hosts may not.
+  // Resolve the complete graph first: provider traversal order is not authority.
+  const peerProven = peer =>
+    graphEdges.some(edge => {
+      if (edge.resolved.directory !== peer.owner.directory) return false;
+      const providerEdge = graphEdges.find(
+        candidate =>
+          candidate.owner.directory === edge.owner.directory &&
+          candidate.name === peer.name &&
+          candidate.resolved.manifest.name === peer.resolved.manifest.name &&
+          candidate.resolved.manifest.version ===
+            peer.resolved.manifest.version &&
+          (memberRoots.has(candidate.owner.directory)
+            ? directBlocks
+            : ['dependencies', 'optionalDependencies']
+          ).some(block => has(candidate.owner.manifest, block, peer.name)),
+      );
+      if (!providerEdge) return false;
+      const alias = npmAlias(
+        effectiveRequest(edge.owner, peer.name, catalogs, policy),
+      );
+      return (
+        alias?.[1] === peer.resolved.manifest.name &&
+        semver.validRange(alias[2]) &&
+        semver.satisfies(peer.resolved.manifest.version, alias[2]) &&
+        semver.validRange(peer.request) &&
+        semver.satisfies(peer.resolved.manifest.version, peer.request)
+      );
+    });
+  // A nested importer may inherit peers from the workspace's installation
+  // without itself depending on the package that supplies the alias. Consult
+  // that actual root's installed graph, not unrelated packages in node_modules.
+  if (
+    workspaceRoot !== undefined &&
+    peerChecks.some(peer => !peerProven(peer))
+  ) {
+    const contextQueue = [manifestAt(workspaceRoot)];
+    const contextSeen = new Set();
+    while (contextQueue.length) {
+      signal?.throwIfAborted();
+      const owner = contextQueue.shift();
+      if (contextSeen.has(owner.directory)) continue;
+      contextSeen.add(owner.directory);
+      if (seen.has(owner.directory)) {
+        contextQueue.push(
+          ...graphEdges
+            .filter(edge => edge.owner.directory === owner.directory)
+            .map(edge => edge.resolved),
+        );
+        continue;
+      }
+      seen.set(owner.directory, owner);
+      assert(
+        seen.size <= 20000,
+        'Installed consumer graph exceeds bounded review size',
+      );
+      if (
+        commitsDescriptor(owner.manifest) ||
+        (frameworkOwner(owner.manifest) && supportEdges(owner.manifest).length)
+      )
+        assert.deepEqual(
+          owner.manifest.ultramodern?.supportArtifacts,
+          descriptor,
+          `${owner.manifest.name}: owner must commit to exact support descriptor`,
+        );
+      const blocks = memberRoots.has(owner.directory)
+        ? [...directBlocks, 'peerDependencies']
+        : ['dependencies', 'optionalDependencies', 'peerDependencies'];
+      for (const name of new Set(
+        blocks.flatMap(block => Object.keys(owner.manifest[block] ?? {})),
+      )) {
+        if (names.includes(name)) continue;
+        const resolved = resolveDependency(
+          owner,
+          name,
+          catalogs,
+          policy,
+          peerChecks,
+        );
+        if (!resolved) continue;
+        assert(
+          !names.includes(resolved.manifest.name),
+          `${name}: private support correction alias is forbidden`,
+        );
+        graphEdges.push({ owner, name, resolved });
+        contextQueue.push(resolved);
+      }
+    }
+  }
+  for (const peer of peerChecks)
+    assert(
+      peerProven(peer),
+      `Wrong owning manifest for ${peer.name}: no installed peer provider alias authority`,
+    );
   // Owners came from real manifest bytes; no caller manifest projections.
   const payloads = new Map();
   const transport = async (url, options) => {
@@ -495,6 +770,25 @@ export async function verifySupportConsumer({
       fs.readFileSync(filename).equals(bytes),
       `Installed workspace catalog changed during verification: ${filename}`,
     );
+  if (workspaceRoot !== undefined)
+    assert.deepEqual(
+      supportWorkspaceImporters(workspaceRoot),
+      [...memberRoots].sort(),
+      'Workspace importer membership changed during verification',
+    );
+  for (const { owner, name, resolved } of graphEdges) {
+    const current = resolveDependency(owner, name, catalogs, policy, []);
+    assert.equal(
+      current?.directory,
+      resolved.directory,
+      'Installed dependency resolution changed during verification',
+    );
+    assert.equal(
+      current?.entry,
+      resolved.entry,
+      'Installed dependency entry changed during verification',
+    );
+  }
   for (const resolution of resolutions) {
     const owner = manifestAt(resolution.owner);
     const current = resolvePackage(
@@ -502,6 +796,7 @@ export async function verifySupportConsumer({
       resolution.name,
       resolution.specifier,
       catalogs,
+      policy,
     );
     assert.equal(
       current.directory,

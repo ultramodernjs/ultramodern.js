@@ -2,48 +2,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { parse } from 'yaml';
 import { supportProtocol as protocol } from '../ultramodern-support-artifacts/protocol.mjs';
 import { isDirectRun } from './lib/direct-run.mjs';
-import { verifySupportConsumer } from './verify-support-consumer.mjs';
+import {
+  supportWorkspaceImporters,
+  verifySupportConsumer,
+} from './verify-support-consumer.mjs';
 
-export function supportWorkspaceImporters(root) {
-  root = fs.realpathSync(root);
-  const workspace = path.join(root, 'pnpm-workspace.yaml');
-  const patterns = fs.existsSync(workspace)
-    ? parse(fs.readFileSync(workspace, 'utf8')).packages
-    : [];
-  assert(Array.isArray(patterns), 'Workspace packages must be an array');
-  assert(
-    patterns.every(
-      pattern =>
-        typeof pattern === 'string' &&
-        !path.isAbsolute(pattern) &&
-        !pattern.split('/').includes('..'),
-    ),
-    'Invalid workspace package pattern',
-  );
-  const included = patterns
-    .filter(pattern => !pattern.startsWith('!'))
-    .map(pattern => `${pattern.replace(/\/$/u, '')}/package.json`);
-  const excluded = [
-    '**/node_modules/**',
-    '**/.git/**',
-    ...patterns
-      .filter(pattern => pattern.startsWith('!'))
-      .map(pattern => `${pattern.slice(1)}/package.json`),
-  ];
-  return [
-    ...new Set([
-      root,
-      ...fs
-        .globSync(included, { cwd: root, exclude: excluded })
-        .map(filename =>
-          fs.realpathSync(path.dirname(path.join(root, filename))),
-        ),
-    ]),
-  ].sort();
-}
+export { supportWorkspaceImporters } from './verify-support-consumer.mjs';
 
 export async function verifySupportWorkspace({
   root,
@@ -80,6 +46,7 @@ export async function verifySupportWorkspace({
     receipts.push(
       await verifySupportConsumer({
         root: importer,
+        workspaceRoot: root,
         descriptor: manifest.ultramodern?.supportArtifacts,
         fetchArtifact,
         readGithub,

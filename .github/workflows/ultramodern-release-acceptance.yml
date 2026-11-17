@@ -137,6 +137,9 @@ jobs:
       - name: Run exact-artifact ERP-10 acceptance
         id: erp-acceptance
         env:
+          # The trusted coordinator consumes this before starting any build or
+          # install child and forwards it only to read-only support admission.
+          SUPPORT_ARTIFACT_GITHUB_TOKEN: ${{ github.token }}
           # Preserve the original remote-loader stack before the React bridge wraps it.
           FEDERATION_DEBUG: 'true'
           # Opt-in workspace build parallelism for larger self-hosted runners;
