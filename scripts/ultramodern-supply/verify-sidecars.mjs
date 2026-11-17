@@ -11,6 +11,7 @@ import {
   MODULE_FEDERATION_NODE_VERSION,
   MODULE_FEDERATION_VERSION,
   ULTRAMODERN_PACKAGE_PINS,
+  ULTRAMODERN_SIDECAR_OVERRIDES,
 } from '../../packages/toolkit/ultramodern-create/src/ultramodern-workspace/versions.ts';
 import { packageMetadataRepository } from '../ultramodern-publish/lib/prepare-bleedingdev-packages/constants.mjs';
 
@@ -137,25 +138,25 @@ export function assertRecipeConsumers(
   };
   // The publisher ships source edges unchanged, so a cohort package that names
   // an upstream package with a recipe would ship the uncorrected artifact.
-  const recipeByUpstream = new Map(
-    recipeList.map(item => [item.upstream.name, item]),
-  );
+  const recipesByUpstream = Map.groupBy(recipeList, item => item.upstream.name);
   for (const manifest of publishedManifests) {
     for (const block of consumerBlocks) {
       for (const [name, specifier] of Object.entries(manifest[block] ?? {})) {
-        const recipe = recipeByUpstream.get(name);
-        const expected =
-          recipe && `npm:${recipe.fork.name}@${recipe.fork.version}`;
-        const unpublished =
-          recipe &&
-          isUnpublishedForkEdge(manifest.name, name, specifier, recipe);
+        const candidates = recipesByUpstream.get(name);
+        if (!candidates) continue;
+        const expected = candidates.map(
+          recipe => `npm:${recipe.fork.name}@${recipe.fork.version}`,
+        );
+        const unpublished = candidates.find(recipe =>
+          isUnpublishedForkEdge(manifest.name, name, specifier, recipe),
+        );
         assert.ok(
-          !recipe || specifier === expected || unpublished,
-          `${manifest.name} ${block}.${name} is ${specifier}; declare ${expected} in source`,
+          expected.includes(specifier) || unpublished,
+          `${manifest.name} ${block}.${name} is ${specifier}; declare ${expected.join(' or ')} in source`,
         );
         // A listed unpublished fork edge is the recipe's declared consumer
         // until the fork is on npm and the edge becomes its exact alias.
-        if (unpublished) reach(recipe);
+        reach(unpublished);
       }
     }
   }
@@ -184,6 +185,7 @@ export function assertRepositoryRecipeConsumers(publishedManifests) {
   assertRecipeGraph(recipes, {
     generatorPins: [
       ...Object.values(ULTRAMODERN_PACKAGE_PINS),
+      ULTRAMODERN_SIDECAR_OVERRIDES,
       ...qualifiedProfilePins,
     ],
   });
@@ -195,6 +197,7 @@ export function assertRepositoryRecipeConsumers(publishedManifests) {
       ...Object.entries(ULTRAMODERN_PACKAGE_PINS)
         .filter(([block]) => !block.endsWith('DevDependencies'))
         .map(([, pins]) => pins),
+      ULTRAMODERN_SIDECAR_OVERRIDES,
       ...qualifiedProfilePins,
     ],
     publishedManifests,
@@ -380,6 +383,29 @@ function compareVersions(left, right) {
 }
 
 /**
+ * Whether `version` lies inside a published manifest's declared dependency
+ * range. Only the exact, caret and tilde forms that reviewed upstream
+ * artifacts declare are understood; any other range fails closed.
+ */
+export function satisfiesDeclaredRange(version, range) {
+  const match = /^([\^~]?)(\d+)\.(\d+)\.(\d+)$/u.exec(String(range));
+  assert.ok(match, `unsupported declared dependency range ${range}`);
+  const [, operator, ...floor] = match;
+  const lower = floor.join('.');
+  if (!operator) return version === lower;
+  const candidate = /^(\d+)\.(\d+)\.(\d+)$/u.exec(version);
+  if (!candidate) return false;
+  const [major, minor] = floor.map(Number);
+  const [candidateMajor, candidateMinor] = candidate.slice(1).map(Number);
+  if (operator === '^' && major === 0 && minor === 0) return version === lower;
+  return (
+    candidateMajor === major &&
+    ((operator === '^' && major !== 0) || candidateMinor === minor) &&
+    compareVersions(version, lower) >= 0
+  );
+}
+
+/**
  * Fetch the newest registry release of the recipe's upstream major.minor
  * (prereleases only when the pin is one), authenticated by its packument
  * integrity. Returns undefined when the pin is already that release.
@@ -514,14 +540,19 @@ async function fetchPinnedTarball(url) {
 export async function verifySidecar(id, { artifactsDir, materializeTo } = {}) {
   const recipe = recipes.find(item => item.id === id);
   assert.ok(recipe, `unknown sidecar: ${id}`);
-  return reconstructSidecarRecipe(recipe, { artifactsDir, materializeTo });
+  return reconstructSidecarRecipe(recipe, {
+    aliasTargets: recipes,
+    artifactsDir,
+    materializeTo,
+  });
 }
 
 // Internal producer API: callers supply the already validated, source-bound recipe.
-// No CLI or environment option can select an alternate recipe file.
+// No CLI or environment option can select an alternate recipe file. Every alias
+// the recipe projects must name one of `aliasTargets`, the caller's reviewed set.
 export async function reconstructSidecarRecipe(
   recipe,
-  { artifactsDir, materializeTo } = {},
+  { aliasTargets = [], artifactsDir, materializeTo } = {},
 ) {
   const { id } = recipe;
   assert.deepEqual(
@@ -595,10 +626,26 @@ export async function reconstructSidecarRecipe(
       },
     };
     for (const [key, changes] of Object.entries(recipe.manifestChanges)) {
-      for (const dependencyName of Object.keys(changes)) {
+      for (const [dependencyName, specifier] of Object.entries(changes)) {
         assert.ok(
           Object.hasOwn(patched[key] ?? {}, dependencyName),
           `${id}: recipe changes absent upstream ${key}.${dependencyName}`,
+        );
+        const [, fork, version] = forkSpecifier.exec(String(specifier)) ?? [];
+        if (!fork) continue;
+        // An alias swaps bytes, never the API line the upstream manifest declared.
+        const target = aliasTargets.find(
+          item => item.fork.name === fork && item.fork.version === version,
+        );
+        assert.ok(
+          target,
+          `${id}: ${key}.${dependencyName} aliases ${specifier}, which is not in the reviewed recipe set`,
+        );
+        const declared = patched[key][dependencyName];
+        assert.ok(
+          target.upstream.name === dependencyName &&
+            satisfiesDeclaredRange(target.upstream.version, declared),
+          `${id}: ${key}.${dependencyName} declares ${declared}; ${specifier} reconstructs ${target.upstream.name} ${target.upstream.version}, outside that API line`,
         );
       }
       projected[key] = { ...patched[key], ...changes };
@@ -623,7 +670,10 @@ if (
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
   const args = process.argv.slice(2);
-  const generatorPins = Object.values(ULTRAMODERN_PACKAGE_PINS);
+  const generatorPins = [
+    ...Object.values(ULTRAMODERN_PACKAGE_PINS),
+    ULTRAMODERN_SIDECAR_OVERRIDES,
+  ];
   if (args.includes('--upstream-latest')) {
     assert.equal(args.length, 1, '--upstream-latest takes no other argument');
     assertNoUpstreamedPatches(recipes, await findUpstreamedPatches(recipes), {

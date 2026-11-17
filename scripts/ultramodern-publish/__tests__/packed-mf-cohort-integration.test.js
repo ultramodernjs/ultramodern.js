@@ -6,12 +6,21 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { promisify } = require('node:util');
+const { withFixtureBootstraps } = require('./sidecar-bootstrap-fixture.js');
 const execute = promisify(execFile);
 
-for (const profile of ['mf-cohort', 'tanstack-redact', 'parser']) {
+for (const profile of [
+  'mf-cohort',
+  'tanstack-redact',
+  'parser',
+  'picomatch-4',
+]) {
   test(`${profile}: authenticated sidecars pass real packed strict installation and canonical API probes`, {
     timeout: 240_000,
   }, async t => {
+    // This is a packed-byte installation test, not a registry publication.
+    if (profile === 'parser' || profile === 'picomatch-4')
+      withFixtureBootstraps(t);
     const root = fs.mkdtempSync(
       path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'mf-cohort-proof-'),
     );

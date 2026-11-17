@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -1291,6 +1292,13 @@ test('release validator keeps publication input validation bound to dispatch val
 test('release validator requires the closed sidecar profile choice and parser default', () => {
   const input =
     readPublishWorkflow().on.workflow_dispatch.inputs.sidecar_profile;
+  const options = [
+    'parser',
+    'mf-sdk',
+    'tanstack-redact',
+    'mf-cohort',
+    'picomatch-4',
+  ];
   assert.deepEqual(
     {
       required: input.required,
@@ -1298,62 +1306,25 @@ test('release validator requires the closed sidecar profile choice and parser de
       options: input.options,
       default: input.default,
     },
-    {
-      required: true,
-      type: 'choice',
-      options: ['parser', 'mf-sdk', 'tanstack-redact', 'mf-cohort'],
-      default: 'parser',
-    },
+    { required: true, type: 'choice', options, default: 'parser' },
   );
   const mutations = [
     ['missing profile', removeField('sidecar_profile'), true],
     ['optional profile', setField('required', false)],
     ['unrestricted profile', setField('type', 'string')],
-    ['SDK default', setField('default', 'mf-sdk')],
-    ['MF cohort default', setField('default', 'mf-cohort')],
-    [
-      'missing MF cohort option',
-      setField('options', ['parser', 'mf-sdk', 'tanstack-redact']),
-    ],
-    ['unknown default', setField('default', 'other')],
-    ['Redact default', setField('default', 'tanstack-redact')],
-    ['MF cohort default', setField('default', 'mf-cohort')],
-    [
-      'missing MF cohort option',
-      setField('options', ['parser', 'mf-sdk', 'tanstack-redact']),
-    ],
-    [
-      'missing parser option',
-      setField('options', ['mf-sdk', 'mf-cohort', 'tanstack-redact']),
-    ],
-    [
-      'missing SDK option',
-      setField('options', ['parser', 'mf-cohort', 'tanstack-redact']),
-    ],
-    [
-      'missing Redact option',
-      setField('options', ['parser', 'mf-sdk', 'mf-cohort']),
-    ],
-    [
-      'unknown option',
-      setField('options', [
-        'parser',
-        'mf-sdk',
-        'mf-cohort',
-        'tanstack-redact',
-        'other',
-      ]),
-    ],
-    [
-      'duplicate option',
-      setField('options', [
-        'parser',
-        'mf-sdk',
-        'mf-cohort',
-        'tanstack-redact',
-        'parser',
-      ]),
-    ],
+    ...options.map(option => [
+      `missing ${option} option`,
+      setField(
+        'options',
+        options.filter(candidate => candidate !== option),
+      ),
+    ]),
+    ...[...options.slice(1), 'other'].map(value => [
+      `${value} default`,
+      setField('default', value),
+    ]),
+    ['unknown option', setField('options', [...options, 'other'])],
+    ['duplicate option', setField('options', [...options, 'parser'])],
   ];
   for (const [label, mutate, root] of mutations) {
     assertPublishMutationRejected(
@@ -1362,7 +1333,7 @@ test('release validator requires the closed sidecar profile choice and parser de
         const inputs = workflow.on.workflow_dispatch.inputs;
         mutate(root ? inputs : inputs.sidecar_profile);
       },
-      /sidecar profile.*parser\/mf-sdk\/tanstack-redact\/mf-cohort.*parser default/u,
+      /sidecar profile.*choice with parser default/u,
     );
   }
 });
@@ -1444,10 +1415,35 @@ test('release validator accepts matching profile overrides and inherited profile
   );
 });
 
+test('every dispatchable sidecar profile passes the actual publish input shell guard', () => {
+  const workflow = yaml.load(fs.readFileSync(publishWorkflowPath, 'utf8'));
+  const step = workflow.jobs['publish-security'].steps.find(
+    item => item.name === 'Validate publish inputs',
+  );
+  const guard = profile => {
+    const result = spawnSync('bash', ['-e', '-c', step.run], {
+      env: {
+        PATH: process.env.PATH,
+        PUBLISH_MODE: 'sidecars',
+        SIDECAR_PROFILE: profile,
+      },
+      encoding: 'utf8',
+    });
+    assert.ifError(result.error);
+    return result;
+  };
+  for (const profile of workflow.on.workflow_dispatch.inputs.sidecar_profile
+    .options) {
+    const result = guard(profile);
+    assert.equal(result.status, 0, `${profile}: ${result.stderr}`);
+  }
+  assert.equal(guard('unreviewed-profile').status, 1);
+});
+
 test('release validator rejects SDK cohort inputs and unknown sidecar profiles', () => {
   const parserGuard = '[[ "$SIDECAR_PROFILE" == parser ]]';
   const sidecarGuard =
-    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == tanstack-redact || "$SIDECAR_PROFILE" == mf-cohort ]]';
+    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == tanstack-redact || "$SIDECAR_PROFILE" == mf-cohort || "$SIDECAR_PROFILE" == picomatch-4 ]] || exit 1';
   for (const [label, guard, replacement] of [
     ['SDK in cohort mode', parserGuard, sidecarGuard],
     ['unguarded cohort profile', parserGuard, 'true'],

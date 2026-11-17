@@ -11,6 +11,8 @@ import {
   assertRecipeGraph,
   findUpstreamedPatches,
   isUnpublishedForkEdge,
+  reconstructSidecarRecipe,
+  satisfiesDeclaredRange,
   verifySidecar,
 } from './verify-sidecars.mjs';
 
@@ -621,4 +623,136 @@ test('reconstructed sidecar tarballs bind repository metadata to their active pr
     }
     fs.rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('declared dependency ranges admit only the same API line', () => {
+  for (const [version, range, admitted] of [
+    ['2.3.2', '^2.3.1', true],
+    ['4.0.7', '^2.3.1', false],
+    ['2.3.0', '^2.3.1', false],
+    ['0.3.1', '^0.3.1', true],
+    ['0.4.0', '^0.3.1', false],
+    ['0.0.1', '^0.0.1', true],
+    ['0.0.2', '^0.0.1', false],
+    ['2.4.0-beta.1', '^2.3.1', false],
+    ['3.3.4', '~3.3.3', true],
+    ['3.4.0', '~3.3.3', false],
+    ['2.9.3', '2.9.3', true],
+    ['2.9.5', '2.9.3', false],
+  ])
+    assert.equal(satisfiesDeclaredRange(version, range), admitted, range);
+  for (const range of ['>=2.0.0', '^2.3.1 || ^4.0.0', '*', 'workspace:*'])
+    assert.throws(
+      () => satisfiesDeclaredRange('2.3.2', range),
+      /unsupported declared dependency range/u,
+    );
+});
+
+test('an alias that moves a consumer across its declared API line fails reconstruction', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-api-line-'));
+  try {
+    const source = path.join(directory, 'package');
+    fs.mkdirSync(source);
+    fs.writeFileSync(
+      path.join(source, 'package.json'),
+      JSON.stringify({
+        name: 'micromatch',
+        version: '4.0.8',
+        license: 'MIT',
+        dependencies: { braces: '^3.0.3', picomatch: '^2.3.1' },
+      }),
+    );
+    execFileSync('tar', ['-czf', 'micromatch.tgz', 'package'], {
+      cwd: directory,
+    });
+    const bytes = fs.readFileSync(path.join(directory, 'micromatch.tgz'));
+    const artifactsDir = path.join(directory, 'artifacts');
+    fs.mkdirSync(artifactsDir);
+    fs.writeFileSync(path.join(artifactsDir, 'micromatch.tgz'), bytes);
+    const target = (upstream, fork) => ({
+      upstream: { name: 'picomatch', version: upstream },
+      fork: { name: '@bleedingdev/picomatch', version: fork },
+    });
+    const braces = {
+      upstream: { name: 'braces', version: '3.0.3' },
+      fork: { name: '@bleedingdev/braces', version: '3.0.4' },
+    };
+    const micromatch = picomatch => ({
+      id: 'micromatch',
+      upstream: {
+        name: 'micromatch',
+        version: '4.0.8',
+        integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
+      },
+      fork: { name: '@bleedingdev/micromatch', version: '4.0.9' },
+      license: 'MIT',
+      artifacts: ['*'],
+      patch: null,
+      manifestChanges: {
+        dependencies: {
+          braces: 'npm:@bleedingdev/braces@3.0.4',
+          picomatch: `npm:@bleedingdev/picomatch@${picomatch}`,
+        },
+      },
+    });
+    await assert.rejects(
+      reconstructSidecarRecipe(micromatch('4.0.8'), {
+        aliasTargets: [braces, target('4.0.7', '4.0.8')],
+        artifactsDir,
+      }),
+      /dependencies\.picomatch declares \^2\.3\.1; npm:@bleedingdev\/picomatch@4\.0\.8 reconstructs picomatch 4\.0\.7, outside that API line/u,
+    );
+    await assert.rejects(
+      reconstructSidecarRecipe(micromatch('2.3.3'), {
+        aliasTargets: [braces],
+        artifactsDir,
+      }),
+      /not in the reviewed recipe set/u,
+    );
+    const materializeTo = path.join(directory, 'reconstructed');
+    await reconstructSidecarRecipe(micromatch('2.3.3'), {
+      aliasTargets: [braces, target('2.3.2', '2.3.3')],
+      artifactsDir,
+      materializeTo,
+    });
+    assert.deepEqual(
+      JSON.parse(
+        fs.readFileSync(path.join(materializeTo, 'package.json'), 'utf8'),
+      ).dependencies,
+      {
+        braces: 'npm:@bleedingdev/braces@3.0.4',
+        picomatch: 'npm:@bleedingdev/picomatch@2.3.3',
+      },
+    );
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('consumer admission recognizes both exact aliases for parallel upstream API lines', () => {
+  const [first, second] = ['2', '4'].map(major => ({
+    id: `matcher-${major}`,
+    upstream: { name: 'matcher', version: `${major}.0.0` },
+    fork: { name: '@bleedingdev/matcher', version: `${major}.0.1` },
+    manifestChanges: {},
+  }));
+  const manifests = recipeList =>
+    recipeList.map(recipe => ({
+      name: `consumer-${recipe.id}`,
+      dependencies: {
+        matcher: `npm:${recipe.fork.name}@${recipe.fork.version}`,
+      },
+    }));
+  const options = {
+    generatorPins: [],
+    publishedManifests: manifests([first, second]),
+  };
+  assert.doesNotThrow(() => assertRecipeConsumers([first, second], options));
+  assert.doesNotThrow(() => assertRecipeConsumers([second, first], options));
+  const uncorrected = structuredClone(options);
+  uncorrected.publishedManifests[0].dependencies.matcher = '2.0.0';
+  assert.throws(
+    () => assertRecipeConsumers([first, second], uncorrected),
+    /declare npm:@bleedingdev\/matcher@2\.0\.1 or npm:@bleedingdev\/matcher@4\.0\.1/u,
+  );
 });

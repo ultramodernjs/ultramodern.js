@@ -129,10 +129,8 @@ test('pnpm preserves the corrected generator dependency identity', () => {
 // Framework packages ship their source edges unchanged, so the graph the
 // monorepo tests must already be the corrected sidecar graph: a runtime edge
 // of a framework package may not resolve an upstream name that has a recipe.
-function upstreamRecipeEdges(lockfileText) {
-  const byUpstream = new Map(
-    recipes.map(recipe => [recipe.upstream.name, recipe]),
-  );
+function upstreamRecipeEdges(lockfileText, recipeList = recipes) {
+  const byUpstream = Map.groupBy(recipeList, recipe => recipe.upstream.name);
   const edges = [];
   for (const [importer, blocks] of Object.entries(
     parse(lockfileText).importers ?? {},
@@ -140,16 +138,17 @@ function upstreamRecipeEdges(lockfileText) {
     if (!importer.startsWith('packages/')) continue;
     for (const block of ['dependencies', 'optionalDependencies']) {
       for (const [name, { version }] of Object.entries(blocks[block] ?? {})) {
-        const recipe = byUpstream.get(name);
-        if (!recipe) continue;
-        const fork = `${recipe.fork.name}@${recipe.fork.version}`;
-        if (
-          version !== fork &&
-          !version.startsWith(`${fork}(`) &&
-          !isUnpublishedForkEdge(importer, name, version, recipe)
-        ) {
-          edges.push(`${importer} ${block}.${name} -> ${version}`);
-        }
+        const candidates = byUpstream.get(name);
+        if (!candidates) continue;
+        const admitted = candidates.some(recipe => {
+          const fork = `${recipe.fork.name}@${recipe.fork.version}`;
+          return (
+            version === fork ||
+            version.startsWith(`${fork}(`) ||
+            isUnpublishedForkEdge(importer, name, version, recipe)
+          );
+        });
+        if (!admitted) edges.push(`${importer} ${block}.${name} -> ${version}`);
       }
     }
   }
@@ -243,4 +242,32 @@ importers:
       'packages/runtime/federation-runtime dependencies.@module-federation/enhanced -> @bleedingdev/mf-enhanced@2.9.20(@types/node@26.6.2)',
     ],
   );
+});
+
+test('a lock can use both reviewed fork identities for one upstream name', () => {
+  const reviewed = [
+    {
+      upstream: { name: 'picomatch' },
+      fork: { name: '@bleedingdev/picomatch', version: '2.3.3' },
+    },
+    {
+      upstream: { name: 'picomatch' },
+      fork: { name: '@bleedingdev/picomatch-v4', version: '4.0.8' },
+    },
+  ];
+  const lock = `
+lockfileVersion: '9.0'
+importers:
+  packages/toolkit/utils:
+    dependencies:
+      picomatch:
+        specifier: npm:@bleedingdev/picomatch@2.3.3
+        version: '@bleedingdev/picomatch@2.3.3'
+  packages/cli/builder:
+    dependencies:
+      picomatch:
+        specifier: npm:@bleedingdev/picomatch-v4@4.0.8
+        version: '@bleedingdev/picomatch-v4@4.0.8'
+`;
+  assert.deepEqual(upstreamRecipeEdges(lock, reviewed), []);
 });
