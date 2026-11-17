@@ -26,7 +26,7 @@ every i18next release (i18next 27 replaced the `t` overloads with a rest-tuple u
 which made `i18nInstance: i18next` fail again) and rejects applications that enable
 strict keys or selectors. Keys, overloads, selectors and `CustomTypeOptions`
 augmentation now apply to `i18nInstance.t` and to the `t` returned by
-`useModernI18n<I18nInstance>()`.
+`useModernI18n()`.
 
 Custom wrappers that own a native i18next instance at `i18nInstance.instance` are
 modelled separately as `I18nWrapperInstance`, with their own `t(key: string)`, and
@@ -46,10 +46,10 @@ function is rejected. Real i18next instances are unaffected.
 
 BREAKING: `useModernI18n().t` and `.i18nInstance` are typed from the configured
 instance instead of `(key: string | string[], ...args: any[]) => string` and
-`I18nInstance`. Without a type argument they are typed for `I18nRuntimeInstance`,
-because the provider may hold a wrapper: calls both kinds accept, such as `t('key')`
-and `i18nInstance.on?.()`, keep compiling, while i18next options, overloads and
-selectors need `useModernI18n<I18nInstance>()`, which hands out i18next's own `t`.
+`I18nInstance`. Without a type argument they are typed for an i18next instance, so
+`t('key', { count })`, default values, key arrays and selectors keep i18next's own
+types. An app that configures a wrapper names it, `useModernI18n<MyWrapper>()`, to
+get the wrapper's `t` and members.
 
 BREAKING: the provider no longer fabricates a placeholder instance. The runtime always
 runs `onBeforeRender` (which resolves the instance) before rendering a root, including

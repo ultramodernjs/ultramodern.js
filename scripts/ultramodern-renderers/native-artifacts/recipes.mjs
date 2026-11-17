@@ -185,7 +185,7 @@ export function composeRecipe({
   validateRecipe(recipe);
   return recipe;
 }
-/** Production inputs from the explicit 53f0 handoff, not a successful-build receipt. */
+/** Production inputs from authenticated CI handoff 43988363275/1, not a native release receipt. */
 export function runtimeRecipes(
   { root = repo } = {},
   { pairQualifier = qualifyRuntimePairSource } = {},

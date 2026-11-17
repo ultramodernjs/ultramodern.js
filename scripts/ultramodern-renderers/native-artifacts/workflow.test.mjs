@@ -65,7 +65,7 @@ test('production recipe has all four exact pins without claiming a successful pr
   assert.equal(Object.keys(recipe.packages).length, 4);
   assert.equal(
     recipe.packages.octane.patchSha256,
-    '529e0cbb9dd695c7569ae9d64b04ee0ba9685402823faa230c339d582d811f74',
+    'c005016a3c6a15a76cbb52ecf0c80f409878f13d68894fa67c50daf490f8c9d8',
   );
   assert.equal(typeof recipe.qualifySource, 'function');
   assert.equal(typeof recipe.qualifyPacked, 'function');

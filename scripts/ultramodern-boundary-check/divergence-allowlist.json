@@ -6,7 +6,7 @@
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
   "totalFiles": 1468,
   "totalHunks": 4949,
-  "totalChangedLines": 105552,
+  "totalChangedLines": 105545,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -991,7 +991,7 @@
     {
       "file": "packages/document/docs/en/guides/advanced-features/international/api.mdx",
       "hunks": 15,
-      "changedLines": 123
+      "changedLines": 122
     },
     {
       "file": "packages/document/docs/en/guides/advanced-features/international/best-practices.mdx",
@@ -1756,7 +1756,7 @@
     {
       "file": "packages/document/docs/zh/guides/advanced-features/international/api.mdx",
       "hunks": 15,
-      "changedLines": 112
+      "changedLines": 111
     },
     {
       "file": "packages/document/docs/zh/guides/advanced-features/international/best-practices.mdx",
@@ -2221,7 +2221,7 @@
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/context.tsx",
       "hunks": 33,
-      "changedLines": 318
+      "changedLines": 317
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/contextHelpers.ts",
@@ -2336,7 +2336,7 @@
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/instance.ts",
       "hunks": 33,
-      "changedLines": 285
+      "changedLines": 283
     },
     {
       "file": "packages/runtime/plugin-i18n/src/runtime/i18n/react-i18next.ts",
@@ -2566,17 +2566,17 @@
     {
       "file": "packages/runtime/plugin-i18n/tests/types/i18n-wrapper.ts",
       "hunks": 1,
-      "changedLines": 62
+      "changedLines": 61
     },
     {
       "file": "packages/runtime/plugin-i18n/tests/types/i18next-instance.ts",
       "hunks": 1,
-      "changedLines": 37
+      "changedLines": 38
     },
     {
       "file": "packages/runtime/plugin-i18n/tests/types/selector/i18next-selector-instance.ts",
       "hunks": 1,
-      "changedLines": 27
+      "changedLines": 25
     },
     {
       "file": "packages/runtime/plugin-i18n/tests/types/selector/tsconfig.json",

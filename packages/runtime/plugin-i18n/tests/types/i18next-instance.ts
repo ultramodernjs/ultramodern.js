@@ -23,15 +23,16 @@ export function ReactI18nextTitle() {
 }
 
 export function ModernTitle() {
-  // Without a type argument the provider may hold a wrapper, so `t` accepts
-  // only what both i18next and a wrapper's `t(key)` accept.
-  const { t: anyInstanceT } = useModernI18n();
-  // @ts-expect-error A wrapper's `t` takes no i18next options.
-  anyInstanceT('items', { count: 2 });
-  // For i18next itself the hook hands out i18next's own `t` and overloads.
-  const { t } = useModernI18n<I18nInstance>();
+  // Without a type argument the hook hands out i18next's own `t` and forms.
+  const { t } = useModernI18n();
   const count: string = t('items', { count: 2 });
+  const withDefault: string = t('title', 'Title');
+  const withDefaultAndOptions: string = t('items', 'Items', { count: 2 });
+  const fallbackKeys: string = t(['missing', 'title']);
   // @ts-expect-error i18next's own `t` rejects a non-key argument.
   t(1);
-  return `${anyInstanceT('title')}${t('title')}${count}`;
+  const explicit: string = useModernI18n<I18nInstance>().t('items', {
+    count: 2,
+  });
+  return `${t('title')}${count}${withDefault}${withDefaultAndOptions}${fallbackKeys}${explicit}`;
 }

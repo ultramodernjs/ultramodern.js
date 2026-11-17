@@ -12,7 +12,7 @@ import {
 
 test('whole-suite partition is sorted, bounded, duplicate-free and exhaustive', () => {
   const suites = Array.from(
-    { length: 197 },
+    { length: 198 },
     (_, index) => `suite-${String(index).padStart(3, '0')}`,
   );
   const batches = partitionSuites(suites);
@@ -21,7 +21,7 @@ test('whole-suite partition is sorted, bounded, duplicate-free and exhaustive', 
   assert(batches.every(batch => batch.length <= 8));
   assert.throws(() => partitionSuites(['same', 'same']));
   assert.throws(() => partitionSuites(['b', 'a']));
-  assert.throws(() => partitionSuites(suites, 197));
+  assert.throws(() => partitionSuites(suites, 198));
 });
 
 test('evidence rejects load errors, failures, skips, missing and duplicate suite/assertion IDs', () => {
@@ -137,7 +137,7 @@ test('evidence rejects load errors, failures, skips, missing and duplicate suite
   );
 });
 
-test('complete source and packed gates execute all 180 plus 17 suite identities', () => {
+test('complete source and packed gates execute all 180 plus 18 suite identities', () => {
   assert(process.env.OWNED_TEMP_DIR, 'Run in owned-temp-dir');
   const work = fs.mkdtempSync(
     path.join(process.env.OWNED_TEMP_DIR, 'full-gate-test-'),
@@ -147,7 +147,7 @@ test('complete source and packed gates execute all 180 plus 17 suite identities'
       composedRoot = path.join(work, 'composed');
     for (const [root, count] of [
       [baselineRoot, 180],
-      [composedRoot, 197],
+      [composedRoot, 198],
     ]) {
       const dir = path.join(root, 'packages/octane/tests/hydration');
       fs.mkdirSync(dir, { recursive: true });
@@ -196,14 +196,14 @@ test('complete source and packed gates execute all 180 plus 17 suite identities'
       work: path.join(work, 'packed-report'),
     });
     assert.equal(result.baseline.suites.length, 180);
-    assert.equal(result.composed.suites.length, 197);
-    assert.equal(result.packed.suites.length, 197);
+    assert.equal(result.composed.suites.length, 198);
+    assert.equal(result.packed.suites.length, 198);
     assert.equal(
       executed.reduce((sum, batch) => sum + batch.suites.length, 0),
-      574,
+      576,
     );
     assert.equal(executed.length, 23 + 25 + 25);
-    assert.equal(result.inventory.additional.length, 17);
+    assert.equal(result.inventory.additional.length, 18);
     assert(
       fs.existsSync(path.join(work, 'packed-report/complete-statuses.json')),
     );
@@ -234,7 +234,7 @@ test('complete source and packed gates execute all 180 plus 17 suite identities'
       fs.readFileSync(path.join(failedDirectory, 'complete-statuses.json')),
     );
     assert.equal(saved.baseline.suites.length, 180);
-    assert.equal(saved.composed.suites.length, 197);
+    assert.equal(saved.composed.suites.length, 198);
     assert.equal(saved.baseline.suites[0].assertions[0].status, 'failed');
     assert.deepEqual(saved.baseline.suites[0].assertions[0].failures, [
       'real failed assertion retained',

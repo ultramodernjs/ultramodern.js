@@ -24,7 +24,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const owning = path.dirname(here);
 const repo = path.resolve(owning, '../../..');
 const expectedPatch =
-  '529e0cbb9dd695c7569ae9d64b04ee0ba9685402823faa230c339d582d811f74';
+  'c005016a3c6a15a76cbb52ecf0c80f409878f13d68894fa67c50daf490f8c9d8';
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const integrity = bytes =>
   `sha512-${createHash('sha512').update(bytes).digest('base64')}`;

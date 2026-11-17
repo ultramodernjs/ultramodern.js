@@ -7477,3 +7477,289 @@ index 0000000..ef90bef
 +		}
 +	},
 +);
+diff --git a/packages/octane/tests/hydration/streamed-suspense-enclosing-catch.test.ts b/packages/octane/tests/hydration/streamed-suspense-enclosing-catch.test.ts
+new file mode 100644
+index 0000000000..53c355a7f1
+--- /dev/null
++++ b/packages/octane/tests/hydration/streamed-suspense-enclosing-catch.test.ts
+@@ -0,0 +1,280 @@
++import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
++import { act, hydrateRoot } from '../../src/index.js';
++import * as ServerRT from 'octane/server';
++import { loadCompiledFixtureSource } from '../_server-fixture.js';
++import {
++	activateStreamedMarkup,
++	createPipeableCollector,
++	deferred,
++	resetStreamRuntimeGlobals,
++} from '../_server-stream.js';
++
++// A routed document renders every match inside an enclosing catch. Once a JSX
++// Suspense boundary's fallback is committed to the stream, a later failure of
++// its content recovers at that boundary: the healthy siblings stream, the error
++// reaches onError, and the browser retries the boundary. The enclosing catch
++// still owns failures that happen before the boundary's fallback is committed,
++// and the browser retry still reports to the nearest client error boundary.
++
++const SOURCE = `
++	import { ErrorBoundary, Suspense, use } from 'octane';
++
++	function Remote(props) @{
++		const value = use(props.value);
++		<p data-remote={props.id}>{value as string}</p>
++	}
++
++	function ShellGate(props) @{
++		const value = use(props.value);
++		<aside id="shell-gate">{value as string}</aside>
++	}
++
++	function Parent(props) @{
++		const value = use(props.parent);
++		props.onParentReady();
++		<section id="parent">
++			<h2>{value as string}</h2>
++			<Suspense fallback={<i data-fallback="a">{'a loading' as string}</i>}>
++				<Remote id="a" value={props.a} />
++			</Suspense>
++		</section>
++	}
++
++	export function NestedRoutedRemotes(props) @{
++		<ErrorBoundary fallback={<p id="route-error">{'route failed' as string}</p>}>
++			<section id="route">
++				<Suspense fallback={<i data-fallback="parent">{'parent loading' as string}</i>}>
++					<Parent parent={props.parent} a={props.a} onParentReady={props.onParentReady} />
++				</Suspense>
++				<Remote id="b" value={props.b} />
++				<ShellGate value={props.shell} />
++			</section>
++		</ErrorBoundary>
++	}
++
++	export function RoutedRemotes(props) @{
++		<main>
++			<ErrorBoundary fallback={<p id="route-error">{'route failed' as string}</p>}>
++				<section id="route">
++					<Suspense fallback={<i data-fallback="a">{'a loading' as string}</i>}>
++						<Remote id="a" value={props.a} />
++					</Suspense>
++					<Suspense fallback={<i data-fallback="b">{'b loading' as string}</i>}>
++						<Remote id="b" value={props.b} />
++					</Suspense>
++					@if (props.shell) {
++						<ShellGate value={props.shell} />
++					}
++				</section>
++			</ErrorBoundary>
++		</main>
++	}
++`;
++
++function fulfilled<T>(value: T): Promise<T> {
++	return Object.assign(Promise.resolve(value), { status: 'fulfilled', value });
++}
++
++function rejected(reason: Error): Promise<never> {
++	const promise = Promise.reject(reason);
++	promise.catch(() => {});
++	return Object.assign(promise, { status: 'rejected', reason });
++}
++
++describe.each([true, false])('a streamed Suspense boundary under an enclosing catch (dev=%s)', (dev) => {
++	const server = loadCompiledFixtureSource(SOURCE, {
++		id: 'streamed-suspense-enclosing-catch.tsrx',
++		mode: 'server',
++		compileOptions: { dev },
++	});
++	const client = loadCompiledFixtureSource(SOURCE, {
++		id: 'streamed-suspense-enclosing-catch.tsrx',
++		mode: 'client',
++		compileOptions: { dev },
++	});
++	let container: HTMLElement;
++	let errSpy: ReturnType<typeof vi.spyOn>;
++	beforeEach(() => {
++		container = document.createElement('div');
++		document.body.appendChild(container);
++		errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
++	});
++	afterEach(() => {
++		container.remove();
++		errSpy.mockRestore();
++		resetStreamRuntimeGlobals();
++	});
++
++	function render(props: Record<string, unknown>, component = server.RoutedRemotes) {
++		const collector = createPipeableCollector();
++		const errors: unknown[] = [];
++		ServerRT.renderToPipeableStream(component, props, {
++			onError: (error) => errors.push(error),
++		}).pipe(collector.destination);
++		return { collector, errors };
++	}
++
++	/** Stream A's failure and B's content after the shell has committed both fallbacks. */
++	async function streamUnavailableSibling() {
++		const a = deferred<string>();
++		const b = deferred<string>();
++		const unavailable = new Error('remote a unavailable');
++		const { collector, errors } = render({ a: a.promise, b: b.promise });
++		const shell = collector.chunks.join('');
++		container.innerHTML = shell;
++		activateStreamedMarkup(container);
++		expect(container.querySelector('[data-fallback="a"]')).not.toBeNull();
++		expect(container.querySelector('[data-fallback="b"]')).not.toBeNull();
++		const route = container.querySelector('#route');
++		expect(route).not.toBeNull();
++
++		a.reject(unavailable);
++		b.resolve('remote b');
++		await collector.ended;
++		const late = collector.chunks.slice(shell === '' ? 0 : 1).join('');
++		const tail = document.createElement('div');
++		tail.innerHTML = late;
++		container.append(...tail.childNodes);
++		activateStreamedMarkup(container);
++		return { late, errors, unavailable, route };
++	}
++
++	it('streams the healthy sibling and the failed fallback with a retry, and reports the error', async () => {
++		const { late, errors, unavailable, route } = await streamUnavailableSibling();
++		expect(errors).toEqual([unavailable]);
++		expect(late).toContain('$OCTRX(');
++		expect(container.querySelector('#route-error')).toBeNull();
++		expect(container.querySelector('#route')).toBe(route);
++		expect(container.querySelector('[data-remote="b"]')?.textContent).toBe('remote b');
++		expect(container.querySelector('[data-fallback="a"]')?.textContent).toBe('a loading');
++		expect(container.querySelector('[data-fallback="b"]')).toBeNull();
++	});
++
++	it('retries the failed boundary in the browser and keeps the healthy sibling', async () => {
++		await streamUnavailableSibling();
++		const sibling = container.querySelector('[data-remote="b"]')!;
++		const recoverable: string[] = [];
++		const caught: unknown[] = [];
++		const root = hydrateRoot(
++			container,
++			client.RoutedRemotes,
++			{ a: fulfilled('remote a'), b: Promise.resolve('b client') },
++			{
++				onRecoverableError: (error) => recoverable.push((error as Error).message),
++				onCaughtError: (error) => caught.push(error),
++			},
++		);
++		await vi.waitFor(async () => {
++			await act(async () => {});
++			expect(container.querySelector('[data-remote="a"]')?.textContent).toBe('remote a');
++		});
++		expect(container.querySelector('[data-fallback="a"], #route-error')).toBeNull();
++		expect(container.querySelector('[data-remote="b"]')).toBe(sibling);
++		expect(sibling.textContent).toBe('remote b');
++		expect(recoverable).toEqual([
++			expect.stringContaining('likely due to an error during server rendering'),
++		]);
++		expect(caught).toEqual([]);
++		root.unmount();
++	});
++
++	it('reports a browser retry failure to the nearest client error boundary', async () => {
++		await streamUnavailableSibling();
++		const browserFailure = new Error('remote a unavailable in the browser');
++		const caught: unknown[] = [];
++		const root = hydrateRoot(
++			container,
++			client.RoutedRemotes,
++			{ a: rejected(browserFailure), b: Promise.resolve('b client') },
++			{ onCaughtError: (error) => caught.push(error) },
++		);
++		await vi.waitFor(async () => {
++			await act(async () => {});
++			expect(container.querySelector('#route-error')?.textContent).toBe('route failed');
++		});
++		expect(caught).toEqual([browserFailure]);
++		root.unmount();
++	});
++
++	it('keeps a synchronous content error in the enclosing catch', async () => {
++		const failure = new Error('route content failed');
++		const { collector, errors } = render({ a: rejected(failure), b: fulfilled('remote b') });
++		const html = await collector.ended;
++		container.innerHTML = html;
++		expect(container.querySelector('#route-error')?.textContent).toBe('route failed');
++		expect(container.querySelector('#route, [data-fallback]')).toBeNull();
++		expect(html).not.toContain('$OCTRX(');
++		expect(errors).toEqual([]);
++	});
++
++	it('keeps a failure before the shell commits its fallback in the enclosing catch', async () => {
++		const a = deferred<string>();
++		const shell = deferred<string>();
++		const { collector, errors } = render({ a: a.promise, b: fulfilled('remote b'), shell: shell.promise });
++		expect(collector.chunks).toEqual([]);
++		a.reject(new Error('remote a unavailable before the shell'));
++		await Promise.resolve();
++		shell.resolve('shell');
++		const html = await collector.ended;
++		container.innerHTML = collector.chunks[0]!;
++		expect(container.querySelector('#route-error')?.textContent).toBe('route failed');
++		expect(container.querySelector('#route, [data-fallback]')).toBeNull();
++		expect(html).not.toContain('$OCTRX(');
++		expect(errors).toEqual([]);
++	});
++
++	it('does not commit a nested fallback inside a finished parent before the shell', async () => {
++		const parent = deferred<string>();
++		const a = deferred<string>();
++		const shell = deferred<string>();
++		const onParentReady = vi.fn();
++		const { collector, errors } = render(
++			{ parent: parent.promise, a: a.promise, b: fulfilled('remote b'), shell: shell.promise, onParentReady },
++			server.NestedRoutedRemotes,
++		);
++		try {
++			expect(collector.chunks).toEqual([]);
++			parent.resolve('parent ready');
++			await vi.waitFor(() => expect(onParentReady).toHaveBeenCalled());
++			expect(collector.chunks).toEqual([]);
++			a.reject(new Error('nested a unavailable before the shell'));
++			await vi.waitFor(() => expect(collector.chunks.join('')).toContain('id="route-error"'));
++			const html = await collector.ended;
++			container.innerHTML = html;
++			expect(container.querySelector('#route-error')?.textContent).toBe('route failed');
++			expect(container.querySelector('#route, [data-fallback]')).toBeNull();
++			expect(html).not.toContain('$OCTRX(');
++			expect(errors).toEqual([]);
++		} finally {
++			shell.resolve('released');
++			await collector.ended;
++		}
++	});
++
++	it('commits nested fallbacks in finished parent segments when the shell is accepted', async () => {
++		const parent = deferred<string>();
++		const a = deferred<string>();
++		const shell = deferred<string>();
++		const onParentReady = vi.fn();
++		const unavailable = new Error('nested a unavailable after the shell');
++		const { collector, errors } = render(
++			{ parent: parent.promise, a: a.promise, b: fulfilled('remote b'), shell: shell.promise, onParentReady },
++			server.NestedRoutedRemotes,
++		);
++		parent.resolve('parent ready');
++		await vi.waitFor(() => expect(onParentReady).toHaveBeenCalled());
++		expect(collector.chunks).toEqual([]);
++		shell.resolve('shell ready');
++		await vi.waitFor(() => expect(collector.chunks.length).toBeGreaterThan(0));
++		a.reject(unavailable);
++		const html = await collector.ended;
++		container.innerHTML = html;
++		activateStreamedMarkup(container);
++		expect(container.querySelector('#route-error')).toBeNull();
++		expect(container.querySelector('#route')).not.toBeNull();
++		expect(container.querySelector('[data-remote="b"]')?.textContent).toBe('remote b');
++		expect(container.querySelector('[data-fallback="a"]')?.textContent).toBe('a loading');
++		expect(html).toContain('$OCTRX(');
++		expect(errors).toEqual([unavailable]);
++	});
++});

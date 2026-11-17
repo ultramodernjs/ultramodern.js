@@ -148,11 +148,9 @@ export interface I18nInstance {
 }
 
 /**
- * A custom instance that owns a native i18next instance at
- * `i18nInstance.instance`. The plugin initialises and switches the wrapper
- * itself, so its own initialisation stays in charge of its `t`; resources,
- * detection, the react-i18next provider and `useModernI18n().t` use the native
- * instance.
+ * A custom instance owning a native i18next one at `i18nInstance.instance`.
+ * The plugin initialises, switches and clones the wrapper, whose own `t` is
+ * `useModernI18n<Wrapper>().t`; resources and detection use the native one.
  */
 export interface I18nWrapperInstance
   extends Omit<

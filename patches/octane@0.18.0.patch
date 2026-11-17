@@ -2852,7 +2852,7 @@ index 67ad2d9..5e101af 100644
    queueNativeChangeDiagnostic,
    queueOwnRefDetach,
 diff --git a/dist/cjs/runtime.server.cjs b/dist/cjs/runtime.server.cjs
-index c7c4bf6..fe651ec 100644
+index c7c4bf6..d71cd91 100644
 --- a/dist/cjs/runtime.server.cjs
 +++ b/dist/cjs/runtime.server.cjs
 @@ -68,6 +68,7 @@ __export(runtime_server_exports, {
@@ -3043,7 +3043,143 @@ index c7c4bf6..fe651ec 100644
  }
  async function prerenderToNodeStream(entryComponent, props, options) {
    if (typeof entryComponent !== "function" && options === void 0) {
-@@ -8443,6 +8425,451 @@ function preinitModule(href, options) {
+@@ -6289,8 +6271,8 @@ function rewindStreamBoundaryReplay(stream, checkpoint) {
+       boundary.errorReported = value.errorReported;
+       boundary.errorFlushed = value.errorFlushed;
+       boundary.abandoned = value.abandoned;
+-      if (value.state === "guard" && !value.catchGuardCaptured)
+-        stream.hasUncapturedCatchGuards = true;
++      if (value.state === "guard" && !value.catchGuardCaptured || value.state === "pending" && value.pendingCaptured === false)
++        stream.hasUncapturedSentinels = true;
+       if (!stream.boundaries.has(saved.key)) restoredDeletion = true;
+       stream.boundaries.set(saved.key, boundary);
+     }
+@@ -6378,29 +6360,34 @@ function pruneStreamBoundariesAbsentFromShell(stream, shellBoundaryKeys) {
+     if (!shellBoundaryKeys.has(key)) stream.boundaries.delete(key);
+   }
+ }
+-function captureCatchGuards(stream, html) {
+-  const guards = /* @__PURE__ */ new Map();
++function captureStreamSentinels(stream, html) {
++  const sentinels = /* @__PURE__ */ new Map();
+   for (const [key, boundary] of stream.boundaries) {
+-    if (boundary.state === "guard" && !boundary.catchGuardCaptured) guards.set(boundary.id, key);
++    if (boundary.state === "guard" ? !boundary.catchGuardCaptured : boundary.state === "pending" && boundary.pendingCaptured === false)
++      sentinels.set(boundary.id, key);
+   }
+   const prefix = import_constants.STREAM_BOUNDARY_ATTR + '="';
+   let offset = 0;
+-  while (guards.size !== 0) {
++  while (sentinels.size !== 0) {
+     const start = html.indexOf(prefix, offset);
+     if (start < 0) break;
+     const idStart = start + prefix.length;
+     const end = html.indexOf('"', idStart);
+     if (end < 0) break;
+     const id = html.slice(idStart, end);
+-    const key = guards.get(id);
++    const key = sentinels.get(id);
+     if (key !== void 0) {
+-      recordStreamBoundaryMutation(stream, key);
+-      stream.boundaries.get(key).catchGuardCaptured = true;
+-      guards.delete(id);
++      const boundary = stream.boundaries.get(key);
++      if (boundary.state === "guard" || stream.shellCommitted) {
++        recordStreamBoundaryMutation(stream, key);
++        if (boundary.state === "guard") boundary.catchGuardCaptured = true;
++        else boundary.pendingCaptured = true;
++        sentinels.delete(id);
++      }
+     }
+     offset = end + 1;
+   }
+-  stream.hasUncapturedCatchGuards = guards.size !== 0;
++  stream.hasUncapturedSentinels = sentinels.size !== 0;
+ }
+ function ssrTryArm(content, open, arm, bindingMarker) {
+   return MARKERS ? "<!--" + (bindingMarker === void 0 ? open : bindingMarker + arm) + "-->" + content + import_constants.BLOCK_CLOSE : content;
+@@ -6659,7 +6646,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+           };
+           recordStreamBoundaryMutation(stream, key);
+           stream.boundaries.set(key, entry);
+-          stream.hasUncapturedCatchGuards = true;
++          stream.hasUncapturedSentinels = true;
+           if (ownerKeys.length !== 0) recordStreamBoundaryOwners(stream, key, ownerKeys);
+         }
+         if (!entry.catchGuardCaptured) {
+@@ -6691,7 +6678,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+           const seeds = isolateSerial(serialStart);
+           if (!entry.serverOwnedStatic) entry.seeds = seeds;
+           pruneUnrepresentedStreamDescendants(stream, key, entry.html);
+-          if (stream.hasUncapturedCatchGuards) captureCatchGuards(stream, entry.html);
++          if (stream.hasUncapturedSentinels) captureStreamSentinels(stream, entry.html);
+         } else {
+           isolateSerial(serialStart);
+         }
+@@ -6739,6 +6726,10 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+               ancestors: ancestorKeys,
+               owners: ownerKeys
+             };
++            if (catchOrRecover === SSR_RECOVER_ERRORS && hasEnclosingSsrCatch(scope)) {
++              entry.pendingCaptured = false;
++              stream.hasUncapturedSentinels = true;
++            }
+             recordStreamBoundaryMutation(stream, key);
+             stream.boundaries.set(key, entry);
+             if (ownerKeys.length !== 0) recordStreamBoundaryOwners(stream, key, ownerKeys);
+@@ -6786,7 +6777,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+             const abandoned = entry.catchGuardIdCount === void 0 ? void 0 : [];
+             pruneUnrepresentedStreamDescendants(stream, key, entry.html, abandoned);
+             if (abandoned?.length) entry.abandoned = abandoned;
+-            if (stream.hasUncapturedCatchGuards) captureCatchGuards(stream, entry.html);
++            if (stream.hasUncapturedSentinels) captureStreamSentinels(stream, entry.html);
+           }
+           if (entry.catchGuardIdCount !== void 0) {
+             restoreOuterIds();
+@@ -6796,6 +6787,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+           ID_COUNTER = entry.pendingIdOffset;
+           return pendingForm();
+         }
++        if (stream !== null) pruneUnrepresentedStreamDescendants(stream, key, caught);
+         const idCount = Math.max(0, ID_COUNTER - outerIdCounter);
+         return bindingMarker === void 0 ? ssrTryArm(caught, import_hydration_protocol.BOUNDARY_CLIENT + import_hydration_protocol.BOUNDARY_CLIENT_CAUGHT + idCount, 2, bindingMarker) : ssrTryArm(
+           "<!--" + import_hydration_protocol.STREAM_CATCH_COMMENT + ":" + idCount + "-->" + caught,
+@@ -6804,7 +6796,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+           bindingMarker
+         );
+       }
+-      if (catchOrRecover !== SSR_RECOVER_ERRORS || hasEnclosingSsrCatch(scope) || pendFn === null && entry === void 0)
++      if (catchOrRecover !== SSR_RECOVER_ERRORS || hasEnclosingSsrCatch(scope) && entry?.pendingCaptured !== true || pendFn === null && entry === void 0)
+         throw e;
+       if (stream !== null) {
+         rewindSerial(serialStart);
+@@ -7213,7 +7205,8 @@ async function runStream(component, props, options, sink, resolved, cancelInject
+   const stream = {
+     boundaries: /* @__PURE__ */ new Map(),
+     boundaryChildren: /* @__PURE__ */ new Map(),
+-    hasUncapturedCatchGuards: false,
++    hasUncapturedSentinels: false,
++    shellCommitted: false,
+     nextId: 0,
+     token: createStreamToken(),
+     activePassBoundaryKeys: null,
+@@ -7502,7 +7495,14 @@ async function runStream(component, props, options, sink, resolved, cancelInject
+     }
+     const shellWrite = write(pass.vtCandidates ? vtSsrStrip(shell, pass.rawHtml) : shell);
+     if (shellWrite !== void 0) await shellWrite;
+-    if (stream.hasUncapturedCatchGuards) captureCatchGuards(stream, pass.body);
++    stream.shellCommitted = true;
++    if (stream.hasUncapturedSentinels) {
++      captureStreamSentinels(stream, pass.body);
++      for (const boundary of stream.boundaries.values()) {
++        if (!stream.hasUncapturedSentinels) break;
++        if (boundary.state === "done") captureStreamSentinels(stream, boundary.html);
++      }
++    }
+   } catch (err) {
+     try {
+       completeInjection();
+@@ -8443,6 +8443,451 @@ function preinitModule(href, options) {
      '<script type="module" src="' + escapeAttr(safeHref) + '" async' + hintAttrs(options, true, "script") + ' data-oct-hint="' + escapeAttr(key) + '"></script>'
    );
  }
@@ -3495,7 +3631,7 @@ index c7c4bf6..fe651ec 100644
  // Annotate the CommonJS export names for ESM import in node:
  0 && (module.exports = {
    Activity,
-@@ -8485,6 +8912,7 @@ function preinitModule(href, options) {
+@@ -8485,6 +8930,7 @@ function preinitModule(href, options) {
    endNativeReadScope,
    escapeAttr,
    escapeHtml,
@@ -3503,7 +3639,7 @@ index c7c4bf6..fe651ec 100644
    finishNativeReadWitness,
    flushLayoutSync,
    flushSync,
-@@ -8518,13 +8946,17 @@ function preinitModule(href, options) {
+@@ -8518,13 +8964,17 @@ function preinitModule(href, options) {
    preinitModule,
    preload,
    preloadModule,
@@ -33763,7 +33899,7 @@ index dc67893..7d4f2a9 100644
    queueNativeChangeDiagnostic,
    queueOwnRefDetach,
 diff --git a/dist/node/runtime.server.js b/dist/node/runtime.server.js
-index a690a33..041ad34 100644
+index a690a33..681427d 100644
 --- a/dist/node/runtime.server.js
 +++ b/dist/node/runtime.server.js
 @@ -135,10 +135,7 @@ import {
@@ -33929,7 +34065,143 @@ index a690a33..041ad34 100644
  }
  async function prerenderToNodeStream(entryComponent, props, options) {
    if (typeof entryComponent !== "function" && options === void 0) {
-@@ -8361,6 +8331,472 @@ function preinitModule(href, options) {
+@@ -6207,8 +6177,8 @@ function rewindStreamBoundaryReplay(stream, checkpoint) {
+       boundary.errorReported = value.errorReported;
+       boundary.errorFlushed = value.errorFlushed;
+       boundary.abandoned = value.abandoned;
+-      if (value.state === "guard" && !value.catchGuardCaptured)
+-        stream.hasUncapturedCatchGuards = true;
++      if (value.state === "guard" && !value.catchGuardCaptured || value.state === "pending" && value.pendingCaptured === false)
++        stream.hasUncapturedSentinels = true;
+       if (!stream.boundaries.has(saved.key)) restoredDeletion = true;
+       stream.boundaries.set(saved.key, boundary);
+     }
+@@ -6296,29 +6266,34 @@ function pruneStreamBoundariesAbsentFromShell(stream, shellBoundaryKeys) {
+     if (!shellBoundaryKeys.has(key)) stream.boundaries.delete(key);
+   }
+ }
+-function captureCatchGuards(stream, html) {
+-  const guards = /* @__PURE__ */ new Map();
++function captureStreamSentinels(stream, html) {
++  const sentinels = /* @__PURE__ */ new Map();
+   for (const [key, boundary] of stream.boundaries) {
+-    if (boundary.state === "guard" && !boundary.catchGuardCaptured) guards.set(boundary.id, key);
++    if (boundary.state === "guard" ? !boundary.catchGuardCaptured : boundary.state === "pending" && boundary.pendingCaptured === false)
++      sentinels.set(boundary.id, key);
+   }
+   const prefix = STREAM_BOUNDARY_ATTR + '="';
+   let offset = 0;
+-  while (guards.size !== 0) {
++  while (sentinels.size !== 0) {
+     const start = html.indexOf(prefix, offset);
+     if (start < 0) break;
+     const idStart = start + prefix.length;
+     const end = html.indexOf('"', idStart);
+     if (end < 0) break;
+     const id = html.slice(idStart, end);
+-    const key = guards.get(id);
++    const key = sentinels.get(id);
+     if (key !== void 0) {
+-      recordStreamBoundaryMutation(stream, key);
+-      stream.boundaries.get(key).catchGuardCaptured = true;
+-      guards.delete(id);
++      const boundary = stream.boundaries.get(key);
++      if (boundary.state === "guard" || stream.shellCommitted) {
++        recordStreamBoundaryMutation(stream, key);
++        if (boundary.state === "guard") boundary.catchGuardCaptured = true;
++        else boundary.pendingCaptured = true;
++        sentinels.delete(id);
++      }
+     }
+     offset = end + 1;
+   }
+-  stream.hasUncapturedCatchGuards = guards.size !== 0;
++  stream.hasUncapturedSentinels = sentinels.size !== 0;
+ }
+ function ssrTryArm(content, open, arm, bindingMarker) {
+   return MARKERS ? "<!--" + (bindingMarker === void 0 ? open : bindingMarker + arm) + "-->" + content + BLOCK_CLOSE : content;
+@@ -6577,7 +6552,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+           };
+           recordStreamBoundaryMutation(stream, key);
+           stream.boundaries.set(key, entry);
+-          stream.hasUncapturedCatchGuards = true;
++          stream.hasUncapturedSentinels = true;
+           if (ownerKeys.length !== 0) recordStreamBoundaryOwners(stream, key, ownerKeys);
+         }
+         if (!entry.catchGuardCaptured) {
+@@ -6609,7 +6584,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+           const seeds = isolateSerial(serialStart);
+           if (!entry.serverOwnedStatic) entry.seeds = seeds;
+           pruneUnrepresentedStreamDescendants(stream, key, entry.html);
+-          if (stream.hasUncapturedCatchGuards) captureCatchGuards(stream, entry.html);
++          if (stream.hasUncapturedSentinels) captureStreamSentinels(stream, entry.html);
+         } else {
+           isolateSerial(serialStart);
+         }
+@@ -6657,6 +6632,10 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+               ancestors: ancestorKeys,
+               owners: ownerKeys
+             };
++            if (catchOrRecover === SSR_RECOVER_ERRORS && hasEnclosingSsrCatch(scope)) {
++              entry.pendingCaptured = false;
++              stream.hasUncapturedSentinels = true;
++            }
+             recordStreamBoundaryMutation(stream, key);
+             stream.boundaries.set(key, entry);
+             if (ownerKeys.length !== 0) recordStreamBoundaryOwners(stream, key, ownerKeys);
+@@ -6704,7 +6683,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+             const abandoned = entry.catchGuardIdCount === void 0 ? void 0 : [];
+             pruneUnrepresentedStreamDescendants(stream, key, entry.html, abandoned);
+             if (abandoned?.length) entry.abandoned = abandoned;
+-            if (stream.hasUncapturedCatchGuards) captureCatchGuards(stream, entry.html);
++            if (stream.hasUncapturedSentinels) captureStreamSentinels(stream, entry.html);
+           }
+           if (entry.catchGuardIdCount !== void 0) {
+             restoreOuterIds();
+@@ -6714,6 +6693,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+           ID_COUNTER = entry.pendingIdOffset;
+           return pendingForm();
+         }
++        if (stream !== null) pruneUnrepresentedStreamDescendants(stream, key, caught);
+         const idCount = Math.max(0, ID_COUNTER - outerIdCounter);
+         return bindingMarker === void 0 ? ssrTryArm(caught, BOUNDARY_CLIENT + BOUNDARY_CLIENT_CAUGHT + idCount, 2, bindingMarker) : ssrTryArm(
+           "<!--" + STREAM_CATCH_COMMENT + ":" + idCount + "-->" + caught,
+@@ -6722,7 +6702,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+           bindingMarker
+         );
+       }
+-      if (catchOrRecover !== SSR_RECOVER_ERRORS || hasEnclosingSsrCatch(scope) || pendFn === null && entry === void 0)
++      if (catchOrRecover !== SSR_RECOVER_ERRORS || hasEnclosingSsrCatch(scope) && entry?.pendingCaptured !== true || pendFn === null && entry === void 0)
+         throw e;
+       if (stream !== null) {
+         rewindSerial(serialStart);
+@@ -7131,7 +7111,8 @@ async function runStream(component, props, options, sink, resolved, cancelInject
+   const stream = {
+     boundaries: /* @__PURE__ */ new Map(),
+     boundaryChildren: /* @__PURE__ */ new Map(),
+-    hasUncapturedCatchGuards: false,
++    hasUncapturedSentinels: false,
++    shellCommitted: false,
+     nextId: 0,
+     token: createStreamToken(),
+     activePassBoundaryKeys: null,
+@@ -7420,7 +7401,14 @@ async function runStream(component, props, options, sink, resolved, cancelInject
+     }
+     const shellWrite = write(pass.vtCandidates ? vtSsrStrip(shell, pass.rawHtml) : shell);
+     if (shellWrite !== void 0) await shellWrite;
+-    if (stream.hasUncapturedCatchGuards) captureCatchGuards(stream, pass.body);
++    stream.shellCommitted = true;
++    if (stream.hasUncapturedSentinels) {
++      captureStreamSentinels(stream, pass.body);
++      for (const boundary of stream.boundaries.values()) {
++        if (!stream.hasUncapturedSentinels) break;
++        if (boundary.state === "done") captureStreamSentinels(stream, boundary.html);
++      }
++    }
+   } catch (err) {
+     try {
+       completeInjection();
+@@ -8361,6 +8349,472 @@ function preinitModule(href, options) {
      '<script type="module" src="' + escapeAttr(safeHref) + '" async' + hintAttrs(options, true, "script") + ' data-oct-hint="' + escapeAttr(key) + '"></script>'
    );
  }
@@ -34402,7 +34674,7 @@ index a690a33..041ad34 100644
  export {
    Activity,
    Children,
-@@ -8402,6 +8838,7 @@ export {
+@@ -8402,6 +8856,7 @@ export {
    endNativeReadScope,
    escapeAttr,
    escapeHtml,
@@ -34410,7 +34682,7 @@ index a690a33..041ad34 100644
    finishNativeReadWitness,
    flushLayoutSync,
    flushSync,
-@@ -8435,13 +8872,17 @@ export {
+@@ -8435,13 +8890,17 @@ export {
    preinitModule,
    preload,
    preloadModule,
@@ -40596,7 +40868,7 @@ index f541d85..d511359 100644
 +/** The native loader suspends without putting transported HTML into application use() seeds. */
 +export declare function externalSnapshotBoundary<C>(options: ExternalSnapshotBoundaryOptions<C>): C;
 diff --git a/dist/runtime.server.js b/dist/runtime.server.js
-index 34ab6af..97978d3 100644
+index 34ab6af..d7e2a70 100644
 --- a/dist/runtime.server.js
 +++ b/dist/runtime.server.js
 @@ -134,10 +134,7 @@ import {
@@ -40762,7 +41034,143 @@ index 34ab6af..97978d3 100644
  }
  async function prerenderToNodeStream(entryComponent, props, options) {
    if (typeof entryComponent !== "function" && options === void 0) {
-@@ -8360,6 +8330,472 @@ function preinitModule(href, options) {
+@@ -6206,8 +6176,8 @@ function rewindStreamBoundaryReplay(stream, checkpoint) {
+       boundary.errorReported = value.errorReported;
+       boundary.errorFlushed = value.errorFlushed;
+       boundary.abandoned = value.abandoned;
+-      if (value.state === "guard" && !value.catchGuardCaptured)
+-        stream.hasUncapturedCatchGuards = true;
++      if (value.state === "guard" && !value.catchGuardCaptured || value.state === "pending" && value.pendingCaptured === false)
++        stream.hasUncapturedSentinels = true;
+       if (!stream.boundaries.has(saved.key)) restoredDeletion = true;
+       stream.boundaries.set(saved.key, boundary);
+     }
+@@ -6295,29 +6265,34 @@ function pruneStreamBoundariesAbsentFromShell(stream, shellBoundaryKeys) {
+     if (!shellBoundaryKeys.has(key)) stream.boundaries.delete(key);
+   }
+ }
+-function captureCatchGuards(stream, html) {
+-  const guards = /* @__PURE__ */ new Map();
++function captureStreamSentinels(stream, html) {
++  const sentinels = /* @__PURE__ */ new Map();
+   for (const [key, boundary] of stream.boundaries) {
+-    if (boundary.state === "guard" && !boundary.catchGuardCaptured) guards.set(boundary.id, key);
++    if (boundary.state === "guard" ? !boundary.catchGuardCaptured : boundary.state === "pending" && boundary.pendingCaptured === false)
++      sentinels.set(boundary.id, key);
+   }
+   const prefix = STREAM_BOUNDARY_ATTR + '="';
+   let offset = 0;
+-  while (guards.size !== 0) {
++  while (sentinels.size !== 0) {
+     const start = html.indexOf(prefix, offset);
+     if (start < 0) break;
+     const idStart = start + prefix.length;
+     const end = html.indexOf('"', idStart);
+     if (end < 0) break;
+     const id = html.slice(idStart, end);
+-    const key = guards.get(id);
++    const key = sentinels.get(id);
+     if (key !== void 0) {
+-      recordStreamBoundaryMutation(stream, key);
+-      stream.boundaries.get(key).catchGuardCaptured = true;
+-      guards.delete(id);
++      const boundary = stream.boundaries.get(key);
++      if (boundary.state === "guard" || stream.shellCommitted) {
++        recordStreamBoundaryMutation(stream, key);
++        if (boundary.state === "guard") boundary.catchGuardCaptured = true;
++        else boundary.pendingCaptured = true;
++        sentinels.delete(id);
++      }
+     }
+     offset = end + 1;
+   }
+-  stream.hasUncapturedCatchGuards = guards.size !== 0;
++  stream.hasUncapturedSentinels = sentinels.size !== 0;
+ }
+ function ssrTryArm(content, open, arm, bindingMarker) {
+   return MARKERS ? "<!--" + (bindingMarker === void 0 ? open : bindingMarker + arm) + "-->" + content + BLOCK_CLOSE : content;
+@@ -6576,7 +6551,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+           };
+           recordStreamBoundaryMutation(stream, key);
+           stream.boundaries.set(key, entry);
+-          stream.hasUncapturedCatchGuards = true;
++          stream.hasUncapturedSentinels = true;
+           if (ownerKeys.length !== 0) recordStreamBoundaryOwners(stream, key, ownerKeys);
+         }
+         if (!entry.catchGuardCaptured) {
+@@ -6608,7 +6583,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+           const seeds = isolateSerial(serialStart);
+           if (!entry.serverOwnedStatic) entry.seeds = seeds;
+           pruneUnrepresentedStreamDescendants(stream, key, entry.html);
+-          if (stream.hasUncapturedCatchGuards) captureCatchGuards(stream, entry.html);
++          if (stream.hasUncapturedSentinels) captureStreamSentinels(stream, entry.html);
+         } else {
+           isolateSerial(serialStart);
+         }
+@@ -6656,6 +6631,10 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+               ancestors: ancestorKeys,
+               owners: ownerKeys
+             };
++            if (catchOrRecover === SSR_RECOVER_ERRORS && hasEnclosingSsrCatch(scope)) {
++              entry.pendingCaptured = false;
++              stream.hasUncapturedSentinels = true;
++            }
+             recordStreamBoundaryMutation(stream, key);
+             stream.boundaries.set(key, entry);
+             if (ownerKeys.length !== 0) recordStreamBoundaryOwners(stream, key, ownerKeys);
+@@ -6703,7 +6682,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+             const abandoned = entry.catchGuardIdCount === void 0 ? void 0 : [];
+             pruneUnrepresentedStreamDescendants(stream, key, entry.html, abandoned);
+             if (abandoned?.length) entry.abandoned = abandoned;
+-            if (stream.hasUncapturedCatchGuards) captureCatchGuards(stream, entry.html);
++            if (stream.hasUncapturedSentinels) captureStreamSentinels(stream, entry.html);
+           }
+           if (entry.catchGuardIdCount !== void 0) {
+             restoreOuterIds();
+@@ -6713,6 +6692,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+           ID_COUNTER = entry.pendingIdOffset;
+           return pendingForm();
+         }
++        if (stream !== null) pruneUnrepresentedStreamDescendants(stream, key, caught);
+         const idCount = Math.max(0, ID_COUNTER - outerIdCounter);
+         return bindingMarker === void 0 ? ssrTryArm(caught, BOUNDARY_CLIENT + BOUNDARY_CLIENT_CAUGHT + idCount, 2, bindingMarker) : ssrTryArm(
+           "<!--" + STREAM_CATCH_COMMENT + ":" + idCount + "-->" + caught,
+@@ -6721,7 +6701,7 @@ function ssrTry(scope, siteKey, tryFn, pendFn, catchOrRecover = null, namespace
+           bindingMarker
+         );
+       }
+-      if (catchOrRecover !== SSR_RECOVER_ERRORS || hasEnclosingSsrCatch(scope) || pendFn === null && entry === void 0)
++      if (catchOrRecover !== SSR_RECOVER_ERRORS || hasEnclosingSsrCatch(scope) && entry?.pendingCaptured !== true || pendFn === null && entry === void 0)
+         throw e;
+       if (stream !== null) {
+         rewindSerial(serialStart);
+@@ -7130,7 +7110,8 @@ async function runStream(component, props, options, sink, resolved, cancelInject
+   const stream = {
+     boundaries: /* @__PURE__ */ new Map(),
+     boundaryChildren: /* @__PURE__ */ new Map(),
+-    hasUncapturedCatchGuards: false,
++    hasUncapturedSentinels: false,
++    shellCommitted: false,
+     nextId: 0,
+     token: createStreamToken(),
+     activePassBoundaryKeys: null,
+@@ -7419,7 +7400,14 @@ async function runStream(component, props, options, sink, resolved, cancelInject
+     }
+     const shellWrite = write(pass.vtCandidates ? vtSsrStrip(shell, pass.rawHtml) : shell);
+     if (shellWrite !== void 0) await shellWrite;
+-    if (stream.hasUncapturedCatchGuards) captureCatchGuards(stream, pass.body);
++    stream.shellCommitted = true;
++    if (stream.hasUncapturedSentinels) {
++      captureStreamSentinels(stream, pass.body);
++      for (const boundary of stream.boundaries.values()) {
++        if (!stream.hasUncapturedSentinels) break;
++        if (boundary.state === "done") captureStreamSentinels(stream, boundary.html);
++      }
++    }
+   } catch (err) {
+     try {
+       completeInjection();
+@@ -8360,6 +8348,472 @@ function preinitModule(href, options) {
      '<script type="module" src="' + escapeAttr(safeHref) + '" async' + hintAttrs(options, true, "script") + ' data-oct-hint="' + escapeAttr(key) + '"></script>'
    );
  }
@@ -41235,7 +41643,7 @@ index 34ab6af..97978d3 100644
  export {
    Activity,
    Children,
-@@ -8401,6 +8837,7 @@ export {
+@@ -8401,6 +8855,7 @@ export {
    endNativeReadScope,
    escapeAttr,
    escapeHtml,
@@ -41243,7 +41651,7 @@ index 34ab6af..97978d3 100644
    finishNativeReadWitness,
    flushLayoutSync,
    flushSync,
-@@ -8434,13 +8871,17 @@ export {
+@@ -8434,13 +8889,17 @@ export {
    preinitModule,
    preload,
    preloadModule,

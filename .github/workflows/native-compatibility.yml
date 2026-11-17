@@ -11,6 +11,12 @@ on:
   workflow_call:
 
   workflow_dispatch:
+    inputs:
+      runtime_patch_handoff:
+        description: Generate qualified runtime correction patches for review, without publishing
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   actions: read
@@ -134,6 +140,86 @@ jobs:
 
       - name: Test native compatibility
         run: pnpm run validate:native-compatibility --prepared
+
+      # Explicit manual handoff only, after every normal check. PR, merge-queue
+      # and reusable release runs never rewrite canonical correction patches.
+      - name: Qualify runtime source and write canonical patches
+        if: github.event_name == 'workflow_dispatch' && inputs.runtime_patch_handoff == true && github.workflow_ref == format('{0}/.github/workflows/native-compatibility.yml@{1}', github.repository, github.ref)
+        shell: bash
+        run: |
+          pnpm_binary="$(mise which pnpm --tool pnpm@12.21.0)"
+          case "$pnpm_binary" in
+            /*) ;;
+            *) echo "::error::pnpm 12.21.0 binary path is not absolute" >&2; exit 1 ;;
+          esac
+          if [ "$("$pnpm_binary" --version)" != 12.21.0 ]; then
+            echo "::error::selected pnpm is not 12.21.0" >&2
+            exit 1
+          fi
+          owned="$(mktemp -d "$RUNNER_TEMP/runtime-qualify-XXXXXX")"
+          trap 'rm -rf -- "$owned"' EXIT
+          OWNED_TEMP_DIR="$owned" PNPM_BINARY="$pnpm_binary" \
+            node scripts/ultramodern-renderers/octane-corrections/qualify-runtime.mjs --write-patch
+
+      - name: Stage runtime patch handoff receipt
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.runtime_patch_handoff == true && github.workflow_ref == format('{0}/.github/workflows/native-compatibility.yml@{1}', github.repository, github.ref)
+        env:
+          HANDOFF_DIR: ${{ runner.temp }}/runtime-handoff
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          PNPM_VERSION: '12.21.0'
+          MISE_VERSION: '2026.11.8'
+        run: |
+          node --input-type=module <<'JS'
+          import crypto from 'node:crypto';
+          import fs from 'node:fs';
+          import path from 'node:path';
+
+          const handoff = process.env.HANDOFF_DIR;
+          const patches = [
+            'patches/octane@0.18.0.patch',
+            'patches/@octanejs__rspack-plugin@0.2.10.patch',
+          ];
+          const inputs = [
+            'scripts/ultramodern-renderers/octane-corrections/runtime-source.patch',
+            'scripts/ultramodern-renderers/octane-corrections/runtime-tests.patch',
+          ];
+          const describe = file => {
+            const bytes = fs.readFileSync(file);
+            return {
+              path: file,
+              bytes: bytes.length,
+              sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+            };
+          };
+          const generated = patches.map(describe);
+          fs.mkdirSync(path.join(handoff, 'patches'), { recursive: true });
+          for (const file of patches) {
+            fs.copyFileSync(file, path.join(handoff, file));
+          }
+          const receipt = {
+            schema: 'runtime-patch-handoff/v1',
+            sourceSha: process.env.SOURCE_SHA,
+            run: { id: process.env.RUN_ID, attempt: process.env.RUN_ATTEMPT },
+            toolchain: {
+              node: process.versions.node,
+              pnpm: process.env.PNPM_VERSION,
+              mise: process.env.MISE_VERSION,
+            },
+            inputs: inputs.map(describe),
+            patches: generated,
+          };
+          fs.writeFileSync(path.join(handoff, 'receipt.json'), `${JSON.stringify(receipt)}\n`);
+          JS
+
+      - name: Upload runtime patch handoff
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.runtime_patch_handoff == true && github.workflow_ref == format('{0}/.github/workflows/native-compatibility.yml@{1}', github.repository, github.ref)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runtime-patch-handoff-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: ${{ runner.temp }}/runtime-handoff
+          if-no-files-found: error
 
   pack-candidate:
     needs: effect-compiler-payload
