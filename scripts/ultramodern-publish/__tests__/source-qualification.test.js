@@ -33,11 +33,31 @@ const writeReceipt = (filePath, value) => {
 
 const acceptedReceipt = () => ({
   schema: 'bleedingdev.ultramodern.source-qualification',
-  schemaVersion: 1,
+  schemaVersion: 2,
   source: { repository, commit: qualifiedCommit },
   runId: '77',
   runAttempt: '2',
   runIdentity: `github:${repository}:run:77:attempt:2`,
+  integration: { mode: 'in-run', runId: '77', runAttempt: '2' },
+});
+
+const qualifiedTree = 'c'.repeat(40);
+const reusedIntegration = () => ({
+  runId: '66',
+  runAttempt: '1',
+  testedCommit: 'd'.repeat(40),
+  tree: qualifiedTree,
+  url: `https://github.com/${repository}/actions/runs/66`,
+  payloadSha256: 'e'.repeat(64),
+});
+const reusedReceipt = () => ({
+  ...acceptedReceipt(),
+  integration: {
+    mode: 'reused',
+    repository,
+    workflow: '.github/workflows/integration-test.yml',
+    ...reusedIntegration(),
+  },
 });
 
 const verifyArgs = {
@@ -76,6 +96,7 @@ test('a qualification receipt binds the qualified commit to its own run', async 
     const outPath = path.join(root, 'nested', 'source-qualification.json');
     const receipt = createSourceQualification({
       commit: qualifiedCommit,
+      integrationDecision: 'run',
       outPath,
       repository,
       runAttempt: '2',
@@ -113,6 +134,7 @@ test('a qualification receipt cannot be minted for an unresolved source', async 
         () =>
           createSourceQualification({
             commit: qualifiedCommit,
+            integrationDecision: 'run',
             outPath,
             repository,
             runAttempt: '2',
@@ -192,6 +214,99 @@ test('verification rejects a receipt that is not the strict schema', async () =>
       () => verifySourceQualification({ ...verifyArgs, receiptPath }),
       /strict receipt shape/u,
     );
+  });
+});
+
+test('a receipt records the reused integration run only for the identical tree', async () => {
+  const { createSourceQualification, verifySourceQualification } =
+    await loadHelper();
+  await withTempDir(async root => {
+    const outPath = path.join(root, 'source-qualification.json');
+    const receipt = createSourceQualification({
+      commit: qualifiedCommit,
+      integrationDecision: 'reuse',
+      outPath,
+      repository,
+      reusedIntegration: reusedIntegration(),
+      runAttempt: '2',
+      runId: '77',
+      sourceTree: qualifiedTree,
+    });
+    assert.deepEqual(receipt, reusedReceipt());
+    assert.deepEqual(
+      verifySourceQualification({ ...verifyArgs, receiptPath: outPath }),
+      reusedReceipt(),
+    );
+
+    for (const [overrides, sourceTree] of [
+      [{}, 'f'.repeat(40)],
+      [{}, undefined],
+      [{ runId: '77' }, qualifiedTree],
+      [{ url: `https://github.com/other/repo/actions/runs/66` }, qualifiedTree],
+      [{ payloadSha256: 'short' }, qualifiedTree],
+      [{ runAttempt: undefined }, qualifiedTree],
+    ]) {
+      assert.throws(() =>
+        createSourceQualification({
+          commit: qualifiedCommit,
+          integrationDecision: 'reuse',
+          outPath: path.join(root, 'rejected.json'),
+          repository,
+          reusedIntegration: { ...reusedIntegration(), ...overrides },
+          runAttempt: '2',
+          runId: '77',
+          sourceTree,
+        }),
+      );
+    }
+    assert.throws(
+      () =>
+        createSourceQualification({
+          commit: qualifiedCommit,
+          integrationDecision: 'skip',
+          outPath: path.join(root, 'rejected.json'),
+          repository,
+          runAttempt: '2',
+          runId: '77',
+        }),
+      /Unknown integration decision/u,
+    );
+    assert.equal(fs.existsSync(path.join(root, 'rejected.json')), false);
+  });
+});
+
+test('verification rejects version 1 receipts and malformed integration evidence', async () => {
+  const { verifySourceQualification } = await loadHelper();
+  await withTempDir(async root => {
+    const receiptPath = path.join(root, 'source-qualification.json');
+    const { integration, ...versionOne } = acceptedReceipt();
+    writeReceipt(receiptPath, { ...versionOne, schemaVersion: 1 });
+    assert.throws(
+      () => verifySourceQualification({ ...verifyArgs, receiptPath }),
+      /strict receipt shape/u,
+    );
+    writeReceipt(receiptPath, { ...acceptedReceipt(), schemaVersion: 1 });
+    assert.throws(
+      () => verifySourceQualification({ ...verifyArgs, receiptPath }),
+      /Unknown source qualification schema/u,
+    );
+    for (const forged of [
+      { mode: 'in-run', runId: '78', runAttempt: '2' },
+      { mode: 'in-run', runId: '77', runAttempt: '2', extra: true },
+      { mode: 'skipped', runId: '77', runAttempt: '2' },
+      {
+        ...reusedReceipt().integration,
+        workflow: '.github/workflows/other.yml',
+      },
+      { ...reusedReceipt().integration, repository: 'someone/fork' },
+      { ...reusedReceipt().integration, tree: 'HEAD' },
+    ]) {
+      writeReceipt(receiptPath, { ...acceptedReceipt(), integration: forged });
+      assert.throws(
+        () => verifySourceQualification({ ...verifyArgs, receiptPath }),
+        /does not record valid integration evidence/u,
+      );
+    }
   });
 });
 

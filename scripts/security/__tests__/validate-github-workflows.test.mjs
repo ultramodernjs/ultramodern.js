@@ -202,9 +202,15 @@ const cohortJobs = [
   'reconcile-sidecars',
   'record-publish-outcome',
   'rehearse-tractor',
+  'select-integration-evidence',
   'start-release-acceptance',
   'validate-release',
 ];
+// The selector's decision is an output, so its result carries outputs.
+const integrationRun = { result: 'success', outputs: { decision: 'run' } };
+const integrationReuse = { result: 'success', outputs: { decision: 'reuse' } };
+const resultOf = value =>
+  value && typeof value === 'object' ? value.result : value;
 // Jobs that run only in a cohort dry run.
 const dryCohortJobs = ['record-publish-outcome', 'validate-release'];
 const sidecarJobs = ['prepare-sidecars', 'qualify-sidecars'];
@@ -226,6 +232,7 @@ const publicationResults = (workflow, mode, dryRun = false) => {
         results[jobId] = 'skipped';
       }
     }
+    results['select-integration-evidence'] = integrationRun;
   }
   results['publish-sidecars'] = dryRun ? 'skipped' : 'success';
   return results;
@@ -278,12 +285,17 @@ test('source-cohort reuse is rejected before compiler and integration work start
   // The payload starts beside publish-security; every job that consumes it
   // still waits for the validated dispatch.
   assert.equal(workflow.jobs['effect-compiler-payload'].needs, undefined);
-  for (const job of ['integration', 'prepare-release'])
+  for (const job of ['select-integration-evidence', 'prepare-release'])
     assert.deepEqual(
       workflow.jobs[job].needs,
       ['publish-security', 'effect-compiler-payload'],
       job,
     );
+  assert.deepEqual(workflow.jobs.integration.needs, [
+    'publish-security',
+    'effect-compiler-payload',
+    'select-integration-evidence',
+  ]);
   assert.ok(
     workflow.jobs['prepare-release'].steps.some(step =>
       step.run?.includes('workflow.mjs reject-published-source'),
@@ -718,9 +730,12 @@ test('release qualification overlaps integration and issues no receipt before bo
     'utf8',
   );
   const workflow = yaml.load(content);
-  const results = Object.fromEntries(
-    Object.keys(workflow.jobs).map(jobId => [jobId, 'success']),
-  );
+  const results = {
+    ...Object.fromEntries(
+      Object.keys(workflow.jobs).map(jobId => [jobId, 'success']),
+    ),
+    'select-integration-evidence': integrationRun,
+  };
   const context = {
     github: {
       actor: 'BleedingDev',
@@ -745,10 +760,53 @@ test('release qualification overlaps integration and issues no receipt before bo
   assert.deepEqual(workflow.jobs['qualify-source'].needs, [
     'integration',
     'qualify-source-compute',
+    'select-integration-evidence',
   ]);
+  const reused = {
+    'select-integration-evidence': integrationReuse,
+    integration: 'skipped',
+  };
   for (const jobId of ['qualify-source', 'publish', 'publish-sidecars']) {
     assert.equal(schedules(jobId), true, jobId);
+    assert.equal(schedules(jobId, reused), true, `${jobId} reuses`);
+    for (const result of ['success', 'failure', 'cancelled'])
+      assert.equal(
+        schedules(jobId, { ...reused, integration: result }),
+        false,
+        `${jobId} rejects a reuse decision with integration ${result}`,
+      );
+    for (const result of ['failure', 'cancelled', 'skipped'])
+      assert.equal(
+        schedules(jobId, {
+          ...reused,
+          'select-integration-evidence': {
+            result,
+            outputs: { decision: 'reuse' },
+          },
+        }),
+        false,
+        `${jobId} rejects a reuse decision from a ${result} selector`,
+      );
+    for (const selected of [
+      'success',
+      { result: 'success' },
+      { result: 'success', outputs: { decision: 'skip' } },
+    ])
+      assert.equal(
+        schedules(jobId, {
+          integration: 'skipped',
+          'select-integration-evidence': selected,
+        }),
+        false,
+        `${jobId} rejects a skipped integration without a reuse decision`,
+      );
   }
+  assert.equal(schedules('integration'), true);
+  assert.equal(schedules('integration', reused), false);
+  assert.equal(
+    schedules('integration', { 'select-integration-evidence': 'success' }),
+    false,
+  );
   for (const prerequisite of ['integration', 'qualify-source-compute']) {
     for (const result of ['failure', 'cancelled', 'skipped']) {
       assert.equal(
@@ -801,6 +859,7 @@ test('release qualification overlaps integration and issues no receipt before bo
 const modePrerequisites = {
   cohort: [
     'publish-security',
+    'select-integration-evidence',
     'integration',
     'qualify-source-compute',
     'qualify-source',
@@ -871,7 +930,7 @@ test('publication modes run their selected path with the inactive path skipped',
       for (const jobId of Object.keys(workflow.jobs)) {
         assert.equal(
           schedules(jobId),
-          results[jobId] === 'success',
+          resultOf(results[jobId]) === 'success',
           [mode, dryRun ? 'dry' : 'live', jobId].join(' '),
         );
       }
@@ -909,7 +968,7 @@ test('each active publication gate rejects unsuccessful or absent required resul
       'cohort',
       false,
       'qualify-source',
-      ['integration', 'qualify-source-compute'],
+      ['select-integration-evidence', 'integration', 'qualify-source-compute'],
     ],
     [
       'sidecars',
@@ -1891,6 +1950,70 @@ test('live publication modes share a non-cancelling lock and dry runs use indepe
   }
 });
 
+test('reused integration evidence is accepted only through the one verified clause', () => {
+  const clause =
+    "needs.select-integration-evidence.result == 'success' && ((needs.integration.result == 'success' && needs.select-integration-evidence.outputs.decision == 'run') || (needs.integration.result == 'skipped' && needs.select-integration-evidence.outputs.decision == 'reuse'))";
+  const workflow = readPublishWorkflow();
+  for (const jobId of ['qualify-source', 'publish-sidecars', 'publish'])
+    assert.equal(workflow.jobs[jobId].if.split(clause).length, 2, jobId);
+  for (const jobId of ['qualify-source', 'publish-sidecars', 'publish']) {
+    assertJobMutationRejected(
+      jobId,
+      'reuse without a decision',
+      replaceGuard(
+        " && needs.select-integration-evidence.outputs.decision == 'reuse'",
+        '',
+      ),
+      /integration evidence clause|reuse decision|failure, cancellation/u,
+    );
+    assertJobMutationRejected(
+      jobId,
+      'an extra skipped-integration path',
+      replaceGuard(
+        clause,
+        `(${clause} || needs.integration.result == 'skipped')`,
+      ),
+      /integration evidence clause|reuse decision|failure, cancellation/u,
+    );
+  }
+  assertJobMutationRejected(
+    'integration',
+    'runs regardless of the decision',
+    replaceGuard(
+      " && needs.select-integration-evidence.outputs.decision == 'run'",
+      '',
+    ),
+    /integration must run exactly when/u,
+  );
+  assertJobMutationRejected(
+    'select-integration-evidence',
+    'a dispatcher-chosen run',
+    job => {
+      job.steps.at(-1).env.CANDIDATE = githubExpression('inputs.version');
+    },
+    /no dispatch input/u,
+  );
+  assertJobMutationRejected(
+    'select-integration-evidence',
+    'a different selector command',
+    job => {
+      job.steps.at(-1).run =
+        'node scripts/ultramodern-publish/integration-evidence.mjs select --run 1';
+    },
+    /fixed integration-evidence.mjs select command/u,
+  );
+  assertJobMutationRejected(
+    'select-integration-evidence',
+    'job-level permissions',
+    setField('permissions', {
+      actions: 'read',
+      contents: 'read',
+      'pull-requests': 'write',
+    }),
+    /read-only permissions|must not grant/u,
+  );
+});
+
 test('release validator rejects unsafe qualification splits and receipt shortcuts', () => {
   const workflowPath = '.github/workflows/publish-bleedingdev.yml';
   const content = fs.readFileSync(
@@ -1904,11 +2027,16 @@ test('release validator rejects unsafe qualification splits and receipt shortcut
   const mutateJoin = replacement =>
     content.slice(0, joinStart) + replacement + content.slice(joinEnd);
   assert.ok(joinStart > 0 && joinEnd > joinStart);
-  for (const need of ['integration', 'qualify-source-compute']) {
+  for (const need of [
+    'integration',
+    'qualify-source-compute',
+    'select-integration-evidence',
+  ]) {
     assert.ok(
       errors(mutateJoin(join.replace(`      - ${need}\n`, ''))).some(error =>
         error.includes('must join integration'),
       ),
+      need,
     );
   }
   const conditionStart = join.indexOf('    if: >-\n');
@@ -1920,7 +2048,7 @@ test('release validator rejects unsafe qualification splits and receipt shortcut
   );
   assert.ok(
     errors(unsafeCondition).some(error =>
-      error.includes('failure, cancellation or skip'),
+      error.includes('failure, cancellation or any other skip'),
     ),
   );
   const movedCreate = content.replace(

@@ -320,6 +320,34 @@ function resultFor(results, jobId) {
   return value;
 }
 
+// A result given as { result, outputs } exposes its outputs; a bare result
+// string, or an output that was not given, stays MISSING.
+function outputFor(results, jobId, name) {
+  let value = MISSING;
+  if (results instanceof Map) {
+    if (results.has(jobId)) {
+      value = results.get(jobId);
+    }
+  } else if (
+    results &&
+    typeof results === 'object' &&
+    Object.prototype.hasOwnProperty.call(results, jobId)
+  ) {
+    value = results[jobId];
+  }
+  const outputs =
+    value && typeof value === 'object' ? value.outputs : undefined;
+  if (
+    !outputs ||
+    typeof outputs !== 'object' ||
+    !Object.prototype.hasOwnProperty.call(outputs, name) ||
+    typeof outputs[name] !== 'string'
+  ) {
+    return MISSING;
+  }
+  return outputs[name];
+}
+
 function collectAncestors(workflow, jobId) {
   const jobs = workflow?.jobs;
   if (!jobs || typeof jobs !== 'object') {
@@ -362,14 +390,16 @@ function collectAncestors(workflow, jobId) {
 function readReference(path, environment) {
   const [root, ...segments] = path;
   if (root === 'needs') {
-    if (
-      segments.length !== 2 ||
-      segments[1] !== 'result' ||
-      !environment.directNeeds.has(segments[0])
-    ) {
+    if (!environment.directNeeds.has(segments[0])) {
       return MISSING;
     }
-    return resultFor(environment.results, segments[0]);
+    if (segments.length === 2 && segments[1] === 'result') {
+      return resultFor(environment.results, segments[0]);
+    }
+    if (segments.length === 3 && segments[1] === 'outputs') {
+      return outputFor(environment.results, segments[0], segments[2]);
+    }
+    return MISSING;
   }
   if (root !== 'github' && root !== 'vars' && root !== 'inputs') {
     return MISSING;

@@ -347,14 +347,22 @@ const expression = value => '$' + '{{ ' + value + ' }}';
 const depotLinux = expression(
   "vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8'",
 );
-test('every acceptance leg selects the one Depot Linux runner', () => {
-  // All three acceptance legs select the same runner class, byte for byte: the
-  // sealed receipt verifies evidence digests against absolute RUNNER_TEMP
-  // paths, which only agree when both legs run the same image. The former
-  // `&& 'ubuntu-latest' ||` fork-isolation prefix is gone with it, so an
-  // external pull request can no longer move one leg to other hardware.
+test('every acceptance leg selects a fixed Depot Linux runner', () => {
+  // The renderer and seal legs select the same runner class, byte for byte:
+  // the sealed receipt verifies evidence digests against absolute RUNNER_TEMP
+  // paths, which only agree when both legs run the same image. The ERP leg
+  // hands seal only its receipt files, never a path, and needs more cores for
+  // its build passes, so it pins the 16-vCPU size of the same Depot Ubuntu
+  // 24.04 image as a literal no variable can move. The former
+  // `&& 'ubuntu-latest' ||` fork-isolation prefix is gone, so an external pull
+  // request can no longer move any leg to other hardware.
+  assert.equal(
+    readWorkflow('ultramodern-release-acceptance').jobs['accept-release'][
+      'runs-on'
+    ],
+    'depot-ubuntu-24.04-16',
+  );
   for (const [workflow, job] of [
-    ['ultramodern-release-acceptance', 'accept-release'],
     ['ultramodern-release-acceptance', 'renderer-features'],
     ['ultramodern-release-acceptance', 'seal'],
     ['ultramodern-tractor-downstream', 'tractor-downstream'],
