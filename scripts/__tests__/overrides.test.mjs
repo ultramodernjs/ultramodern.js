@@ -402,6 +402,44 @@ test('an npm: alias override fails while the edge keeps another version', () => 
   );
 });
 
+test('disjoint npm alias overrides each accept only their own resolved line', () => {
+  const lockfile = `
+lockfileVersion: '9.0'
+overrides:
+  'picomatch@>=2.0.0 <2.3.3': npm:@bleedingdev/picomatch@2.3.3
+  'picomatch@>=4.0.0 <4.0.8': npm:@bleedingdev/picomatch-v4@4.0.8
+snapshots:
+  micromatch@4.0.8:
+    dependencies:
+      picomatch: '@bleedingdev/picomatch@2.3.3'
+  '@vercel/nft@1.11.6':
+    dependencies:
+      picomatch: '@bleedingdev/picomatch-v4@4.0.8'
+`;
+  assert.deepEqual(findOverrideViolations(lockfile, new Map()), []);
+  for (const [fresh, stale, selector] of [
+    ['@bleedingdev/picomatch@2.3.3', '2.3.2', '>=2.0.0 <2.3.3'],
+    ['@bleedingdev/picomatch-v4@4.0.8', '4.0.7', '>=4.0.0 <4.0.8'],
+  ]) {
+    const violations = findOverrideViolations(
+      lockfile.replace(`picomatch: '${fresh}'`, `picomatch: ${stale}`),
+      new Map(),
+    );
+    assert.equal(violations.length, 1);
+    assert(violations[0].startsWith(`'picomatch@${selector}':`));
+  }
+  assert.notDeepEqual(
+    findOverrideViolations(
+      lockfile.replace(
+        "picomatch: '@bleedingdev/picomatch@2.3.3'",
+        "picomatch: '@bleedingdev/picomatch@2.3.2'",
+      ),
+      new Map(),
+    ),
+    [],
+  );
+});
+
 test('digit-leading package names parse and validate', () => {
   assert.deepEqual(parseOverrideKey('parent>2-decode'), {
     parent: { name: 'parent', range: undefined },

@@ -192,11 +192,20 @@ export function findOverrideViolations(lockfileText, importerNames) {
         inRange(entry.version, parent.range),
     );
 
-  const violations = [];
-  for (const [key, rawValue] of Object.entries(lockfile.overrides ?? {})) {
-    const value = String(rawValue);
-    const { parent, target } = parseOverrideKey(key);
+  const overrideEntries = Object.entries(lockfile.overrides ?? {}).map(
+    ([key, value]) => ({ key, value: String(value), ...parseOverrideKey(key) }),
+  );
+  const rangedAliases = overrideEntries.filter(
+    ({ parent, target, value }) =>
+      !parent &&
+      !target.peer &&
+      target.range &&
+      semver.validRange(target.range) &&
+      value.startsWith('npm:'),
+  );
 
+  const violations = [];
+  for (const { key, value, parent, target } of overrideEntries) {
     const empty = [parent, target].find(spec => spec?.range === '');
     if (empty) {
       violations.push(
@@ -303,7 +312,21 @@ export function findOverrideViolations(lockfileText, importerNames) {
       const edge = childEdge(entry.snapshot, target.name);
       if (edge !== undefined) judged.add(String(edge).replace(/\(.*$/, ''));
     }
+    // An aliased edge no longer records its original version. An exact
+    // resolution owned by a disjoint selector isn't evidence of a stale edge.
+    const otherAliasLines =
+      target.range &&
+      semver.validRange(target.range) &&
+      value.startsWith('npm:')
+        ? rangedAliases.filter(
+            other =>
+              other.target.name === target.name &&
+              !semver.intersects(other.target.range, target.range),
+          )
+        : [];
     for (const version of judged) {
+      if (otherAliasLines.some(other => honours(version, other.value)))
+        continue;
       // An unranged selector matches any specifier, including git, file
       // and alias edges.
       const matches =
