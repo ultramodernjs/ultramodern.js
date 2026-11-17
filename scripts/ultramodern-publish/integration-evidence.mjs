@@ -3,12 +3,17 @@
 //
 // The publish runs integration-test.yml on the commit it releases. When the
 // pull request that produced that commit already ran the same suites on a
-// byte-identical tree, a second run repeats ~10 minutes of Windows and Linux
-// shards and proves nothing new about the source: the tree pins the workflow
-// file, every script it runs, the lockfile and the tests. This selector finds
-// that earlier run and lets the publish skip its own integration only when all
-// of the following are proven, cheapest first. Anything unproven, and any API
-// or download error, decides `run`, so the publish runs integration exactly as
+// byte-identical tree, the tree pins the workflow file, every script it runs,
+// the lockfile and the tests, so a second run repeats ~10 minutes of Windows
+// and Linux shards on the same source. It does not pin everything a run
+// depends on: the generator and fresh-consumer suites install third-party
+// packages from the registry under the release-age window, and runner images
+// and the clock move. Reuse therefore accepts a result at most 24 hours old
+// instead of one taken at publish time; the Linux acceptance legs still
+// install against the registry at publish time. This selector finds that
+// earlier run and lets the publish skip its own integration only when all of
+// the following are proven, cheapest first. Anything unproven, and any API or
+// download error, decides `run`, so the publish runs integration exactly as
 // before.
 //
 //  - The publish commit is a merge commit; its second parent is the merged
@@ -17,18 +22,25 @@
 //  - The tested commit is GitHub's own record of what the run checked out:
 //    the one `referenced_workflows` entry for the local payload workflow at
 //    refs/pull/N/merge. Its tree must equal the publish commit's tree.
-//  - Every Integration Test run of that head on this tree is a same-repository
-//    pull_request run of integration-test.yml, completed, green, and on its
-//    first attempt. A run that went green by rerun, or a red or unfinished
-//    sample on the same tree, is not evidence: the publish takes its own.
-//  - Its first attempt started at most 24 hours before this publish run.
+//  - Every Integration Test run of that pull request on this tree, under any
+//    of its heads, is a same-repository pull_request run of
+//    integration-test.yml, completed, green, and on its first attempt. A run
+//    that went green by rerun, or a red or unfinished sample on the same tree,
+//    is not evidence: the publish takes its own. An empty or amended retrigger
+//    commit gives the same tree a new head, so the pull request's runs are
+//    listed by its branch, not only by the merged head.
+//  - The newest of them started at most 24 hours before this check runs, so a
+//    re-run of an old publish cannot reuse old evidence.
 //  - Every job ran and passed: the full integration matrix (counted from the
 //    checked-out integration-test.yml, identical by tree), with only the
 //    payload's cache-miss build jobs allowed to be skipped.
-//  - The pull request ref holds no cache entry. PR jobs only restore caches
-//    (ci-cache.yml is the one writer, on main-ultramodern), so a tested build
-//    snapshot can only have come from the trusted default-branch seed the
-//    publish itself would read.
+//  - The pull request ref holds no cache entry now. PR jobs only restore
+//    caches (ci-cache.yml is the one writer, on main-ultramodern). This is a
+//    listing at publish time: an entry written by an earlier head's modified
+//    workflow and deleted again before the publish is not seen. Such an entry
+//    could only make the reused run test other build output; the published
+//    bytes are built from the tree by prepare-release, never from a cache the
+//    integration run restored.
 //  - The compiler payload the run tested and the payload of this publish run
 //    carry byte-identical inventories ({source, targets}, every file digest),
 //    each bound to its own producer run, attempt and commit.
@@ -43,6 +55,9 @@ import { isDeepStrictEqual } from 'node:util';
 export const integrationWorkflowPath = '.github/workflows/integration-test.yml';
 export const payloadWorkflowFile = 'effect-compiler-payload.yml';
 export const maxEvidenceAgeMs = 24 * 60 * 60 * 1000;
+// A pull request branch with more runs than this is not inspected: integration
+// runs instead.
+const maxRunPages = 10;
 
 const shaPattern = /^[0-9a-f]{40}$/u;
 const idPattern = /^[1-9][0-9]*$/u;
@@ -105,6 +120,33 @@ function testedCommitOf(run, repository) {
   return { sha: reference.sha, ref: reference.ref };
 }
 
+// Every run a listing reports, across pages. A listing that changes while it
+// is read, or has more pages than are inspected, is unproven.
+async function listRuns(api, pathname, label) {
+  const runs = new Map();
+  for (let page = 1; page <= maxRunPages; page += 1) {
+    const listing = await api(`${pathname}&per_page=100&page=${page}`);
+    const pageRuns = Array.isArray(listing?.workflow_runs)
+      ? listing.workflow_runs
+      : [];
+    if (!Number.isSafeInteger(listing?.total_count)) {
+      unproven(`the Integration Test runs of ${label} could not be listed`);
+    }
+    for (const run of pageRuns) runs.set(run.id, run);
+    if (pageRuns.length < 100 || runs.size >= listing.total_count) {
+      if (runs.size !== listing.total_count) {
+        unproven(
+          `the Integration Test runs of ${label} changed while they were listed`,
+        );
+      }
+      return [...runs.values()];
+    }
+  }
+  unproven(
+    `${label} has more than ${maxRunPages * 100} Integration Test runs to inspect`,
+  );
+}
+
 /**
  * Decide whether this publish run may reuse a pull request's Integration Test
  * run. Never throws: any failure to prove reuse is a `run` decision.
@@ -114,6 +156,7 @@ export async function selectIntegrationEvidence({
   context,
   expectedIntegrationJobs,
   readPayloadManifest,
+  now = Date.now(),
 }) {
   try {
     const { repository, runAttempt, runId, sha } = context;
@@ -155,33 +198,71 @@ export async function selectIntegrationEvidence({
     ) {
       unproven('the Integration Test workflow could not be identified');
     }
-    const listing = await api(
-      `/repos/${repository}/actions/workflows/${workflow.id}/runs?head_sha=${head}&per_page=100`,
+    const runsPath = `/repos/${repository}/actions/workflows/${workflow.id}/runs`;
+    const headRuns = await listRuns(
+      api,
+      `${runsPath}?head_sha=${head}`,
+      `pull request head ${head}`,
     );
-    const runs = Array.isArray(listing?.workflow_runs)
-      ? listing.workflow_runs
-      : [];
-    if (listing?.total_count !== runs.length) {
-      unproven(`too many Integration Test runs for ${head} to inspect`);
+    if (headRuns.length === 0) {
+      unproven(`no Integration Test run tested pull request head ${head}`);
     }
-
-    const sameTree = [];
-    for (const run of runs) {
+    // The merged head's runs name its pull request and branch. The branch
+    // listing then also covers the pull request's earlier heads.
+    const pullRefs = new Set();
+    const branches = new Set();
+    for (const run of headRuns) {
       const tested = testedCommitOf(run, repository);
       if (!tested) {
         unproven(
           `Integration Test run ${run.id} of ${head} does not record which commit it tested`,
         );
       }
-      const testedCommit = await api(
-        `/repos/${repository}/git/commits/${tested.sha}`,
+      pullRefs.add(tested.ref);
+      branches.add(run.head_branch);
+    }
+    const [pullRef] = pullRefs;
+    const [branch] = branches;
+    if (
+      pullRefs.size !== 1 ||
+      branches.size !== 1 ||
+      typeof branch !== 'string' ||
+      branch === ''
+    ) {
+      unproven(
+        `the Integration Test runs of ${head} do not name one pull request branch`,
       );
-      if (testedCommit?.tree?.sha === tree) sameTree.push({ run, tested });
+    }
+    const runs = new Map(headRuns.map(run => [run.id, run]));
+    for (const run of await listRuns(
+      api,
+      `${runsPath}?event=pull_request&branch=${encodeURIComponent(branch)}`,
+      `branch ${branch}`,
+    )) {
+      runs.set(run.id, run);
+    }
+
+    const trees = new Map();
+    const sameTree = [];
+    for (const run of runs.values()) {
+      const tested = testedCommitOf(run, repository);
+      if (!tested) {
+        unproven(
+          `Integration Test run ${run.id} of branch ${branch} does not record which commit it tested`,
+        );
+      }
+      // The same branch name may have served an earlier pull request.
+      if (tested.ref !== pullRef) continue;
+      if (!trees.has(tested.sha)) {
+        const testedCommit = await api(
+          `/repos/${repository}/git/commits/${tested.sha}`,
+        );
+        trees.set(tested.sha, testedCommit?.tree?.sha);
+      }
+      if (trees.get(tested.sha) === tree) sameTree.push({ run, tested });
     }
     if (sameTree.length === 0) {
-      unproven(
-        `no Integration Test run of pull request head ${head} tested tree ${tree}`,
-      );
+      unproven(`no Integration Test run of ${pullRef} tested tree ${tree}`);
     }
     for (const { run } of sameTree) {
       if (
@@ -210,16 +291,16 @@ export async function selectIntegrationEvidence({
       item.run.id > newest.run.id ? item : newest,
     );
 
-    const publishRun = await api(`/repos/${repository}/actions/runs/${runId}`);
-    const publishCreated = Date.parse(publishRun?.created_at ?? '');
+    // Measured at decision time: a re-run of this publish keeps its
+    // created_at, so the run's own timestamps would let old evidence pass.
     const evidenceStarted = Date.parse(run.run_started_at ?? '');
-    if (!Number.isFinite(publishCreated) || !Number.isFinite(evidenceStarted)) {
+    if (!Number.isFinite(now) || !Number.isFinite(evidenceStarted)) {
       unproven('run times are unknown');
     }
-    const age = publishCreated - evidenceStarted;
+    const age = now - evidenceStarted;
     if (age < 0 || age > maxEvidenceAgeMs) {
       unproven(
-        `Integration Test run ${run.id} started ${Math.round(age / 3_600_000)} h before this publish; the limit is 24 h`,
+        `Integration Test run ${run.id} started ${Math.round(age / 3_600_000)} h before this check; the limit is 24 h`,
       );
     }
 
@@ -307,7 +388,7 @@ export async function selectIntegrationEvidence({
 
     return {
       decision: 'reuse',
-      reason: `pull request run ${run.id} attempt 1 tested this exact tree`,
+      reason: `pull request run ${run.id} attempt 1 tested this exact tree, and no run of ${pullRef} on it failed or was rerun`,
       evidence: {
         runId: String(run.id),
         runAttempt: '1',
