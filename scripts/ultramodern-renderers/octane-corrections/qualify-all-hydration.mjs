@@ -256,7 +256,7 @@ export function qualifyAllHydration({
     180,
     'Exact authenticated latest inventory',
   );
-  assert.equal(composedSuites.length, 197, 'Exact composed inventory');
+  assert.equal(composedSuites.length, 198, 'Exact composed inventory');
   assert(
     baselineSuites.every(suite => composedSuites.includes(suite)),
     'No baseline suite may disappear',
@@ -266,7 +266,7 @@ export function qualifyAllHydration({
   );
   assert.equal(
     additional.length,
-    17,
+    18,
     'All additional port suites are included',
   );
   const inventory = { baselineSuites, composedSuites, additional };
