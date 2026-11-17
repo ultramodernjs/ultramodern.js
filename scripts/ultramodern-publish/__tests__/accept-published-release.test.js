@@ -144,12 +144,52 @@ test('only an owner-dispatched main publish whose npm jobs passed in the publica
       undefined,
       JSON.stringify(patch),
     );
+  // `gh run rerun --failed` re-runs a failed publish but carries over the
+  // publish-sidecars that already passed in attempt 1.
+  const carried = jobs.map(job =>
+    job.name === publicationJobs[0] ? { ...job, run_attempt: 1 } : job,
+  );
+  api.assertPublishedRun(run, carried, artifacts, expected);
+  // Its latest execution up to the publication attempt decides; a later
+  // attempt does not vouch for this publication.
+  for (const later of [
+    [
+      { ...jobs[0], run_attempt: 1 },
+      { ...jobs[0], conclusion: 'failure' },
+    ],
+    [{ ...jobs[0], run_attempt: 3 }],
+  ])
+    assert.throws(
+      () =>
+        api.assertPublishedRun(
+          run,
+          [...later, ...jobs.slice(1)],
+          artifacts,
+          expected,
+        ),
+      undefined,
+      JSON.stringify(later),
+    );
+  assert.throws(
+    () =>
+      api.assertPublishedRun(
+        run,
+        [
+          ...carried,
+          { ...jobs[1], run_attempt: 1, conclusion: 'failure' },
+        ].filter(job => job !== carried[1]),
+        artifacts,
+        expected,
+      ),
+    /Missing or duplicate original job: Publish accepted/,
+  );
   for (const name of publicationJobs)
     for (const patch of [
       { conclusion: 'failure' },
       { conclusion: 'skipped' },
       { status: 'in_progress' },
-      { run_attempt: 1 },
+      ...(name === publicationJobs[1] ? [{ run_attempt: 1 }] : []),
+      { run_attempt: 3 },
       { head_sha: 'e'.repeat(40) },
     ]) {
       const changed = jobs.map(job =>

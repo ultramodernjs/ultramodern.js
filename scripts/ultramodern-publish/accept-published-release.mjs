@@ -81,9 +81,23 @@ function originalAttempts(expected) {
   return { runId, producerAttempt, publicationAttempt };
 }
 
+function assertPassedOriginalJob(job, run, runId) {
+  assert.equal(job.status, 'completed', `Original job: ${job.name}`);
+  assert.equal(
+    job.conclusion,
+    'success',
+    `Original job did not pass: ${job.name}`,
+  );
+  assert.equal(String(job.run_id), runId);
+  assert.equal(job.head_sha, run.head_sha);
+}
+
 // The original run may still be finishing start-release-acceptance when this
 // runs, so its own status and conclusion are not read: only the two jobs that
-// wrote to npm, in the attempt that published, and the identity they uploaded.
+// wrote to npm and the identity they uploaded. `jobs` lists every attempt. The
+// publish job ran in the publication attempt. `gh run rerun --failed` does not
+// re-run a publish-sidecars that already passed, so its latest execution up
+// to the publication attempt decides.
 export function assertPublishedRun(run, jobs, artifacts, expected) {
   const { runId, producerAttempt, publicationAttempt } =
     originalAttempts(expected);
@@ -101,19 +115,34 @@ export function assertPublishedRun(run, jobs, artifacts, expected) {
   assert.equal(run.actor?.login, owner);
   assert.equal(run.triggering_actor?.login, owner);
   assert.match(run.head_sha, /^[a-f0-9]{40}$/u);
-  for (const name of publicationJobs) {
-    const found = jobs.filter(job => job.name === name);
-    assert.equal(found.length, 1, `Missing or duplicate original job: ${name}`);
-    assert.equal(found[0].status, 'completed', `Original job: ${name}`);
-    assert.equal(
-      found[0].conclusion,
-      'success',
-      `Original job did not pass: ${name}`,
-    );
-    assert.equal(String(found[0].run_id), runId);
-    assert.equal(String(found[0].run_attempt), publicationAttempt);
-    assert.equal(found[0].head_sha, run.head_sha);
-  }
+  const [sidecarsJob, publishJob] = publicationJobs;
+  const published = jobs.filter(
+    job =>
+      job.name === publishJob && String(job.run_attempt) === publicationAttempt,
+  );
+  assert.equal(
+    published.length,
+    1,
+    `Missing or duplicate original job: ${publishJob}`,
+  );
+  assertPassedOriginalJob(published[0], run, runId);
+  const sidecars = jobs.filter(
+    job =>
+      job.name === sidecarsJob &&
+      Number(job.run_attempt) <= Number(publicationAttempt),
+  );
+  const sidecarsAttempt = Math.max(
+    ...sidecars.map(job => Number(job.run_attempt)),
+  );
+  const latestSidecars = sidecars.filter(
+    job => Number(job.run_attempt) === sidecarsAttempt,
+  );
+  assert.equal(
+    latestSidecars.length,
+    1,
+    `Missing or duplicate original job: ${sidecarsJob}`,
+  );
+  assertPassedOriginalJob(latestSidecars[0], run, runId);
   const names = acceptanceArtifactNames({
     runId,
     producerAttempt,
@@ -341,7 +370,7 @@ function authorize(environment) {
   });
   const run = api(`repos/${repository}/actions/runs/${expected.runId}`);
   const jobs = pages(
-    `repos/${repository}/actions/runs/${expected.runId}/attempts/${expected.publicationAttempt}/jobs?per_page=100`,
+    `repos/${repository}/actions/runs/${expected.runId}/jobs?filter=all&per_page=100`,
   ).flatMap(page => page.jobs);
   const artifacts = pages(
     `repos/${repository}/actions/runs/${expected.runId}/artifacts?per_page=100`,
