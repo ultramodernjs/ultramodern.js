@@ -33,6 +33,17 @@ every PR.
 
 ---
 
+### 2026-11-17 Effect Node deployment trace roots
+
+Owner: `bleedingdev`. Disposition: `inline-patch`.
+`packages/solutions/app-tools/src/plugins/deploy/platforms/node.ts` delegates
+entry selection to the fork-owned deployment tooling instead of starting a
+trace at every emitted Effect source file. The extension retains the actual
+Effect bundle and ordinary server entries; NFT still follows genuine imports
+into API, shared, and application source directories. Non-Effect, server-only,
+and external-SDK entry selection is unchanged. Real ndepe and NFT regressions
+prove both exclusion of unused roots and preservation of imported files.
+
 ### 2026-11-13 integration through ce64c5d625
 
 Owner: `bleedingdev`. The integration is

@@ -1,6 +1,9 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { traceDeployFiles } from '@modern-js/app-tools-extensions/deploy-output/trace-files';
+import {
+  createNodeDeployEntryFilter,
+  traceDeployFiles,
+} from '@modern-js/app-tools-extensions/deploy-output/trace-files';
 import {
   chalk,
   fs as fse,
@@ -51,11 +54,14 @@ export const createNodePreset: CreatePreset = ({
       await fse.writeFile(entryFilePath, code);
     },
     async end() {
-      const filter = (filePath: string) => {
-        return (
-          !filePath.startsWith(staticDirectory) && !filePath.endsWith('.map')
-        );
-      };
+      const filter = await createNodeDeployEntryFilter({
+        appDirectory,
+        outputDirectory,
+        apiDirectory: appContext.apiDirectory || path.join(appDirectory, 'api'),
+        sharedDirectory:
+          appContext.sharedDirectory || path.join(appDirectory, 'shared'),
+        bff: modernConfig.bff,
+      });
       // Because @modern-js/prod-server is an implicit dependency of the entry, so we add it to the include here.
       const entry = isEsmProject
         ? await resolveESMDependency('@modern-js/prod-server')
