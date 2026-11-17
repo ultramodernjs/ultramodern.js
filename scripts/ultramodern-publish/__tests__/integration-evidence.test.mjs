@@ -20,9 +20,13 @@ const mainParent = 'b'.repeat(40);
 const prHead = 'c'.repeat(40);
 const testedSha = 'd'.repeat(40);
 const otherTested = 'e'.repeat(40);
+const earlierHead = '9'.repeat(40);
+const earlierTested = '8'.repeat(40);
 const tree = '1'.repeat(40);
 const otherTree = '2'.repeat(40);
 const workflowId = 368482011;
+const branch = 'ci/feature';
+const runsPath = `/repos/${repository}/actions/workflows/${workflowId}/runs`;
 const integrationNames = [
   ...['Windows', 'Linux'].flatMap(platform => [
     ...[1, 2, 3, 4, 5, 6].map(
@@ -71,6 +75,7 @@ const candidate = (overrides = {}) => ({
   run_attempt: 1,
   run_started_at: '2026-11-17T17:00:00Z',
   head_sha: prHead,
+  head_branch: branch,
   repository: { full_name: repository },
   head_repository: { full_name: repository },
   referenced_workflows: [
@@ -82,6 +87,20 @@ const candidate = (overrides = {}) => ({
   ],
   ...overrides,
 });
+// A run of an earlier head of the same branch, testing `sha` at `ref`.
+const earlier = (id, sha, overrides = {}, ref = 'refs/pull/326/merge') =>
+  candidate({
+    id,
+    head_sha: earlierHead,
+    referenced_workflows: [
+      {
+        path: `${repository}/.github/workflows/effect-compiler-payload.yml@${sha}`,
+        sha,
+        ref,
+      },
+    ],
+    ...overrides,
+  });
 const greenJobs = () => [
   {
     name: 'effect-compiler-payload / Effect compiler (cached identity)',
@@ -103,15 +122,32 @@ const greenJobs = () => [
   })),
 ];
 
+// One page of a run listing, as GitHub pages it.
+const listingPage = (pathname, runs, totalCount = runs.length) => {
+  const query = new URL(`https://api.github.test${pathname}`).searchParams;
+  assert.equal(query.get('per_page'), '100');
+  const page = Number(query.get('page'));
+  return {
+    total_count: totalCount,
+    workflow_runs: runs.slice((page - 1) * 100, page * 100),
+  };
+};
+
 function fixture({
   runs = [candidate()],
+  branchRuns = runs,
+  branchTotal = branchRuns.length,
   jobs = greenJobs(),
-  commitTrees = { [testedSha]: tree, [otherTested]: otherTree },
+  commitTrees = {
+    [testedSha]: tree,
+    [otherTested]: otherTree,
+    [earlierTested]: tree,
+  },
   parents = [mainParent, prHead],
-  publishCreated = '2026-11-17T18:00:00Z',
   cacheCount = 0,
   manifests = {},
   failing = null,
+  reused = { runId: '400', sha: testedSha },
 } = {}) {
   const calls = [];
   const api = async pathname => {
@@ -129,19 +165,19 @@ function fixture({
     ) {
       return { id: workflowId, path: integrationWorkflowPath };
     }
+    if (pathname.startsWith(`${runsPath}?head_sha=${prHead}&`)) {
+      return listingPage(pathname, runs);
+    }
     if (
       pathname.startsWith(
-        `/repos/${repository}/actions/workflows/${workflowId}/runs?head_sha=${prHead}`,
+        `${runsPath}?event=pull_request&branch=${encodeURIComponent(branch)}&`,
       )
     ) {
-      return { total_count: runs.length, workflow_runs: runs };
-    }
-    if (pathname === `/repos/${repository}/actions/runs/500`) {
-      return { created_at: publishCreated };
+      return listingPage(pathname, branchRuns, branchTotal);
     }
     if (
       pathname.startsWith(
-        `/repos/${repository}/actions/runs/400/attempts/1/jobs`,
+        `/repos/${repository}/actions/runs/${reused.runId}/attempts/1/jobs`,
       )
     ) {
       return { total_count: jobs.length, jobs };
@@ -158,8 +194,8 @@ function fixture({
       throw new Error('artifact download returned 500');
     const key = `${runId} ${name}`;
     if (Object.hasOwn(manifests, key)) return manifests[key];
-    if (key === `400 effect-compiler-payload-${testedSha}`) {
-      return manifestFor('400', '1', testedSha);
+    if (key === `${reused.runId} effect-compiler-payload-${reused.sha}`) {
+      return manifestFor(reused.runId, '1', reused.sha);
     }
     if (key === `500 effect-compiler-payload-${publishSha}`) {
       return manifestFor('500', '1', publishSha);
@@ -169,12 +205,13 @@ function fixture({
   return { api, calls, readPayloadManifest };
 }
 
-const select = setup =>
+const select = (setup, now = Date.parse('2026-11-17T18:00:00Z')) =>
   selectIntegrationEvidence({
     api: setup.api,
     context,
     expectedIntegrationJobs: integrationNames.length,
     readPayloadManifest: setup.readPayloadManifest,
+    now,
   });
 
 const assertRun = async (setup, pattern) => {
@@ -201,9 +238,11 @@ test('the checked-out integration matrix has the 19 jobs the validator pins', ()
 test('reuses a first-attempt green same-repo run on the identical tree', async () => {
   const setup = fixture();
   const selection = await select(setup);
+  const reason =
+    'pull request run 400 attempt 1 tested this exact tree, and no run of refs/pull/326/merge on it failed or was rerun';
   assert.deepEqual(selection, {
     decision: 'reuse',
-    reason: 'pull request run 400 attempt 1 tested this exact tree',
+    reason,
     evidence: {
       runId: '400',
       runAttempt: '1',
@@ -217,7 +256,7 @@ test('reuses a first-attempt green same-repo run on the identical tree', async (
     renderOutputs(selection),
     [
       'decision=reuse',
-      'reason=pull request run 400 attempt 1 tested this exact tree',
+      `reason=${reason}`,
       'run_id=400',
       'run_attempt=1',
       `tested_commit=${testedSha}`,
@@ -256,7 +295,10 @@ test('no run on the identical tree runs integration', async () => {
     }),
     /tested tree/u,
   );
-  await assertRun(fixture({ runs: [] }), /tested tree/u);
+  await assertRun(
+    fixture({ runs: [] }),
+    /no Integration Test run tested pull request head/u,
+  );
 });
 
 test('a run that does not record its tested commit runs integration', async () => {
@@ -321,15 +363,135 @@ test('a red, unfinished or rerun sample on the same tree runs integration', asyn
   );
 });
 
-test('evidence older than 24 hours runs integration', async () => {
+test('a red or rerun sample under an earlier head of the pull request runs integration', async () => {
+  // An empty or amended retrigger commit gives the same tree a new head.
   await assertRun(
-    fixture({ publishCreated: '2026-11-18T17:00:01Z' }),
-    /the limit is 24 h/u,
+    fixture({
+      branchRuns: [
+        candidate(),
+        earlier(390, earlierTested, { conclusion: 'failure' }),
+      ],
+    }),
+    /run 390 on this tree is completed\/failure/u,
   );
-  const fresh = await select(
-    fixture({ publishCreated: '2026-11-18T17:00:00Z' }),
+  await assertRun(
+    fixture({
+      branchRuns: [
+        candidate(),
+        earlier(390, earlierTested, { run_attempt: 2 }),
+      ],
+    }),
+    /run 390 on this tree went green on attempt 2/u,
   );
+  await assertRun(
+    fixture({
+      branchRuns: [
+        candidate(),
+        earlier(390, earlierTested, {
+          status: 'completed',
+          conclusion: 'cancelled',
+        }),
+      ],
+    }),
+    /run 390 on this tree is completed\/cancelled/u,
+  );
+  await assertRun(
+    fixture({
+      branchRuns: [
+        candidate(),
+        earlier(390, earlierTested, { referenced_workflows: [] }),
+      ],
+    }),
+    /run 390 of branch ci\/feature does not record which commit it tested/u,
+  );
+});
+
+test('earlier heads on another tree and other pull requests on the branch name are not samples', async () => {
+  const setup = fixture({
+    branchRuns: [
+      candidate(),
+      // An earlier head of this pull request that tested another tree.
+      earlier(390, otherTested, { conclusion: 'failure' }),
+      // An earlier pull request that used the same branch name.
+      earlier(
+        380,
+        earlierTested,
+        { conclusion: 'failure' },
+        'refs/pull/300/merge',
+      ),
+    ],
+  });
+  const selection = await select(setup);
+  assert.equal(selection.decision, 'reuse');
+  assert.equal(selection.evidence.runId, '400');
+  // Another pull request's run needs no tree lookup.
+  assert.ok(
+    !setup.calls.includes(`/repos/${repository}/git/commits/${earlierTested}`),
+  );
+});
+
+test('the newest green run on the tree is reused, whichever head it ran on', async () => {
+  const selection = await select(
+    fixture({
+      branchRuns: [candidate(), earlier(410, earlierTested)],
+      reused: { runId: '410', sha: earlierTested },
+    }),
+  );
+  assert.equal(selection.decision, 'reuse');
+  assert.equal(selection.evidence.runId, '410');
+  assert.equal(selection.evidence.testedCommit, earlierTested);
+});
+
+test('head runs that name two pull requests run integration', async () => {
+  await assertRun(
+    fixture({
+      runs: [candidate(), candidate({ id: 401, head_branch: 'other/branch' })],
+    }),
+    /do not name one pull request branch/u,
+  );
+});
+
+test('the branch listing is read page by page and must be complete', async () => {
+  const otherPullRequest = Array.from({ length: 150 }, (_, index) =>
+    earlier(1000 + index, earlierTested, {}, 'refs/pull/300/merge'),
+  );
+  const setup = fixture({ branchRuns: [candidate(), ...otherPullRequest] });
+  assert.equal((await select(setup)).decision, 'reuse');
+  assert.deepEqual(
+    setup.calls
+      .filter(call => call.includes('branch='))
+      .map(call =>
+        new URL(`https://api.github.test${call}`).searchParams.get('page'),
+      ),
+    ['1', '2'],
+  );
+  await assertRun(
+    fixture({ branchRuns: [candidate()], branchTotal: 2 }),
+    /changed while they were listed/u,
+  );
+  await assertRun(
+    fixture({
+      branchRuns: Array.from({ length: 1000 }, (_, index) =>
+        earlier(1000 + index, earlierTested, {}, 'refs/pull/300/merge'),
+      ),
+      branchTotal: 1001,
+    }),
+    /more than 1000 Integration Test runs to inspect/u,
+  );
+});
+
+test('evidence older than 24 hours at decision time runs integration', async () => {
+  // A re-run of a publish keeps its created_at; the age counts from now.
+  const stale = await select(fixture(), Date.parse('2026-11-18T17:00:01Z'));
+  assert.equal(stale.decision, 'run');
+  assert.match(
+    stale.reason,
+    /started 24 h before this check; the limit is 24 h/u,
+  );
+  const fresh = await select(fixture(), Date.parse('2026-11-18T17:00:00Z'));
   assert.equal(fresh.decision, 'reuse');
+  const future = await select(fixture(), Date.parse('2026-11-17T16:59:59Z'));
+  assert.equal(future.decision, 'run');
 });
 
 test('a skipped, failed, missing or copied integration job runs integration', async () => {
@@ -450,6 +612,7 @@ test('an API or download error runs integration and never throws', async () => {
   for (const failing of [
     '/git/commits/',
     '/actions/workflows/',
+    'branch=',
     '/attempts/1/jobs',
     '/actions/caches',
     'payload',

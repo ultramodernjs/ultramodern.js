@@ -203,9 +203,11 @@ jobs:
   # Integration evidence for the release tree. The pull request that produced
   # this merge commit already ran integration-test.yml; when that run tested a
   # byte-identical tree (so the same workflow, scripts, lockfile and tests),
-  # passed every job on its first attempt within 24 hours, restored no
-  # pull-request-scoped cache, and tested a compiler payload identical to this
-  # run's, the publish reuses it instead of running the suites again. The run
+  # passed every job on its first attempt within 24 hours, with every other
+  # run of that pull request on this tree also green on its first attempt,
+  # left no pull-request-scoped cache entry, and tested a compiler payload
+  # identical to this run's, the publish reuses it instead of running the
+  # suites again. The run
   # is found from the merge commit's own parent, never from an input, so a
   # dispatcher cannot choose it. Anything unproven decides `run`. The decision
   # and the reused run's link go to the job summary and the source
