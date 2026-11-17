@@ -388,8 +388,10 @@ test('feature proofs select Depot on every event, with no GitHub-hosted branch',
     'accept-published'
   ];
   // Every job of this repository runs on Depot, so no event and no repository
-  // variable may resolve either leg to a GitHub-hosted label.
-  for (const job of [source, published]) {
+  // variable may resolve either leg to a GitHub-hosted label. The source leg
+  // pins a literal Depot label, which no event or variable can move.
+  assert.equal(source['runs-on'], 'depot-ubuntu-24.04-16');
+  for (const job of [published]) {
     const expression = job['runs-on'].slice(3, -3);
     const select = (vars = {}, foreign = false, required = true) =>
       runInNewContext(expression, {

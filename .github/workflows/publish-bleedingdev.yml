@@ -199,12 +199,20 @@ jobs:
       github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern')
     uses: ./.github/workflows/effect-compiler-payload.yml
 
-  # The integration suites on the exact release commit: a called workflow
-  # shares this run's github.sha, so no other run's check is polled. A
-  # recovery dispatch runs them on HEAD too, because HEAD's tooling drives the
-  # registry. The compiler matrix supplies the same verified selection on both paths.
-  integration:
-    name: Integration suites on the release commit
+  # Integration evidence for the release tree. The pull request that produced
+  # this merge commit already ran integration-test.yml; when that run tested a
+  # byte-identical tree (so the same workflow, scripts, lockfile and tests),
+  # passed every job on its first attempt within 24 hours, restored no
+  # pull-request-scoped cache, and tested a compiler payload identical to this
+  # run's, the publish reuses it instead of running the suites again. The run
+  # is found from the merge commit's own parent, never from an input, so a
+  # dispatcher cannot choose it. Anything unproven decides `run`. The decision
+  # and the reused run's link go to the job summary and the source
+  # qualification receipt.
+  select-integration-evidence:
+    name: Find a green integration run on this exact tree
+    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+    timeout-minutes: 5
     needs:
       - publish-security
       - effect-compiler-payload
@@ -213,6 +221,49 @@ jobs:
       github.actor == 'BleedingDev' &&
       github.triggering_actor == 'BleedingDev' &&
       github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern')
+    outputs:
+      decision: ${{ steps.select.outputs.decision }}
+      run_id: ${{ steps.select.outputs.run_id }}
+      run_attempt: ${{ steps.select.outputs.run_attempt }}
+      tested_commit: ${{ steps.select.outputs.tested_commit }}
+      tree: ${{ steps.select.outputs.tree }}
+      url: ${{ steps.select.outputs.url }}
+      payload_sha256: ${{ steps.select.outputs.payload_sha256 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Node.js 26.13.1
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26.13.1'
+
+      - name: Select integration evidence for this tree
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ultramodern-publish/integration-evidence.mjs select
+
+  # The integration suites on the exact release commit, unless
+  # select-integration-evidence proved a pull request run on the identical
+  # tree. A called workflow shares this run's github.sha. A recovery dispatch
+  # qualifies HEAD the same way, because HEAD's tooling drives the registry.
+  # The compiler matrix supplies the same verified selection on both paths.
+  integration:
+    name: Integration suites on the release commit
+    needs:
+      - publish-security
+      - effect-compiler-payload
+      - select-integration-evidence
+    if: >-
+      inputs.mode == 'cohort' &&
+      github.actor == 'BleedingDev' &&
+      github.triggering_actor == 'BleedingDev' &&
+      github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern') &&
+      needs.select-integration-evidence.outputs.decision == 'run'
     uses: ./.github/workflows/integration-test.yml
     with:
       compiler_payload_provided: true
@@ -397,9 +448,14 @@ jobs:
             --project @modern-js/plugin-bff \
             --project @modern-js/bff-core
 
-  # The only job that can issue a source qualification receipt. Its two needs
-  # run concurrently on this dispatch's exact commit. A failed, cancelled or
-  # skipped check cannot authorize a recovery or reach either publish job.
+  # The only job that can issue a source qualification receipt, on this
+  # dispatch's exact commit. Integration authorizes it in exactly two ways:
+  # it ran here and passed, or it was skipped because
+  # select-integration-evidence succeeded and decided to reuse a pull request
+  # run on the identical tree. A failed, cancelled or otherwise skipped check
+  # cannot authorize a recovery or reach either publish job. The integration
+  # clause is byte-identical in publish-sidecars and publish, so the dry run's
+  # evaluation of this job proves the expression the OIDC jobs use.
   qualify-source:
     name: Confirm qualified source and integration
     runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
@@ -407,19 +463,25 @@ jobs:
     needs:
       - integration
       - qualify-source-compute
+      - select-integration-evidence
     if: >-
+      always() &&
+      cancelled() == false &&
       inputs.mode == 'cohort' &&
       github.actor == 'BleedingDev' &&
       github.triggering_actor == 'BleedingDev' &&
       github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern') &&
-      needs.integration.result == 'success' &&
+      needs.select-integration-evidence.result == 'success' && ((needs.integration.result == 'success' && needs.select-integration-evidence.outputs.decision == 'run') || (needs.integration.result == 'skipped' && needs.select-integration-evidence.outputs.decision == 'reuse')) &&
       needs.qualify-source-compute.result == 'success'
     steps:
+      # This job runs one dependency-free script and reads the commit's tree
+      # object, so it checks out only that directory, not the whole repository.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
+          sparse-checkout: scripts/ultramodern-publish
 
       - name: Setup Node.js 26.13.1
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -427,18 +489,36 @@ jobs:
           node-version: '26.13.1'
 
       # The proof a later recovery dispatch needs: the exact commit this job
-      # qualified, bound to this run and attempt. Written only after both
-      # prerequisite jobs pass, so a failed check uploads nothing and its bundle
-      # stays unrecoverable.
+      # qualified, bound to this run and attempt, and the integration evidence
+      # that qualified it. Written only after every prerequisite passes, so a
+      # failed check uploads nothing and its bundle stays unrecoverable. A
+      # reused run's tree is checked again here against this checkout's own
+      # tree before it is recorded.
       - name: Record the qualified source commit
         if: inputs.recovery_run_id == ''
+        env:
+          INTEGRATION_DECISION: ${{ needs.select-integration-evidence.outputs.decision }}
+          INTEGRATION_RUN_ID: ${{ needs.select-integration-evidence.outputs.run_id }}
+          INTEGRATION_RUN_ATTEMPT: ${{ needs.select-integration-evidence.outputs.run_attempt }}
+          INTEGRATION_TESTED_COMMIT: ${{ needs.select-integration-evidence.outputs.tested_commit }}
+          INTEGRATION_TREE: ${{ needs.select-integration-evidence.outputs.tree }}
+          INTEGRATION_URL: ${{ needs.select-integration-evidence.outputs.url }}
+          INTEGRATION_PAYLOAD_SHA256: ${{ needs.select-integration-evidence.outputs.payload_sha256 }}
         run: |
           node scripts/ultramodern-publish/source-qualification.mjs create \
             --out "$BLEEDINGDEV_SOURCE_QUALIFICATION" \
             --repository "$GITHUB_REPOSITORY" \
             --commit "$GITHUB_SHA" \
+            --source-tree "$(git rev-parse "$GITHUB_SHA^{tree}")" \
             --run-id "$GITHUB_RUN_ID" \
-            --run-attempt "$GITHUB_RUN_ATTEMPT"
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --integration-decision "$INTEGRATION_DECISION" \
+            --integration-run-id "$INTEGRATION_RUN_ID" \
+            --integration-run-attempt "$INTEGRATION_RUN_ATTEMPT" \
+            --integration-tested-commit "$INTEGRATION_TESTED_COMMIT" \
+            --integration-tree "$INTEGRATION_TREE" \
+            --integration-url "$INTEGRATION_URL" \
+            --integration-payload-sha256 "$INTEGRATION_PAYLOAD_SHA256"
 
       - name: Upload the source qualification receipt
         if: inputs.recovery_run_id == ''
@@ -1040,12 +1120,13 @@ jobs:
       inputs.dry_run == false &&
       needs.publish-security.result == 'success' &&
       (
-        (inputs.mode == 'cohort' && needs.integration.result == 'success' && needs.qualify-source-compute.result == 'success' && needs.qualify-source.result == 'success' && needs.reconcile-sidecars.result == 'success' && needs.accept-release.result == 'success' && needs.rehearse-tractor.result == 'success') ||
+        (inputs.mode == 'cohort' && needs.select-integration-evidence.result == 'success' && ((needs.integration.result == 'success' && needs.select-integration-evidence.outputs.decision == 'run') || (needs.integration.result == 'skipped' && needs.select-integration-evidence.outputs.decision == 'reuse')) && needs.qualify-source-compute.result == 'success' && needs.qualify-source.result == 'success' && needs.reconcile-sidecars.result == 'success' && needs.accept-release.result == 'success' && needs.rehearse-tractor.result == 'success') ||
         (inputs.mode == 'sidecars' && needs.prepare-sidecars.result == 'success' && needs.qualify-sidecars.result == 'success')
       )
     needs:
       - prepare-sidecars
       - qualify-sidecars
+      - select-integration-evidence
       - integration
       - qualify-source-compute
       - publish-security
@@ -1184,7 +1265,7 @@ jobs:
       github.ref == format('refs/heads/{0}', vars.BLEEDINGDEV_PUBLISH_BRANCH || 'main-ultramodern') &&
       inputs.dry_run == false &&
       needs.publish-security.result == 'success' &&
-      needs.integration.result == 'success' &&
+      needs.select-integration-evidence.result == 'success' && ((needs.integration.result == 'success' && needs.select-integration-evidence.outputs.decision == 'run') || (needs.integration.result == 'skipped' && needs.select-integration-evidence.outputs.decision == 'reuse')) &&
       needs.qualify-source-compute.result == 'success' &&
       needs.qualify-source.result == 'success' &&
       needs.reconcile-sidecars.result == 'success' &&
@@ -1192,6 +1273,7 @@ jobs:
       needs.rehearse-tractor.result == 'success' &&
       needs.publish-sidecars.result == 'success'
     needs:
+      - select-integration-evidence
       - integration
       - qualify-source-compute
       - publish-security

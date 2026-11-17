@@ -25,19 +25,27 @@
 // independent of `recovery_run_attempt`. That decoupling is safe because the
 // attempt only selects the artifact; `expectedCommit` below is what authorizes
 // the reuse.
+//
+// Schema version 2 also records which integration evidence qualified the
+// commit: the suites this run executed (`in-run`), or the pull request
+// Integration Test run that select-integration-evidence proved tested this
+// exact tree (`reused`). The release record links to the publication run, so
+// this receipt and that run's summary keep the record truthful either way.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const sourceQualificationSchema =
   'bleedingdev.ultramodern.source-qualification';
-export const sourceQualificationSchemaVersion = 1;
+export const sourceQualificationSchemaVersion = 2;
 export const sourceQualificationArtifactPrefix =
   'bleedingdev-source-qualification';
+export const integrationWorkflowPath = '.github/workflows/integration-test.yml';
 
 const repositoryPattern = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/u;
 const commitPattern = /^[0-9a-f]{40}$/u;
 const runIdPattern = /^[1-9][0-9]*$/u;
+const digestPattern = /^[0-9a-f]{64}$/u;
 
 function assertPattern(value, pattern, label) {
   if (typeof value !== 'string' || !pattern.test(value)) {
@@ -50,6 +58,116 @@ function runIdentityOf({ repository, runAttempt, runId }) {
   return `github:${repository}:run:${runId}:attempt:${runAttempt}`;
 }
 
+function runUrlOf({ repository, runId }) {
+  return `https://github.com/${repository}/actions/runs/${runId}`;
+}
+
+const sameKeys = (value, keys) =>
+  value !== null &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  JSON.stringify(Object.keys(value).sort()) ===
+    JSON.stringify([...keys].sort());
+
+const inRunKeys = ['mode', 'runAttempt', 'runId'];
+const reusedKeys = [
+  'mode',
+  'payloadSha256',
+  'repository',
+  'runAttempt',
+  'runId',
+  'testedCommit',
+  'tree',
+  'url',
+  'workflow',
+];
+
+// Either this run's own integration job, or a reused pull request run whose
+// tested tree equals the tree of the qualified commit.
+export function assertIntegrationEvidence(
+  integration,
+  { repository, runAttempt, runId, sourceTree },
+) {
+  const invalid = () => {
+    throw new Error(
+      'Source qualification receipt does not record valid integration evidence',
+    );
+  };
+  if (sameKeys(integration, inRunKeys) && integration.mode === 'in-run') {
+    if (integration.runId !== runId || integration.runAttempt !== runAttempt) {
+      invalid();
+    }
+    return integration;
+  }
+  if (!sameKeys(integration, reusedKeys) || integration.mode !== 'reused') {
+    invalid();
+  }
+  try {
+    assertPattern(integration.runId, runIdPattern, 'Run id');
+    assertPattern(integration.runAttempt, runIdPattern, 'Run attempt');
+    assertPattern(integration.testedCommit, commitPattern, 'Source commit');
+    assertPattern(integration.tree, commitPattern, 'Source tree');
+    assertPattern(integration.payloadSha256, digestPattern, 'Digest');
+  } catch {
+    invalid();
+  }
+  if (
+    integration.repository !== repository ||
+    integration.workflow !== integrationWorkflowPath ||
+    integration.runId === runId ||
+    integration.url !== runUrlOf({ repository, runId: integration.runId }) ||
+    (sourceTree !== undefined && integration.tree !== sourceTree)
+  ) {
+    invalid();
+  }
+  return integration;
+}
+
+function integrationEvidenceOf({
+  decision,
+  repository,
+  runAttempt,
+  runId,
+  sourceTree,
+  reused,
+}) {
+  if (decision === 'run') {
+    return assertIntegrationEvidence(
+      { mode: 'in-run', runId, runAttempt },
+      { repository, runAttempt, runId },
+    );
+  }
+  if (decision !== 'reuse') {
+    throw new Error(`Unknown integration decision ${String(decision)}`);
+  }
+  return assertIntegrationEvidence(
+    {
+      mode: 'reused',
+      repository,
+      workflow: integrationWorkflowPath,
+      runId: reused?.runId,
+      runAttempt: reused?.runAttempt,
+      testedCommit: reused?.testedCommit,
+      tree: reused?.tree,
+      url: reused?.url,
+      payloadSha256: reused?.payloadSha256,
+    },
+    {
+      repository,
+      runAttempt,
+      runId,
+      sourceTree: assertPattern(sourceTree, commitPattern, 'Source tree'),
+    },
+  );
+}
+
+export function integrationEvidenceSummary(integration) {
+  if (integration.mode === 'in-run') {
+    return `Integration ran in this publish (run ${integration.runId} attempt ${integration.runAttempt}).`;
+  }
+  return `Integration reused from [run ${integration.runId}](${integration.url}) attempt ${integration.runAttempt}, tested commit \`${integration.testedCommit}\`, tree \`${integration.tree}\` = this commit's tree, compiler payload sha256 \`${integration.payloadSha256}\`.`;
+}
+
 export function sourceQualificationArtifactName({ runAttempt, runId }) {
   return `${sourceQualificationArtifactPrefix}-run-${assertPattern(
     runId,
@@ -60,10 +178,13 @@ export function sourceQualificationArtifactName({ runAttempt, runId }) {
 
 export function createSourceQualification({
   commit,
+  integrationDecision,
   outPath,
   repository,
+  reusedIntegration,
   runAttempt,
   runId,
+  sourceTree,
 }) {
   const receipt = {
     schema: sourceQualificationSchema,
@@ -75,6 +196,14 @@ export function createSourceQualification({
     runId: assertPattern(runId, runIdPattern, 'Run id'),
     runAttempt: assertPattern(runAttempt, runIdPattern, 'Run attempt'),
     runIdentity: runIdentityOf({ repository, runAttempt, runId }),
+    integration: integrationEvidenceOf({
+      decision: integrationDecision,
+      repository,
+      runAttempt,
+      runId,
+      sourceTree,
+      reused: reusedIntegration,
+    }),
   };
   if (typeof outPath !== 'string' || outPath.length === 0) {
     throw new Error('Receipt output path is required');
@@ -99,6 +228,7 @@ export function verifySourceQualification({
   const isPlainObject = value =>
     value !== null && typeof value === 'object' && !Array.isArray(value);
   const expectedKeys = [
+    'integration',
     'runAttempt',
     'runId',
     'runIdentity',
@@ -147,6 +277,7 @@ export function verifySourceQualification({
     );
   }
   assertPattern(receipt.source.commit, commitPattern, 'Source commit');
+  assertIntegrationEvidence(receipt.integration, expected);
   if (expectedCommit !== null) {
     if (
       assertPattern(expectedCommit, commitPattern, 'Source commit') !==
@@ -175,13 +306,34 @@ function optional(values, flag) {
 export function runSourceQualificationCli(argv) {
   const [command, ...values] = argv;
   if (command === 'create') {
-    createSourceQualification({
+    const integrationDecision = required(values, '--integration-decision');
+    const reused =
+      integrationDecision === 'reuse'
+        ? {
+            runId: required(values, '--integration-run-id'),
+            runAttempt: required(values, '--integration-run-attempt'),
+            testedCommit: required(values, '--integration-tested-commit'),
+            tree: required(values, '--integration-tree'),
+            url: required(values, '--integration-url'),
+            payloadSha256: required(values, '--integration-payload-sha256'),
+          }
+        : undefined;
+    const receipt = createSourceQualification({
       commit: required(values, '--commit'),
+      integrationDecision,
       outPath: required(values, '--out'),
       repository: required(values, '--repository'),
+      reusedIntegration: reused,
       runAttempt: required(values, '--run-attempt'),
       runId: required(values, '--run-id'),
+      sourceTree: optional(values, '--source-tree') ?? undefined,
     });
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      fs.appendFileSync(
+        process.env.GITHUB_STEP_SUMMARY,
+        `## Source qualification\n\n${integrationEvidenceSummary(receipt.integration)}\n`,
+      );
+    }
     return;
   }
   if (command === 'verify') {
