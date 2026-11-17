@@ -11,7 +11,7 @@ import {
   runWorkerFixtureProof,
 } from '../../tests/ultramodern-renderers/octane-federation-workers/proof.mjs';
 import { confinedPath } from '../lib/file-evidence.mjs';
-import { leasePorts } from '../ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
+import { claimPorts } from '../ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 import { nativeStartArchiveRequests } from './native-federation-inputs.mjs';
 import {
   installedBin,
@@ -597,11 +597,42 @@ async function provePackedWorkers(context, input, signal) {
   const { host, remotes, services, remoteServices } =
     await generatePackedWorkerWorkspace({ sdk, workspaceRoot, options });
   // Each origin string is compiled into its Worker bundle, so these ports must
-  // exist before the build. The leases stay bound until the statement before
-  // the build that bakes them in; this narrows the bind window rather than
-  // removing it, because a built origin cannot be chosen by the child.
-  const portLease = await leasePorts([host, ...remotes].length);
-  const origins = portLease.ports.map(port => `http://127.0.0.1:${port}`);
+  // exist before the build. They stay bound until the statement before that
+  // build and claimed until this proof ends: the asset servers and bridges
+  // that bind them later can never find them taken by a sibling proof.
+  const portClaim = await claimPorts([host, ...remotes].length);
+  try {
+    await provePackedWorkersOnClaimedPorts(context, input, signal, {
+      portClaim,
+      host,
+      remotes,
+      services,
+      remoteServices,
+      workspaceRoot,
+      target,
+      actualBinding,
+    });
+  } finally {
+    await portClaim.free();
+  }
+}
+
+async function provePackedWorkersOnClaimedPorts(
+  context,
+  input,
+  signal,
+  {
+    portClaim,
+    host,
+    remotes,
+    services,
+    remoteServices,
+    workspaceRoot,
+    target,
+    actualBinding,
+  },
+) {
+  const origins = portClaim.ports.map(port => `http://127.0.0.1:${port}`);
   const dependencies = packedWorkerDependencies(context);
   const sharedPackageName = '@authored-worker/shared-counter';
   const fixture = createOctaneWorkerFederationFixtures({
@@ -670,7 +701,7 @@ async function provePackedWorkers(context, input, signal) {
       origin: origins[index],
     });
   }
-  await portLease.release();
+  await portClaim.release();
   const compiled = await buildCompiledWorkerApplications({
     applications,
     context,
