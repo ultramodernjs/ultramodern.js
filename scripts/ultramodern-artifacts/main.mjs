@@ -47,7 +47,7 @@ function payloadsAt(directory) {
     }),
   );
 }
-export function writerApi({ protocol, token }) {
+export function writerApi({ protocol, token, fetchArtifact = fetch }) {
   artifactPolicy(protocol);
   const { repository, repositoryId } = protocol;
   assert(token, 'Release job token required');
@@ -62,7 +62,7 @@ export function writerApi({ protocol, token }) {
         route === `/repositories/${repositoryId}`,
     );
     const upload = method === 'UPLOAD';
-    const response = await fetch(
+    const response = await fetchArtifact(
       `https://${upload ? 'uploads' : 'api'}.github.com${route}`,
       {
         method: upload ? 'POST' : method,
@@ -85,7 +85,26 @@ export function writerApi({ protocol, token }) {
       },
     );
     if (optional && response.status === 404) return null;
-    assert(response.ok, `GitHub ${method} ${route}: HTTP ${response.status}`);
+    if (!response.ok) {
+      const failure = await response.json().catch(() => undefined);
+      const message =
+        typeof failure?.message === 'string'
+          ? failure.message.replaceAll(token, '[REDACTED]').slice(0, 600)
+          : 'No JSON error message';
+      const diagnostics = Object.fromEntries(
+        [
+          'x-github-request-id',
+          'x-ratelimit-remaining',
+          'x-ratelimit-reset',
+          'retry-after',
+        ]
+          .map(name => [name, response.headers.get(name)])
+          .filter(([, value]) => value !== null),
+      );
+      throw new Error(
+        `GitHub ${method} ${route}: HTTP ${response.status}; ${JSON.stringify({ message, ...diagnostics })}`,
+      );
+    }
     return bytes ? Buffer.from(await response.arrayBuffer()) : response.json();
   };
 }
