@@ -318,81 +318,201 @@ test('the original published identity cannot be relabeled as the acceptance invo
     );
 });
 
-test('registry verification keeps the original signed invocation and refuses missing packages', async () => {
+const verifierEnvironment = {
+  GITHUB_REPOSITORY: repository,
+  GITHUB_REPOSITORY_ID: String(repositoryId),
+  GITHUB_REF: 'refs/heads/main-ultramodern',
+};
+
+test('registry verification uses the publish job predicate, never this run as signer', async () => {
   const { api, release } = await fixture();
-  const environment = {
-    GITHUB_REPOSITORY: repository,
-    GITHUB_REPOSITORY_ID: String(repositoryId),
-    GITHUB_REF: 'refs/heads/main-ultramodern',
+  const expectation = api.publishedRegistryExpectation(release, {
+    ...verifierEnvironment,
     GITHUB_RUN_ID: '999',
-    GITHUB_RUN_ATTEMPT: '2',
-  };
-  const expectation = api.originalRegistryExpectation(release, environment, {
-    runId,
-    attempt: publicationAttempt,
+    GITHUB_RUN_ATTEMPT: '1',
   });
-  assert.deepEqual(expectation.invocation, {
-    repository,
-    runId,
-    runAttempt: publicationAttempt,
-    exactAttempt: true,
-  });
+  // The acceptance run is never named as the signer of the cohort.
+  assert.equal(expectation.invocation, undefined);
   assert.equal(expectation.source.commit, sourceCommit);
-  assert.equal(environment.GITHUB_RUN_ID, '999');
-  // A recovery publish signs its own later HEAD, not the manifest commit.
-  const recoveryHead = '5'.repeat(40);
   assert.equal(
-    api.originalRegistryExpectation(release, environment, {
-      runId,
-      attempt: publicationAttempt,
-      sourceCommit: recoveryHead,
-    }).source.commit,
-    recoveryHead,
+    expectation.workflow.path,
+    '.github/workflows/publish-bleedingdev.yml',
   );
-  assert.throws(() =>
-    api.originalRegistryExpectation(release, environment, {
-      runId,
-      attempt: publicationAttempt,
-      sourceCommit: 'main',
-    }),
-  );
-  const packages = [
-    { targetName: '@bleedingdev/a' },
-    { targetName: '@bleedingdev/b' },
-  ];
-  const states = new Map(
-    packages.map(item => [item.targetName, { exists: true }]),
-  );
-  api.assertCompletePublishedRegistry(states, { packages });
-  states.set(packages[1].targetName, { exists: false });
-  assert.throws(
-    () => api.assertCompletePublishedRegistry(states, { packages }),
-    /cannot publish missing/,
-  );
-  states.delete(packages[1].targetName);
-  assert.throws(() =>
-    api.assertCompletePublishedRegistry(states, { packages }),
-  );
-  const existing = new Map(
-    packages.map(item => [item.targetName, { exists: true }]),
-  );
-  await assert.rejects(
-    api.verifyOriginalPublicationProvenance({ packages }, existing, {
-      ...expectation,
-      source: { repository },
-    }),
-    /Original signed source commit/,
-  );
-  await assert.rejects(
-    api.verifyOriginalPublicationProvenance({ packages }, existing, {
-      ...expectation,
-      invocation: { ...expectation.invocation, exactAttempt: false },
-    }),
-    /Original signed attempt must be exact/,
-  );
+  assert.equal(expectation.workflow.ref, 'refs/heads/main-ultramodern');
+  for (const patch of [
+    { GITHUB_REF: 'refs/heads/other' },
+    { GITHUB_REPOSITORY_ID: '1' },
+    { GITHUB_REPOSITORY: 'fork/ultramodern.js' },
+  ])
+    assert.throws(
+      () =>
+        api.publishedRegistryExpectation(release, {
+          ...verifierEnvironment,
+          ...patch,
+        }),
+      undefined,
+      JSON.stringify(patch),
+    );
 });
 
-test('the cohort verifier waits for a package npm does not show yet, then authenticates its exact invocation', async () => {
+async function verifyPublishedMember(change = statement => statement) {
+  const { api, release } = await fixture();
+  const { npmPackagePurl, slsaProvenanceV1, githubActionsBuildType } =
+    await import('../lib/prepare-bleedingdev-packages/provenance.mjs');
+  const { verifyRegistryPackageDist, verifyRegistryProvenance } = await import(
+    '../lib/prepare-bleedingdev-packages/registry.mjs'
+  );
+  const item = {
+    targetName: '@bleedingdev/a',
+    version: release.release.version,
+    integrity: `sha512-${Buffer.alloc(64, 1).toString('base64')}`,
+  };
+  const statement = change({
+    _type: 'https://in-toto.io/Statement/v1',
+    predicateType: slsaProvenanceV1,
+    subject: [
+      {
+        name: npmPackagePurl(item.targetName, item.version),
+        digest: { sha512: Buffer.alloc(64, 1).toString('hex') },
+      },
+    ],
+    predicate: {
+      buildDefinition: {
+        buildType: githubActionsBuildType,
+        externalParameters: {
+          workflow: {
+            repository: `https://github.com/${repository}`,
+            path: '.github/workflows/publish-bleedingdev.yml',
+            ref: 'refs/heads/main-ultramodern',
+          },
+        },
+        resolvedDependencies: [
+          {
+            uri: `git+https://github.com/${repository}@refs/heads/main-ultramodern`,
+            digest: { gitCommit: sourceCommit },
+          },
+        ],
+      },
+      runDetails: {
+        metadata: {
+          invocationId: `https://github.com/${repository}/actions/runs/${runId}/attempts/${publicationAttempt}`,
+        },
+      },
+    },
+  });
+  const fetchImpl = async url => {
+    assert(
+      decodeURIComponent(url).endsWith(`${item.targetName}@${item.version}`),
+      'The real verifier must request the pinned npm attestation endpoint',
+    );
+    return {
+      ok: true,
+      json: async () => ({
+        attestations: [
+          {
+            predicateType: slsaProvenanceV1,
+            bundle: {
+              dsseEnvelope: {
+                payloadType: 'application/vnd.in-toto+json',
+                payload: Buffer.from(JSON.stringify(statement)).toString(
+                  'base64',
+                ),
+              },
+            },
+          },
+        ],
+      }),
+    };
+  };
+  // Unit seams substitute only the byte download and the cryptographic
+  // signature check. The expectation the publish job derives, the subject,
+  // the signed workflow and source go through the production code.
+  return verifyRegistryPackageDist(
+    item,
+    { attestations: { provenance: { predicateType: slsaProvenanceV1 } } },
+    api.publishedRegistryExpectation(release, verifierEnvironment),
+    {
+      deadline: { remainingMs: () => 1 },
+      assertRegistryDistMatches: () => {},
+      verifyRegistryTarball: async () => {},
+      verifyRegistryProvenance: (member, dist, expected) =>
+        verifyRegistryProvenance(
+          member,
+          dist,
+          expected,
+          fetchImpl,
+          async (_bundle, authenticated) => {
+            if (statement.rejectSignature) {
+              throw new Error('Invalid attestation signature');
+            }
+            return {
+              certificateIdentity: authenticated.certificateIdentity,
+              issuer: authenticated.issuer,
+              verifierVersion: 'unit-fixture',
+            };
+          },
+        ),
+    },
+  );
+}
+
+const signedBy =
+  (attempt, run = runId) =>
+  statement => {
+    statement.predicate.runDetails.metadata.invocationId = `https://github.com/${repository}/actions/runs/${run}/attempts/${attempt}`;
+    return statement;
+  };
+
+test('members a failed-job rerun or a recovery run reused from npm are accepted', async () => {
+  await verifyPublishedMember();
+  // `gh run rerun --failed`: attempt 2 reused what attempt 1 uploaded.
+  await verifyPublishedMember(signedBy('1'));
+  // A recovery dispatch reused what the original producer run uploaded, and
+  // signed its own later HEAD for the rest.
+  await verifyPublishedMember(signedBy('1', '39078000000'));
+  await verifyPublishedMember(statement => {
+    statement.predicate.buildDefinition.resolvedDependencies[0].digest.gitCommit =
+      '5'.repeat(40);
+    return statement;
+  });
+});
+
+test('members not signed by the trusted publish workflow over the exact bytes fail', async () => {
+  for (const [change, error] of [
+    [
+      statement => {
+        statement.predicate.buildDefinition.externalParameters.workflow.path =
+          '.github/workflows/accept-bleedingdev-release.yml';
+        return statement;
+      },
+      /workflow path.*does not match trusted path/,
+    ],
+    [
+      statement => {
+        statement.predicate.buildDefinition.externalParameters.workflow.ref =
+          'refs/heads/feature';
+        return statement;
+      },
+      /workflow ref/,
+    ],
+    [
+      statement => {
+        statement.subject[0].digest.sha512 = Buffer.alloc(64, 2).toString(
+          'hex',
+        );
+        return statement;
+      },
+      /does not match the accepted tarball integrity/,
+    ],
+    [
+      statement => Object.assign(statement, { rejectSignature: true }),
+      /Invalid attestation signature/,
+    ],
+  ])
+    await assert.rejects(verifyPublishedMember(change), error);
+});
+
+test('the cohort verifier waits for the origin, then for the install view pnpm reads', async () => {
   const { api, release } = await fixture();
   const { validateRegistryCohort, verifyRegistryPackage } = await import(
     '../lib/prepare-bleedingdev-packages/registry.mjs'
@@ -402,14 +522,13 @@ test('the cohort verifier waits for a package npm does not show yet, then authen
     version: release.release.version,
   }));
   const cohort = { ...release, packages };
-  const expectation = api.originalRegistryExpectation(
+  const expectation = api.publishedRegistryExpectation(
     release,
-    { GITHUB_REPOSITORY: repository },
-    { runId, attempt: publicationAttempt },
+    verifierEnvironment,
   );
   const reads = new Map();
   const waits = [];
-  let authenticated;
+  const order = [];
   const result = await api.verifyPublishedCohort(cohort, expectation, {
     validate: (manifest, options) =>
       validateRegistryCohort(manifest, options, {
@@ -432,28 +551,25 @@ test('the cohort verifier waits for a package npm does not show yet, then authen
               polledExpectation,
             ) => {
               assert.equal(polledExpectation, expectation);
+              order.push(`origin ${dist.name}`);
               return dist;
             },
             wait: async delay => waits.push(delay),
           }),
       }),
-    authenticate: (manifest, states, exact) => {
-      authenticated = { manifest, states, exact };
-      return 'authenticated';
+    awaitInstallView: async (manifest, options) => {
+      assert.equal(manifest, cohort);
+      assert.equal(options.tag, 'latest');
+      order.push('install view');
     },
   });
-  assert.equal(result, 'authenticated');
   assert.equal(reads.get('@bleedingdev/a'), 1);
   assert.equal(reads.get('@bleedingdev/b'), 3);
   assert.equal(waits.length, 2);
-  assert.equal(authenticated.manifest, cohort);
-  assert.equal(authenticated.exact, expectation);
+  assert.deepEqual(order.at(-1), 'install view');
   assert.deepEqual(
-    [...authenticated.states],
-    packages.map(item => [
-      item.targetName,
-      { exists: true, dist: { name: item.targetName } },
-    ]),
+    [...result],
+    packages.map(item => [item.targetName, { name: item.targetName }]),
   );
   // A package npm never shows fails the run instead of being skipped.
   await assert.rejects(
@@ -470,194 +586,119 @@ test('the cohort verifier waits for a package npm does not show yet, then authen
               wait: async () => {},
             }),
         }),
-      authenticate: () => assert.fail('nothing missing may be authenticated'),
+      awaitInstallView: () => assert.fail('an unverified cohort is not read'),
     }),
     /@bleedingdev\/b@3\.9\.3-ultramodern\.8 is not present in the registry/u,
   );
 });
 
-async function verifyAttestedPublication({
-  change = statement => statement,
-  originalAttempt = publicationAttempt,
-  rejectSignature = false,
-} = {}) {
-  const { api, release, expected } = await fixture();
-  const { npmPackagePurl, slsaProvenanceV1, githubActionsBuildType } =
-    await import('../lib/prepare-bleedingdev-packages/provenance.mjs');
-  const packages = ['a', 'b'].map(name => ({
-    targetName: `@bleedingdev/${name}`,
-    version: release.release.version,
-    integrity: `sha512-${Buffer.alloc(64, 1).toString('base64')}`,
-  }));
-  const states = new Map(
-    packages.map(item => [
-      item.targetName,
-      {
-        exists: true,
-        dist: {
-          attestations: { provenance: { predicateType: slsaProvenanceV1 } },
-        },
-      },
-    ]),
+test('the install view is read like pnpm reads it, and every member must show the version at latest', async () => {
+  const { readRegistryInstallView } = await import(
+    '../lib/prepare-bleedingdev-packages/registry-read.mjs'
   );
-  const expectation = api.originalRegistryExpectation(
-    release,
-    {
-      GITHUB_REPOSITORY: repository,
-      GITHUB_RUN_ID: '999',
-      GITHUB_RUN_ATTEMPT: '2',
-    },
-    { runId: expected.runId, attempt: originalAttempt },
+  const { awaitRegistryInstallView } = await import(
+    '../lib/prepare-bleedingdev-packages/registry.mjs'
   );
-  const visited = [];
-  const result = await api.verifyOriginalPublicationProvenance(
-    { ...release, packages },
-    states,
-    expectation,
-    {
-      fetchImpl: async url => {
-        const item = packages.find(candidate =>
-          decodeURIComponent(url).endsWith(
-            `${candidate.targetName}@${candidate.version}`,
-          ),
-        );
-        assert(
-          item,
-          'The real verifier must request the pinned npm attestation endpoint',
-        );
-        visited.push(item.targetName);
-        let statement = {
-          _type: 'https://in-toto.io/Statement/v1',
-          predicateType: slsaProvenanceV1,
-          subject: [
-            {
-              name: npmPackagePurl(item.targetName, item.version),
-              digest: { sha512: Buffer.alloc(64, 1).toString('hex') },
-            },
-          ],
-          predicate: {
-            buildDefinition: {
-              buildType: githubActionsBuildType,
-              externalParameters: {
-                workflow: {
-                  repository: `https://github.com/${repository}`,
-                  path: '.github/workflows/publish-bleedingdev.yml',
-                  ref: 'refs/heads/main-ultramodern',
-                },
-              },
-              resolvedDependencies: [
-                {
-                  uri: `git+https://github.com/${repository}@refs/heads/main-ultramodern`,
-                  digest: { gitCommit: sourceCommit },
-                },
-              ],
-            },
-            runDetails: {
-              metadata: {
-                invocationId: `https://github.com/${repository}/actions/runs/${runId}/attempts/${originalAttempt}`,
-              },
-            },
-          },
-        };
-        // Only the second package drifts: checking the first package cannot
-        // accidentally qualify the complete cohort.
-        if (item.targetName === '@bleedingdev/b') statement = change(statement);
-        return {
-          ok: true,
-          json: async () => ({
-            attestations: [
-              {
-                predicateType: slsaProvenanceV1,
-                bundle: {
-                  dsseEnvelope: {
-                    payloadType: 'application/vnd.in-toto+json',
-                    payload: Buffer.from(JSON.stringify(statement)).toString(
-                      'base64',
-                    ),
-                  },
-                },
-              },
-            ],
-          }),
-        };
-      },
-      // Unit seam substitutes only cryptographic verification. Subject, signed
-      // source, workflow and invocation use the production attestation parser.
-      bundleVerifier: async (_bundle, authenticated) => {
-        if (rejectSignature) throw new Error('Invalid attestation signature');
-        return {
-          certificateIdentity: authenticated.certificateIdentity,
-          issuer: authenticated.issuer,
-          verifierVersion: 'unit-fixture',
-        };
-      },
-    },
-  );
+  const version = '3.9.3-ultramodern.8';
+  const requests = [];
+  const answer = body => async (url, init) => {
+    requests.push({ url, init });
+    return { ok: true, json: async () => body };
+  };
   assert.deepEqual(
-    visited.sort(),
-    packages.map(item => item.targetName),
+    await readRegistryInstallView(
+      '@bleedingdev/a',
+      'latest',
+      version,
+      answer({ 'dist-tags': { latest: version }, versions: { [version]: {} } }),
+    ),
+    { settled: true, value: version },
   );
-  return result;
-}
+  // The plain packument URL with pnpm's accept header: the CDN copy.
+  assert.equal(
+    requests[0].url,
+    'https://registry.npmjs.org/%40bleedingdev%2Fa',
+  );
+  assert.match(
+    requests[0].init.headers.accept,
+    /^application\/vnd\.npm\.install-v1\+json/u,
+  );
+  assert.equal(requests[0].init.headers['cache-control'], undefined);
+  for (const fetchImpl of [
+    answer({ 'dist-tags': { latest: '0.0.1' }, versions: { [version]: {} } }),
+    answer({ 'dist-tags': { latest: version }, versions: {} }),
+    async () => ({ ok: false, status: 404 }),
+    async () => {
+      throw new Error('socket hang up');
+    },
+  ])
+    assert.equal(
+      (
+        await readRegistryInstallView(
+          '@bleedingdev/a',
+          'latest',
+          version,
+          fetchImpl,
+        )
+      ).settled,
+      false,
+    );
 
-test('acceptance authenticates every signed original source/run/attempt instead of historical equivalence', async () => {
-  const result = await verifyAttestedPublication();
-  assert.equal(result.length, 2);
-  assert(result.every(item => item.sourceCommit === sourceCommit));
-  await assert.rejects(
-    verifyAttestedPublication({
-      change: statement => {
-        statement.predicate.buildDefinition.resolvedDependencies[0].digest.gitCommit =
-          'f'.repeat(40);
-        return statement;
+  const manifest = {
+    release: { version },
+    packages: ['a', 'b', 'c'].map(name => ({
+      targetName: `@bleedingdev/${name}`,
+    })),
+  };
+  const reads = new Map();
+  const waits = [];
+  await awaitRegistryInstallView(
+    manifest,
+    { tag: 'latest' },
+    {
+      // The CDN copy of `c` is stale for two more reads.
+      readInstallView: async (name, tag, expected) => {
+        assert.equal(tag, 'latest');
+        assert.equal(expected, version);
+        const count = (reads.get(name) ?? 0) + 1;
+        reads.set(name, count);
+        return name.endsWith('/c') && count < 3
+          ? { settled: false, detail: `${name} stale` }
+          : { settled: true, value: version };
       },
-    }),
-    /source commit.*does not match accepted commit/,
+      wait: async delay => waits.push(delay),
+    },
   );
+  assert.deepEqual([...reads.values()], [1, 1, 3]);
+  assert.equal(waits.length, 2);
   await assert.rejects(
-    verifyAttestedPublication({
-      change: statement => {
-        statement.predicate.runDetails.metadata.invocationId = `https://github.com/${repository}/actions/runs/999/attempts/1`;
-        return statement;
+    awaitRegistryInstallView(
+      manifest,
+      { tag: 'latest' },
+      {
+        readInstallView: async name =>
+          name.endsWith('/b')
+            ? { settled: false, detail: `${name} stale` }
+            : { settled: true, value: version },
+        wait: async () => {},
       },
-    }),
-    /workflow run 999, expected 39078116263/,
+    ),
+    /never served 3\.9\.3-ultramodern\.8 at latest for 1 member\(s\)[\s\S]*@bleedingdev\/b stale/u,
   );
-  await assert.rejects(
-    verifyAttestedPublication({
-      originalAttempt: '2',
-      change: statement => {
-        statement.predicate.runDetails.metadata.invocationId = `https://github.com/${repository}/actions/runs/${runId}/attempts/1`;
-        return statement;
-      },
-    }),
-    /does not match fresh producer attempt 2/,
+});
+
+test('an advanced Tractor pin is reported, never refused', async () => {
+  const { api } = await fixture();
+  const rehearsed = '1'.repeat(40);
+  assert.match(
+    api.describeTractorBaseline(rehearsed, rehearsed),
+    /rehearsed baseline 1{40}/u,
   );
-  await assert.rejects(
-    verifyAttestedPublication({
-      change: statement => {
-        statement.subject[0].digest.sha512 = Buffer.alloc(64, 2).toString(
-          'hex',
-        );
-        return statement;
-      },
-    }),
-    /does not match the accepted tarball integrity/,
+  assert.match(
+    api.describeTractorBaseline(rehearsed, '2'.repeat(40)),
+    /^::notice title=Tractor baseline advanced::.*1{40}.*2{40}/u,
   );
-  await assert.rejects(
-    verifyAttestedPublication({
-      change: statement => {
-        statement.predicate.buildDefinition.externalParameters.workflow.path =
-          '.github/workflows/recover-bleedingdev-acceptance.yml';
-        return statement;
-      },
-    }),
-    /workflow path.*does not match trusted path/,
-  );
-  await assert.rejects(
-    verifyAttestedPublication({ rejectSignature: true }),
-    /Invalid attestation signature/,
-  );
+  assert.throws(() => api.describeTractorBaseline(rehearsed, 'main'));
 });
 
 test('record-only retries retain the actual successful Tractor attempt of this acceptance run', async () => {

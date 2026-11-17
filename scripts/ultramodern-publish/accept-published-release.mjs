@@ -10,11 +10,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isDirectRun } from './lib/direct-run.mjs';
 import {
+  awaitRegistryInstallView,
   createRegistryProvenanceExpectation,
   validateRegistryCohort,
-  verifyRegistryProvenance,
 } from './lib/prepare-bleedingdev-packages/registry.mjs';
-import { mapWithConcurrency } from './lib/prepare-bleedingdev-packages/registry-read.mjs';
 import { readReleaseManifest } from './lib/source-create-proof/release-manifest.mjs';
 import {
   createPublishOutcome,
@@ -184,80 +183,32 @@ export function assertAcceptanceExecutor(executor, environment) {
   );
 }
 
-// The run that published signed its own head commit. In the normal lane that
-// is the manifest commit; a recovery publish signs its later HEAD instead.
-export function originalRegistryExpectation(release, environment, context) {
-  const expectation = createRegistryProvenanceExpectation(release, {
-    ...environment,
-    GITHUB_RUN_ID: positive(context.runId, 'Original publication run'),
-    GITHUB_RUN_ATTEMPT: positive(
-      context.attempt,
-      'Original publication attempt',
-    ),
+// The same predicate the publish job used to call the cohort complete: every
+// member is the exact accepted tarball, signed by publish-bleedingdev.yml on
+// main-ultramodern in this repository. The publish job reuses byte-identical
+// members an earlier attempt (`gh run rerun --failed`) or an earlier producer
+// run (recovery lane) already placed on npm, so the signing run and attempt
+// are not this run's for every member and are not required here: a stricter
+// rule would refuse exactly the cohorts the runbook tells the owner to finish
+// that way. This run's identity is authenticated through the API (authorize).
+export function publishedRegistryExpectation(release, environment) {
+  return createRegistryProvenanceExpectation(release, {
+    GITHUB_REPOSITORY: environment.GITHUB_REPOSITORY,
+    GITHUB_REPOSITORY_ID: environment.GITHUB_REPOSITORY_ID,
+    GITHUB_REF: environment.GITHUB_REF,
   });
-  if (context.sourceCommit !== undefined) {
-    assert.match(context.sourceCommit, /^[a-f0-9]{40}$/u);
-  }
-  return {
-    ...expectation,
-    source: {
-      ...expectation.source,
-      commit: context.sourceCommit ?? expectation.source.commit,
-    },
-    invocation: { ...expectation.invocation, exactAttempt: true },
-  };
 }
 
-export function assertCompletePublishedRegistry(states, release) {
-  assert.equal(states.size, release.packages.length);
-  for (const item of release.packages) {
-    assert.equal(
-      states.get(item.targetName)?.exists,
-      true,
-      `Acceptance cannot publish missing ${item.targetName}`,
-    );
-  }
-}
-
-export async function verifyOriginalPublicationProvenance(
-  release,
-  states,
-  expectation,
-  { fetchImpl, bundleVerifier } = {},
-) {
-  assertCompletePublishedRegistry(states, release);
-  assert.match(
-    expectation.source?.commit,
-    /^[a-f0-9]{40}$/u,
-    'Original signed source commit is required',
-  );
-  assert.equal(
-    expectation.invocation?.exactAttempt,
-    true,
-    'Original signed attempt must be exact',
-  );
-  // The registry poll accepts provenance from the trusted workflow. Acceptance
-  // instead requires the original signed source/run/attempt: feed its complete
-  // expectation directly to the authenticated SLSA verifier.
-  return mapWithConcurrency(release.packages, 8, item =>
-    verifyRegistryProvenance(
-      item,
-      states.get(item.targetName).dist,
-      expectation,
-      fetchImpl,
-      bundleVerifier,
-    ),
-  );
-}
-
-// Polls npm once, for the whole cohort, until it serves the exact accepted
-// bytes at `latest`, then authenticates every package's signed invocation.
+// Polls npm once, for the whole cohort, until its origin serves the exact
+// accepted bytes with trusted provenance at `latest`, then until the cached
+// install metadata that pnpm reads lists them too: the published checks that
+// follow install through that cache, which can lag the origin by minutes.
 export async function verifyPublishedCohort(
   release,
   expectation,
   {
     validate = validateRegistryCohort,
-    authenticate = verifyOriginalPublicationProvenance,
+    awaitInstallView = awaitRegistryInstallView,
   } = {},
 ) {
   const dists = await validate(release, {
@@ -265,13 +216,8 @@ export async function verifyPublishedCohort(
     publishConcurrency: 8,
     tag: release.release.tag,
   });
-  const states = new Map(
-    release.packages.map(item => [
-      item.targetName,
-      { exists: dists.has(item.targetName), dist: dists.get(item.targetName) },
-    ]),
-  );
-  return authenticate(release, states, expectation);
+  await awaitInstallView(release, { tag: release.release.tag });
+  return dists;
 }
 
 export function assertOriginalPublishedIdentity(identity, release, expected) {
@@ -380,21 +326,35 @@ function authorize(environment) {
 }
 
 // Only the job that checks out this run's own HEAD with full history runs
-// these: the acceptance tooling must descend from the release, and the
-// Tractor job consumes this HEAD's baseline pin.
+// this: the acceptance tooling must descend from the release.
 function assertToolingDescendsFromRelease(context, environment) {
   isAncestor(context.run.head_sha, environment.GITHUB_SHA);
+}
+
+// The Tractor job reads the reviewed baseline pin at this run's HEAD, and the
+// outcome records that pin. It advances after every accepted adoption, so an
+// adoption merged while the publish run was in flight moves it past the one
+// the pre-publication rehearsal used. That is reported, never refused: a
+// refusal could not be cleared by any re-run, because every acceptance run
+// starts at main's HEAD.
+export function describeTractorBaseline(releaseBaseline, headBaseline) {
+  for (const revision of [releaseBaseline, headBaseline]) {
+    assert.match(revision, /^[a-f0-9]{40}$/u);
+  }
+  return releaseBaseline === headBaseline
+    ? `Published Tractor runs at the rehearsed baseline ${headBaseline}.`
+    : `::notice title=Tractor baseline advanced::The pre-publication rehearsal used Tractor ${releaseBaseline}; published Tractor runs at main's reviewed pin ${headBaseline}, and the outcome records that one.`;
+}
+
+function reportTractorBaseline(context) {
   const pin = 'scripts/ultramodern-publish/tractor-baseline-revision';
-  const baseline = execFileSync(
-    'git',
-    ['show', `${context.run.head_sha}:${pin}`],
-    { encoding: 'utf8' },
-  ).trim();
-  assert.match(baseline, /^[a-f0-9]{40}$/u);
-  assert.equal(
-    fs.readFileSync(pin, 'utf8').trim(),
-    baseline,
-    'The Tractor baseline changed after this release; accept it from a checkout with the release baseline',
+  console.log(
+    describeTractorBaseline(
+      execFileSync('git', ['show', `${context.run.head_sha}:${pin}`], {
+        encoding: 'utf8',
+      }).trim(),
+      fs.readFileSync(pin, 'utf8').trim(),
+    ),
   );
 }
 
@@ -447,6 +407,7 @@ export async function main(command, environment = process.env) {
   };
   if (command === 'authorize') {
     assertToolingDescendsFromRelease(context, environment);
+    reportTractorBaseline(context);
     output({
       identity_artifact: context.names.identity,
       bundle_artifact: context.names.bundle,
@@ -461,14 +422,10 @@ export async function main(command, environment = process.env) {
     assertToolingDescendsFromRelease(context, environment);
     const { release, options } = evidence(context, releaseDir);
     isAncestor(release.source.commit, context.run.head_sha);
-    // The authenticated ORIGINAL publication expectations, not those of this
-    // run. Never remove invocation checks to reuse npm.
-    const expectation = originalRegistryExpectation(release, environment, {
-      runId: context.runId,
-      attempt: context.publicationAttempt,
-      sourceCommit: context.run.head_sha,
-    });
-    await verifyPublishedCohort(release, expectation);
+    await verifyPublishedCohort(
+      release,
+      publishedRegistryExpectation(release, environment),
+    );
     output({
       version: release.release.version,
       source_commit: release.source.commit,
