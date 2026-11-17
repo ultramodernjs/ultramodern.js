@@ -702,11 +702,11 @@ function handedOffTree(t) {
   return directory;
 }
 
-test('production pair pins exactly the fresh 53f0 handoff, not the prior unaccepted runtime patch', () => {
+test('production pair pins exactly CI handoff 43988363275/1, not the prior runtime patch', () => {
   const pair = runtimeRecipes();
   assert.equal(
     pair.packages.octane.patchSha256,
-    '529e0cbb9dd695c7569ae9d64b04ee0ba9685402823faa230c339d582d811f74',
+    'c005016a3c6a15a76cbb52ecf0c80f409878f13d68894fa67c50daf490f8c9d8',
   );
   assert.equal(
     pair.packages['@octanejs/rspack-plugin'].patchSha256,

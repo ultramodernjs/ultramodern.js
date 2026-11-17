@@ -64,7 +64,7 @@ test('actual reconstructed production adapter requires one exact application cor
   }
 });
 
-test('historical four canonical patches and immutable adapter payload remain unchanged', async () => {
+test('reviewed canonical patches and immutable adapter payload match their exact handoffs', async () => {
   const { sha256 } = await import('./protocol.mjs');
   const files = {
     'patches/@octanejs__tanstack-router@0.3.4.patch':
@@ -72,7 +72,7 @@ test('historical four canonical patches and immutable adapter payload remain unc
     'patches/@tanstack__router-core@1.171.39.patch':
       '546a4a8ecd4cc45419bff0c99c860ab2c9e2d1a8ffd4b1512cedd748e9b5cac8',
     'patches/octane@0.18.0.patch':
-      '529e0cbb9dd695c7569ae9d64b04ee0ba9685402823faa230c339d582d811f74',
+      'c005016a3c6a15a76cbb52ecf0c80f409878f13d68894fa67c50daf490f8c9d8',
     'patches/@octanejs__rspack-plugin@0.2.10.patch':
       '930795abefa05ae08954654b99b4f5a1442f50d89aa58900c164a0200cb7e3f0',
     'scripts/ultramodern-renderers/octane-corrections/routerRenderSnapshot.ts.txt':

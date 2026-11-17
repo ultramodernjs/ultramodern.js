@@ -805,17 +805,18 @@ async function runOwningRuntime(options) {
   return owner.qualifyRuntimePair(options);
 }
 
-// Parent-authenticated 53f0 handoff. Updating a worker output does not update
-// production pins: a fresh explicit handoff must change these expected digests.
+// Parent-authenticated CI handoff 43988363275/1, source e89b8acfe48ce38c7e276acc68438569d4704817.
+// Updating a worker output does not update production pins: a fresh authenticated
+// handoff must change these expected digests.
 export const runtimeHandoffFiles = Object.freeze({
   'patches/octane@0.18.0.patch':
-    '529e0cbb9dd695c7569ae9d64b04ee0ba9685402823faa230c339d582d811f74',
+    'c005016a3c6a15a76cbb52ecf0c80f409878f13d68894fa67c50daf490f8c9d8',
   'patches/@octanejs__rspack-plugin@0.2.10.patch':
     '930795abefa05ae08954654b99b4f5a1442f50d89aa58900c164a0200cb7e3f0',
   'scripts/ultramodern-renderers/octane-corrections/runtime-source.patch':
-    'a3e4e1e0ad6b99e97fd368bea03e50c89594c587cb5a59c40544f02e2a086a4a',
+    '5da8703b8dac0cd9862795c097b1fa9407afff2f8a37a9ba018f1c2ffa82ca40',
   'scripts/ultramodern-renderers/octane-corrections/runtime-tests.patch':
-    '45fd5daf6c151630cec2239d655c60615f9f51e4fd4d8f499f30555873e5281d',
+    '3275ec906de97e70a5f5a331cf821eecf90dc98850e00222af230176829be0a2',
   'scripts/ultramodern-renderers/octane-corrections/rspack-source.patch':
     'd1c3701919c7e7ed7129479497089aa14df8f0f41818b29795ac49998917336e',
 });
