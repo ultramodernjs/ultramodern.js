@@ -30,6 +30,20 @@ const actualUpstream = new Map();
 const callerOwnedTempDir = process.env.OWNED_TEMP_DIR;
 const upstreamContracts = [
   {
+    name: 'webpack',
+    version: '5.112.2',
+    request: 'https://registry.npmjs.org/webpack/-/webpack-5.112.2.tgz',
+    integrity:
+      'sha512-B2tp1LI9D8GVpPDqprdt12ukTkXXahj9MzqSWJq4faSPgOUM7CdZaGAB6HrL/8E6UwbBpdj4vzWDbKoFnVoU6g==',
+  },
+  {
+    name: 'events',
+    version: '3.3.0',
+    request: 'https://registry.npmjs.org/events/-/events-3.3.0.tgz',
+    integrity:
+      'sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==',
+  },
+  {
     name: 'terser',
     version: '5.51.2',
     request: 'https://registry.npmjs.org/terser/-/terser-5.51.2.tgz',
@@ -869,6 +883,74 @@ function upstreamOwner(f, manifest, packed) {
 function stubOrdinaryDependency(f, name) {
   upstreamOwner(f, { name, version: '1.0.0', main: './entry.cjs' });
 }
+test('actual webpack resolves its declared npm events package despite Node builtin precedence', async () => {
+  const f = fixture();
+  const webpack = actualUpstream.get('webpack');
+  const events = actualUpstream.get('events');
+  assert.equal(webpack.packageJson.dependencies.events, '^3.2.0');
+  upstreamOwner(f, webpack.packageJson, webpack);
+  for (const name of Object.keys(webpack.packageJson.dependencies))
+    if (name !== 'events') stubOrdinaryDependency(f, name);
+  const installed = upstreamOwner(f, events.packageJson, events);
+  delete f.rootManifest.dependencies.events;
+  f.save();
+  await verifySupportConsumer(f);
+  fs.rmSync(installed, { recursive: true, force: true });
+  await assert.rejects(
+    verifySupportConsumer(f),
+    /events: required installed dependency is missing/u,
+  );
+});
+test('builtin-named npm packages retain their physical dependency and peer closure', async () => {
+  for (const name of [
+    'buffer',
+    'events',
+    'process',
+    'punycode',
+    'string_decoder',
+    'url',
+    'util',
+  ]) {
+    const f = fixture();
+    const parent = upstreamOwner(f, {
+      name: 'upstream-browser-bundler',
+      version: '1.0.0',
+      main: './entry.cjs',
+      dependencies: { [name]: '1.0.0' },
+    });
+    const owner = upstreamOwner(f, {
+      name,
+      version: '1.0.0',
+      main: './entry.cjs',
+      peerDependencies: { 'solid-js': '^2.0.0-rc.22' },
+    });
+    delete f.rootManifest.dependencies[name];
+    f.save();
+    const receipt = await verifySupportConsumer(f);
+    assert(
+      receipt.resolutions.some(
+        item => item.owner === owner && item.name === 'solid-js',
+      ),
+      `${name}: the installed npm peer must be inspected, not the Node builtin`,
+    );
+    writeManifest(owner, {
+      name,
+      version: '1.0.0',
+      main: './entry.cjs',
+      dependencies: { 'absent-npm-dependency': '1.0.0' },
+    });
+    await assert.rejects(
+      verifySupportConsumer(f),
+      /absent-npm-dependency: required installed dependency is missing/u,
+    );
+    fs.rmSync(owner, { recursive: true, force: true });
+    await assert.rejects(
+      verifySupportConsumer(f),
+      new RegExp(`${name}: required installed dependency is missing`),
+      `${parent}: the builtin must not satisfy an absent declared npm package`,
+    );
+  }
+});
 test('actual terser nested dist manifest does not become an installed owner', async () => {
   const f = fixture();
   const packed = actualUpstream.get('terser');

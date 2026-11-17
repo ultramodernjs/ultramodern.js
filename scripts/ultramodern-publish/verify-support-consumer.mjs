@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
+import { createRequire, isBuiltin } from 'node:module';
 import path from 'node:path';
 import semver from 'semver';
 import { parse as parseYaml } from 'yaml';
@@ -70,10 +70,14 @@ function installedManifest(owner, name) {
     'Invalid installed dependency name',
   );
   assert(!['.', '..'].includes(name), 'Invalid installed dependency name');
-  return createRequire(owner.filename)
-    .resolve.paths(name)
-    ?.map(directory => path.join(directory, name, 'package.json'))
-    .find(filename => fs.existsSync(filename));
+  return (
+    createRequire(owner.filename)
+      // A manifest subpath always denotes an npm package, even when its name
+      // also denotes a Node builtin (events, buffer, util, ...).
+      .resolve.paths(`${name}/package.json`)
+      ?.map(directory => path.join(directory, name, 'package.json'))
+      .find(filename => fs.existsSync(filename))
+  );
 }
 // Resolution only: no require(), import(), lifecycle scripts, or package execution.
 function dependencyName(owner, name, catalogs) {
@@ -125,11 +129,15 @@ function resolvePackage(owner, name, specifier, catalogs) {
   }
   const candidate = installedManifest(owner, name);
   assert(candidate, `No owning manifest for ${name} at ${owner.directory}`);
-  return owningManifest(
-    entry,
+  const resolved = owningManifest(
+    isBuiltin(entry) ? candidate : entry,
     dependencyName(owner, name, catalogs),
     candidate,
   );
+  // Node's public entry is the builtin, not the separately installed npm
+  // package. Its physical manifest still owns the declared dependency graph,
+  // just as an import-only package does without a CommonJS entry.
+  return isBuiltin(entry) ? { ...resolved, entry: null } : resolved;
 }
 function resolveDependency(owner, name, catalogs) {
   // Node supplies the search paths, so this works for ordinary and pnpm-linked
