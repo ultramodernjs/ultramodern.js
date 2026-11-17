@@ -323,7 +323,7 @@ function verifyProducedReceipt({ release, options, runIdentity }) {
   });
 }
 
-async function executeAcceptanceProfile(options) {
+async function executeAcceptanceProfile({ supportGithubToken, ...options }) {
   const { supportAdmissionRun } = await import(
     './lib/support-release-admission.mjs'
   );
@@ -332,17 +332,24 @@ async function executeAcceptanceProfile(options) {
   );
   return runAcceptanceProfile({
     ...options,
-    runImpl: supportAdmissionRun(run),
+    runImpl: supportAdmissionRun(run, { githubToken: supportGithubToken }),
   });
 }
 
-async function runPrepublish({ release, options, runIdentity }) {
+async function runPrepublish({
+  release,
+  options,
+  runIdentity,
+  supportGithubToken,
+}) {
   if (options.continueFrom) {
     const { verifyInstalledSupportWorkspace } = await import(
       './lib/support-release-admission.mjs'
     );
     verifyInstalledSupportWorkspace(
       path.join(options.workDir, options.projectName),
+      process.env,
+      { githubToken: supportGithubToken },
     );
     const { runAcceptanceContinuation } = await import(
       '../ultramodern-production-readiness/published-create-proof/acceptance-continuation.mjs'
@@ -400,6 +407,7 @@ async function runPrepublish({ release, options, runIdentity }) {
       storeDir: options.storeDir,
     });
     return await executeAcceptanceProfile({
+      supportGithubToken,
       mode: 'source',
       release,
       registryUrl: registry.registryUrl,
@@ -419,7 +427,12 @@ async function runPrepublish({ release, options, runIdentity }) {
   }
 }
 
-async function runPublished({ release, options, runIdentity }) {
+async function runPublished({
+  release,
+  options,
+  runIdentity,
+  supportGithubToken,
+}) {
   const registryUrl = new URL(options.registryUrl).toString();
   const sourceReceipt = verifyReceipt({
     release,
@@ -433,6 +446,7 @@ async function runPublished({ release, options, runIdentity }) {
     );
   }
   return executeAcceptanceProfile({
+    supportGithubToken,
     mode: 'published',
     acceptedResolution: acceptedResolution(sourceReceipt),
     release,
@@ -451,6 +465,12 @@ async function runPublished({ release, options, runIdentity }) {
 }
 
 async function main(argv = process.argv.slice(2), env = process.env) {
+  // Only the trusted, read-only support verifier may receive this credential.
+  // Remove it before registry, install, generator, build or browser children
+  // can inherit process.env; retain it only in the coordinator's local state.
+  const supportGithubToken = env.SUPPORT_ARTIFACT_GITHUB_TOKEN;
+  delete env.SUPPORT_ARTIFACT_GITHUB_TOKEN;
+  delete process.env.SUPPORT_ARTIFACT_GITHUB_TOKEN;
   const options = parseArgs(argv);
   const release = readReleaseManifest({ manifestPath: options.manifestPath });
   assertExpectedRelease(release, options);
@@ -468,9 +488,9 @@ async function main(argv = process.argv.slice(2), env = process.env) {
     return 0;
   }
   if (options.mode === 'published') {
-    await runPublished({ release, options, runIdentity });
+    await runPublished({ release, options, runIdentity, supportGithubToken });
   } else {
-    await runPrepublish({ release, options, runIdentity });
+    await runPrepublish({ release, options, runIdentity, supportGithubToken });
   }
   verifyProducedReceipt({ release, options, runIdentity });
   process.stdout.write(

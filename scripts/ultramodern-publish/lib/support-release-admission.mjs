@@ -104,7 +104,11 @@ export async function verifyReleaseSupportOwners(packages, transport = {}) {
 
 // runAcceptanceProfile's command seam is synchronous. Keep it synchronous and
 // make the real frozen-install command fail if any importer fails admission.
-export function verifyInstalledSupportWorkspace(root, env = process.env) {
+export function verifyInstalledSupportWorkspace(
+  root,
+  env = process.env,
+  { githubToken } = {},
+) {
   const scratch = fs.mkdtempSync(
     path.join(env.TMPDIR ?? os.tmpdir(), 'support-installed-admission-'),
   );
@@ -118,7 +122,11 @@ export function verifyInstalledSupportWorkspace(root, env = process.env) {
       ],
       {
         cwd: root,
-        env: { ...env, OWNED_TEMP_DIR: scratch },
+        env: {
+          ...env,
+          OWNED_TEMP_DIR: scratch,
+          ...(githubToken ? { GH_TOKEN: githubToken } : {}),
+        },
         stdio: 'inherit',
       },
     );
@@ -129,7 +137,7 @@ export function verifyInstalledSupportWorkspace(root, env = process.env) {
   }
 }
 
-export function supportAdmissionRun(run) {
+export function supportAdmissionRun(run, { githubToken } = {}) {
   return (command, args, options) => {
     const result = run(command, args, options);
     if (
@@ -138,10 +146,11 @@ export function supportAdmissionRun(run) {
       args.includes('--frozen-lockfile') &&
       !args.includes('--lockfile-only')
     ) {
-      verifyInstalledSupportWorkspace(options.cwd, {
-        ...process.env,
-        ...options.env,
-      });
+      verifyInstalledSupportWorkspace(
+        options.cwd,
+        { ...process.env, ...options.env },
+        { githubToken },
+      );
     }
     return result;
   };

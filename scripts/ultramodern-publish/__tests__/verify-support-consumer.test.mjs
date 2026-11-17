@@ -30,6 +30,20 @@ const actualUpstream = new Map();
 const callerOwnedTempDir = process.env.OWNED_TEMP_DIR;
 const upstreamContracts = [
   {
+    name: 'webpack',
+    version: '5.112.2',
+    request: 'https://registry.npmjs.org/webpack/-/webpack-5.112.2.tgz',
+    integrity:
+      'sha512-B2tp1LI9D8GVpPDqprdt12ukTkXXahj9MzqSWJq4faSPgOUM7CdZaGAB6HrL/8E6UwbBpdj4vzWDbKoFnVoU6g==',
+  },
+  {
+    name: 'events',
+    version: '3.3.0',
+    request: 'https://registry.npmjs.org/events/-/events-3.3.0.tgz',
+    integrity:
+      'sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==',
+  },
+  {
     name: 'terser',
     version: '5.51.2',
     request: 'https://registry.npmjs.org/terser/-/terser-5.51.2.tgz',
@@ -869,6 +883,349 @@ function upstreamOwner(f, manifest, packed) {
 function stubOrdinaryDependency(f, name) {
   upstreamOwner(f, { name, version: '1.0.0', main: './entry.cjs' });
 }
+function peerAliasFixture() {
+  const f = fixture();
+  const name = '@module-federation/runtime-tools';
+  const target = '@bleedingdev/mf-runtime-tools';
+  const runtime = path.join(f.root, 'node_modules', name);
+  writeManifest(runtime, {
+    name: target,
+    version: '2.9.5',
+    main: './entry.cjs',
+  });
+  fs.writeFileSync(path.join(runtime, 'entry.cjs'), 'throw Error("EXECUTED")');
+  const core = upstreamOwner(f, {
+    name: '@rspack/core',
+    version: '2.3.2',
+    main: './entry.cjs',
+    peerDependencies: { [name]: '^0.24.1 || ^2.0.0' },
+  });
+  const provider = upstreamOwner(f, {
+    name: '@bleedingdev/mf-rspack',
+    version: '2.9.5',
+    main: './entry.cjs',
+    dependencies: { [name]: `npm:${target}@2.9.5` },
+    peerDependencies: { '@rspack/core': '^2.0.0' },
+  });
+  return { f, name, target, runtime, core, provider };
+}
+test('installer boundary: peer alias is proven by an actual provider of that same peer consumer', async () => {
+  const { f } = peerAliasFixture();
+  await verifySupportConsumer(f);
+});
+test('installer boundary: a nested importer uses its explicit workspace installation context for inherited peers', async () => {
+  const { f, provider } = peerAliasFixture();
+  fs.writeFileSync(
+    path.join(f.root, 'pnpm-workspace.yaml'),
+    'packages:\n  - apps/*\n',
+  );
+  const app = path.join(f.root, 'apps/app');
+  const manifest = {
+    ...structuredClone(f.rootManifest),
+    name: '@synthetic/app',
+    dependencies: { '@rspack/core': '^2.0.0' },
+  };
+  writeManifest(app, manifest);
+  const options = { ...f, root: app };
+  await assert.rejects(
+    verifySupportConsumer(options),
+    /no installed peer provider alias authority/,
+  );
+  await verifySupportConsumer({ ...options, workspaceRoot: f.root });
+  const providerManifest = JSON.parse(
+    fs.readFileSync(path.join(provider, 'package.json')),
+  );
+  providerManifest.ultramodern = { supportArtifacts: { wrong: true } };
+  writeManifest(provider, providerManifest);
+  await assert.rejects(
+    verifySupportConsumer({ ...options, workspaceRoot: f.root }),
+    /exact support descriptor/,
+  );
+});
+test('installer boundary: ordinary alias copies may differ physically, but not in provider identity or version', async () => {
+  const { f, name, target, provider } = peerAliasFixture();
+  const copy = path.join(provider, 'node_modules', name);
+  writeManifest(copy, { name: target, version: '2.9.5', main: './entry.cjs' });
+  fs.writeFileSync(path.join(copy, 'entry.cjs'), 'throw Error("EXECUTED")');
+  await verifySupportConsumer(f);
+  writeManifest(copy, { name: target, version: '2.9.4', main: './entry.cjs' });
+  await assert.rejects(verifySupportConsumer(f), /installed alias version/);
+});
+test('installer boundary: renamed peer without a related declared provider is never normalized', async () => {
+  for (const kind of ['absent', 'unrelated', 'plain', 'wrong-target']) {
+    const { f, name, provider } = peerAliasFixture();
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(provider, 'package.json')),
+    );
+    if (kind === 'absent') {
+      delete f.rootManifest.dependencies[manifest.name];
+      f.save();
+    } else {
+      if (kind === 'unrelated') delete manifest.peerDependencies;
+      if (kind === 'plain') manifest.dependencies[name] = '^2.0.0';
+      if (kind === 'wrong-target')
+        manifest.dependencies[name] = 'npm:@unproven/runtime-tools@2.9.5';
+      writeManifest(provider, manifest);
+    }
+    await assert.rejects(verifySupportConsumer(f), /Wrong owning manifest/);
+  }
+});
+test('installer boundary: alias proofs retain entry containment and provider mutation checks', async () => {
+  const escaping = peerAliasFixture();
+  writeManifest(escaping.runtime, {
+    name: escaping.target,
+    version: '2.9.5',
+    main: '../foreign.cjs',
+  });
+  fs.writeFileSync(
+    path.join(escaping.runtime, '../foreign.cjs'),
+    'throw Error("EXECUTED")',
+  );
+  await assert.rejects(
+    verifySupportConsumer(escaping.f),
+    /escapes owning package/,
+  );
+  const { f, provider } = peerAliasFixture();
+  const transport = f.fetchArtifact;
+  f.fetchArtifact = async (...args) => {
+    fs.appendFileSync(path.join(provider, 'package.json'), '\n');
+    return transport(...args);
+  };
+  await assert.rejects(verifySupportConsumer(f), /owner manifest changed/);
+});
+test('installer boundary: range-scoped workspace override proves a renamed runtime dependency', async () => {
+  const f = fixture();
+  upstreamOwner(f, {
+    name: 'micromatch',
+    version: '4.0.8',
+    main: './entry.cjs',
+    dependencies: { braces: '^3.0.3' },
+  });
+  const braces = path.join(f.root, 'node_modules/braces');
+  writeManifest(braces, {
+    name: '@bleedingdev/braces',
+    version: '3.0.4',
+    main: './entry.cjs',
+  });
+  fs.writeFileSync(path.join(braces, 'entry.cjs'), 'throw Error("EXECUTED")');
+  fs.writeFileSync(
+    path.join(f.root, 'pnpm-workspace.yaml'),
+    "overrides:\n  'braces@>=3.0.0 <3.0.4': npm:@bleedingdev/braces@3.0.4\n",
+  );
+  await verifySupportConsumer(f);
+  const workspace = path.join(f.root, 'pnpm-workspace.yaml');
+  for (const selector of [
+    'braces@^2.0.0',
+    'other-parent>braces@^3.0.3',
+    'micromatch@^5.0.0>braces',
+  ]) {
+    fs.writeFileSync(
+      workspace,
+      `overrides:\n  '${selector}': npm:@bleedingdev/braces@3.0.4\n`,
+    );
+    await assert.rejects(verifySupportConsumer(f), /Wrong owning manifest/);
+  }
+  fs.writeFileSync(
+    workspace,
+    "overrides:\n  'micromatch@^4.0.0>braces@>=3.0.0 <3.0.4': npm:@bleedingdev/braces@3.0.4\n",
+  );
+  await verifySupportConsumer(f);
+  writeManifest(braces, {
+    name: '@unproven/braces',
+    version: '3.0.4',
+    main: './entry.cjs',
+  });
+  await assert.rejects(verifySupportConsumer(f), /Wrong owning manifest/);
+  writeManifest(braces, {
+    name: '@bleedingdev/braces',
+    version: '3.0.5',
+    main: './entry.cjs',
+  });
+  await assert.rejects(verifySupportConsumer(f), /installed alias version/);
+  writeManifest(braces, {
+    name: '@bleedingdev/braces',
+    version: '3.0.4',
+    main: './entry.cjs',
+  });
+  const transport = f.fetchArtifact;
+  f.fetchArtifact = async (...args) => {
+    fs.appendFileSync(workspace, '# mutation\n');
+    return transport(...args);
+  };
+  await assert.rejects(verifySupportConsumer(f), /workspace catalog changed/);
+});
+test('installer boundary: actual workspace siblings have exact root-direct authority, not published peers', async () => {
+  const { verifySupportWorkspace } = await import(
+    '../verify-support-workspace.mjs'
+  );
+  const f = fixture();
+  fs.writeFileSync(
+    path.join(f.root, 'pnpm-workspace.yaml'),
+    'packages:\n  - apps/*\n',
+  );
+  const sibling = path.join(f.root, 'apps/sibling');
+  writeManifest(sibling, {
+    name: '@synthetic/sibling',
+    version: '1.0.0',
+    main: './entry.cjs',
+    ultramodern: { supportArtifacts: f.descriptor },
+    dependencies: { 'solid-js': f.descriptor.packages['solid-js'].request },
+  });
+  fs.writeFileSync(path.join(sibling, 'entry.cjs'), 'throw Error("EXECUTED")');
+  fs.mkdirSync(path.join(f.root, 'node_modules/@synthetic'), {
+    recursive: true,
+  });
+  fs.symlinkSync(sibling, path.join(f.root, 'node_modules/@synthetic/sibling'));
+  f.rootManifest.dependencies = { '@synthetic/sibling': 'workspace:*' };
+  f.save();
+  const receipt = await verifySupportWorkspace(f);
+  assert.equal(receipt.importers.length, 2);
+  assert(
+    receipt.importers[0].owners.some(
+      owner => owner.directory === sibling && owner.role === 'root-direct',
+    ),
+  );
+  // The same installed package is not a consumer without explicit membership.
+  await assert.rejects(
+    verifySupportConsumer(f),
+    /framework owner must use a peer/,
+  );
+  const siblingManifest = JSON.parse(
+    fs.readFileSync(path.join(sibling, 'package.json')),
+  );
+  siblingManifest.dependencies['solid-js'] = p.cohort['solid-js'];
+  writeManifest(sibling, siblingManifest);
+  await assert.rejects(
+    verifySupportWorkspace(f),
+    /differs from support request/,
+  );
+  siblingManifest.dependencies['solid-js'] =
+    f.descriptor.packages['solid-js'].request;
+  writeManifest(sibling, siblingManifest);
+  unpack(
+    f.payloads.get(p.assetFilename('solid-js', p.cohort['solid-js'])),
+    path.join(sibling, 'node_modules/solid-js'),
+  );
+  await assert.rejects(verifySupportWorkspace(f), /wrong physical peer/);
+});
+test('installer boundary: workspace discovery excludes installed descriptors and rejects escaped symlink members', async () => {
+  const { supportWorkspaceImporters, verifySupportWorkspace } = await import(
+    '../verify-support-workspace.mjs'
+  );
+  const f = fixture();
+  fs.writeFileSync(
+    path.join(f.root, 'pnpm-workspace.yaml'),
+    'packages:\n  - "**"\n',
+  );
+  upstreamOwner(f, {
+    name: 'foreign-descriptor',
+    version: '1.0.0',
+    main: './entry.cjs',
+    ultramodern: { supportArtifacts: f.descriptor },
+    dependencies: { 'solid-js': f.descriptor.packages['solid-js'].request },
+  });
+  assert.deepEqual(supportWorkspaceImporters(f.root), [f.root]);
+  await assert.rejects(
+    verifySupportWorkspace(f),
+    /framework owner must use a peer/,
+  );
+  const outside = fs.mkdtempSync(path.join(directory, 'outside-member-'));
+  writeManifest(outside, { name: 'outside', version: '1.0.0' });
+  fs.mkdirSync(path.join(f.root, 'apps'), { recursive: true });
+  fs.symlinkSync(outside, path.join(f.root, 'apps/outside'));
+  fs.writeFileSync(
+    path.join(f.root, 'pnpm-workspace.yaml'),
+    'packages:\n  - apps/outside\n',
+  );
+  assert.throws(
+    () => supportWorkspaceImporters(f.root),
+    /escapes consumer boundary/,
+  );
+});
+test('installer boundary: support overrides cannot replace exact authority or published framework peers', async () => {
+  const f = fixture();
+  fs.writeFileSync(
+    path.join(f.root, 'pnpm-workspace.yaml'),
+    'packages:\n  - packages/*\noverrides:\n  solid-js: npm:@unproven/solid@2.0.0-rc.22\n',
+  );
+  f.framework('@modern-js/renderer-solid', { 'solid-js': '^2.0.0-rc.22' });
+  await assert.rejects(verifySupportConsumer(f), /wrong framework peer/);
+  delete f.rootManifest.dependencies;
+  f.rootManifest.devDependencies['solid-js'] = p.cohort['solid-js'];
+  f.save();
+  await assert.rejects(
+    verifySupportConsumer(f),
+    /differs from support request/,
+  );
+});
+test('actual webpack resolves its declared npm events package despite Node builtin precedence', async () => {
+  const f = fixture();
+  const webpack = actualUpstream.get('webpack');
+  const events = actualUpstream.get('events');
+  assert.equal(webpack.packageJson.dependencies.events, '^3.2.0');
+  upstreamOwner(f, webpack.packageJson, webpack);
+  for (const name of Object.keys(webpack.packageJson.dependencies))
+    if (name !== 'events') stubOrdinaryDependency(f, name);
+  const installed = upstreamOwner(f, events.packageJson, events);
+  delete f.rootManifest.dependencies.events;
+  f.save();
+  await verifySupportConsumer(f);
+  fs.rmSync(installed, { recursive: true, force: true });
+  await assert.rejects(
+    verifySupportConsumer(f),
+    /events: required installed dependency is missing/u,
+  );
+});
+test('builtin-named npm packages retain their physical dependency and peer closure', async () => {
+  for (const name of [
+    'buffer',
+    'events',
+    'process',
+    'punycode',
+    'string_decoder',
+    'url',
+    'util',
+  ]) {
+    const f = fixture();
+    const parent = upstreamOwner(f, {
+      name: 'upstream-browser-bundler',
+      version: '1.0.0',
+      main: './entry.cjs',
+      dependencies: { [name]: '1.0.0' },
+    });
+    const owner = upstreamOwner(f, {
+      name,
+      version: '1.0.0',
+      main: './entry.cjs',
+      peerDependencies: { 'solid-js': '^2.0.0-rc.22' },
+    });
+    delete f.rootManifest.dependencies[name];
+    f.save();
+    const receipt = await verifySupportConsumer(f);
+    assert(
+      receipt.resolutions.some(
+        item => item.owner === owner && item.name === 'solid-js',
+      ),
+      `${name}: the installed npm peer must be inspected, not the Node builtin`,
+    );
+    writeManifest(owner, {
+      name,
+      version: '1.0.0',
+      main: './entry.cjs',
+      dependencies: { 'absent-npm-dependency': '1.0.0' },
+    });
+    await assert.rejects(
+      verifySupportConsumer(f),
+      /absent-npm-dependency: required installed dependency is missing/u,
+    );
+    fs.rmSync(owner, { recursive: true, force: true });
+    await assert.rejects(
+      verifySupportConsumer(f),
+      new RegExp(`${name}: required installed dependency is missing`),
+      `${parent}: the builtin must not satisfy an absent declared npm package`,
+    );
+  }
+});
 test('actual terser nested dist manifest does not become an installed owner', async () => {
   const f = fixture();
   const packed = actualUpstream.get('terser');
@@ -1253,10 +1610,13 @@ test('release preparation and recovery invoke packed admission before publish an
     new URL('../run-release-acceptance.mjs', import.meta.url),
     'utf8',
   );
-  assert.match(acceptance, /runImpl: supportAdmissionRun\(run\)/u);
   assert.match(
     acceptance,
-    /verifyInstalledSupportWorkspace\(\s*path.join\(options.workDir, options.projectName\),?\s*\)/u,
+    /runImpl: supportAdmissionRun\(run,\s*\{\s*githubToken: supportGithubToken,?\s*\}\)/u,
+  );
+  assert.match(
+    acceptance,
+    /verifyInstalledSupportWorkspace\(\s*path.join\(options.workDir, options.projectName\),\s*process.env,\s*\{\s*githubToken: supportGithubToken,?\s*\},?\s*\)/u,
   );
 });
 

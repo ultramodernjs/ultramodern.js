@@ -1430,6 +1430,7 @@ jobs:
 
       - name: Run published ERP-10 acceptance
         env:
+          SUPPORT_ARTIFACT_GITHUB_TOKEN: ${{ github.token }}
           PRODUCER_RUN_IDENTITY: ${{ needs.accept-release.outputs.producer_run_identity }}
           PUBLISH_VERSION: ${{ inputs.version }}
         run: |
