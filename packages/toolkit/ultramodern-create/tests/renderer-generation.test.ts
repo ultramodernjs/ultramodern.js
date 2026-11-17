@@ -8,7 +8,9 @@ import {
   validateUltramodernBuildArtifact,
 } from '@modern-js/backend-federation-contracts';
 import { loadUltramodernConfigFile } from '@modern-js/ultramodern-app-tools';
+import { yaml } from '@modern-js/utils';
 import { localizedNavigationSharedCheckCommand } from '../../../../scripts/ultramodern-renderers/native-localized-navigation.mjs';
+import { readResolvedUltramodernWorkspaceInputs } from '../src/ultramodern-tooling/config';
 import {
   addUltramodernVertical,
   generateUltramodernWorkspace,
@@ -25,7 +27,11 @@ import type {
   ApplicationRenderer,
   UltramodernWorkspaceOptions,
 } from '../src/ultramodern-workspace/types';
+import type { JsonRecord } from '../src/ultramodern-workspace/validation/types';
+import { validateWorkspace } from '../src/ultramodern-workspace/validation/workspace';
+import { createWorkspaceValidationContract } from '../src/ultramodern-workspace/workspace-validation-contract';
 import {
+  linkInstalledCompiler,
   linkInstalledCompilerPolicy,
   snapshotWorkspace,
 } from './helpers/workspace-kit';
@@ -36,6 +42,137 @@ const unsupportedNativeArtifact =
   /(?:worker|workerd|cloudflare|mf-types|i18n|locales)/iu;
 const unsupportedNativeSource =
   /(?:['"](?:react(?:-dom)?(?:\/[^'"]*)?|@types\/react(?:-dom)?|@tanstack\/react-router|@modern-js\/(?:runtime(?:\/[^'"]*)?|runtime-renderer-extensions|runtime-extensions\/build-identity|plugin-(?:i18n|tanstack)(?:\/[^'"]*)?)|@module-federation\/(?:modern-js-v3|bridge-react))['"]|moduleFederationPlugin|i18nPlugin|MODERNJS_DEPLOY|reactI18next)/u;
+
+for (const renderer of renderers) {
+  test(`generated ${renderer} tooling hosts validate without admitting foreign runtime or policy`, async () => {
+    const tempRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), `um-support-validation-${renderer}-`),
+    );
+    const targetDir = path.join(tempRoot, 'support-workspace');
+    try {
+      await generateUltramodernWorkspace({
+        targetDir,
+        packageName: 'support-workspace',
+        modernVersion: '3.8.3',
+        renderer,
+        enableTailwind: false,
+        generateAgentFiles: false,
+        packageSource: { strategy: 'workspace' },
+      });
+      linkInstalledCompilerPolicy(targetDir);
+      linkInstalledCompiler(targetDir);
+      const { config, raw, verticals, primaryShell, additionalShells } =
+        await readResolvedUltramodernWorkspaceInputs(
+          targetDir,
+          {},
+          {
+            command: 'validate',
+            env: 'development',
+          },
+        );
+      const contract = createWorkspaceValidationContract(
+        config.workspace.packageScope,
+        config.features.tailwind,
+        raw.topology.sharedPackages,
+        verticals,
+        additionalShells,
+        primaryShell,
+      );
+      const validate = () => validateWorkspace(targetDir, contract);
+      assert.doesNotThrow(validate);
+      const mutate = (
+        relative: string,
+        change: (value: JsonRecord) => void,
+        error: RegExp,
+      ) => {
+        const filename = path.join(targetDir, relative);
+        const original = fs.readFileSync(filename, 'utf8');
+        try {
+          const value = relative.endsWith('.yaml')
+            ? yaml.load(original)
+            : JSON.parse(original);
+          change(value);
+          fs.writeFileSync(
+            filename,
+            relative.endsWith('.yaml')
+              ? yaml.dump(value)
+              : JSON.stringify(value),
+          );
+          assert.throws(validate, error, relative);
+        } finally {
+          fs.writeFileSync(filename, original);
+        }
+      };
+      mutate(
+        'package.json',
+        value => {
+          value.devDependencies['solid-js'] = 'https://example.com/solid.tgz';
+        },
+        /exact support request/u,
+      );
+      mutate(
+        'package.json',
+        value => {
+          value.dependencies = {
+            'solid-js': value.devDependencies['solid-js'],
+          };
+          delete value.devDependencies['solid-js'];
+        },
+        /tooling host solid-js/u,
+      );
+      mutate(
+        'package.json',
+        value => {
+          value.ultramodern.supportArtifacts.producer.runAttempt++;
+        },
+        /support-artifacts-/u,
+      );
+      const foreign =
+        renderer === 'solid' ? '@tanstack/react-router' : 'solid-js';
+      mutate(
+        `${appDirectory}/package.json`,
+        value => {
+          value.dependencies[foreign] =
+            value.ultramodern.supportArtifacts.packages[foreign].request;
+        },
+        /foreign renderer package/u,
+      );
+      mutate(
+        'packages/shared-contracts/package.json',
+        value => {
+          value.dependencies['foreign-ui'] =
+            renderer === 'solid'
+              ? 'npm:react@19.3.1'
+              : 'npm:solid-js@2.0.0-rc.22';
+        },
+        /foreign renderer package/u,
+      );
+      mutate(
+        'pnpm-workspace.yaml',
+        value => {
+          value.overrides['braces@>=3.0.0 <3.0.4'] = '0.0.0';
+        },
+        /Workspace dependency override/u,
+      );
+      const page = path.join(targetDir, appDirectory, 'src/routes/page.tsx');
+      const original = fs.existsSync(page)
+        ? fs.readFileSync(page, 'utf8')
+        : undefined;
+      try {
+        fs.writeFileSync(
+          page,
+          `import '${foreign}';\nexport default function Page() { return null; }\n`,
+        );
+        assert.throws(validate, /foreign renderer/u);
+      } finally {
+        if (original === undefined) fs.rmSync(page);
+        else fs.writeFileSync(page, original);
+      }
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+}
 
 for (const renderer of renderers) {
   test(`fresh ${renderer} generation projects its selected native profile`, async () => {
@@ -349,10 +486,40 @@ declare const ULTRAMODERN_SITE_URL: string;
           const packageManifest = JSON.parse(source);
           if (renderer === 'solid')
             assert.equal(packageManifest.devDependencies?.wrangler, undefined);
-          for (const name of [
-            ...Object.keys(packageManifest.dependencies ?? {}),
-            ...Object.keys(packageManifest.devDependencies ?? {}),
+          for (const [group, name] of [
+            ...Object.keys(packageManifest.dependencies ?? {}).map(
+              name => ['dependencies', name] as const,
+            ),
+            ...Object.keys(packageManifest.devDependencies ?? {}).map(
+              name => ['devDependencies', name] as const,
+            ),
           ]) {
+            if (group === 'devDependencies' && supportPins.has(name)) {
+              const hosts =
+                relativePath === 'package.json'
+                  ? [
+                      '@effect/opentelemetry',
+                      '@tanstack/react-router',
+                      'rsbuild-plugin-dts',
+                      'solid-js',
+                    ]
+                  : relativePath === `${appDirectory}/package.json`
+                    ? [
+                        '@effect/opentelemetry',
+                        'rsbuild-plugin-dts',
+                        ...(renderer === 'octane' ? ['solid-js'] : []),
+                      ]
+                    : [];
+              assert.ok(
+                hosts.includes(name),
+                `${relativePath}: unexpected tooling host ${name}`,
+              );
+              assert.equal(
+                packageManifest[group][name],
+                supportPins.get(name)?.request,
+              );
+              continue;
+            }
             assert.doesNotMatch(
               name,
               /^(?:react(?:-dom)?|@types\/react(?:-dom)?|@tanstack\/react-router|@module-federation\/(?!(?:enhanced|node|runtime)$)|@modern-js\/(?:runtime$|runtime-renderer-extensions$|plugin-(?:i18n|tanstack)$)|miniflare$|zephyr)/u,

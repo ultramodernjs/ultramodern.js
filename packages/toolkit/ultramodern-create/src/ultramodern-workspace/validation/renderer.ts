@@ -13,6 +13,7 @@ import {
   getRendererGenerationProfile,
   isApplicationRenderer,
 } from '../renderer-profile';
+import { toolingSupportDependencies } from '../tooling-support';
 import type { RendererGenerationProfile, WorkspaceRenderer } from '../types';
 import {
   MODULE_FEDERATION_NODE_VERSION,
@@ -367,7 +368,51 @@ export function assertRendererDependencies(
   generation?: RendererGenerationProfile,
   options: RendererDependencyCatalogs = {},
 ): void {
+  assertRendererDependencyOwnership(manifest, renderer, generation, options, {
+    kind: 'runtime',
+  });
+}
+
+/** Root tooling hosts do not select an application renderer. */
+export function assertWorkspaceRootToolingDependencies(
+  manifest: JsonRecord,
+  renderer: WorkspaceRenderer,
+  options: RendererDependencyCatalogs = {},
+): void {
+  assertRendererDependencyOwnership(manifest, renderer, undefined, options, {
+    kind: 'workspace-tooling',
+  });
+}
+
+function assertRendererDependencyOwnership(
+  manifest: JsonRecord,
+  renderer: WorkspaceRenderer,
+  generation: RendererGenerationProfile | undefined,
+  options: RendererDependencyCatalogs,
+  owner: { kind: 'runtime' } | { kind: 'workspace-tooling' },
+): void {
   const support = readSupportArtifacts(manifest);
+  const supportDependencies = toolingSupportDependencies(
+    { ...manifest.dependencies, ...manifest.devDependencies },
+    support,
+  );
+  for (const [name, request] of Object.entries(supportDependencies)) {
+    const runtimeHost =
+      owner.kind === 'runtime' && manifest.dependencies?.[name] === request;
+    assert(
+      runtimeHost || manifest.devDependencies?.[name] === request,
+      `${manifest.name} tooling host ${name} must use the exact support request in devDependencies unless owned by its runtime`,
+    );
+    for (const group of [
+      ...(owner.kind === 'workspace-tooling' ? ['dependencies'] : []),
+      'optionalDependencies',
+      'peerDependencies',
+    ])
+      assert(
+        !Object.hasOwn(manifest[group] ?? {}, name),
+        `${manifest.name} tooling host ${name} cannot be declared in ${group}`,
+      );
+  }
   for (const group of ['dependencies', 'devDependencies'] as const) {
     const requests = manifest[group] ?? {};
     const selected = selectSupportRequests(requests, support);
@@ -395,9 +440,14 @@ export function assertRendererDependencies(
           : undefined;
       const alias =
         resolved === undefined ? undefined : parseNpmAlias(resolved);
+      const supportHost =
+        group === 'devDependencies' &&
+        Object.hasOwn(supportDependencies, name) &&
+        request === supportDependencies[name];
       assert(
-        !isForeignRendererPackage(name, renderer) &&
-          (!alias || !isForeignRendererPackage(alias.name, renderer)),
+        supportHost ||
+          (!isForeignRendererPackage(name, renderer) &&
+            (!alias || !isForeignRendererPackage(alias.name, renderer))),
         `${manifest.name} ${group} contains foreign renderer package ${name}`,
       );
       if (nativeGeneration) {
@@ -452,6 +502,10 @@ export function assertAuthoredRendererDependencyPins(
 ): void {
   const profile = generation.profile;
   const support = readSupportArtifacts(manifest);
+  const supportDependencies = toolingSupportDependencies(
+    { ...manifest.dependencies, ...manifest.devDependencies },
+    support,
+  );
   const pins: Record<string, string> = {
     [profile.compiler.name]: profile.compiler.version,
     [profile.hydration.name]: profile.hydration.version,
@@ -485,10 +539,15 @@ export function assertAuthoredRendererDependencyPins(
       );
       const resolved = resolveDependencyRequest(name, request, options);
       const alias = parseNpmAlias(resolved);
+      const supportHost =
+        group === 'devDependencies' &&
+        Object.hasOwn(supportDependencies, name) &&
+        request === supportDependencies[name];
       assert(
-        !isForeignRendererPackage(name, generation.renderer) &&
-          (!alias ||
-            !isForeignRendererPackage(alias.name, generation.renderer)),
+        supportHost ||
+          (!isForeignRendererPackage(name, generation.renderer) &&
+            (!alias ||
+              !isForeignRendererPackage(alias.name, generation.renderer))),
         `${manifest.name} ${group}.${name} conflicts with the selected ${generation.renderer} renderer`,
       );
       if (generation.renderer !== 'react') {

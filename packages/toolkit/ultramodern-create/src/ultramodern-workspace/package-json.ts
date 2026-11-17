@@ -23,6 +23,7 @@ import {
   resolveAppGenerationProfile,
   resolveWorkspaceRenderer,
 } from './renderer-profile';
+import { toolingSupportDependencies } from './tooling-support';
 import type { JsonValue, ResolvedPackageSource, WorkspaceApp } from './types';
 import { NODE_VERSION, ULTRAMODERN_PACKAGE_PINS } from './versions';
 import {
@@ -34,6 +35,23 @@ import {
 
 const frameworkRequest = (packageSource: ResolvedPackageSource) =>
   packageSource.strategy === 'install' ? 'catalog:ultramodern' : 'workspace:*';
+
+function rootSupportDependencies(
+  packageSource: ResolvedPackageSource,
+): Record<string, string> {
+  const support = packageSource.supportArtifacts;
+  return selectSupportRequests(
+    {
+      ...ULTRAMODERN_PACKAGE_PINS.bffEffectDependencies,
+      ...ULTRAMODERN_PACKAGE_PINS.serverCompilerDevDependencies,
+      ...toolingSupportDependencies(
+        { [ULTRAMODERN_CREATE_PACKAGE]: frameworkRequest(packageSource) },
+        support,
+      ),
+    },
+    support,
+  );
+}
 
 export function appDependencies(
   scope: string,
@@ -130,6 +148,7 @@ function appDevDependencies(
   packageSource: ResolvedPackageSource,
   enableTailwind: boolean,
   app: WorkspaceApp,
+  dependencies: Record<string, string>,
 ): Record<string, string> {
   const {
     '@rsbuild/plugin-tailwindcss': tailwindPluginVersion,
@@ -152,7 +171,7 @@ function appDevDependencies(
           ),
         );
 
-  return selectSupportRequests(
+  const devDependencies = selectSupportRequests(
     {
       ...(appHasApi(app) || (app.kind === 'shell' && renderer === 'react')
         ? {
@@ -166,9 +185,10 @@ function appDevDependencies(
         ? { '@modern-js/app-tools': frameworkRequest(packageSource) }
         : {}),
       ...selectedAlways,
-      ...(appHasApi(app)
-        ? ULTRAMODERN_PACKAGE_PINS.serverCompilerDevDependencies
-        : {}),
+      // Both owners are installed through app-tools even for UI-only apps:
+      // app-tools-extensions and plugin-bff-build-extensions.
+      ...ULTRAMODERN_PACKAGE_PINS.serverCompilerDevDependencies,
+      ...ULTRAMODERN_PACKAGE_PINS.bffEffectDependencies,
       ...generationProfile?.devDependencies,
       ...(enableTailwind
         ? {
@@ -179,6 +199,21 @@ function appDevDependencies(
     },
     packageSource.supportArtifacts,
   );
+  for (const name of Object.keys(
+    ULTRAMODERN_PACKAGE_PINS.bffEffectDependencies,
+  ))
+    if (Object.hasOwn(dependencies, name)) delete devDependencies[name];
+  return {
+    ...devDependencies,
+    ...Object.fromEntries(
+      Object.entries(
+        toolingSupportDependencies(
+          { ...dependencies, ...devDependencies },
+          packageSource.supportArtifacts,
+        ),
+      ).filter(([name]) => !Object.hasOwn(dependencies, name)),
+    ),
+  };
 }
 
 export function createRootPackageJson(
@@ -256,24 +291,7 @@ export function createRootPackageJson(
         typescript: ULTRAMODERN_PACKAGE_PINS.appDevDependencies.typescript,
         [ULTRAMODERN_CREATE_PACKAGE]: frameworkRequest(packageSource),
         '@modern-js/ultramodern-app-tools': frameworkRequest(packageSource),
-        ...selectSupportRequests(
-          ULTRAMODERN_PACKAGE_PINS.serverCompilerDevDependencies,
-          packageSource.supportArtifacts,
-        ),
-        ...Object.fromEntries(
-          apps
-            .flatMap(app =>
-              Object.entries(
-                appDependencies(scope, packageSource, app, remotes),
-              ),
-            )
-            .filter(([name]) =>
-              Object.hasOwn(
-                packageSource.supportArtifacts?.packages ?? {},
-                name,
-              ),
-            ),
-        ),
+        ...rootSupportDependencies(packageSource),
       },
       ...(packageSource.supportArtifacts
         ? { ultramodern: { supportArtifacts: packageSource.supportArtifacts } }
@@ -380,20 +398,7 @@ export function createRootPackageJson(
       '@modern-js/code-tools': frameworkRequest(packageSource),
       [ULTRAMODERN_CREATE_PACKAGE]: frameworkRequest(packageSource),
       '@modern-js/plugin-bff': frameworkRequest(packageSource),
-      ...selectSupportRequests(
-        {
-          ...ULTRAMODERN_PACKAGE_PINS.bffEffectDependencies,
-          ...ULTRAMODERN_PACKAGE_PINS.serverCompilerDevDependencies,
-        },
-        packageSource.supportArtifacts,
-      ),
-      ...(packageSource.supportArtifacts
-        ? {
-            '@tanstack/react-router':
-              packageSource.supportArtifacts.packages['@tanstack/react-router']
-                .request,
-          }
-        : {}),
+      ...rootSupportDependencies(packageSource),
     },
     ...(packageSource.supportArtifacts
       ? { ultramodern: { supportArtifacts: packageSource.supportArtifacts } }
@@ -434,6 +439,13 @@ export function createAppPackage(
   remotes: WorkspaceApp[] = [],
   bridge?: UltramodernBridgeConfig,
 ): JsonValue {
+  const dependencies = appDependencies(
+    scope,
+    packageSource,
+    app,
+    remotes,
+    bridge,
+  );
   const packageExports: Record<string, JsonValue> = Object.fromEntries(
     Object.entries(app.exposes ?? {}).map(([expose, source]) => [
       expose,
@@ -468,8 +480,13 @@ export function createAppPackage(
     ...(packageSource.supportArtifacts
       ? { ultramodern: { supportArtifacts: packageSource.supportArtifacts } }
       : {}),
-    dependencies: appDependencies(scope, packageSource, app, remotes, bridge),
-    devDependencies: appDevDependencies(packageSource, enableTailwind, app),
+    dependencies,
+    devDependencies: appDevDependencies(
+      packageSource,
+      enableTailwind,
+      app,
+      dependencies,
+    ),
   };
 
   if (appHasApi(app)) {
@@ -521,7 +538,9 @@ export function createSharedPackage(
   };
 
   if (id === 'shared-contracts') {
-    packageJson.dependencies = hasNativeAppGeneration(renderer)
+    const dependencies: Record<string, string> = hasNativeAppGeneration(
+      renderer,
+    )
       ? {
           '@modern-js/renderer-core': packageSource
             ? frameworkRequest(packageSource)
@@ -539,6 +558,26 @@ export function createSharedPackage(
             ? frameworkRequest(packageSource)
             : WORKSPACE_PACKAGE_VERSION,
         };
+    packageJson.dependencies = selectSupportRequests(
+      dependencies,
+      packageSource?.supportArtifacts,
+    );
+    packageJson.devDependencies = {
+      '@effect/tsgo':
+        ULTRAMODERN_PACKAGE_PINS.appDevDependencies['@effect/tsgo'],
+      ...Object.fromEntries(
+        Object.entries(
+          toolingSupportDependencies(
+            dependencies,
+            packageSource?.supportArtifacts,
+          ),
+        ).filter(([name]) => !Object.hasOwn(dependencies, name)),
+      ),
+    };
+    if (packageSource?.supportArtifacts && !hasNativeAppGeneration(renderer))
+      packageJson.ultramodern = {
+        supportArtifacts: packageSource.supportArtifacts,
+      };
   }
 
   if (id === 'shared-design-tokens') {

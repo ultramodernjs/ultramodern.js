@@ -14,6 +14,7 @@ import {
   assertNativeRendererSourceSurface,
   assertRendererDependencies,
   assertRendererProjection,
+  assertWorkspaceRootToolingDependencies,
   validateApiOnlySourceSurface,
 } from './renderer';
 
@@ -645,13 +646,21 @@ export function validateWorkspace(
     selectedRenderers.size === 1 ? [...selectedRenderers][0] : undefined;
   for (const member of members) {
     const manifest = readJson(member);
-    if (uniformRenderer)
-      assertRendererDependencies(
-        manifest,
-        uniformRenderer,
-        undefined,
-        dependencyCatalogs,
-      );
+    if (uniformRenderer) {
+      if (member === 'package.json')
+        assertWorkspaceRootToolingDependencies(
+          manifest,
+          uniformRenderer,
+          dependencyCatalogs,
+        );
+      else
+        assertRendererDependencies(
+          manifest,
+          uniformRenderer,
+          undefined,
+          dependencyCatalogs,
+        );
+    }
     for (const group of [
       'dependencies',
       'devDependencies',
