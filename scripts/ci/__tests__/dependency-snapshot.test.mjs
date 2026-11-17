@@ -8,11 +8,11 @@ import {
   dependencyInputs,
   restoreDependencies,
   snapshotDependencies,
-} from '../windows-dependency-snapshot.mjs';
+} from '../dependency-snapshot.mjs';
 
 function fixture(t) {
   const directory = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'windows-dependencies-'),
+    path.join(os.tmpdir(), 'installed-dependencies-'),
   );
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const root = path.join(directory, 'workspace');
@@ -62,7 +62,7 @@ test('file-only tar transport rebuilds native links, workspace links and runnabl
   const manifest = snapshotDependencies(root, key);
   assert.equal(manifest.links.length, 3);
   const archive = path.join(directory, 'snapshot.tar');
-  execFileSync('tar', ['-cf', archive, '.ci-windows-dependencies'], {
+  execFileSync('tar', ['-cf', archive, '.ci-dependencies'], {
     cwd: root,
   });
   const listing = execFileSync('tar', ['-tvf', archive], { encoding: 'utf8' });
@@ -125,6 +125,8 @@ test('lockfile, manifests, patches, runtime and checkout paths bind the snapshot
     write(file, original);
   }
   assert.notEqual(dependencyInputs(root, { node: 'different-runtime' }), key);
+  assert.notEqual(dependencyInputs(root, { platform: 'another-os' }), key);
+  assert.notEqual(dependencyInputs(root, { arch: 'another-cpu' }), key);
 });
 
 test('wrong identity and escaping link targets fail closed before an installation is restored', t => {
@@ -132,10 +134,7 @@ test('wrong identity and escaping link targets fail closed before an installatio
   snapshotDependencies(root, key);
   assert.throws(() => restoreDependencies(root, 'wrong'), /identity mismatch/);
   assert.ok(!fs.existsSync(path.join(root, 'node_modules')));
-  const file = path.join(
-    root,
-    '.ci-windows-dependencies/snapshot/manifest.json',
-  );
+  const file = path.join(root, '.ci-dependencies/snapshot/manifest.json');
   const manifest = JSON.parse(fs.readFileSync(file));
   for (const target of ['../outside', '/absolute', 'C:/absolute']) {
     manifest.links[0].target = target;
@@ -154,4 +153,38 @@ test('snapshot refuses an external native link instead of archiving personal or 
   );
   assert.throws(() => snapshotDependencies(root, key));
   assert.ok(fs.existsSync(path.join(root, 'node_modules/example')));
+});
+
+// macOS transports executable files and file symlinks as well as directories.
+test('native executables and relative file links survive file-only archive transport', t => {
+  const { root, directory, write, key } = fixture(t);
+  write(
+    'node_modules/native-tool',
+    '#!/bin/sh\nprintf "native executable works\\n"\n',
+  );
+  fs.chmodSync(path.join(root, 'node_modules/native-tool'), 0o755);
+  fs.mkdirSync(path.join(root, 'node_modules/.bin'));
+  fs.symlinkSync(
+    '../native-tool',
+    path.join(root, 'node_modules/.bin/native-tool'),
+    'file',
+  );
+  snapshotDependencies(root, key);
+  const archive = path.join(directory, 'native.tar');
+  execFileSync('tar', ['-cf', archive, '.ci-dependencies'], { cwd: root });
+  fs.rmSync(path.join(root, '.ci-dependencies'), { recursive: true });
+  execFileSync('tar', ['-xf', archive], { cwd: root });
+  restoreDependencies(root, key);
+  const link = path.join(root, 'node_modules/.bin/native-tool');
+  assert.equal(
+    fs.realpathSync(link),
+    fs.realpathSync(path.join(root, 'node_modules/native-tool')),
+  );
+  if (process.platform !== 'win32') {
+    assert.equal(
+      execFileSync(link, { encoding: 'utf8' }),
+      'native executable works\n',
+    );
+    assert.equal(fs.statSync(link).mode & 0o111, 0o111);
+  }
 });

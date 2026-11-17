@@ -10,6 +10,7 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import json
+import re
 import subprocess
 
 
@@ -42,6 +43,43 @@ def jobs(repo, run, attempt=None):
 
 def mac_job(job):
     return any("macos" in label.lower() for label in job["labels"])
+
+
+def mac_timing(repo, job):
+    steps = [step for step in job["steps"] if step["started_at"]]
+    execution = steps[0]["started_at"] if steps else None
+    cpu = None
+    if job["status"] == "completed" and job["name"] == "ut-mac":
+        log = subprocess.check_output(
+            ["gh", "api", f"repos/{repo}/actions/jobs/{job['id']}/logs",
+             "--allow-escape-sequences"], text=True,
+        )
+        # /usr/bin/time -l includes the CPU of the pnpm/Rstest child tree.
+        timings = re.findall(
+            r"(\d+\.\d+)\s+real\s+(\d+\.\d+)\s+user\s+(\d+\.\d+)\s+sys", log,
+        )
+        if timings:
+            elapsed, user, system = map(float, timings[-1])
+            cpu = {
+                "elapsed_seconds": elapsed, "user_seconds": user,
+                "system_seconds": system,
+                "average_cpu_cores": round((user + system) / elapsed, 2),
+            }
+    return {
+        "name": job["name"], "url": job["html_url"],
+        "created": job["created_at"], "started": execution,
+        "completed": job["completed_at"], "conclusion": job["conclusion"],
+        "queue_seconds": duration(job["created_at"], execution)
+        if execution else None,
+        "execution_seconds": duration(execution, job["completed_at"])
+        if execution and job["completed_at"] else None,
+        "test_cpu": cpu,
+        "steps": [{
+            "name": step["name"], "conclusion": step["conclusion"],
+            "seconds": duration(step["started_at"], step["completed_at"])
+            if step["completed_at"] else None,
+        } for step in steps],
+    }
 
 
 def history(repo, count):
@@ -92,8 +130,15 @@ def measure(repo, sha, event, attempt):
     ]
     if not runs:
         raise SystemExit("No matching workflow runs")
-    if attempt and any(run["run_attempt"] != attempt for run in runs):
-        raise SystemExit("Attempts differ: rerun the complete set, not a subset")
+    if attempt:
+        if any(run["run_attempt"] < attempt for run in runs):
+            raise SystemExit("Attempt missing: rerun the complete set, not a subset")
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            runs = list(pool.map(
+                lambda run: api(
+                    f"repos/{repo}/actions/runs/{run['id']}/attempts/{attempt}"
+                ), runs,
+            ))
     with ThreadPoolExecutor(max_workers=4) as pool:
         batches = list(pool.map(lambda run: jobs(repo, run, attempt), runs))
     start = min(run["run_started_at"] for run in runs)
@@ -132,11 +177,7 @@ def measure(repo, sha, event, attempt):
             if job["completed_at"] == last_required
         ],
         "missing_required": missing, "pending": pending, "failed": failed,
-        "mac_jobs": [{
-            "name": job["name"],
-            "created": job["created_at"], "started": job["started_at"],
-            "completed": job["completed_at"], "conclusion": job["conclusion"],
-        } for job in all_jobs if mac_job(job)],
+        "mac_jobs": [mac_timing(repo, job) for job in all_jobs if mac_job(job)],
     }, indent=2))
     if pending or failed or (event == "pull_request" and missing):
         raise SystemExit(1)

@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const storage = '.ci-windows-dependencies/snapshot';
+const storage = '.ci-dependencies/snapshot';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const trackedFiles = root =>
   execFileSync('git', ['ls-files', '-z'], {
@@ -47,7 +47,7 @@ export function dependencyInputs(root, runtime = {}) {
       file.endsWith('/package.json') ||
       file === 'package.json' ||
       file.startsWith('patches/') ||
-      file === 'scripts/ci/windows-dependency-snapshot.mjs',
+      file === 'scripts/ci/dependency-snapshot.mjs',
   );
   const inputs = files.map(file => [
     file,
@@ -63,7 +63,7 @@ export function dependencyInputs(root, runtime = {}) {
     ...runtime,
     inputs,
   };
-  return `windows-linked-files-v1-${hash(JSON.stringify(identity))}`;
+  return `installed-linked-files-v2-${hash(JSON.stringify(identity))}`;
 }
 
 function dependencyRoots(root) {
@@ -84,8 +84,8 @@ export function snapshotDependencies(root, key) {
   const roots = dependencyRoots(root);
   assert.ok(roots.includes('node_modules'), 'No installed root dependencies');
   const links = [];
-  // Walk without following junctions. Transport regular files only; junctions
-  // are a relative graph rebuilt with the native Windows API after extraction.
+  // Walk without following links. Transport regular files only; the relative
+  // graph is rebuilt natively after extraction (junctions on Windows).
   function visit(relative) {
     const absolute = contained(root, relative);
     const stat = fs.lstatSync(absolute);
@@ -96,7 +96,7 @@ export function snapshotDependencies(root, key) {
       );
       const target = portable(path.relative(root, destination));
       contained(root, target);
-      const type = fs.statSync(absolute).isDirectory() ? 'junction' : 'file';
+      const type = fs.statSync(absolute).isDirectory() ? 'dir' : 'file';
       links.push({ path: relative, target, type });
     } else if (stat.isDirectory()) {
       for (const name of fs.readdirSync(absolute)) visit(`${relative}/${name}`);
@@ -159,7 +159,7 @@ export function restoreDependencies(root, key) {
     contained(root, link.path);
     contained(root, link.target);
     assert.ok(withinTree(link.path), 'Link is not inside dependencies');
-    assert.ok(link.type === 'junction' || link.type === 'file');
+    assert.ok(link.type === 'dir' || link.type === 'file');
     assert.ok(
       !manifest.links.some(other => link.path.startsWith(`${other.path}/`)),
       'Nested link parent',
@@ -176,7 +176,13 @@ export function restoreDependencies(root, key) {
       !fs.existsSync(destination),
       'Snapshot unexpectedly contains a transported link',
     );
-    fs.symlinkSync(contained(root, link.target), destination, link.type);
+    fs.symlinkSync(
+      contained(root, link.target),
+      destination,
+      process.platform === 'win32' && link.type === 'dir'
+        ? 'junction'
+        : link.type,
+    );
   }
   for (const link of manifest.links) {
     assert.equal(
@@ -235,7 +241,7 @@ if (
     verifyTransport(root, key);
   } else {
     throw new Error(
-      'Usage: windows-dependency-snapshot.mjs key|snapshot|restore|verify-transport',
+      'Usage: dependency-snapshot.mjs key|snapshot|restore|verify-transport',
     );
   }
 }

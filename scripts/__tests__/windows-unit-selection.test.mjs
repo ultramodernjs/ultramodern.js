@@ -332,7 +332,7 @@ test('unsupported future project shapes fail instead of silently losing coverage
 // it replaced, which caps the whole lever near 1.5 min even if they did.
 test('no workflow caches a resolved node_modules tree', () => {
   const files = [
-    '.github/actions/windows-dependencies/action.yml',
+    '.github/actions/installed-dependencies/action.yml',
     '.github/workflows/ci-cache.yml',
     '.github/workflows/ut-Windows.yml',
     '.github/workflows/integration-test.yml',
@@ -351,14 +351,14 @@ test('no workflow caches a resolved node_modules tree', () => {
       `${file} caches ${trees.join(', ')}; a restored NTFS junction graph is not traversable, so the next frozen install fails`,
     );
     assert.ok(
-      !/windows-dependencies-v\d/u.test(content),
+      !/installed-dependencies-v\d/u.test(content),
       `${file} still names the dependency-tree cache key`,
     );
   }
   // The store cache stays: it is what makes the install "reused 2218,
   // downloaded 0" rather than a download, and it round-trips as plain files.
   assert.match(
-    readRepoText('.github/actions/windows-dependencies/action.yml'),
+    readRepoText('.github/actions/installed-dependencies/action.yml'),
     /key: pnpm-store-\$\{\{ runner\.os \}\}/u,
   );
 });
