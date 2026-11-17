@@ -34,8 +34,8 @@ function assertScopedIdentityCorrection(text) {
 
 test('owned compiler pins the released Effect/tsrs component and embedded TypeScript identities', () => {
   assert.deepEqual(source.effect, {
-    baseVersion: '0.69.0',
-    baseCommit: '416fdf299111341e156fc94330cd481470494ac6',
+    baseVersion: '0.70.0',
+    baseCommit: '0e722d359c969bdf1b1316f08e8637022cde3cce',
   });
   assert.deepEqual(source.tsrs, {
     version: '0.25.0-ts7.1.0-beta',
