@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  validateRecipe,
+  verifySourceQualification,
+} from '../ultramodern-artifacts/reconstruct.mjs';
 import { qualifyOtel } from '../ultramodern-dependencies/otel-corrections/portable.mjs';
 import { qualifyPeerCorrections } from '../ultramodern-dependencies/test-peer-corrections/qualify.mjs';
 import { qualifyReactSupport } from '../ultramodern-renderers/react-router-corrections/support-adapter.mjs';
@@ -11,14 +15,14 @@ import {
   readHeldReadRecipeBytes,
 } from '../ultramodern-renderers/solid-corrections/qualify-held-read.mjs';
 import { qualifyDtsPlugin } from './dts-plugin.mjs';
-import { inputs, supportProtocol as protocol } from './protocol.mjs';
-import { validateRecipe, verifySourceQualification } from './reconstruct.mjs';
+import { inputs, supportProtocol } from './protocol.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const peers = ['@rstest/core', 'ioredis-mock', '@types/ioredis-mock'];
-export function readRecipes() {
+export function readRecipes(protocol = supportProtocol) {
   const packages = Object.fromEntries(
-    Object.entries(inputs).map(([name, input]) => {
+    Object.keys(protocol.cohort).map(name => {
+      const input = inputs[name];
       const patchPath = path.join(root, input.patchPath);
       assert.equal(
         protocol.sha256(fs.readFileSync(patchPath)),
@@ -54,7 +58,7 @@ function context(workDirectory) {
   assert.equal(process.versions.node, '26.13.1');
   return { toolchain, workDirectory };
 }
-function peerEvidence(result) {
+function peerEvidence(result, protocol) {
   assert(
     result.gates && result.artifacts.length === 3,
     'metadata owning gates/closed3 receipt required',
@@ -87,21 +91,25 @@ function solidEvidence(result) {
     licenseBytes: result.license.bytes,
   };
 }
-export function releaseRecipe() {
+export function releaseRecipe(protocol = supportProtocol) {
+  // Only v3 still carries the rc.22 heldRead correction.
+  const solid = Object.hasOwn(protocol.cohort, 'solid-js');
   const recipe = {
-    packages: readRecipes(),
+    packages: readRecipes(protocol),
     async qualifySource({ workDirectory }) {
       const { toolchain } = context(workDirectory);
-      const solid = await qualifyHeldRead({
-        workDirectory: path.join(
-          workDirectory,
-          `support-solid-${process.pid}-${Date.now()}`,
-        ),
-        storeDirectory: toolchain.storeDirectory,
-        nodeBinary: toolchain.node,
-        pnpmBinary: toolchain.pnpm,
-        recipeBytes: readHeldReadRecipeBytes(),
-      });
+      const heldRead = solid
+        ? await qualifyHeldRead({
+            workDirectory: path.join(
+              workDirectory,
+              `support-solid-${process.pid}-${Date.now()}`,
+            ),
+            storeDirectory: toolchain.storeDirectory,
+            nodeBinary: toolchain.node,
+            pnpmBinary: toolchain.pnpm,
+            recipeBytes: readHeldReadRecipeBytes(),
+          })
+        : undefined;
       const metadata = await qualifyPeerCorrections({
         workDirectory,
         toolchain,
@@ -117,12 +125,12 @@ export function releaseRecipe() {
       const dts = await qualifyDtsPlugin({ workDirectory, toolchain });
       const evidence = {
         '@tanstack/react-router': react,
-        'solid-js': solidEvidence(solid),
-        ...peerEvidence(metadata),
+        ...(solid ? { 'solid-js': solidEvidence(heldRead) } : {}),
+        ...peerEvidence(metadata, protocol),
         '@effect/opentelemetry': otel,
         'rsbuild-plugin-dts': dts,
       };
-      verifySourceQualification(recipe, evidence);
+      verifySourceQualification({ protocol, recipe, evidence });
       return evidence;
     },
     async qualifyPacked({ directory, manifest, workDirectory }) {
@@ -147,21 +155,23 @@ export function releaseRecipe() {
         toolchain,
         reactArchiveBytes: payloads.get('@tanstack/react-router'),
       });
-      const solid = await qualifyHeldReadPacked({
-        workDirectory: path.join(
-          workDirectory,
-          `support-solid-packed-${process.pid}-${Date.now()}`,
-        ),
-        toolchain,
-        recipeBytes: readHeldReadRecipeBytes(),
-        payloads: new Map([['solid-js', payloads.get('solid-js')]]),
-        manifest: {
-          name: 'solid-js',
-          version: protocol.cohort['solid-js'],
-          integrity: manifest.packages['solid-js'].integrity,
-        },
-      });
-      assert.equal(solid.evidence.transport.installedActualPayload, true);
+      if (solid) {
+        const heldRead = await qualifyHeldReadPacked({
+          workDirectory: path.join(
+            workDirectory,
+            `support-solid-packed-${process.pid}-${Date.now()}`,
+          ),
+          toolchain,
+          recipeBytes: readHeldReadRecipeBytes(),
+          payloads: new Map([['solid-js', payloads.get('solid-js')]]),
+          manifest: {
+            name: 'solid-js',
+            version: protocol.cohort['solid-js'],
+            integrity: manifest.packages['solid-js'].integrity,
+          },
+        });
+        assert.equal(heldRead.evidence.transport.installedActualPayload, true);
+      }
       await qualifyPeerCorrections({
         workDirectory,
         toolchain,
@@ -186,6 +196,6 @@ export function releaseRecipe() {
       });
     },
   };
-  validateRecipe(recipe);
+  validateRecipe({ protocol, recipe });
   return recipe;
 }

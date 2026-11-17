@@ -10,6 +10,7 @@ import {
   assemblePackage,
   assertSameBytes,
   buildEnvironment,
+  octane20RuntimeInputs,
   packagePatch,
   phaseTracker,
   qualifyRuntimeTree,
@@ -268,7 +269,7 @@ test('npm layout reconstruction preserves identity and actual compiler/map/licen
     };
     for (const [file, bytes] of Object.entries(emitted))
       fs.writeFileSync(path.join(source, 'dist', file), bytes);
-    assemblePackage(upstream, source, built);
+    assemblePackage(upstream, source, built, '0.18.0');
     const patch = packagePatch(upstream, built);
     assert(
       !patch.includes(Buffer.from(work)),
@@ -430,4 +431,64 @@ test('phase tracker reports the failed phase, last command and signal without re
     /^\[octane-runtime\] packed hydration suites: FAILED after \d+\.\ds; last command: node vitest\.mjs run --config packed\.mjs \(cwd \/work\/source\); exit none; signal SIGKILL; Command failed: node vitest\.mjs\n$/u,
   );
   assert.equal(lines.length, 4);
+});
+
+test('the Octane 0.20 owning candidate selects its own runtime package, dependencies and output identity', t => {
+  assert(process.env.OWNED_TEMP_DIR, 'Run tests inside owned-temp-dir');
+  const inputs = octane20RuntimeInputs();
+  assert.deepEqual(
+    inputs.packages.map(({ name, version }) => [name, version]),
+    [
+      ['octane', '0.20.0'],
+      ['@octanejs/rspack-plugin', '0.2.12'],
+    ],
+  );
+  const manifest = JSON.parse(
+    fs.readFileSync(
+      path.join(inputs.dependencyDirectory, 'runtime-build-package.json'),
+      'utf8',
+    ),
+  );
+  assert.equal(manifest.dependencies.octane, inputs.packages[0].version);
+  assert.equal(
+    inputs.runtimePair.octane.patchPath,
+    'patches/octane@0.20.0.patch',
+  );
+  assert.equal(
+    inputs.runtimePair['@octanejs/rspack-plugin'].patchPath,
+    'patches/@octanejs__rspack-plugin@0.2.12.patch',
+  );
+  for (const patch of inputs.patches) assert.ok(fs.statSync(patch).isFile());
+  const work = fs.mkdtempSync(
+    path.join(process.env.OWNED_TEMP_DIR, 'octane020-'),
+  );
+  t.after(() => fs.rmSync(work, { recursive: true, force: true }));
+  const upstream = path.join(work, 'upstream');
+  const source = path.join(work, 'source');
+  const output = path.join(work, 'output');
+  fs.mkdirSync(upstream);
+  fs.mkdirSync(path.join(source, 'dist'), { recursive: true });
+  fs.writeFileSync(
+    path.join(upstream, 'package.json'),
+    JSON.stringify({
+      name: 'octane',
+      version: '0.20.0',
+      dependencies: {},
+      peerDependencies: {},
+    }),
+  );
+  fs.writeFileSync(
+    path.join(source, 'dist/index.js'),
+    'export const built = true;\n',
+  );
+  assemblePackage(upstream, source, output, inputs.packages[0].version);
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(output, 'package.json'), 'utf8'))
+      .version,
+    '0.20.0',
+  );
+  assert.equal(
+    fs.readFileSync(path.join(output, 'dist/index.js'), 'utf8'),
+    'export const built = true;\n',
+  );
 });

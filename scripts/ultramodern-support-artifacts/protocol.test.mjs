@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 import { buildEnvironment } from '../ultramodern-dependencies/otel-corrections/portable.mjs';
-import { currentProducer } from './main.mjs';
-import { inputs, supportProtocol as p } from './protocol.mjs';
-import { readRecipes } from './recipes.mjs';
+import { currentProducer, main } from './main.mjs';
+import {
+  candidateSupportProtocol as candidate,
+  inputs,
+  supportProtocol as p,
+} from './protocol.mjs';
+import { readRecipes, releaseRecipe } from './recipes.mjs';
 import { validateRecipe, verifySourceQualification } from './reconstruct.mjs';
 
 const source = 'a'.repeat(40);
@@ -17,17 +22,20 @@ const producer = {
   runAttempt: 1,
   tag: `support-artifacts-${source}-1-1`,
 };
-function manifest() {
+function manifest(protocol = p) {
   return {
-    protocol: p.protocol,
+    protocol: protocol.protocol,
     producer: { ...producer },
     packages: Object.fromEntries(
-      Object.entries(p.cohort).map(([name, version]) => [
+      Object.entries(protocol.cohort).map(([name, version]) => [
         name,
         {
           version,
-          request: p.releaseUrl(producer, p.assetFilename(name, version)),
-          integrity: p.integrity(Buffer.from(name)),
+          request: protocol.releaseUrl(
+            producer,
+            protocol.assetFilename(name, version),
+          ),
+          integrity: protocol.integrity(Buffer.from(name)),
           upstream: structuredClone(inputs[name].upstream),
           patchSha256: inputs[name].patchSha256,
         },
@@ -35,6 +43,18 @@ function manifest() {
     ),
   };
 }
+const producerEnv = {
+  GITHUB_REPOSITORY: p.repository,
+  GITHUB_REPOSITORY_ID: String(p.repositoryId),
+  GITHUB_EVENT_NAME: 'workflow_dispatch',
+  GITHUB_REF: 'refs/heads/main-ultramodern',
+  GITHUB_ACTOR: 'BleedingDev',
+  GITHUB_TRIGGERING_ACTOR: 'BleedingDev',
+  GITHUB_WORKFLOW_REF: `${p.repository}/${p.workflow}@refs/heads/main-ultramodern`,
+  GITHUB_SHA: source,
+  GITHUB_RUN_ID: '1',
+  GITHUB_RUN_ATTEMPT: '1',
+};
 test('closed v3 seven support identities and eight release assets', () => {
   const m = manifest();
   p.validateManifest(m);
@@ -54,6 +74,60 @@ test('closed v3 seven support identities and eight release assets', () => {
   assert.equal(
     p.descriptorFor(m).manifest.request,
     p.releaseUrl(producer, 'support-artifacts.json'),
+  );
+});
+test('producer-only v4 candidate has six identities and seven release assets', () => {
+  const m = manifest(candidate);
+  candidate.validateManifest(m);
+  assert.equal(candidate.protocol, 'ultramodern.support-artifacts.v4');
+  assert.deepEqual(Object.keys(m.packages).sort(), [
+    '@effect/opentelemetry',
+    '@rstest/core',
+    '@tanstack/react-router',
+    '@types/ioredis-mock',
+    'ioredis-mock',
+    'rsbuild-plugin-dts',
+  ]);
+  assert.equal(Object.keys(m.packages).length + 1, 7);
+  assert.deepEqual(
+    candidate.descriptorFor(m).manifest.request,
+    p.releaseUrl(producer, 'support-artifacts.json'),
+  );
+  // Consumers keep the active v3 authority and reject the candidate until admission.
+  assert.throws(() => p.validateManifest(m));
+  assert.throws(() => candidate.validateManifest(manifest()));
+  const withSolid = manifest(candidate);
+  withSolid.packages['solid-js'] = manifest().packages['solid-js'];
+  assert.throws(() => candidate.validateManifest(withSolid));
+  const recipe = releaseRecipe(candidate);
+  assert.deepEqual(
+    Object.keys(recipe.packages).sort(),
+    Object.keys(m.packages).sort(),
+  );
+  assert.throws(() => validateRecipe(recipe));
+  validateRecipe(releaseRecipe());
+});
+test('producer CLI binds the v4 candidate, never the active v3 consumer cohort', async t => {
+  assert(process.env.OWNED_TEMP_DIR, 'Use owned-temp-dir');
+  const root = fs.mkdtempSync(
+    path.join(process.env.OWNED_TEMP_DIR, 'support-cli-'),
+  );
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const write = m =>
+    fs.writeFileSync(
+      path.join(root, 'support-artifacts.json'),
+      JSON.stringify(m),
+    );
+  write(manifest());
+  await assert.rejects(
+    main(['qualify', root], producerEnv),
+    /support-artifacts\.v4/,
+  );
+  // A v4 manifest passes protocol validation and fails only on missing archives.
+  write(manifest(candidate));
+  await assert.rejects(
+    main(['qualify', root], producerEnv),
+    /Exact release payload set required/,
   );
 });
 test('native/support mixing and missing identities fail closed', () => {
@@ -126,18 +200,7 @@ test('immutable source provenance and exact canonical patch handoff', () => {
   );
 });
 test('source/actor/workflow guards fail closed', () => {
-  const env = {
-    GITHUB_REPOSITORY: p.repository,
-    GITHUB_REPOSITORY_ID: String(p.repositoryId),
-    GITHUB_EVENT_NAME: 'workflow_dispatch',
-    GITHUB_REF: 'refs/heads/main-ultramodern',
-    GITHUB_ACTOR: 'BleedingDev',
-    GITHUB_TRIGGERING_ACTOR: 'BleedingDev',
-    GITHUB_WORKFLOW_REF: `${p.repository}/${p.workflow}@refs/heads/main-ultramodern`,
-    GITHUB_SHA: source,
-    GITHUB_RUN_ID: '1',
-    GITHUB_RUN_ATTEMPT: '1',
-  };
+  const env = producerEnv;
   assert.deepEqual(currentProducer(env), producer);
   for (const key of [
     'GITHUB_ACTOR',

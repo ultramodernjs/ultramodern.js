@@ -20,7 +20,7 @@ export const inputs = freeze(
     fs.readFileSync(new URL('./inputs.json', import.meta.url), 'utf8'),
   ),
 );
-const cohort = Object.freeze({
+const consumerCohort = Object.freeze({
   'solid-js': '2.0.0-rc.22',
   '@effect/opentelemetry': '4.1.4',
   '@rstest/core': '0.12.6',
@@ -29,7 +29,14 @@ const cohort = Object.freeze({
   '@tanstack/react-router': '1.170.46',
   'rsbuild-plugin-dts': '1.0.7',
 });
-export function inspectSupportTarball(bytes) {
+// Producer-only candidate: stable Solid needs no support correction. Consumers
+// stay on v3 until its artifact admission replaces the v3 binding.
+const candidateCohort = Object.freeze(
+  Object.fromEntries(
+    Object.entries(consumerCohort).filter(([name]) => name !== 'solid-js'),
+  ),
+);
+const inspectCohortTarball = cohort => bytes => {
   // DefinitelyTyped's authenticated archive has a single historical root name.
   // Normalize only that exact root for the unchanged strict npm-layout parser.
   const tar = gunzipSync(bytes, { maxOutputLength: 128 * 1024 * 1024 });
@@ -80,8 +87,9 @@ export function inspectSupportTarball(bytes) {
     cohort[inspected.packageJson.name],
   );
   return inspected;
-}
-function validateUpstream(value, name, version) {
+};
+export const inspectSupportTarball = inspectCohortTarball(consumerCohort);
+const validateCohortUpstream = cohort => (value, name, version) => {
   assert(Object.hasOwn(cohort, name));
   assert.equal(version, cohort[name]);
   exactKeys(
@@ -90,7 +98,7 @@ function validateUpstream(value, name, version) {
     'fixed support provenance',
   );
   assert.deepEqual(value, inputs[name].upstream);
-}
+};
 function validateNpmLicense({ name, upstream, files }) {
   if (name === 'solid-js') {
     assert.equal(upstream.licenseLocation, 'source-only');
@@ -106,17 +114,26 @@ function validateNpmLicense({ name, upstream, files }) {
     );
   }
 }
-export const supportProtocol = bindArtifactProtocol({
-  protocol: 'ultramodern.support-artifacts.v3',
-  repository: 'ultramodernjs/ultramodern.js',
-  repositoryId: 1151231350,
-  workflow: '.github/workflows/support-artifacts.yml',
-  cohort,
-  manifestFilename: 'support-artifacts.json',
-  tagPrefix: 'support-artifacts',
-  releaseTitle: 'Support artifacts',
-  reconstructionPrefix: 'support-reconstruction-',
-  validateUpstream,
-  inspectNpmTarball: inspectSupportTarball,
-  validateNpmLicense,
-});
+const bindSupportProtocol = (protocol, cohort) =>
+  bindArtifactProtocol({
+    protocol,
+    repository: 'ultramodernjs/ultramodern.js',
+    repositoryId: 1151231350,
+    workflow: '.github/workflows/support-artifacts.yml',
+    cohort,
+    manifestFilename: 'support-artifacts.json',
+    tagPrefix: 'support-artifacts',
+    releaseTitle: 'Support artifacts',
+    reconstructionPrefix: 'support-reconstruction-',
+    validateUpstream: validateCohortUpstream(cohort),
+    inspectNpmTarball: inspectCohortTarball(cohort),
+    validateNpmLicense,
+  });
+export const supportProtocol = bindSupportProtocol(
+  'ultramodern.support-artifacts.v3',
+  consumerCohort,
+);
+export const candidateSupportProtocol = bindSupportProtocol(
+  'ultramodern.support-artifacts.v4',
+  candidateCohort,
+);
