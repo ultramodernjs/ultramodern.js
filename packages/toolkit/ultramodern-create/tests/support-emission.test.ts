@@ -148,17 +148,24 @@ test.each(['react', 'solid'] as const)(
           supportArtifacts.packages['@effect/opentelemetry'].request,
         );
     }
-    // The root directly hosts app-tools-extensions' required declaration
-    // plugin peer; a UI-only shell does not run the native server compiler.
+    // Installed tooling owns peers even when this app does not compile a BFF.
     const emitted = JSON.parse(JSON.stringify({ root, importer }));
-    assert.equal(
-      emitted.root.devDependencies['rsbuild-plugin-dts'],
-      supportArtifacts.packages['rsbuild-plugin-dts'].request,
-    );
-    assert.equal(
-      emitted.importer.devDependencies['rsbuild-plugin-dts'],
-      undefined,
-    );
+    for (const name of ['rsbuild-plugin-dts', '@effect/opentelemetry']) {
+      for (const manifest of [emitted.root, emitted.importer])
+        assert.equal(
+          { ...manifest.devDependencies, ...manifest.dependencies }[name],
+          supportArtifacts.packages[name].request,
+        );
+    }
+    // The generator requires both native adapters and the React tooling.
+    // Their runtime peers need root hosts independent of the app renderer.
+    for (const name of ['solid-js', '@tanstack/react-router'])
+      assert.equal(
+        emitted.root.devDependencies[name],
+        supportArtifacts.packages[name].request,
+      );
+    for (const name of ['@rstest/core', 'ioredis-mock', '@types/ioredis-mock'])
+      assert.equal(emitted.root.devDependencies[name], undefined);
     assert.deepEqual(source.supportArtifacts, supportArtifacts);
     const directory = fs.mkdtempSync(
       path.join(os.tmpdir(), 'support-emission-'),

@@ -678,6 +678,83 @@ test('declared dev-only tools need no public peer or installed host, but require
     'solid-js',
   ]);
 });
+test('React workspace root must host the generator dependency on the required Solid adapter', async () => {
+  // Minimal installed projection of release 6: the React root selects these
+  // three support inputs, but create also requires renderer-solid by npm alias.
+  // Adapter availability is not the same thing as the selected app renderer.
+  const selected = [
+    '@effect/opentelemetry',
+    'rsbuild-plugin-dts',
+    '@tanstack/react-router',
+  ];
+  const f = fixture(selected);
+  const generatorName = '@bleedingdev/modern-js-ultramodern-create';
+  const rendererName = '@bleedingdev/modern-js-renderer-solid';
+  const generator = f.framework(
+    generatorName,
+    {},
+    {
+      ultramodern: {
+        sourceName: '@modern-js/ultramodern-create',
+        supportArtifacts: f.descriptor,
+      },
+      dependencies: {
+        '@modern-js/renderer-solid': `npm:${rendererName}@1.0.0`,
+      },
+    },
+  );
+  const renderer = f.framework(
+    rendererName,
+    { 'solid-js': p.cohort['solid-js'] },
+    {
+      ultramodern: {
+        sourceName: '@modern-js/renderer-solid',
+        supportArtifacts: f.descriptor,
+      },
+    },
+  );
+  delete f.rootManifest.dependencies[rendererName];
+  fs.mkdirSync(path.join(generator, 'node_modules/@modern-js'), {
+    recursive: true,
+  });
+  fs.symlinkSync(
+    renderer,
+    path.join(generator, 'node_modules/@modern-js/renderer-solid'),
+  );
+  f.save();
+  await assert.rejects(
+    verifySupportConsumer(f),
+    /solid-js: owner closure requires a selected direct host/,
+  );
+
+  // The owner contract stays required; generation must provide its exact host.
+  f.rootManifest.devDependencies['solid-js'] =
+    f.descriptor.packages['solid-js'].request;
+  f.save();
+  unpack(
+    f.payloads.get(p.assetFilename('solid-js', p.cohort['solid-js'])),
+    path.join(f.root, 'node_modules/solid-js'),
+  );
+  const receipt = await verifySupportConsumer(f);
+  assert.deepEqual(receipt.selectedPackages, [...selected, 'solid-js'].sort());
+  assert(
+    receipt.resolutions.some(
+      item => item.owner === renderer && item.name === 'solid-js',
+    ),
+  );
+  fs.writeFileSync(
+    path.join(f.root, 'pnpm-workspace.yaml'),
+    `catalog:\n  solid-js: ${f.descriptor.packages['solid-js'].request}\n`,
+  );
+  for (const request of [p.cohort['solid-js'], 'catalog:']) {
+    f.rootManifest.devDependencies['solid-js'] = request;
+    f.save();
+    await assert.rejects(
+      verifySupportConsumer(f),
+      /differs from support request/,
+    );
+  }
+});
 test('private support aliases and orphan peer metadata reject', async () => {
   const f = fixture();
   f.rootManifest.dependencies = { 'private-solid': 'npm:solid-js@2.0.0-rc.22' };

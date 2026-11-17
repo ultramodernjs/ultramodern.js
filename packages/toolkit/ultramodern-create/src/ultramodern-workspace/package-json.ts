@@ -35,6 +35,29 @@ import {
 const frameworkRequest = (packageSource: ResolvedPackageSource) =>
   packageSource.strategy === 'install' ? 'catalog:ultramodern' : 'workspace:*';
 
+function rootSupportDependencies(
+  packageSource: ResolvedPackageSource,
+): Record<string, string> {
+  const support = packageSource.supportArtifacts;
+  return selectSupportRequests(
+    {
+      ...ULTRAMODERN_PACKAGE_PINS.bffEffectDependencies,
+      ...ULTRAMODERN_PACKAGE_PINS.serverCompilerDevDependencies,
+      // The root installs create, whose required adapter/runtime dependencies
+      // own these peers even when the generated app uses another renderer.
+      ...(support
+        ? Object.fromEntries(
+            (['solid-js', '@tanstack/react-router'] as const).map(name => [
+              name,
+              support.packages[name].request,
+            ]),
+          )
+        : {}),
+    },
+    support,
+  );
+}
+
 export function appDependencies(
   scope: string,
   packageSource: ResolvedPackageSource,
@@ -166,9 +189,10 @@ function appDevDependencies(
         ? { '@modern-js/app-tools': frameworkRequest(packageSource) }
         : {}),
       ...selectedAlways,
-      ...(appHasApi(app)
-        ? ULTRAMODERN_PACKAGE_PINS.serverCompilerDevDependencies
-        : {}),
+      // Both owners are installed through app-tools even for UI-only apps:
+      // app-tools-extensions and plugin-bff-build-extensions.
+      ...ULTRAMODERN_PACKAGE_PINS.serverCompilerDevDependencies,
+      ...ULTRAMODERN_PACKAGE_PINS.bffEffectDependencies,
       ...generationProfile?.devDependencies,
       ...(enableTailwind
         ? {
@@ -256,10 +280,7 @@ export function createRootPackageJson(
         typescript: ULTRAMODERN_PACKAGE_PINS.appDevDependencies.typescript,
         [ULTRAMODERN_CREATE_PACKAGE]: frameworkRequest(packageSource),
         '@modern-js/ultramodern-app-tools': frameworkRequest(packageSource),
-        ...selectSupportRequests(
-          ULTRAMODERN_PACKAGE_PINS.serverCompilerDevDependencies,
-          packageSource.supportArtifacts,
-        ),
+        ...rootSupportDependencies(packageSource),
         ...Object.fromEntries(
           apps
             .flatMap(app =>
@@ -380,20 +401,7 @@ export function createRootPackageJson(
       '@modern-js/code-tools': frameworkRequest(packageSource),
       [ULTRAMODERN_CREATE_PACKAGE]: frameworkRequest(packageSource),
       '@modern-js/plugin-bff': frameworkRequest(packageSource),
-      ...selectSupportRequests(
-        {
-          ...ULTRAMODERN_PACKAGE_PINS.bffEffectDependencies,
-          ...ULTRAMODERN_PACKAGE_PINS.serverCompilerDevDependencies,
-        },
-        packageSource.supportArtifacts,
-      ),
-      ...(packageSource.supportArtifacts
-        ? {
-            '@tanstack/react-router':
-              packageSource.supportArtifacts.packages['@tanstack/react-router']
-                .request,
-          }
-        : {}),
+      ...rootSupportDependencies(packageSource),
     },
     ...(packageSource.supportArtifacts
       ? { ultramodern: { supportArtifacts: packageSource.supportArtifacts } }
