@@ -130,6 +130,38 @@ function correctedVersions(packageName, versions) {
   return corrected;
 }
 
+// A successfully frozen install omits native optional dependencies not
+// available on this runner. Only a conclusive lockfile platform mismatch may
+// explain a missing link; an unknown selector must not allow an omission.
+function excludesPlatform(selectors, current) {
+  if (
+    !current ||
+    !Array.isArray(selectors) ||
+    selectors.length === 0 ||
+    !selectors.every(selector => /^!?[a-z0-9_-]+$/u.test(selector))
+  ) {
+    return false;
+  }
+  if (selectors.includes(`!${current}`)) return true;
+  const supported = selectors.filter(selector => !selector.startsWith('!'));
+  return (
+    supported.length > 0 &&
+    !supported.includes('any') &&
+    !supported.includes(current)
+  );
+}
+
+function linuxLibc() {
+  if (process.platform !== 'linux') return undefined;
+  const report = process.report?.getReport();
+  if (report?.header.glibcVersionRuntime) return 'glibc';
+  if (
+    report?.sharedObjects.some(file => /(?:ld-musl-|libc\.musl-)/u.test(file))
+  )
+    return 'musl';
+  return undefined;
+}
+
 /** Prove every raw and installed production occurrence uses its authenticated patched payload. */
 export function inspectInstalledCorrectionGraph({
   root,
@@ -429,7 +461,11 @@ export function inspectInstalledCorrectionGraph({
           );
           child = { id: snapshotId(key), key };
         }
-        edges.push({ dependencyKey, child: child.id });
+        edges.push({
+          dependencyKey,
+          child: child.id,
+          optional: field === 'optionalDependencies',
+        });
         const parents = reverse.get(child.id) ?? new Set();
         parents.add(node.id);
         reverse.set(child.id, parents);
@@ -492,9 +528,7 @@ export function inspectInstalledCorrectionGraph({
       const state = { logical, physical, ...pathState(logical) };
       return state;
     }
-    throw new Error(
-      `Missing installed dependency: ${parent} > ${dependencyKey}`,
-    );
+    return null;
   };
   const listPayload = (directory, reference) => {
     const files = [];
@@ -527,6 +561,7 @@ export function inspectInstalledCorrectionGraph({
   };
   const targets = new Map();
   const identities = [];
+  const libc = linuxLibc();
   const physicalQueue = [...nodes.values()]
     .filter(node => node.importer !== undefined && relevant.has(node.id))
     .map(node => ({
@@ -560,6 +595,29 @@ export function inspectInstalledCorrectionGraph({
       );
       const child = nodes.get(edge.child);
       const resolved = resolveDependency(physicalParent, edge.dependencyKey);
+      if (!resolved) {
+        const declaredOptional =
+          Object.hasOwn(
+            parentManifest.optionalDependencies ?? {},
+            edge.dependencyKey,
+          ) ||
+          (Object.hasOwn(
+            parentManifest.peerDependencies ?? {},
+            edge.dependencyKey,
+          ) &&
+            parentManifest.peerDependenciesMeta?.[edge.dependencyKey]
+              ?.optional === true);
+        const meta = child.key && lock.packages[child.key.split('(')[0]];
+        assert.ok(
+          edge.optional &&
+            declaredOptional &&
+            meta &&
+            (excludesPlatform(meta.cpu, process.arch) ||
+              excludesPlatform(meta.os, process.platform) ||
+              excludesPlatform(meta.libc, libc)),
+          `Missing installed dependency: ${physicalParent} > ${edge.dependencyKey}`,
+        );
+      }
       const key = JSON.stringify([physicalParent, edge.dependencyKey]);
       if (resolutions.has(key))
         assert.deepEqual(
@@ -572,6 +630,7 @@ export function inspectInstalledCorrectionGraph({
         dependencyKey: edge.dependencyKey,
         state: resolved,
       });
+      if (!resolved) continue;
       const value = manifest(resolved.physical);
       if (child.importer !== undefined) {
         assert.equal(

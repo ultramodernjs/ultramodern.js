@@ -218,6 +218,97 @@ function fixture(t) {
   };
 }
 
+function addOptionalNativeBranch(f, platform) {
+  const name = 'native-platform-fallback';
+  const patched = f.patched[0];
+  const directory = path.join(
+    f.root,
+    'node_modules/.pnpm',
+    'optional-native',
+    'node_modules',
+    name,
+  );
+  const installedLink = path.join(f.root, 'node_modules', name);
+  const manifestPath = path.join(f.root, 'package.json');
+  const importer = readJson(manifestPath);
+  importer.optionalDependencies = { [name]: '1.0.0' };
+  writeJson(manifestPath, importer);
+  f.lock.importers['.'].optionalDependencies = {
+    [name]: { specifier: '1.0.0', version: '1.0.0' },
+  };
+  f.lock.packages[`${name}@1.0.0`] = platform;
+  f.lock.snapshots[`${name}@1.0.0`] = {
+    dependencies: { [packageName]: patched },
+    optional: true,
+  };
+  f.save();
+  return {
+    name,
+    manifestPath,
+    attach() {
+      writePackage(directory, {
+        name,
+        version: '1.0.0',
+        dependencies: { [packageName]: correctedVersions[0] },
+      });
+      link(f.targets[0], path.join(path.dirname(directory), packageName));
+      link(directory, installedLink);
+    },
+  };
+}
+
+test('optional packages excluded by the runner platform are omitted only as long as their links are absent', t => {
+  const f = fixture(t);
+  const branch = addOptionalNativeBranch(f, { cpu: [`!${process.arch}`] });
+  const proof = f.inspect();
+  assert.deepEqual(proof.targets, f.expectedTargets());
+  assert.doesNotThrow(proof.assertUnchanged);
+  branch.attach();
+  assert.throws(proof.assertUnchanged, /Installed dependency edge changed/u);
+  const present = f.inspect();
+  assert.ok(present.identities.some(edge => edge.name === branch.name));
+  assert.deepEqual(present.targets, f.expectedTargets());
+});
+
+test('a missing production link needs both a declared optional edge and a conclusive platform mismatch', async t => {
+  for (const [name, metadata, mutate] of [
+    ['no platform selectors', {}, () => {}],
+    ['current cpu', { cpu: [process.arch] }, () => {}],
+    ['current os', { os: [process.platform] }, () => {}],
+    ['any cpu', { cpu: ['any'] }, () => {}],
+    [
+      'required lock edge',
+      { cpu: [`!${process.arch}`] },
+      (f, b) => {
+        f.lock.importers['.'].dependencies[b.name] =
+          f.lock.importers['.'].optionalDependencies[b.name];
+        delete f.lock.importers['.'].optionalDependencies[b.name];
+        f.save();
+      },
+    ],
+    [
+      'required manifest edge',
+      { cpu: [`!${process.arch}`] },
+      (_f, b) => {
+        const manifest = readJson(b.manifestPath);
+        manifest.dependencies[b.name] = manifest.optionalDependencies[b.name];
+        delete manifest.optionalDependencies[b.name];
+        writeJson(b.manifestPath, manifest);
+      },
+    ],
+  ]) {
+    await t.test(name, child => {
+      const f = fixture(child);
+      const branch = addOptionalNativeBranch(f, metadata);
+      mutate(f, branch);
+      assert.throws(
+        f.inspect,
+        /Missing installed dependency: .*native-platform-fallback/u,
+      );
+    });
+  }
+});
+
 function addRemoteProductionBranch(f, protocol = 'https:') {
   const routerName = '@octanejs/tanstack-router';
   const routerUrl = `${protocol}//github.com/bleedingdev/octane/releases/download/%40octanejs%2Ftanstack-router%400.1.60%2Bultramodern.0b9f76ee3003/octanejs-tanstack-router-0.1.60%2Bultramodern.0b9f76ee3003.tgz`;
