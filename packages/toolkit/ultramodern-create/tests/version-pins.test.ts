@@ -16,11 +16,13 @@ import {
 } from '../src/ultramodern-release-cohort';
 import { generateUltramodernWorkspace } from '../src/ultramodern-workspace';
 import { ULTRAMODERN_WORKSPACE_POLICY } from '../src/ultramodern-workspace/policy';
+import { readBundledFrameworkManifests } from '../src/ultramodern-workspace/tooling-support';
 import { assertWorkspaceDependencyOverrides } from '../src/ultramodern-workspace/validation/workspace';
 import {
   BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
   BRACES_FORK_VERSION,
 } from '../src/ultramodern-workspace/versions';
+import { createPublishedCreateFixture } from './helpers/published-create-fixture.mjs';
 
 function cohort() {
   return parseUltramodernReleaseCohort({
@@ -164,10 +166,8 @@ test('local source generation rejects an explicit install request', async () => 
 // workspace exempts exactly those versions.
 test('an installed create package immediately installs its exact cohort and transitive sidecars under native release-age policy', async () => {
   const packageRoot = path.resolve(__dirname, '..');
-  // The installed copy lives under this package's node_modules so Node
-  // resolves its dependencies by walking up, with no links to create.
-  const installRoot = fs.mkdtempSync(
-    path.join(packageRoot, 'node_modules', '.um-installed-cohort-'),
+  const installRoot = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'um-installed-producer-')),
   );
   const installed = path.join(
     installRoot,
@@ -178,13 +178,7 @@ test('an installed create package immediately installs its exact cohort and tran
   );
   try {
     fs.mkdirSync(installed, { recursive: true });
-    for (const entry of [
-      'package.json',
-      'dist',
-      'template',
-      'template-workspace',
-      'templates',
-    ]) {
+    for (const entry of ['template', 'template-workspace', 'templates']) {
       fs.cpSync(path.join(packageRoot, entry), path.join(installed, entry), {
         recursive: true,
       });
@@ -206,38 +200,24 @@ test('an installed create package immediately installs its exact cohort and tran
       );
     // modern-js-utils is not a catalog entry: it arrives transitively at the
     // same cohort version and must be exempt too.
-    const names = [
-      ...ULTRAMODERN_WORKSPACE_MODERN_PACKAGES.map(name =>
-        name.slice('@modern-js/'.length),
-      ),
-      'backend-federation-contracts',
-      'renderer-core',
-      'utils',
-    ].sort();
-    fs.writeFileSync(
-      path.join(installed, 'release-cohort.json'),
-      JSON.stringify({
-        aliases: Object.fromEntries(
-          names.map(name => [
-            `@modern-js/${name}`,
-            `@bleedingdev/modern-js-${name}`,
-          ]),
-        ),
-        packages: names.map(name => ({
-          sourceName: `@modern-js/${name}`,
-          targetName: `@bleedingdev/modern-js-${name}`,
-          version,
-        })),
-        release: { tag: 'latest', version },
-        schema: 'bleedingdev.ultramodern.release-cohort',
-        schemaVersion: 2,
+    const installedCohort = parseUltramodernReleaseCohort(
+      createPublishedCreateFixture({
+        installed,
+        version,
         sidecars,
-        source: {
-          commit: 'a'.repeat(40),
-          repository: 'https://example.test/repo',
-        },
+        requiredPackages: ULTRAMODERN_WORKSPACE_MODERN_PACKAGES,
       }),
     );
+    // Exercise current source even when local dist predates the physical-owner
+    // resolver. Every reached owner and exact alias edge must authenticate.
+    const owners = readBundledFrameworkManifests(installed, installedCohort);
+    assert(owners.has('@modern-js/utils'));
+    assert(owners.has('@modern-js/renderer-solid'));
+    const names = installedCohort.packages.map(item =>
+      item.sourceName.slice('@modern-js/'.length),
+    );
+    const generateEnv = { ...process.env };
+    delete generateEnv.NODE_PATH;
     const generate = (workspace: string, modernPackageVersion: string) =>
       spawnSync(
         process.execPath,
@@ -260,7 +240,7 @@ generateUltramodernWorkspace(JSON.parse(process.argv[2]));`,
             packageSource: { strategy: 'install', modernPackageVersion },
           }),
         ],
-        { cwd: tempRoot, encoding: 'utf8' },
+        { cwd: tempRoot, encoding: 'utf8', env: generateEnv },
       );
 
     const created = generate('fresh', version);
