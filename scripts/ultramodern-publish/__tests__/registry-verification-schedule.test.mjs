@@ -154,6 +154,9 @@ test('registry reads distinguish absent, throttled and malformed state', async (
 // The post-publish probe waits for a version npm has just accepted. A CDN or
 // npm-cache copy of the packument never shows it, so every read must bypass
 // caches and still see the fresh version while cached requests get stale data.
+// registry.npmjs.org answers a plain packument GET from its CDN copy whatever
+// cache-control the client sends; only the `?write=true` packument reaches
+// the origin.
 test('post-publish registry lookups read the origin, not a cached packument', async () => {
   const { lookupRegistryDistTag, lookupRegistryPackageDist } = await import(
     '../lib/prepare-bleedingdev-packages/registry-read.mjs'
@@ -172,6 +175,7 @@ test('post-publish registry lookups read the origin, not a cached packument', as
   const fetchImpl = async (url, init) => {
     requests.push(url);
     const bypassesCache =
+      new URL(url).searchParams.get('write') === 'true' &&
       init?.cache === 'no-store' &&
       init?.headers?.['cache-control'] === 'no-cache';
     return { ok: true, json: async () => (bypassesCache ? fresh : stale) };
@@ -185,8 +189,8 @@ test('post-publish registry lookups read the origin, not a cached packument', as
     '1.0.1',
   );
   assert.deepEqual(requests, [
-    `https://registry.npmjs.org/${encodeURIComponent(pkg)}`,
-    `https://registry.npmjs.org/${encodeURIComponent(pkg)}`,
+    `https://registry.npmjs.org/${encodeURIComponent(pkg)}?write=true`,
+    `https://registry.npmjs.org/${encodeURIComponent(pkg)}?write=true`,
   ]);
 
   const absent = { fetchImpl: async () => ({ ok: false, status: 404 }) };
