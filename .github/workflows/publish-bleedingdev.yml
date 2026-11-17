@@ -474,11 +474,14 @@ jobs:
       needs.select-integration-evidence.result == 'success' && ((needs.integration.result == 'success' && needs.select-integration-evidence.outputs.decision == 'run') || (needs.integration.result == 'skipped' && needs.select-integration-evidence.outputs.decision == 'reuse')) &&
       needs.qualify-source-compute.result == 'success'
     steps:
+      # This job runs one dependency-free script and reads the commit's tree
+      # object, so it checks out only that directory, not the whole repository.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
+          sparse-checkout: scripts/ultramodern-publish
 
       - name: Setup Node.js 26.13.1
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

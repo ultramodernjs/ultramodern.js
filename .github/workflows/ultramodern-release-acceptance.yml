@@ -46,7 +46,11 @@ jobs:
   accept-release:
     name: Clean-room acceptance of the immutable release bundle
     # Feature proofs validate a job-owned RUNNER_TEMP on GitHub or Depot GHA.
-    runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
+    # 16 vCPUs: on 8, the two workspace build passes ran 4 app builds at a time
+    # and each build slowed from 14 s (2 at a time) to 20-21 s (4 at a time), so
+    # the cores were already full. BLEEDINGDEV_ACCEPT_BUILD_CONCURRENCY below
+    # matches this size.
+    runs-on: depot-ubuntu-24.04-16
     timeout-minutes: 180
     outputs:
       producer_artifact_identity: ${{ inputs.producer_artifact_identity }}
@@ -129,6 +133,9 @@ jobs:
         id: acceptance-workspace
         run: echo "path=$(mktemp -d "$RUNNER_TEMP/ultramodern-erp-XXXXXX")" >> "$GITHUB_OUTPUT"
 
+      - name: Start CPU sampling
+        run: node scripts/ci/cpu-usage.mjs start --out "$RUNNER_TEMP/cpu-erp.txt"
+
       - name: Run exact-artifact ERP-10 acceptance
         id: erp-acceptance
         env:
@@ -137,9 +144,9 @@ jobs:
           SUPPORT_ARTIFACT_GITHUB_TOKEN: ${{ github.token }}
           # Preserve the original remote-loader stack before the React bridge wraps it.
           FEDERATION_DEBUG: 'true'
-          # Opt-in workspace build parallelism for larger self-hosted runners;
-          # unset (the hosted default) leaves the acceptance profile untouched.
-          BLEEDINGDEV_ACCEPT_BUILD_CONCURRENCY: ${{ vars.BLEEDINGDEV_ACCEPT_BUILD_CONCURRENCY }}
+          # The two workspace build passes build every app at once on this
+          # 16-vCPU runner; installs keep the reviewed concurrency profile.
+          BLEEDINGDEV_ACCEPT_BUILD_CONCURRENCY: '16'
           PRODUCER_RUN_IDENTITY: ${{ inputs.producer_run_identity }}
           ACCEPTANCE_WORK_DIR: ${{ steps.acceptance-workspace.outputs.path }}
         run: |
@@ -149,6 +156,10 @@ jobs:
             --receipt "$BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT" \
             --run-identity "$PRODUCER_RUN_IDENTITY" \
             --work-dir "$ACCEPTANCE_WORK_DIR"
+
+      - name: Report CPU use of the ERP-10 acceptance
+        if: always()
+        run: node scripts/ci/cpu-usage.mjs report --out "$RUNNER_TEMP/cpu-erp.txt" --label "ERP-10 acceptance"
 
       - name: Upload failed ERP diagnostics
         if: failure() && steps.erp-acceptance.outcome == 'failure'
@@ -260,6 +271,9 @@ jobs:
         id: renderer-fixed-browser
         run: mise exec -- node scripts/ultramodern-renderers/provision-browser.mjs
 
+      - name: Start CPU sampling
+        run: node scripts/ci/cpu-usage.mjs start --out "$RUNNER_TEMP/cpu-renderer.txt"
+
       # $RUNNER_TEMP/renderer-features is fixed, not mktemp'd: `seal` verifies
       # every evidence digest against the bytes at the absolute paths recorded
       # here, so it must reconstruct the identical root. RUNNER_TEMP is the
@@ -290,6 +304,10 @@ jobs:
             --native-inputs "$feature_work/native-inputs/native-inputs.json" \
             --emit-rows "$RENDERER_FEATURE_ROWS" \
             --run-identity "$PRODUCER_RUN_IDENTITY"
+
+      - name: Report CPU use of the renderer features
+        if: always() && steps.renderer-features.outcome != 'skipped'
+        run: node scripts/ci/cpu-usage.mjs report --out "$RUNNER_TEMP/cpu-renderer.txt" --label "Installed renderer features"
 
       # The whole logs tree, not only *.log: a row's evidence can be any file
       # under its feature-<row>. prefix, and `seal` re-digests every one of them.
