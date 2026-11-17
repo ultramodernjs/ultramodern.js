@@ -455,8 +455,7 @@ export function assertCompilerArchitecture(
           const selectedApp = workspaceValidationContract.apps.find(app =>
             absolutePath.startsWith(path.join(root, app.path) + path.sep),
           );
-          if (!selectedApp?.renderer || selectedApp.renderer === 'react')
-            continue;
+          if (!selectedApp?.renderer) continue;
           const sourceFile = parseCompilerInput(absolutePath);
           for (const reference of runtimeModuleReferences(sourceFile)) {
             if (

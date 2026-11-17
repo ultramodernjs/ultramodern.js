@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { verifySupportConsumer } from '../../../../scripts/ultramodern-publish/verify-support-consumer.mjs';
 import {
   inputs,
   supportProtocol as protocol,
@@ -17,6 +18,7 @@ import {
   appDependencies,
   createAppPackage,
   createRootPackageJson,
+  createSharedPackage,
 } from '../src/ultramodern-workspace/package-json';
 import {
   parseSupportArtifacts,
@@ -27,11 +29,18 @@ import {
 import { resolveRendererGenerationAdapter } from '../src/ultramodern-workspace/renderer-generations';
 import * as rendererProfile from '../src/ultramodern-workspace/renderer-profile';
 import { getRendererGenerationProfile } from '../src/ultramodern-workspace/renderer-profile';
+import {
+  readBundledFrameworkManifests,
+  toolingSupportDependencies,
+} from '../src/ultramodern-workspace/tooling-support';
 import type {
   ResolvedPackageSource,
   WorkspaceApp,
 } from '../src/ultramodern-workspace/types';
-import { assertRendererDependencies } from '../src/ultramodern-workspace/validation/renderer';
+import {
+  assertRendererDependencies,
+  assertWorkspaceRootToolingDependencies,
+} from '../src/ultramodern-workspace/validation/renderer';
 
 // Synthetic authority only; no production URL or descriptor is activated.
 function descriptor() {
@@ -65,6 +74,324 @@ function descriptor() {
     ),
   });
 }
+
+test.each(['react', 'solid', 'octane', 'none'] as const)(
+  '%s importers host the exact installed tooling closure, not foreign runtimes',
+  renderer => {
+    const supportArtifacts = parseSupportArtifacts(descriptor());
+    const source: ResolvedPackageSource = {
+      strategy: 'workspace',
+      modernPackageVersion: 'workspace:*',
+      supportArtifacts,
+    };
+    const app =
+      renderer === 'none'
+        ? createVerticalDescriptor('orders', 4101, { preset: 'api-only' })
+        : { ...shellApp, renderer };
+    const rootRenderer = renderer === 'none' ? 'react' : renderer;
+    const manifest = JSON.parse(
+      JSON.stringify(createAppPackage('support-proof', app, source, false)),
+    );
+    const root = JSON.parse(
+      JSON.stringify(
+        createRootPackageJson('support-proof', source, [], undefined, [], {
+          ...shellApp,
+          renderer: rootRenderer,
+        }),
+      ),
+    );
+    const selectedSupport = (value: typeof manifest) =>
+      Object.keys(supportArtifacts.packages)
+        .filter(name =>
+          Object.hasOwn(
+            { ...value.dependencies, ...value.devDependencies },
+            name,
+          ),
+        )
+        .sort();
+    assert.deepEqual(selectedSupport(root), [
+      '@effect/opentelemetry',
+      '@tanstack/react-router',
+      'rsbuild-plugin-dts',
+      'solid-js',
+    ]);
+    assert.deepEqual(
+      selectedSupport(manifest),
+      renderer === 'react'
+        ? [
+            '@effect/opentelemetry',
+            '@tanstack/react-router',
+            'rsbuild-plugin-dts',
+            'solid-js',
+          ]
+        : ['@effect/opentelemetry', 'rsbuild-plugin-dts', 'solid-js'],
+    );
+    assert.doesNotThrow(() =>
+      assertWorkspaceRootToolingDependencies(root, rootRenderer),
+    );
+    assert.doesNotThrow(() => assertRendererDependencies(manifest, renderer));
+    for (const name of ['effect', '@effect/opentelemetry'])
+      if (Object.hasOwn(manifest.dependencies, name))
+        assert.equal(manifest.devDependencies[name], undefined);
+
+    const shared = JSON.parse(
+      JSON.stringify(
+        createSharedPackage(
+          'support-proof',
+          'shared-contracts',
+          'Contracts',
+          source,
+          renderer === 'none' ? 'react' : renderer,
+        ),
+      ),
+    );
+    assert.deepEqual(
+      selectedSupport(shared),
+      renderer === 'react' || renderer === 'none'
+        ? ['@effect/opentelemetry', 'rsbuild-plugin-dts']
+        : [],
+    );
+    if (renderer === 'react' || renderer === 'none') {
+      assert.deepEqual(readSupportArtifacts(shared), supportArtifacts);
+      assert.equal(
+        shared.dependencies['@effect/opentelemetry'],
+        supportArtifacts.packages['@effect/opentelemetry'].request,
+      );
+      assert.equal(
+        shared.devDependencies['rsbuild-plugin-dts'],
+        supportArtifacts.packages['rsbuild-plugin-dts'].request,
+      );
+    }
+    const tokens = JSON.parse(
+      JSON.stringify(
+        createSharedPackage(
+          'support-proof',
+          'shared-design-tokens',
+          'Tokens',
+          source,
+          renderer,
+        ),
+      ),
+    );
+    assert.deepEqual(selectedSupport(tokens), []);
+
+    for (const group of [
+      'dependencies',
+      'optionalDependencies',
+      'peerDependencies',
+    ]) {
+      const wrongGroup = structuredClone(root);
+      const request = wrongGroup.devDependencies['solid-js'];
+      delete wrongGroup.devDependencies['solid-js'];
+      wrongGroup[group] = { ...wrongGroup[group], 'solid-js': request };
+      assert.throws(
+        () => assertWorkspaceRootToolingDependencies(wrongGroup, rootRenderer),
+        /tooling host solid-js/u,
+      );
+    }
+    const wrongUrl = structuredClone(manifest);
+    wrongUrl.devDependencies['rsbuild-plugin-dts'] =
+      'https://example.com/dts.tgz';
+    assert.throws(
+      () => assertRendererDependencies(wrongUrl, renderer),
+      /tooling host rsbuild-plugin-dts/u,
+    );
+    const foreign =
+      renderer === 'solid' ? '@tanstack/react-router' : 'solid-js';
+    const foreignRuntime = structuredClone(manifest);
+    foreignRuntime.dependencies[foreign] =
+      supportArtifacts.packages[foreign].request;
+    assert.throws(
+      () => assertRendererDependencies(foreignRuntime, renderer),
+      /foreign renderer package/u,
+    );
+    const arbitraryHost = structuredClone(manifest);
+    arbitraryHost.devDependencies['foreign-ui'] =
+      `npm:${foreign}@${supportArtifacts.packages[foreign].version}`;
+    assert.throws(
+      () => assertRendererDependencies(arbitraryHost, renderer),
+      /foreign renderer package/u,
+    );
+    arbitraryHost.devDependencies['foreign-ui'] = 'catalog:foreign';
+    assert.throws(
+      () =>
+        assertRendererDependencies(arbitraryHost, renderer, undefined, {
+          catalogs: {
+            foreign: {
+              'foreign-ui': `npm:${foreign}@${supportArtifacts.packages[foreign].version}`,
+            },
+          },
+        }),
+      /foreign renderer package/u,
+    );
+  },
+);
+
+test('installed optional peers require direct physical hosts; development owners do not', async () => {
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'support-peer-bundle-'),
+  );
+  const write = (relative: string, manifest: unknown) => {
+    const filename = path.join(directory, relative, 'package.json');
+    fs.mkdirSync(path.dirname(filename), { recursive: true });
+    fs.writeFileSync(filename, JSON.stringify(manifest));
+  };
+  try {
+    const support = parseSupportArtifacts(descriptor());
+    write('.', {
+      name: '@modern-js/ultramodern-create',
+      dependencies: {
+        '@modern-js/fixture-tools': 'workspace:*',
+        '@modern-js/fixture-renderer': 'workspace:*',
+      },
+    });
+    write('node_modules/@modern-js/fixture-tools', {
+      name: '@modern-js/fixture-tools',
+      peerDependencies: {
+        '@modern-js/fixture-renderer': 'workspace:*',
+        'rsbuild-plugin-dts': '1.0.7',
+      },
+      peerDependenciesMeta: {
+        '@modern-js/fixture-renderer': { optional: true },
+      },
+      devDependencies: { '@modern-js/test-tools': 'workspace:*' },
+      ultramodern: { supportArtifacts: support },
+    });
+    write('node_modules/@modern-js/fixture-renderer', {
+      name: '@modern-js/fixture-renderer',
+      peerDependencies: { 'solid-js': '2.0.0-rc.22' },
+      ultramodern: { supportArtifacts: support },
+    });
+    write('node_modules/@modern-js/test-tools', {
+      name: '@modern-js/test-tools',
+      peerDependencies: { '@rstest/core': '0.12.6' },
+    });
+    const direct = { '@modern-js/fixture-tools': 'workspace:*' };
+    const manifests = readBundledFrameworkManifests(directory);
+    assert.deepEqual(toolingSupportDependencies(direct, support, manifests), {
+      'rsbuild-plugin-dts': support.packages['rsbuild-plugin-dts'].request,
+      'solid-js': support.packages['solid-js'].request,
+    });
+    const require = createRequire(
+      path.join(
+        directory,
+        'node_modules/@modern-js/fixture-tools/package.json',
+      ),
+    );
+    assert.equal(
+      JSON.parse(
+        fs.readFileSync(
+          require.resolve('@modern-js/fixture-renderer/package.json'),
+          'utf8',
+        ),
+      ).peerDependencies['solid-js'],
+      '2.0.0-rc.22',
+    );
+    for (const name of ['solid-js', 'rsbuild-plugin-dts'] as const) {
+      write(`node_modules/${name}`, {
+        name,
+        version: support.packages[name].version,
+        main: './index.js',
+      });
+      fs.writeFileSync(
+        path.join(directory, 'node_modules', name, 'index.js'),
+        '',
+      );
+    }
+    const consumer = {
+      name: '@synthetic/app',
+      ultramodern: { supportArtifacts: support },
+      devDependencies: {
+        ...direct,
+        'rsbuild-plugin-dts': support.packages['rsbuild-plugin-dts'].request,
+      },
+    };
+    write('app', consumer);
+    const authenticationBoundary = new Error('reached archive authentication');
+    let authenticationCalls = 0;
+    const verify = () =>
+      verifySupportConsumer({
+        root: path.join(directory, 'app'),
+        descriptor: support,
+        readGithub: async () => {
+          authenticationCalls++;
+          throw authenticationBoundary;
+        },
+        fetchArtifact: async () => {
+          authenticationCalls++;
+          throw authenticationBoundary;
+        },
+      });
+    await assert.rejects(
+      verify,
+      /solid-js: owner closure requires a selected direct host/u,
+    );
+    assert.equal(authenticationCalls, 0);
+    write('app', {
+      ...consumer,
+      devDependencies: {
+        ...consumer.devDependencies,
+        ...toolingSupportDependencies(direct, support, manifests),
+      },
+    });
+    await assert.rejects(verify, error => error === authenticationBoundary);
+    assert.ok(
+      authenticationCalls > 0,
+      'The exact direct hosts must pass the unmodified installed-graph gate',
+    );
+    write('node_modules/@modern-js/fixture-duplicate', {
+      name: '@modern-js/fixture-duplicate',
+      peerDependencies: { 'solid-js': '2.0.0-rc.22' },
+      ultramodern: { supportArtifacts: support },
+    });
+    write('node_modules/@modern-js/fixture-duplicate/node_modules/solid-js', {
+      name: 'solid-js',
+      version: '2.0.0-rc.22',
+      main: './index.js',
+    });
+    fs.writeFileSync(
+      path.join(
+        directory,
+        'node_modules/@modern-js/fixture-duplicate/node_modules/solid-js/index.js',
+      ),
+      '',
+    );
+    write('node_modules/@modern-js/fixture-tools', {
+      name: '@modern-js/fixture-tools',
+      peerDependencies: {
+        '@modern-js/fixture-duplicate': 'workspace:*',
+        'rsbuild-plugin-dts': '1.0.7',
+      },
+      peerDependenciesMeta: {
+        '@modern-js/fixture-duplicate': { optional: true },
+      },
+      ultramodern: { supportArtifacts: support },
+    });
+    await assert.rejects(
+      verify,
+      /wrong physical peer \/ duplicate support correction/u,
+    );
+    fs.writeFileSync(
+      path.join(directory, 'package.json'),
+      JSON.stringify({
+        name: '@modern-js/ultramodern-create',
+        dependencies: { '@modern-js/fixture-tools': 'workspace:*' },
+      }),
+    );
+    assert.deepEqual(
+      toolingSupportDependencies(
+        direct,
+        support,
+        readBundledFrameworkManifests(directory),
+      ),
+      {
+        'rsbuild-plugin-dts': support.packages['rsbuild-plugin-dts'].request,
+      },
+    );
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test.each(['react', 'solid'] as const)(
   '%s actual root/importer manifests retain exact support authority',

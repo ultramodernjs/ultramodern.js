@@ -9,6 +9,7 @@ import {
   assertNativeRendererSourceSurface,
   assertRendererDependencies,
   assertRendererProjection,
+  assertWorkspaceRootToolingDependencies,
   isForeignRendererPackage,
   parseNpmAlias,
   validateApiOnlySourceSurface,
@@ -796,17 +797,25 @@ function collectRendererViolations(
     const renderer = selected?.renderer ?? workspaceRenderer;
     if (!renderer) continue;
     const parsed = readPackageJson(workspaceRoot, manifestPath);
-    for (const entry of dependencyEntries(parsed)) {
-      const alias = parseNpmAlias(entry.value);
-      if (
-        isForeignRendererPackage(entry.name, renderer) ||
-        (alias && isForeignRendererPackage(alias.name, renderer))
-      ) {
-        reject(
-          manifestPath,
-          `overlay introduced foreign renderer package ${entry.name} for ${renderer}`,
+    try {
+      if (manifestPath === 'package.json')
+        assertWorkspaceRootToolingDependencies(
+          parsed,
+          renderer,
+          dependencyCatalogs,
         );
-      }
+      else
+        assertRendererDependencies(
+          parsed,
+          renderer,
+          undefined,
+          dependencyCatalogs,
+        );
+    } catch (error) {
+      reject(
+        manifestPath,
+        error instanceof Error ? error.message : String(error),
+      );
     }
     for (const [prefix, value] of policyRoots(parsed)) {
       if (value !== undefined)
