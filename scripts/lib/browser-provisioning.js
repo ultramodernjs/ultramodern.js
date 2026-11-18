@@ -16,7 +16,8 @@
  *       are not the version that keyed the cache, then runs the first
  *       runtime's own CLI. `playwright install` is a no-op for browsers already restored
  *       from the cache; on Linux `--with-deps` also installs the OS packages,
- *       which live outside the cached directory.
+ *       which live outside the cached directory, but only when the runtime's
+ *       own `install-deps --dry-run` reports one missing.
  *
  * The CLI is spawned as `node <playwright bin>`, never through a shell or a
  * `.bin` shim, so the same call works on Linux, macOS and Windows.
@@ -120,10 +121,35 @@ function runnerTempBrowsersPath(environment = process.env) {
   return path.join(runnerTemp, 'ms-playwright');
 }
 
-function browserInstallArgs(platform = process.platform) {
-  return platform === 'linux'
+function browserInstallArgs(
+  platform = process.platform,
+  { systemDependenciesInstalled = false } = {},
+) {
+  return platform === 'linux' && !systemDependenciesInstalled
     ? ['install', '--with-deps', ...installedBrowsers]
     : ['install', ...installedBrowsers];
+}
+
+// `install --with-deps` runs `apt-get update` and `apt-get install` for every
+// listed package even when all are installed, and apt then upgrades any the
+// refreshed index has newer: 24 s of a 33 s step on a Depot boot whose image
+// lagged four mesa updates (publish run 44196872541). `install-deps --dry-run`
+// simulates that install against the image's own index and prints this line
+// only when no package is missing; anything else installs them as before.
+const allSystemDependenciesInstalled =
+  /^All system dependencies are installed\.$/mu;
+
+function linuxSystemDependenciesInstalled(cli, runtimeDir, runCommandImpl) {
+  const check = runCommandImpl(
+    process.execPath,
+    [cli, 'install-deps', '--dry-run', ...installedBrowsers],
+    { cwd: runtimeDir, stdio: ['ignore', 'pipe', 'inherit'] },
+  );
+  process.stdout.write(check.stdout ?? '');
+  return (
+    check.exitCode === 0 &&
+    allSystemDependenciesInstalled.test(check.stdout ?? '')
+  );
 }
 
 // Every runtime the job drives must resolve the same playwright: one browser
@@ -168,12 +194,15 @@ function installBrowsers(
   if (typeof bin !== 'string') {
     throw new Error(`${manifestPath} declares no playwright bin`);
   }
-  const args = browserInstallArgs(platform);
-  const result = runCommandImpl(
-    process.execPath,
-    [path.join(path.dirname(manifestPath), bin), ...args],
-    { cwd: runtimeDir },
-  );
+  const cli = path.join(path.dirname(manifestPath), bin);
+  const args = browserInstallArgs(platform, {
+    systemDependenciesInstalled:
+      platform === 'linux' &&
+      linuxSystemDependenciesInstalled(cli, runtimeDir, runCommandImpl),
+  });
+  const result = runCommandImpl(process.execPath, [cli, ...args], {
+    cwd: runtimeDir,
+  });
   if (result.exitCode !== 0) {
     throw new Error(
       `playwright ${args.join(' ')} failed in ${runtimeDir} with exit code ${result.exitCode}`,

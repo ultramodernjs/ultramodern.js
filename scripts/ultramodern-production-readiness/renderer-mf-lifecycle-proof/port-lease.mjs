@@ -84,8 +84,9 @@ export async function leasePorts(count, host = '127.0.0.1') {
 // that window with every bind(0) and outgoing connect() of their siblings.
 //
 // A claim owns its port from allocation until `free()`, bound or not:
-// - the port lies below the kernel's ephemeral range, so neither bind(0) nor a
-//   connect() autobind can ever be handed it;
+// - the port lies in a band no other allocator hands out: below the kernel's
+//   ephemeral range, so neither bind(0) nor a connect() autobind can be given
+//   it, and below testPortRange, so getPort() never probes or returns it;
 // - a claim file created with O_EXCL makes it exclusive among claimers in every
 // process on this machine; a claim whose owner process died is taken over.
 // The claim files live in one machine-wide directory, never under a TMPDIR a
@@ -95,9 +96,23 @@ const claimDirectory = () =>
     process.platform === 'win32' ? os.tmpdir() : '/tmp',
     'ultramodern-port-claims',
   );
-const claimFloor = 20_000;
 const ownedClaims = new Set();
 let exitHookInstalled = false;
+
+/**
+ * The band getPort() in tests/utils/modernTestUtils.js counts through. It
+ * probes a port with a bind and close and hands the bare number to a child,
+ * so it cannot see claims; claims stay below it instead.
+ */
+export const testPortRange = Object.freeze({ start: 20_000, end: 59_999 });
+
+/** The ports claimPort() hands out: [start, end). */
+export function claimPortRange() {
+  return {
+    start: 10_000,
+    end: Math.min(testPortRange.start, ephemeralPortFloor()),
+  };
+}
 
 /** The first port the kernel may hand to bind(0) or connect(). */
 export function ephemeralPortFloor() {
@@ -220,18 +235,15 @@ export async function claimPortAt(port, host = '127.0.0.1') {
  * bind it again for as long as it lives.
  */
 export async function claimPort(host = '127.0.0.1') {
-  const ceiling = ephemeralPortFloor();
-  const size = ceiling - claimFloor;
-  assert(size >= 1024, `No claimable port range below ${ceiling}`);
+  const { start: floor, end: ceiling } = claimPortRange();
+  const size = ceiling - floor;
+  assert(size >= 1024, `No claimable port range in ${floor}-${ceiling}`);
   const start = randomInt(size);
   for (let offset = 0; offset < size; offset += 1) {
-    const claim = await claimPortAt(
-      claimFloor + ((start + offset) % size),
-      host,
-    );
+    const claim = await claimPortAt(floor + ((start + offset) % size), host);
     if (claim) return claim;
   }
-  throw new Error(`Every claimable port in ${claimFloor}-${ceiling} is taken`);
+  throw new Error(`Every claimable port in ${floor}-${ceiling} is taken`);
 }
 
 /** Claim `count` distinct ports; `free()` gives every one back. */

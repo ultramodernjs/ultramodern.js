@@ -86,10 +86,33 @@ test('a runtime without playwright names the missing install', () =>
 test('install spawns the runtime CLI through node on every platform', () =>
   withRuntimes(root => {
     const runtime = makeRuntime(root, 'a', '1.64.1');
-    for (const [platform, args] of [
-      ['linux', ['install', '--with-deps', 'chromium']],
-      ['darwin', ['install', 'chromium']],
-      ['win32', ['install', 'chromium']],
+    const cli = path.join(runtime, 'node_modules/playwright/cli.js');
+    const dryRun = {
+      command: process.execPath,
+      commandArgs: [cli, 'install-deps', '--dry-run', 'chromium'],
+      options: { cwd: runtime, stdio: ['ignore', 'pipe', 'inherit'] },
+    };
+    for (const [platform, check, args] of [
+      // Linux installs OS packages only when the runtime reports one missing.
+      [
+        'linux',
+        { exitCode: 1, stdout: 'Missing system dependencies (1):\n  xvfb\n' },
+        ['install', '--with-deps', 'chromium'],
+      ],
+      [
+        'linux',
+        { exitCode: 0, stdout: 'All system dependencies are installed.\n' },
+        ['install', 'chromium'],
+      ],
+      // Exit 0 without the report (a CLI that only printed its command)
+      // proves nothing, so the packages are installed as before.
+      [
+        'linux',
+        { exitCode: 0, stdout: 'sudo -- sh -c "apt-get update"\n' },
+        ['install', '--with-deps', 'chromium'],
+      ],
+      ['darwin', undefined, ['install', 'chromium']],
+      ['win32', undefined, ['install', 'chromium']],
     ]) {
       const calls = [];
       installBrowsers(
@@ -98,21 +121,24 @@ test('install spawns the runtime CLI through node on every platform', () =>
           platform,
           runCommandImpl: (command, commandArgs, options) => {
             calls.push({ command, commandArgs, options });
-            return { exitCode: 0 };
+            return commandArgs[1] === 'install-deps' ? check : { exitCode: 0 };
           },
         },
       );
       assert.deepEqual(calls, [
+        ...(check ? [dryRun] : []),
         {
           command: process.execPath,
-          commandArgs: [
-            path.join(runtime, 'node_modules/playwright/cli.js'),
-            ...args,
-          ],
+          commandArgs: [cli, ...args],
           options: { cwd: runtime },
         },
       ]);
-      assert.deepEqual(browserInstallArgs(platform), args);
+      assert.deepEqual(
+        browserInstallArgs(platform, {
+          systemDependenciesInstalled: args.length === 2,
+        }),
+        args,
+      );
     }
   }));
 
@@ -138,7 +164,13 @@ test('install surfaces a failing playwright CLI', () =>
       () =>
         installBrowsers(
           { runtimeDirs: [runtime], version: '1.64.1' },
-          { platform: 'linux', runCommandImpl: () => ({ exitCode: 3 }) },
+          {
+            platform: 'linux',
+            runCommandImpl: (_command, commandArgs) =>
+              commandArgs[1] === 'install-deps'
+                ? { exitCode: 1, stdout: '' }
+                : { exitCode: 3 },
+          },
         ),
       /playwright install --with-deps chromium failed in .* with exit code 3/u,
     );
