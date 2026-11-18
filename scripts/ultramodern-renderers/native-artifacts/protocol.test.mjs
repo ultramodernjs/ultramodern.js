@@ -1,12 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fixture } from './fixtures.test-support.mjs';
-import {
-  assetFilename,
-  octane20ArtifactProtocol,
-  releaseUrl,
-  validateDescriptor,
-} from './protocol.mjs';
+import { assetFilename, releaseUrl, validateDescriptor } from './protocol.mjs';
+import { octane20ArtifactProtocol } from './recipes.mjs';
 import { authenticateDescriptor, readBytes } from './transport.mjs';
 
 test('authenticates the exact closed source/run/attempt manifest without claiming GitHub immutability', async () => {
