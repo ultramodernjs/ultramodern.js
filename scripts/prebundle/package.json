@@ -69,7 +69,6 @@
     "find-up": "8.0.0",
     "fs-extra": "11.4.1",
     "glob": "14.0.6",
-    "globby": "16.2.4",
     "gzip-size": "7.0.0",
     "import-lazy": "4.0.0",
     "inquirer": "14.3.0",
