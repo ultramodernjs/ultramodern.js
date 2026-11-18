@@ -8,27 +8,52 @@ type MaybeAsync<I> = I | Promise<I>;
 export type NormalHandler = (...args: any[]) => any;
 export type Handler<I, O> = (input: I) => MaybeAsync<O>;
 
-type IgnoreRule = { glob: string; negated: boolean; directoryOnly: boolean };
+type IgnoreRule = {
+  base: string;
+  glob: string;
+  negated: boolean;
+  directoryOnly: boolean;
+};
 
-// Lines of every .gitignore inside `dir`, rebased onto `dir`. Ignore files
-// above `dir` are not read: built API handlers live in gitignored dist folders.
+// POSIX paths, shallower first and then by name: the breadth-first order
+// Globby returned. Routes register in this order, and a deeper .gitignore
+// must come after the ones above it.
+const breadthFirst = (files: string[]) =>
+  files
+    .map(file => file.split(path.sep).join('/'))
+    .sort(
+      (a, b) =>
+        a.split('/').length - b.split('/').length ||
+        (a < b ? -1 : a > b ? 1 : 0),
+    );
+
+// Lines of every .gitignore inside `dir`, read like git and the `ignore`
+// package: relative to the file's own directory, without regard to case and
+// without extglob. Ignore files above `dir` are not read: built API handlers
+// live in gitignored dist folders.
 const readIgnoreRules = (dir: string): IgnoreRule[] =>
-  globSync('**/.gitignore', {
-    cwd: dir,
-    exclude: ['**/node_modules', '**/flow-typed', '**/coverage'],
-  }).flatMap(file => {
-    const base = path.dirname(file).split(path.sep).join('/');
+  breadthFirst(
+    globSync('**/.gitignore', {
+      cwd: dir,
+      followSymlinks: true,
+      exclude: ['**/node_modules', '**/flow-typed', '**/coverage'],
+    }),
+  ).flatMap(file => {
+    const parent = path.posix.dirname(file);
+    const base = parent === '.' ? '' : `${parent.toLowerCase()}/`;
     return readFileSync(path.join(dir, file), 'utf8')
+      .replace(/^\uFEFF/, '')
       .split(/\r?\n/)
       .map(line => line.trimEnd())
       .filter(line => line && !line.startsWith('#'))
       .map(line => {
         const negated = line.startsWith('!');
-        const pattern = negated ? line.slice(1) : line;
-        const body = pattern.replace(/\/$/, '');
+        const pattern = (negated ? line.slice(1) : line).toLowerCase();
+        const body = pattern.replace(/\/$/, '').replace(/[()]/g, '[$&]');
         return {
+          base,
           // A line without an inner slash matches at any depth below its file.
-          glob: path.posix.join(base, body.includes('/') ? '' : '**', body),
+          glob: body.includes('/') ? body.replace(/^\//, '') : `**/${body}`,
           negated,
           directoryOnly: pattern.endsWith('/'),
         };
@@ -38,14 +63,15 @@ const readIgnoreRules = (dir: string): IgnoreRule[] =>
 // As in git, the last matching line wins and nothing below an ignored
 // directory comes back.
 const isIgnored = (rules: IgnoreRule[], file: string) => {
-  const segments = file.split(path.sep);
+  const segments = file.toLowerCase().split('/');
   return segments.some((_, index) => {
     const target = segments.slice(0, index + 1).join('/');
     const isDirectory = index < segments.length - 1;
     return rules.reduce(
       (ignored, rule) =>
         (isDirectory || !rule.directoryOnly) &&
-        path.matchesGlob(target, rule.glob)
+        target.startsWith(rule.base) &&
+        path.posix.matchesGlob(target.slice(rule.base.length), rule.glob)
           ? !rule.negated
           : ignored,
       false,
@@ -59,14 +85,17 @@ export const getFiles = (
 ): string[] => {
   const patterns = typeof rules === 'string' ? [rules] : rules;
   const ignoreRules = readIgnoreRules(lambdaDir);
-  return globSync(
-    patterns.filter(rule => !rule.startsWith('!')),
-    {
-      cwd: lambdaDir,
-      exclude: patterns
-        .filter(rule => rule.startsWith('!'))
-        .map(rule => rule.slice(1)),
-    },
+  return breadthFirst(
+    globSync(
+      patterns.filter(rule => !rule.startsWith('!')),
+      {
+        cwd: lambdaDir,
+        followSymlinks: true,
+        exclude: patterns
+          .filter(rule => rule.startsWith('!'))
+          .map(rule => rule.slice(1)),
+      },
+    ),
   )
     .filter(
       file =>

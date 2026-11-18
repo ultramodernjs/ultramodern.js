@@ -57,20 +57,71 @@ describe('getFiles', () => {
     ]);
   });
 
+  test('returns files shallower first, then by name', () => {
+    writeTree(lambdaDir, {
+      'x/[id]/index.ts': '',
+      '[a]/[b].ts': '',
+      'index.ts': '',
+    });
+
+    expect(
+      getFiles(lambdaDir, API_FILE_RULES).map(file =>
+        path.relative(lambdaDir, file).split(path.sep).join('/'),
+      ),
+    ).toEqual(['index.ts', '[a]/[b].ts', 'x/[id]/index.ts']);
+  });
+
+  test('follows symlinked directories', () => {
+    writeTree(lambdaDir, { 'index.ts': '', 'real/inner/r.ts': '' });
+    fs.symlinkSync(
+      path.join(lambdaDir, 'real'),
+      path.join(lambdaDir, 'linkdir'),
+      'junction',
+    );
+
+    expect(found(API_FILE_RULES)).toEqual([
+      'index.ts',
+      'linkdir/inner/r.ts',
+      'real/inner/r.ts',
+    ]);
+  });
+
   test('applies the .gitignore files inside the API directory only', () => {
     fs.mkdirSync(path.join(root, '.git'));
     writeTree(root, { '.gitignore': 'dist/\n' });
     writeTree(lambdaDir, {
-      '.gitignore': 'ignored.js\nbuild/\n',
+      '.gitignore': 'ignored.js\nbuild/\noverride.js\n',
       'index.js': '',
       'ignored.js': '',
       'nested/ignored.js': '',
       'build/out.js': '',
-      'generated/.gitignore': '*.js\n!keep.js\n',
+      'generated/.gitignore': '*.js\n!keep.js\n!override.js\n',
       'generated/drop.js': '',
       'generated/keep.js': '',
+      'generated/override.js': '',
+      'user/[id]/.gitignore': 'generated.js\n',
+      'user/[id]/generated.js': '',
+      'user/[id]/index.js': '',
     });
 
-    expect(found('**/*.js')).toEqual(['generated/keep.js', 'index.js']);
+    expect(found('**/*.js')).toEqual([
+      'generated/keep.js',
+      'generated/override.js',
+      'index.js',
+      'user/[id]/index.js',
+    ]);
+  });
+
+  test('reads .gitignore lines like git: BOM, any case, no extglob', () => {
+    writeTree(lambdaDir, {
+      '.gitignore': '\uFEFFsecret.js\nSHOUT.js\n@(x).js\n',
+      'index.js': '',
+      'secret.js': '',
+      'shout.js': '',
+      'x.js': '',
+      '@(x).js': '',
+    });
+
+    expect(found('**/*.js')).toEqual(['index.js', 'x.js']);
   });
 });
