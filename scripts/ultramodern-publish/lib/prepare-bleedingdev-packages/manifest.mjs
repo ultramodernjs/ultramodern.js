@@ -238,42 +238,10 @@ function orderPublishItems(packages, manifest = { aliases: {}, packages }) {
   return ordered;
 }
 
-// Groups a verified publishOrder into dependency levels: every member of a
-// level has all of its in-cohort dependencies in earlier levels, so a level can
-// publish concurrently once the previous one has returned. The create package
-// keeps a level of its own at the end, preserving its publish-last contract.
-function publishLevels(manifest) {
-  const createTarget =
-    manifest.aliases?.[ultramodernCreateSourceName] ??
-    ultramodernCreateSourceName;
-  const levelByTarget = new Map();
-  const levels = [];
-  for (const targetName of manifest.publishOrder) {
-    let level = 0;
-    if (targetName === createTarget) {
-      level = levels.length;
-    } else {
-      for (const dependency of manifest.dependencyGraph[targetName] ?? []) {
-        const dependencyLevel = levelByTarget.get(dependency);
-        if (dependencyLevel === undefined) {
-          throw new Error(
-            `publishOrder lists ${targetName} before its dependency ${dependency}`,
-          );
-        }
-        level = Math.max(level, dependencyLevel + 1);
-      }
-    }
-    levelByTarget.set(targetName, level);
-    (levels[level] ??= []).push(targetName);
-  }
-  return levels;
-}
-
 export {
   createPackageDependencyGraph,
   orderPublishItems,
   packageDependenciesFromPackageJson,
-  publishLevels,
   validateFullCohortManifest,
   validatePublishManifest,
 };

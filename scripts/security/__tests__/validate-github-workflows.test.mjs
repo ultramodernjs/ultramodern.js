@@ -144,6 +144,9 @@ const cohortJobs = [
 // The selector's decision is an output, so its result carries outputs.
 const integrationRun = { result: 'success', outputs: { decision: 'run' } };
 const integrationReuse = { result: 'success', outputs: { decision: 'reuse' } };
+// reconcile-sidecars decides whether the sidecar publisher has work.
+const sidecarsPublish = { result: 'success', outputs: { decision: 'publish' } };
+const sidecarsReuse = { result: 'success', outputs: { decision: 'reuse' } };
 const resultOf = value =>
   value && typeof value === 'object' ? value.result : value;
 // Jobs that run only in a cohort dry run.
@@ -168,6 +171,7 @@ const publicationResults = (workflow, mode, dryRun = false) => {
       }
     }
     results['select-integration-evidence'] = integrationRun;
+    results['reconcile-sidecars'] = sidecarsPublish;
   }
   results['publish-sidecars'] = dryRun ? 'skipped' : 'success';
   return results;
@@ -670,6 +674,7 @@ test('release qualification overlaps integration and issues no receipt before bo
       Object.keys(workflow.jobs).map(jobId => [jobId, 'success']),
     ),
     'select-integration-evidence': integrationRun,
+    'reconcile-sidecars': sidecarsPublish,
   };
   const context = {
     github: {
@@ -949,6 +954,9 @@ test('each active publication gate rejects unsuccessful or absent required resul
       for (const result of ['failure', 'cancelled', 'skipped', undefined]) {
         const results = publicationResults(workflow, mode, dryRun);
         if (result === undefined) delete results[prerequisite];
+        // A job that failed after writing its outputs still exposes them.
+        else if (typeof results[prerequisite] === 'object')
+          results[prerequisite] = { ...results[prerequisite], result };
         else results[prerequisite] = result;
         assert.equal(
           schedules(jobId, { results }),
@@ -959,6 +967,161 @@ test('each active publication gate rejects unsuccessful or absent required resul
     }
   }
 });
+
+test('the sidecar publisher runs only on a publish decision and publish accepts its skip only on reuse', () => {
+  const workflow = readPublishWorkflow();
+  const schedules = publicationSchedules(workflow, 'cohort');
+  const decided = (decision, result = 'success') => ({
+    result,
+    outputs: { decision },
+  });
+  const withResults = (sidecars, reconcile) => ({
+    results: {
+      ...publicationResults(workflow, 'cohort'),
+      'publish-sidecars': sidecars,
+      'reconcile-sidecars': reconcile,
+    },
+  });
+  assert.equal(
+    schedules('publish-sidecars', withResults('success', sidecarsPublish)),
+    true,
+  );
+  for (const reconcile of [
+    sidecarsReuse,
+    { result: 'success' },
+    decided('skip'),
+    'success',
+  ])
+    assert.equal(
+      schedules('publish-sidecars', withResults('success', reconcile)),
+      false,
+      `publisher must not run on ${JSON.stringify(reconcile)}`,
+    );
+  // Sidecars mode has no reconcile-sidecars and keeps its own clause.
+  assert.equal(
+    publicationSchedules(workflow, 'sidecars')('publish-sidecars'),
+    true,
+  );
+
+  assert.equal(
+    schedules('publish', withResults('success', sidecarsPublish)),
+    true,
+  );
+  assert.equal(
+    schedules('publish', withResults('skipped', sidecarsReuse)),
+    true,
+  );
+  for (const [sidecars, reconcile] of [
+    ['skipped', sidecarsPublish],
+    ['skipped', { result: 'success' }],
+    ['skipped', decided('skip')],
+    ['skipped', 'success'],
+    ['success', sidecarsReuse],
+    ['success', { result: 'success' }],
+    ['failure', sidecarsPublish],
+    ['failure', sidecarsReuse],
+    ['cancelled', sidecarsPublish],
+    ['cancelled', sidecarsReuse],
+    ['skipped', decided('reuse', 'failure')],
+    ['skipped', decided('reuse', 'cancelled')],
+    ['skipped', decided('reuse', 'skipped')],
+    ['success', decided('publish', 'failure')],
+  ])
+    assert.equal(
+      schedules('publish', withResults(sidecars, reconcile)),
+      false,
+      `publish must refuse publish-sidecars ${sidecars} with ${JSON.stringify(reconcile)}`,
+    );
+  // The run continues to npm acceptance only through publish itself.
+  const handoff = withResults('skipped', sidecarsReuse);
+  assert.equal(schedules('start-release-acceptance', handoff), true);
+  assert.equal(
+    schedules('start-release-acceptance', {
+      results: { ...handoff.results, publish: 'skipped' },
+    }),
+    false,
+  );
+});
+
+for (const [label, mutate, pattern] of [
+  [
+    'sidecar publisher without the decision',
+    workflow => {
+      const job = workflow.jobs['publish-sidecars'];
+      const clause =
+        " && needs.reconcile-sidecars.outputs.decision == 'publish'";
+      assert.ok(job.if.includes(clause));
+      job.if = job.if.replace(clause, '');
+    },
+    /publish-sidecars must run in cohort mode only when reconcile-sidecars decided publish/u,
+  ],
+  [
+    'publish accepting any skipped sidecar publisher',
+    workflow => {
+      const job = workflow.jobs.publish;
+      const clause = " && needs.reconcile-sidecars.outputs.decision == 'reuse'";
+      assert.ok(job.if.includes(clause));
+      job.if = job.if.replace(clause, '');
+    },
+    /publish must require publish-sidecars to pass on a publish decision or to be skipped on a reuse decision/u,
+  ],
+  [
+    'publish refusing every skipped sidecar publisher',
+    workflow => {
+      const job = workflow.jobs.publish;
+      const clause =
+        "((needs.publish-sidecars.result == 'success' && needs.reconcile-sidecars.outputs.decision == 'publish') || (needs.publish-sidecars.result == 'skipped' && needs.reconcile-sidecars.outputs.decision == 'reuse'))";
+      assert.ok(job.if.includes(clause));
+      job.if = job.if.replace(
+        clause,
+        "needs.publish-sidecars.result == 'success'",
+      );
+    },
+    /publish must require publish-sidecars to pass on a publish decision or to be skipped on a reuse decision/u,
+  ],
+  [
+    'decision step renamed',
+    workflow => {
+      const step = workflow.jobs['reconcile-sidecars'].steps.find(
+        candidate => candidate.id === 'reconcile',
+      );
+      step.id = 'reconciled';
+    },
+    /reconcile-sidecars must output only the decision/u,
+  ],
+  [
+    'decision not written',
+    workflow => {
+      const step = workflow.jobs['reconcile-sidecars'].steps.find(
+        candidate => candidate.id === 'reconcile',
+      );
+      step.run = step.run.replace('--github-output "$GITHUB_OUTPUT"', '');
+    },
+    /reconcile-sidecars must output only the decision/u,
+  ],
+  [
+    'decision output from another step',
+    workflow => {
+      workflow.jobs['reconcile-sidecars'].outputs.decision = githubExpression(
+        'steps.other.outputs.decision',
+      );
+    },
+    /reconcile-sidecars must output only the decision/u,
+  ],
+  [
+    'decision check that never fails',
+    workflow => {
+      const step = workflow.jobs['reconcile-sidecars'].steps.find(
+        candidate => candidate.env?.SIDECAR_DECISION !== undefined,
+      );
+      step.run = step.run.replace('*) exit 1 ;;', '*) ;;');
+    },
+    /reconcile-sidecars must output only the decision/u,
+  ],
+])
+  test(`release validator rejects a ${label}`, () => {
+    assertPublishMutationRejected(label, mutate, pattern);
+  });
 
 test('publication guards reject the wrong identity, ref, mode, and dry-run type', () => {
   const workflow = readPublishWorkflow();

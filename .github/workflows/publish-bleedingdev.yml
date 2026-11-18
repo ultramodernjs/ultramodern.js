@@ -781,11 +781,17 @@ jobs:
   # what it would do and fails closed on a missing package or any registry
   # content/version mismatch. It needs only the bundle and the publication CLI
   # dependency, so it runs beside the clean-room acceptance; publish-sidecars,
-  # publish and validate-release each require it.
+  # publish and validate-release each require it. Its decision is `publish`
+  # when at least one staged sidecar version is not on npm yet and `reuse`
+  # when every one already is, with the accepted bytes, provenance and tag.
+  # publish-sidecars runs only on `publish`; publish accepts a skipped
+  # publish-sidecars only on `reuse`.
   reconcile-sidecars:
     name: Reconcile the staged sidecars with the registry
     runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 15
+    outputs:
+      decision: ${{ steps.reconcile.outputs.decision }}
     if: >-
       inputs.mode == 'cohort' &&
       github.actor == 'BleedingDev' &&
@@ -825,11 +831,26 @@ jobs:
           run-id: ${{ github.run_id }}
 
       - name: Validate the sidecar publication lane against the registry
+        id: reconcile
         run: |
           node scripts/ultramodern-publish/publish-sidecars.mjs \
             --dry-run \
             --out "$BLEEDINGDEV_RELEASE_DIR" \
-            --tag "$BLEEDINGDEV_PUBLISH_TAG"
+            --tag "$BLEEDINGDEV_PUBLISH_TAG" \
+            --github-output "$GITHUB_OUTPUT"
+
+      # Runs in every dry run too, so the dry run proves this wiring even
+      # though it never reaches the two jobs that read the decision.
+      - name: Record the sidecar publication decision
+        env:
+          SIDECAR_DECISION: ${{ steps.reconcile.outputs.decision }}
+        run: |
+          case "$SIDECAR_DECISION" in
+            publish) summary='at least one sidecar version is not on npm yet, so publish-sidecars publishes it before the cohort' ;;
+            reuse) summary='every sidecar version is already on npm with the accepted bytes, so publish-sidecars is skipped and no sidecar is published' ;;
+            *) exit 1 ;;
+          esac
+          printf '## Sidecars: %s\n\n%s.\n' "$SIDECAR_DECISION" "$summary" >> "$GITHUB_STEP_SUMMARY"
 
   accept-release:
     name: Clean-room acceptance of the immutable release bundle
@@ -1100,11 +1121,14 @@ jobs:
   # their own scope, and they are published from this dedicated job strictly
   # BEFORE the cohort. @bleedingdev/modern-js-image pins them through
   # `npm:@bleedingdev/<name>@<exact version>` alias specifiers, which npm can
-  # only resolve once those exact versions exist on the registry. `publish`
-  # declares this job in `needs`, so a failed or skipped sidecar publication
-  # makes the cohort publish unreachable rather than shipping a cohort whose
-  # image package cannot install. Trusted publishing only: id-token: write and
-  # the npm-publish environment, no token secret.
+  # only resolve once those exact versions exist on the registry. In cohort mode
+  # this job runs only when reconcile-sidecars decided `publish`; when it
+  # decided `reuse`, every exact version is already on npm and this job is
+  # skipped. `publish` declares this job in `needs` and accepts it skipped only
+  # with that `reuse` decision, so a failed sidecar publication, or a skip for
+  # any other reason, makes the cohort publish unreachable rather than shipping
+  # a cohort whose image package cannot install. Trusted publishing only:
+  # id-token: write and the npm-publish environment, no token secret.
   publish-sidecars:
     name: Publish the qualified stable sidecars
     # npm provenance rejects self-hosted runners, including Depot.
@@ -1124,7 +1148,7 @@ jobs:
       inputs.dry_run == false &&
       needs.publish-security.result == 'success' &&
       (
-        (inputs.mode == 'cohort' && needs.select-integration-evidence.result == 'success' && ((needs.integration.result == 'success' && needs.select-integration-evidence.outputs.decision == 'run') || (needs.integration.result == 'skipped' && needs.select-integration-evidence.outputs.decision == 'reuse')) && needs.qualify-source-compute.result == 'success' && needs.qualify-source.result == 'success' && needs.reconcile-sidecars.result == 'success' && needs.accept-release.result == 'success' && needs.rehearse-tractor.result == 'success') ||
+        (inputs.mode == 'cohort' && needs.select-integration-evidence.result == 'success' && ((needs.integration.result == 'success' && needs.select-integration-evidence.outputs.decision == 'run') || (needs.integration.result == 'skipped' && needs.select-integration-evidence.outputs.decision == 'reuse')) && needs.qualify-source-compute.result == 'success' && needs.qualify-source.result == 'success' && needs.reconcile-sidecars.result == 'success' && needs.reconcile-sidecars.outputs.decision == 'publish' && needs.accept-release.result == 'success' && needs.rehearse-tractor.result == 'success') ||
         (inputs.mode == 'sidecars' && needs.prepare-sidecars.result == 'success' && needs.qualify-sidecars.result == 'success')
       )
     needs:
@@ -1275,7 +1299,7 @@ jobs:
       needs.reconcile-sidecars.result == 'success' &&
       needs.accept-release.result == 'success' &&
       needs.rehearse-tractor.result == 'success' &&
-      needs.publish-sidecars.result == 'success'
+      ((needs.publish-sidecars.result == 'success' && needs.reconcile-sidecars.outputs.decision == 'publish') || (needs.publish-sidecars.result == 'skipped' && needs.reconcile-sidecars.outputs.decision == 'reuse'))
     needs:
       - select-integration-evidence
       - integration
@@ -1289,7 +1313,9 @@ jobs:
       - rehearse-tractor
       # Hard ordering gate: the cohort's @bleedingdev/modern-js-image aliases
       # resolve only after these exact sidecar versions are on the registry.
-      # A failed or skipped publish-sidecars makes this job unreachable.
+      # It must pass when reconcile-sidecars decided `publish`, and may be
+      # skipped only when it decided `reuse` (every version already on npm).
+      # Anything else makes this job unreachable.
       - publish-sidecars
     steps:
       - name: Harden Runner

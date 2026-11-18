@@ -1157,13 +1157,9 @@ test('trusted publishing rejects the entire absent cohort before the first regis
   }
 });
 
-test('full-cohort publish runs each dependency level concurrently and never starts a consumer before its dependencies return', async t => {
-  mockTrustedWorkflowEnvironment(t);
-  const { publishManifestPackages } = await import(
-    '../prepare-bleedingdev-packages.mjs'
-  );
-  // plugin-a depends on runtime -> utils; plugin-b and utils share level 0.
-  const fixture = await createArtifactFixture([
+// utils <- runtime <- plugin-a, then eight independent plugins, then create.
+const createPoolFixture = () =>
+  createArtifactFixture([
     {
       sourceName: '@modern-js/plugin-a',
       targetName: '@bleedingdev/modern-js-plugin-a',
@@ -1172,62 +1168,277 @@ test('full-cohort publish runs each dependency level concurrently and never star
           'npm:@bleedingdev/modern-js-runtime@3.2.0-ultramodern.1',
       },
     },
-    {
-      sourceName: '@modern-js/plugin-b',
-      targetName: '@bleedingdev/modern-js-plugin-b',
+    ...'bcdefghi'.split('').map(letter => ({
+      sourceName: `@modern-js/plugin-${letter}`,
+      targetName: `@bleedingdev/modern-js-plugin-${letter}`,
       dependencies: {},
-    },
+    })),
   ]);
-  const { manifest } = fixture.releaseArtifacts;
+const createTarget = '@bleedingdev/modern-js-ultramodern-create';
+const poolOptions = (publishConcurrency, dryRun = true) => ({
+  dryRun,
+  publishConcurrency,
+  tag: 'latest',
+  version: '3.2.0-ultramodern.1',
+});
+// Records every upload's start and end; `behaviour[targetName]` replaces the
+// default immediate acceptance and receives publishPackage's overrides.
+const recordUploads = (behaviour = {}) => {
   const events = [];
   const inFlight = new Set();
   let maxInFlight = 0;
+  const publishPackage = async (artifact, _options, overrides) => {
+    events.push(['start', artifact.targetName]);
+    inFlight.add(artifact.targetName);
+    maxInFlight = Math.max(maxInFlight, inFlight.size);
+    try {
+      await (
+        behaviour[artifact.targetName] ??
+        (() => new Promise(resolve => setTimeout(resolve, 5)))
+      )(overrides);
+    } catch (error) {
+      events.push(['fail', artifact.targetName]);
+      throw error;
+    } finally {
+      inFlight.delete(artifact.targetName);
+    }
+    events.push(['end', artifact.targetName]);
+    return artifact.targetName;
+  };
+  const indexOf = (kind, targetName) =>
+    events.findIndex(
+      ([eventKind, name]) => eventKind === kind && name === targetName,
+    );
+  const started = () =>
+    events.filter(([kind]) => kind === 'start').map(([, name]) => name);
+  return {
+    events,
+    indexOf,
+    maxInFlight: () => maxInFlight,
+    publishPackage,
+    started,
+  };
+};
+const absentRegistry = {
+  lookupRegistryDistTag: async () => '3.1.0-ultramodern.previous',
+  lookupRegistryPackageDist: async () => null,
+};
+
+test('the cohort uploads in one bounded pool, dependencies first, and create only after every other member returned', async t => {
+  mockTrustedWorkflowEnvironment(t);
+  const { publishManifestPackages } = await import(
+    '../prepare-bleedingdev-packages.mjs'
+  );
+  const fixture = await createPoolFixture();
+  const { manifest } = fixture.releaseArtifacts;
+  const members = manifest.publishOrder.filter(name => name !== createTarget);
+  assert.equal(manifest.publishOrder.at(-1), createTarget);
+  assert.equal(members.length, 11);
 
   try {
+    for (const concurrency of [2, 8]) {
+      const uploads = recordUploads();
+      await publishManifestPackages(
+        fixture.releaseArtifacts,
+        poolOptions(concurrency),
+        { ...absentRegistry, publishPackage: uploads.publishPackage },
+      );
+      // The pool is as wide as the cap and never wider.
+      assert.equal(uploads.maxInFlight(), concurrency);
+      // Uploads start in publishOrder, so every dependency starts first.
+      assert.deepEqual(uploads.started(), manifest.publishOrder);
+      // No level barrier: runtime starts while its dependency is in flight.
+      assert.ok(
+        uploads.indexOf('start', '@bleedingdev/modern-js-runtime') <
+          uploads.indexOf('end', '@bleedingdev/modern-js-utils'),
+      );
+      // create starts only after every other member returned.
+      for (const member of members) {
+        assert.ok(
+          uploads.indexOf('end', member) <
+            uploads.indexOf('start', createTarget),
+          `create started before ${member} returned at concurrency ${concurrency}`,
+        );
+      }
+      assert.equal(uploads.events.length, manifest.publishOrder.length * 2);
+    }
+  } finally {
+    removeDir(fixture.root);
+  }
+});
+
+test('a member waiting to retry holds new uploads; once it fails nothing else starts and create never does', async t => {
+  mockTrustedWorkflowEnvironment(t);
+  const { publishManifestPackages } = await import(
+    '../prepare-bleedingdev-packages.mjs'
+  );
+  const fixture = await createPoolFixture();
+  const { manifest } = fixture.releaseArtifacts;
+  const utils = '@bleedingdev/modern-js-utils';
+  const runtime = '@bleedingdev/modern-js-runtime';
+
+  // utils' first attempt fails after runtime has started beside it, and
+  // runtime returns only once utils waits to retry, so the next free slot
+  // opens inside that wait.
+  const retryingUtils = finish => {
+    let entered;
+    const retryEntered = new Promise(resolve => {
+      entered = resolve;
+    });
+    return {
+      [utils]: async overrides => {
+        await new Promise(resolve => setImmediate(resolve));
+        const retry = overrides.wait(30);
+        entered();
+        await retry;
+        finish();
+      },
+      [runtime]: () => retryEntered,
+    };
+  };
+
+  try {
+    // The retry succeeds: the pool pauses for exactly that wait and resumes in
+    // publishOrder afterwards.
+    const recovered = recordUploads(retryingUtils(() => {}));
+    await publishManifestPackages(fixture.releaseArtifacts, poolOptions(2), {
+      ...absentRegistry,
+      publishPackage: recovered.publishPackage,
+    });
+    assert.deepEqual(recovered.started(), manifest.publishOrder);
+    assert.ok(
+      recovered.indexOf('start', runtime) < recovered.indexOf('end', runtime),
+    );
+    assert.ok(
+      recovered.indexOf('end', runtime) < recovered.indexOf('end', utils),
+    );
+    assert.ok(
+      recovered.indexOf('end', utils) <
+        recovered.indexOf('start', '@bleedingdev/modern-js-plugin-a'),
+      'no upload may start while utils waits to retry',
+    );
+
+    // The same retry ends in a failure: only the upload already in flight
+    // (runtime) finishes, nothing else starts, and the failure surfaces.
+    const failed = recordUploads(
+      retryingUtils(() => {
+        throw new Error('fixture: npm publish failed for utils');
+      }),
+    );
+    await assert.rejects(
+      publishManifestPackages(fixture.releaseArtifacts, poolOptions(2), {
+        ...absentRegistry,
+        publishPackage: failed.publishPackage,
+      }),
+      /fixture: npm publish failed for utils/u,
+    );
+    assert.deepEqual(failed.started(), [utils, runtime]);
+    assert.equal(failed.indexOf('start', createTarget), -1);
+
+    // A failure without a retry stops the pool the same way.
+    const plugin = '@bleedingdev/modern-js-plugin-b';
+    const failedPlugin = recordUploads({
+      [plugin]: async () => {
+        throw new Error('fixture: npm publish failed for plugin-b');
+      },
+    });
+    await assert.rejects(
+      publishManifestPackages(fixture.releaseArtifacts, poolOptions(8), {
+        ...absentRegistry,
+        publishPackage: failedPlugin.publishPackage,
+      }),
+      /fixture: npm publish failed for plugin-b/u,
+    );
+    const failedAt = failedPlugin.indexOf('fail', plugin);
+    assert.ok(failedAt > 0);
+    assert.deepEqual(
+      failedPlugin.events
+        .slice(failedAt + 1)
+        .filter(([kind]) => kind === 'start'),
+      [],
+      'no upload may start after plugin-b failed',
+    );
+    // Only the uploads already in flight when it failed were started.
+    assert.deepEqual(failedPlugin.started(), manifest.publishOrder.slice(0, 8));
+    assert.equal(failedPlugin.indexOf('start', createTarget), -1);
+  } finally {
+    removeDir(fixture.root);
+  }
+});
+
+test('a rerun after a failed upload reuses what npm accepted and uploads only the rest, create last', async t => {
+  mockTrustedWorkflowEnvironment(t);
+  const { publishManifestPackages } = await import(
+    '../prepare-bleedingdev-packages.mjs'
+  );
+  const fixture = await createPoolFixture();
+  const { manifest } = fixture.releaseArtifacts;
+  const artifacts = new Map(
+    fixture.releaseArtifacts.packages.map(item => [item.targetName, item]),
+  );
+  // The fake registry keeps the integrity npm accepted for each target.
+  const npm = new Map();
+  const registry = {
+    lookupRegistryDistTag: async name =>
+      npm.has(name) ? '3.2.0-ultramodern.1' : '3.1.0-ultramodern.previous',
+    lookupRegistryPackageDist: async name =>
+      npm.has(name)
+        ? { ...registryDistFor(artifacts.get(name)), integrity: npm.get(name) }
+        : null,
+    preflightTrustedPublishingPackages: async () => {},
+    verifyRegistryPackageDist: async (item, dist) => {
+      assert.equal(
+        dist.integrity,
+        item.integrity,
+        `${item.targetName} drifted`,
+      );
+    },
+  };
+  const accept = artifact => {
+    npm.set(artifact.targetName, artifact.integrity);
+    return artifact.targetName;
+  };
+  const failing = '@bleedingdev/modern-js-plugin-c';
+
+  try {
+    const first = [];
+    await assert.rejects(
+      publishManifestPackages(fixture.releaseArtifacts, poolOptions(2, false), {
+        ...registry,
+        publishPackage: async artifact => {
+          first.push(artifact.targetName);
+          await new Promise(resolve => setTimeout(resolve, 5));
+          if (artifact.targetName === failing) {
+            throw new Error('fixture: npm publish failed for plugin-c');
+          }
+          return accept(artifact);
+        },
+      }),
+      /fixture: npm publish failed for plugin-c/u,
+    );
+    assert.equal(npm.has(failing), false);
+    assert.equal(npm.has(createTarget), false);
+    const placed = [...npm.keys()];
+    assert.ok(placed.length > 0);
+
+    const second = [];
     await publishManifestPackages(
       fixture.releaseArtifacts,
+      poolOptions(2, false),
       {
-        dryRun: true,
-        publishConcurrency: 8,
-        tag: 'latest',
-        version: '3.2.0-ultramodern.1',
-      },
-      {
-        lookupRegistryDistTag: async () => '3.1.0-ultramodern.previous',
-        lookupRegistryPackageDist: async () => null,
+        ...registry,
         publishPackage: async artifact => {
-          events.push(['start', artifact.targetName]);
-          inFlight.add(artifact.targetName);
-          maxInFlight = Math.max(maxInFlight, inFlight.size);
-          await new Promise(resolve => setTimeout(resolve, 10));
-          inFlight.delete(artifact.targetName);
-          events.push(['end', artifact.targetName]);
-          return artifact.targetName;
+          second.push(artifact.targetName);
+          return accept(artifact);
         },
       },
     );
-
-    const indexOf = (kind, targetName) =>
-      events.findIndex(
-        ([eventKind, eventTarget]) =>
-          eventKind === kind && eventTarget === targetName,
-      );
-    for (const targetName of manifest.publishOrder) {
-      for (const dependency of manifest.dependencyGraph[targetName]) {
-        assert.ok(
-          indexOf('end', dependency) < indexOf('start', targetName),
-          `${targetName} started before ${dependency} returned`,
-        );
-      }
-    }
-    // utils and plugin-b share the first level and publish together.
-    assert.equal(maxInFlight, 2);
-    // create keeps its publish-last contract as a level of its own.
-    assert.deepEqual(events.slice(-2), [
-      ['start', '@bleedingdev/modern-js-ultramodern-create'],
-      ['end', '@bleedingdev/modern-js-ultramodern-create'],
-    ]);
-    assert.equal(events.length, manifest.publishOrder.length * 2);
+    assert.deepEqual(
+      second,
+      manifest.publishOrder.filter(name => !placed.includes(name)),
+    );
+    assert.equal(second.at(-1), createTarget);
+    assert.deepEqual([...npm.keys()].sort(), [...manifest.publishOrder].sort());
   } finally {
     removeDir(fixture.root);
   }
