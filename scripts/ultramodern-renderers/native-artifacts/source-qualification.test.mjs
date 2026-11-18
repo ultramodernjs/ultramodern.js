@@ -951,6 +951,35 @@ test('router and adapter reject another package license before creating a build 
   }
 });
 
+test('adapter rejects a mixed release tuple before fetching or building', async t => {
+  const workDirectory = root(t);
+  const current = completedRecipes().packages['@octanejs/tanstack-router'];
+  for (const [octaneCandidate, upstream, expected] of [
+    ['octane-0.20.0', current.upstream, /Adapter source commit/u],
+    [
+      'octane-0.18.0',
+      { ...current.upstream, request: 'https://registry.npmjs.org/other.tgz' },
+      /Adapter npm request/u,
+    ],
+    [
+      'octane-0.18.0',
+      { ...current.upstream, integrity: 'other' },
+      /Adapter npm digest/u,
+    ],
+  ]) {
+    await assert.rejects(
+      qualifyAdapterSource({
+        item: { ...current, upstream },
+        octaneCandidate,
+        workDirectory,
+        fetchArtifact: () => assert.fail('mixed tuple reached transport'),
+      }),
+      expected,
+    );
+    assert.deepEqual(fs.readdirSync(workDirectory), []);
+  }
+});
+
 function handedOffTree(t) {
   const directory = root(t);
   for (const relative of Object.keys(runtimeHandoffFiles)) {

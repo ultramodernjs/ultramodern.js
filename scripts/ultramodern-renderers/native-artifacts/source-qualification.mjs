@@ -579,12 +579,25 @@ export async function qualifyRouterSource({
 /** The adapter's published layout is source; its actual compilation is the owning Vite test plugin. */
 export async function qualifyAdapterSource({
   item,
-  source,
   workDirectory,
   packedDirectory,
   fetchArtifact = fetch,
+  octaneCandidate = 'octane-0.18.0',
 }) {
-  assertOwningLicense('@octanejs/tanstack-router', item.upstream.licenseSha256);
+  const name = '@octanejs/tanstack-router';
+  assertOwningLicense(name, item.upstream.licenseSha256);
+  const { pinnedAdapterCandidate } = await import(
+    '../octane-corrections/qualify-shared-core-peer.mjs'
+  );
+  const { adapter, source } = pinnedAdapterCandidate(octaneCandidate);
+  assert.equal(item.upstream.repository, 'octanejs/octane');
+  assert.equal(item.upstream.commit, source.commit, 'Adapter source commit');
+  assert.equal(item.upstream.request, adapter.url, 'Adapter npm request');
+  assert.equal(
+    item.upstream.integrity,
+    adapter.integrity,
+    'Adapter npm digest',
+  );
   const { assertSharedCoreManifest, sharedCoreManifest } = await import(
     '../octane-corrections/shared-core-peer.mjs'
   );
@@ -630,8 +643,10 @@ export async function qualifyAdapterSource({
       });
       assertSharedCoreManifest(
         JSON.parse(fs.readFileSync(path.join(actual, 'package.json'))),
+        octaneCandidate,
       );
       await qualifyAdapter({
+        octaneCandidate,
         packedDirectory,
         assertSameLayout,
         work: root,
@@ -662,7 +677,7 @@ export async function qualifyAdapterSource({
         fs.readFileSync(path.join(original, 'package.json')),
       );
       const peerManifest = sharedCoreManifest(emittedManifest);
-      assertSharedCoreManifest(peerManifest);
+      assertSharedCoreManifest(peerManifest, octaneCandidate);
       json(path.join(emitted, 'package.json'), peerManifest);
       const actualBuiltPatch = builtPatch(original, emitted);
       assertPatch(item, actualBuiltPatch);

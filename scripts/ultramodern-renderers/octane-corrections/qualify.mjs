@@ -5,6 +5,40 @@ import path from 'node:path';
 import { assetFilename } from '../native-artifacts/protocol.mjs';
 import { packFiles } from '../native-artifacts/reconstruct.mjs';
 import { cohort, references } from './inputs.mjs';
+import {
+  assertSharedCoreManifest,
+  defaultOctaneCandidate,
+  sharedCoreCandidate,
+  sharedCoreVersion,
+} from './shared-core-peer.mjs';
+
+const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+/** Node's package lookup from a directory, without consulting exports maps. */
+export function installedPackage(from, name) {
+  for (let directory = path.resolve(from); ; ) {
+    const candidate = path.join(directory, 'node_modules', name);
+    if (fs.existsSync(path.join(candidate, 'package.json')))
+      return fs.realpathSync(candidate);
+    const parent = path.dirname(directory);
+    assert.notEqual(parent, directory, `${from}: ${name} is not installed`);
+    directory = parent;
+  }
+}
+/** The owning source tree is the exact candidate octane + adapter release. */
+export function assertCandidateSource(sourceRoot, pinned) {
+  for (const [directory, item] of [
+    ['packages/octane', pinned.octane],
+    ['packages/tanstack-router', pinned.adapter],
+  ]) {
+    const manifest = readJson(path.join(sourceRoot, directory, 'package.json'));
+    assert.equal(manifest.name, item.name, `${directory}: owning package`);
+    assert.equal(
+      manifest.version,
+      item.version,
+      `${pinned.candidate}: source ${item.name} is not ${item.version}`,
+    );
+  }
+}
 
 export function installRouterRenderSnapshot({ here, sourcePackage }) {
   const bytes = fs.readFileSync(path.join(here, 'routerRenderSnapshot.ts.txt'));
@@ -31,7 +65,16 @@ export async function qualify({
   verifyIntegrity,
   packedDirectory,
   assertSameLayout,
+  octaneCandidate = defaultOctaneCandidate,
 }) {
+  // Reject an unknown candidate before any fetch, install or write.
+  sharedCoreCandidate(octaneCandidate);
+  const { qualifySharedCorePeer, pinnedAdapterCandidate, lockedIntegrity } =
+    await import('./qualify-shared-core-peer.mjs');
+  const pinned = pinnedAdapterCandidate(octaneCandidate);
+  assertCandidateSource(sourceRoot, pinned);
+  const correctedManifest = readJson(path.join(corrected, 'package.json'));
+  assertSharedCoreManifest(correctedManifest, octaneCandidate);
   const repository = path.resolve(here, '../../..');
   const corePatch = path.join(
     repository,
@@ -60,6 +103,9 @@ export async function qualify({
     work,
   );
   applyExactPatch(core, corePatch);
+  const coreManifest = readJson(path.join(core, 'package.json'));
+  assert.equal(coreManifest.name, '@tanstack/router-core');
+  assert.equal(coreManifest.version, sharedCoreVersion);
   const pack = directory =>
     packFiles(
       new Map(
@@ -98,14 +144,11 @@ export async function qualify({
     ? fs.readFileSync(
         path.join(
           packedDirectory,
-          assetFilename('@octanejs/tanstack-router', '0.3.4'),
+          assetFilename('@octanejs/tanstack-router', pinned.adapterVersion),
         ),
       )
     : pack(corrected);
-  const { qualifySharedCorePeer } = await import(
-    './qualify-shared-core-peer.mjs'
-  );
-  qualifySharedCorePeer({
+  const peer = qualifySharedCorePeer({
     work,
     adapterBytes,
     coreBytes: correctedCoreBytes,
@@ -113,7 +156,19 @@ export async function qualify({
       run(command, args, cwd, { ...options, stdio: 'pipe', encoding: 'utf8' }),
     disk,
     register,
+    octaneCandidate,
   });
+  // The peer controls inspected exactly the adapter and Core this suite runs.
+  assert.deepEqual(
+    peer.adapterManifest,
+    correctedManifest,
+    'Shared-core controls inspected another adapter than the owning suite',
+  );
+  assert.deepEqual(
+    peer.coreManifest,
+    coreManifest,
+    'Shared-core controls inspected another Core than the owning suite',
+  );
   const deps = path.join(work, 'dependencies');
   fs.mkdirSync(deps);
   fs.writeFileSync(
@@ -125,7 +180,7 @@ export async function qualify({
         dependencies: {
           ...cohort,
           '@tanstack/router-core': 'file:../core',
-          octane: '0.18.0',
+          octane: pinned.octane.version,
           '@tsrx/core': '0.6.1',
           vite: '8.0.16',
           vitest: '4.1.10',
@@ -157,10 +212,45 @@ export async function qualify({
   register(path.join(deps, 'node_modules'), 'dependencies');
   // Operation-owned module links, never links to someone else's writable tree.
   const modules = path.join(deps, 'node_modules');
+  // The npm octane runtime is the candidate's exact pinned tarball, matching
+  // the source-tree compiler the Vite plugin loads below.
+  assert.equal(
+    lockedIntegrity(
+      fs.readFileSync(path.join(deps, 'pnpm-lock.yaml'), 'utf8'),
+      'octane',
+      pinned.octane.version,
+    ),
+    pinned.octane.integrity,
+    `octane@${pinned.octane.version} is not the pinned npm tarball`,
+  );
+  const installedOctane = fs.realpathSync(path.join(modules, 'octane'));
+  assert.equal(
+    readJson(path.join(installedOctane, 'package.json')).version,
+    pinned.octane.version,
+  );
+  const installedCore = fs.realpathSync(
+    path.join(modules, '@tanstack/router-core'),
+  );
+  assert.deepEqual(
+    fs.readFileSync(path.join(installedCore, 'package.json')),
+    fs.readFileSync(path.join(core, 'package.json')),
+    'Owning suite must install the inspected corrected Core',
+  );
   fs.symlinkSync(modules, path.join(sourceRoot, 'node_modules'));
   fs.symlinkSync(modules, path.join(corrected, 'node_modules'));
   fs.symlinkSync(modules, path.join(work, 'node_modules'));
   const sourcePackage = path.join(sourceRoot, 'packages/tanstack-router');
+  // Source and packed adapters share one physical Core and octane runtime.
+  for (const pkg of [sourcePackage, corrected])
+    for (const [name, expected] of [
+      ['@tanstack/router-core', installedCore],
+      ['octane', installedOctane],
+    ])
+      assert.equal(
+        installedPackage(pkg, name),
+        expected,
+        `${pkg}: ${name} is not the shared installation`,
+      );
   installRouterRenderSnapshot({ here, sourcePackage });
   fs.appendFileSync(
     path.join(sourcePackage, 'src/index.ts'),
@@ -194,6 +284,6 @@ export default defineConfig({ plugins: [octane({ssr:true})], resolve: { alias: [
     );
   }
   console.log(
-    `Adapter source+packed 59/59 each; router-core correction SHA256 ${createHash('sha256').update(fs.readFileSync(corePatch)).digest('hex')}`,
+    `${octaneCandidate} adapter ${pinned.adapterVersion} on octane ${pinned.octane.version}: source+packed 59/59 each; router-core correction SHA256 ${createHash('sha256').update(fs.readFileSync(corePatch)).digest('hex')}`,
   );
 }

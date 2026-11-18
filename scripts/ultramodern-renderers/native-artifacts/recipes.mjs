@@ -153,7 +153,6 @@ export function composeRecipe({
     });
     const adapter = await qualifyAdapter({
       item: packages['@octanejs/tanstack-router'],
-      source: octaneSource,
       workDirectory,
       packedDirectory: directory,
     });
