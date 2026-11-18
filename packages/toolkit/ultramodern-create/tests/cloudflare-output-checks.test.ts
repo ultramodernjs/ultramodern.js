@@ -5,7 +5,8 @@ import { reportCloudflareOutputChecks } from '../src/ultramodern-tooling/command
 
 // A stand-in verifier. Each check records itself, waits until a second check
 // has started (at most 10 s), sleeps its own delay, prints one line and then
-// passes, fails or throws as its output directory's fixture.json says.
+// passes, fails, throws or passes and throws afterwards as its output
+// directory's fixture.json says.
 const fakeVerifierSource = `const fs = require('node:fs');
 const path = require('node:path');
 const started = path.join(__dirname, 'started');
@@ -26,7 +27,12 @@ exports.verifyCloudflareOutput = async ({ outputDirectory, importWorker }) => {
   if (verdict === 'throw') {
     throw new Error(app + ' manifest is not JSON');
   }
-  return verdict === 'pass'
+  if (verdict === 'late-throw') {
+    setTimeout(() => {
+      throw new Error(app + ' late failure');
+    }, 0);
+  }
+  return verdict === 'pass' || verdict === 'late-throw'
     ? { ok: true, issues: [] }
     : {
         ok: false,
@@ -139,6 +145,35 @@ test('a check that throws fails after the targets before it are reported', () =>
       rstest.restoreAllMocks();
 
       expect(outcome).toBe('inventory manifest is not JSON');
+      expect(lines).toEqual([
+        'checked shell-super-app beside another check',
+        '[ultramodern] Cloudflare output verified: shell-super-app',
+        'checked inventory beside another check',
+      ]);
+      expect(Object.keys(started()).sort()).toEqual([
+        'finance',
+        'inventory',
+        'shell-super-app',
+      ]);
+    },
+  ));
+
+test('a check that fails after it passed still fails the command', () =>
+  withTargets(
+    [
+      { app: 'shell-super-app', delayMs: 300, verdict: 'pass' },
+      { app: 'inventory', delayMs: 0, verdict: 'late-throw' },
+      { app: 'finance', delayMs: 0, verdict: 'pass' },
+    ],
+    async (verifierPath, targets, started) => {
+      const lines = captureOutput();
+      const outcome = await reportCloudflareOutputChecks(
+        verifierPath,
+        targets,
+      ).then(String, (error: Error) => error.message);
+      rstest.restoreAllMocks();
+
+      expect(outcome).toBe('inventory late failure');
       expect(lines).toEqual([
         'checked shell-super-app beside another check',
         '[ultramodern] Cloudflare output verified: shell-super-app',

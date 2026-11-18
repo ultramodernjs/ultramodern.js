@@ -39,15 +39,19 @@ const checkTargetInThread = (
     const stderr: Buffer[] = [];
     worker.stdout.on('data', chunk => stdout.push(chunk));
     worker.stderr.on('data', chunk => stderr.push(chunk));
-    let settled:
+    let posted:
       | { result: CloudflareOutputVerifierResult }
       | { error: unknown }
       | undefined;
+    let threadFailure: { error: unknown } | undefined;
     worker.on('message', message => {
-      settled = message;
+      posted = message;
     });
+    // An uncaught error or a non-zero exit fails the check even after a result
+    // was posted (a timer or rejection left behind by the imported worker), as
+    // it ended the process when the checks ran in it.
     worker.on('error', error => {
-      settled ??= { error };
+      threadFailure ??= { error };
     });
     worker.on('exit', code => {
       void Promise.allSettled([
@@ -57,11 +61,14 @@ const checkTargetInThread = (
         resolve({
           stdout: Buffer.concat(stdout).toString(),
           stderr: Buffer.concat(stderr).toString(),
-          ...(settled ?? {
-            error: new Error(
-              `Cloudflare output check of ${target.label} exited with code ${code} before it returned a result.`,
-            ),
-          }),
+          ...(threadFailure ??
+            (code !== 0 || posted === undefined
+              ? {
+                  error: new Error(
+                    `Cloudflare output check of ${target.label} exited with code ${code}${posted === undefined ? ' before it returned a result' : ''}.`,
+                  ),
+                }
+              : posted)),
         }),
       );
     });

@@ -23,6 +23,14 @@ import { browserSmokePlaywrightPackage } from './published-create-proof/constant
 
 const exactPlaywrightSpec = /^playwright@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/u;
 
+// The registry directory is worked out with any PLAYWRIGHT_BROWSERS_PATH
+// already in the environment ignored, so --install compares the exported path
+// with the directory the cache step restores, not with itself.
+const registryEnvironment = () => ({
+  ...process.env,
+  PLAYWRIGHT_BROWSERS_PATH: '',
+});
+
 function resolveSmokeVersion() {
   const exact = exactPlaywrightSpec.exec(browserSmokePlaywrightPackage);
   return exact
@@ -46,7 +54,10 @@ try {
     if (values.version !== undefined) {
       throw new Error('--version applies only to --install');
     }
-    const outputs = provisioning.resolveBrowserOutputs(resolveSmokeVersion());
+    const outputs = provisioning.resolveBrowserOutputs(
+      resolveSmokeVersion(),
+      registryEnvironment(),
+    );
     provisioning.writeGithubEnv({
       PLAYWRIGHT_BROWSERS_PATH: outputs.cache_path,
     });
@@ -57,7 +68,9 @@ try {
         '--install requires --version <playwright version> from the matching --resolve step',
       );
     }
-    const browsersPath = provisioning.browserCachePath();
+    const browsersPath = provisioning.browserCachePath({
+      environment: registryEnvironment(),
+    });
     if (process.env.PLAYWRIGHT_BROWSERS_PATH !== browsersPath) {
       throw new Error(
         `PLAYWRIGHT_BROWSERS_PATH is ${String(process.env.PLAYWRIGHT_BROWSERS_PATH)}, not the ${browsersPath} the browser cache restores. Run --resolve earlier in the same job; it exports the path through GITHUB_ENV.`,
