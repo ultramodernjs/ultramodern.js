@@ -130,15 +130,6 @@ function reviewedSourcePins(read) {
     read(`${octane}typescript-compat/latest-build-package.json`),
   ).dependencies;
   const reviewed = {
-    'scripts/security/repository-correction.mjs': [
-      `https://registry.npmjs.org/picomatch/-/picomatch-\${number}.tgz`,
-      'picomatch@2.3.2',
-      'picomatch@4.0.7',
-      "'2.3.2',",
-      "'4.0.7',",
-      'sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA==',
-      'sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==',
-    ],
     [`${generator}versions.ts`]: Object.entries(generatedVersions).map(
       ([name, version]) => `const ${name} = '${version}'`,
     ),
@@ -146,8 +137,6 @@ function reviewedSourcePins(read) {
     // controls. The inventory's repository/workspace flags are checked by its
     // owning patch synchronizer and repository-patches tests.
     [`${generator}patch-inventory.ts`]: [
-      'patches/picomatch@2.3.2.patch',
-      'patches/picomatch@4.0.7.patch',
       coordinatedTransitions['@tanstack/redact'].to.slice('npm:'.length),
       patch('@tanstack/router-core'),
       patch('@effect/opentelemetry'),

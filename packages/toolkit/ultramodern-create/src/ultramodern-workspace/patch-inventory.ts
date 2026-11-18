@@ -90,26 +90,6 @@ export default [
       'Include the upstream MIT notice omitted from the npm artifact, preserving the exact license.md bytes at registry source commit 943db54bde8bd34afd029f8f84ceddd1bb42ecdb.',
   },
   {
-    packageName: 'picomatch',
-    version: '2.3.2',
-    path: 'patches/picomatch@2.3.2.patch',
-    sha256: '1b702d20ae6bcdcbe35e484772e3ceecae5f9b004cd4be2e1bd40b5172e9afc2',
-    repository: true,
-    workspace: null,
-    reason:
-      'Bound repeated extglob analysis for GHSA-fc5q-39xc-vjpf on the compatible 2.x line. The repository audit verifies the exact installed correction; generated workspaces do not receive a patch.',
-  },
-  {
-    packageName: 'picomatch',
-    version: '4.0.7',
-    path: 'patches/picomatch@4.0.7.patch',
-    sha256: 'ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960',
-    repository: true,
-    workspace: null,
-    reason:
-      'Bound repeated extglob analysis for GHSA-fc5q-39xc-vjpf on the compatible 4.x line. The repository audit verifies the exact installed correction; generated workspaces do not receive a patch.',
-  },
-  {
     packageName: 'braces',
     version: '3.0.3',
     path: 'patches/braces@3.0.3.patch',

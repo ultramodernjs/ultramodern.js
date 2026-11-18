@@ -222,8 +222,6 @@ patchedDependencies:
   '@module-federation/sdk@2.9.3': fb4b0dfd33a0588ad3821f1d56e2316044ae0b721c515a69080d7d9d9de72e3e
   '@svgr/babel-plugin-transform-svg-component@8.0.0': c2d9f4f67f22c7a4cbfb9dc08b9fd3a0036c661566a313b5e4726e43d659e9d2
   braces@3.0.3: e14af28f138a243a283deed5e9f26275891ad6eedc02e964d8ec7ae7efc6783a
-  picomatch@2.3.2: 1b702d20ae6bcdcbe35e484772e3ceecae5f9b004cd4be2e1bd40b5172e9afc2
-  picomatch@4.0.7: ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960
   rsbuild-plugin-dts@1.0.7: bd0c8f1b4c4681eeb0d1ea0123c252ad41b17f01be1ca171bd8c42ca2d652e44
 
 importers:
@@ -3978,9 +3976,6 @@ importers:
       consola:
         specifier: ^3.4.2
         version: 3.4.2
-      fast-glob:
-        specifier: 3.3.3
-        version: 3.3.3
       fs-extra:
         specifier: ^11.4.1
         version: 11.4.1
@@ -4094,9 +4089,6 @@ importers:
       execa:
         specifier: 10.2.1
         version: 10.2.1
-      fast-glob:
-        specifier: 3.3.3
-        version: 3.3.3
       filesize:
         specifier: 11.0.34
         version: 11.0.34
@@ -20465,7 +20457,7 @@ snapshots:
   '@bleedingdev/micromatch@4.0.8':
     dependencies:
       braces: '@bleedingdev/braces@3.0.4'
-      picomatch: 2.3.2(patch_hash=1b702d20ae6bcdcbe35e484772e3ceecae5f9b004cd4be2e1bd40b5172e9afc2)
+      picomatch: 2.3.2
 
   '@bleedingdev/tanstack-redact@0.3.2(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
@@ -20565,7 +20557,7 @@ snapshots:
       '@changesets/should-skip-package': 1.0.0
       '@changesets/types': 7.0.0
       '@manypkg/get-packages': 3.1.0
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
 
   '@changesets/errors@1.0.0': {}
 
@@ -20584,7 +20576,7 @@ snapshots:
       '@changesets/errors': 1.0.0
       '@changesets/types': 7.0.0
       '@manypkg/get-packages': 3.1.0
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
       tinyexec: 1.3.1
 
   '@changesets/parse@1.0.0':
@@ -22499,7 +22491,7 @@ snapshots:
       detect-libc: 2.1.2
       is-glob: 4.0.3
       node-addon-api: 7.1.1
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
     optionalDependencies:
       '@parcel/watcher-android-arm64': 2.6.0
       '@parcel/watcher-darwin-arm64': 2.6.0
@@ -22998,7 +22990,7 @@ snapshots:
     dependencies:
       '@types/estree': 1.0.9
       estree-walker: 2.0.2
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
     optionalDependencies:
       rollup: 4.68.5
 
@@ -23006,7 +22998,7 @@ snapshots:
     dependencies:
       '@types/estree': 1.0.9
       estree-walker: 2.0.2
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
     optionalDependencies:
       rollup: 4.68.5
 
@@ -25154,7 +25146,7 @@ snapshots:
       glob: 10.5.0
       graceful-fs: 4.2.11
       node-gyp-build: 4.8.4
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
       resolve-from: 5.0.0
     transitivePeerDependencies:
       - encoding
@@ -25173,7 +25165,7 @@ snapshots:
       glob: 14.0.6
       graceful-fs: 4.2.11
       node-gyp-build: 4.8.4
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
       resolve-from: 5.0.0
     transitivePeerDependencies:
       - encoding
@@ -25581,7 +25573,7 @@ snapshots:
   anymatch@3.1.3:
     dependencies:
       normalize-path: 3.0.0
-      picomatch: 2.3.2(patch_hash=1b702d20ae6bcdcbe35e484772e3ceecae5f9b004cd4be2e1bd40b5172e9afc2)
+      picomatch: 2.3.2
 
   arg@4.1.3: {}
 
@@ -27144,9 +27136,9 @@ snapshots:
     dependencies:
       reusify: 1.1.0
 
-  fdir@6.5.0(picomatch@4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)):
+  fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
 
   fengari-interop@0.1.4(fengari@0.1.5):
     dependencies:
@@ -28044,7 +28036,7 @@ snapshots:
       chalk: 4.1.2
       graceful-fs: 4.2.11
       jest-util: 30.5.1
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
       pretty-format: 30.5.1
       slash: 3.0.0
       stack-utils: 2.0.6
@@ -28065,7 +28057,7 @@ snapshots:
       chalk: 4.1.2
       ci-info: 4.4.0
       graceful-fs: 4.2.11
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
 
   jest-worker@27.5.1:
     dependencies:
@@ -28355,7 +28347,7 @@ snapshots:
 
   lint-staged@17.6.1:
     dependencies:
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
       string-argv: 0.4.0
       tinyexec: 1.3.1
     optionalDependencies:
@@ -29077,7 +29069,7 @@ snapshots:
   micromatch@4.0.8:
     dependencies:
       braces: 3.0.3(patch_hash=e14af28f138a243a283deed5e9f26275891ad6eedc02e964d8ec7ae7efc6783a)
-      picomatch: 2.3.2(patch_hash=1b702d20ae6bcdcbe35e484772e3ceecae5f9b004cd4be2e1bd40b5172e9afc2)
+      picomatch: 2.3.2
 
   mime-db@1.52.0: {}
 
@@ -29885,9 +29877,9 @@ snapshots:
 
   picocolors@1.1.1: {}
 
-  picomatch@2.3.2(patch_hash=1b702d20ae6bcdcbe35e484772e3ceecae5f9b004cd4be2e1bd40b5172e9afc2): {}
+  picomatch@2.3.2: {}
 
-  picomatch@4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960): {}
+  picomatch@4.0.7: {}
 
   picturefill@3.0.3: {}
 
@@ -30480,7 +30472,7 @@ snapshots:
 
   readdirp@3.6.0:
     dependencies:
-      picomatch: 2.3.2(patch_hash=1b702d20ae6bcdcbe35e484772e3ceecae5f9b004cd4be2e1bd40b5172e9afc2)
+      picomatch: 2.3.2
 
   readdirp@4.1.2: {}
 
@@ -31728,8 +31720,8 @@ snapshots:
 
   tinyglobby@0.2.17:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960))
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      fdir: 6.5.0(picomatch@4.0.7)
+      picomatch: 4.0.7
 
   tinypool@2.1.2: {}
 
@@ -32014,7 +32006,7 @@ snapshots:
     dependencies:
       '@jridgewell/remapping': 2.3.5
       acorn: 8.19.0
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
       webpack-virtual-modules: 0.6.2
 
   upath@3.0.8: {}
@@ -32080,7 +32072,7 @@ snapshots:
   vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1):
     dependencies:
       lightningcss: 1.33.0
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
       postcss: 8.5.32
       rolldown: 1.2.19
       tinyglobby: 0.2.17
@@ -32105,7 +32097,7 @@ snapshots:
       expect-type: 1.4.0
       magic-string: 1.4.3
       obug: 3.0.0
-      picomatch: 4.0.7(patch_hash=ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960)
+      picomatch: 4.0.7
       std-env: 4.3.0
       tinybench: 6.2.2
       tinyexec: 1.3.1

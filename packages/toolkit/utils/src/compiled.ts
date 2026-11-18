@@ -10,7 +10,6 @@ export { default as debug } from '../compiled/debug';
 
 import _dotenvExpand from '../compiled/dotenv-expand';
 export const { expand: dotenvExpand } = _dotenvExpand;
-export { default as fastGlob } from 'fast-glob';
 export { execa, execaSync } from '../compiled/execa/index.mjs';
 export { filesize } from '../compiled/filesize/index.mjs';
 export { default as fs } from '../compiled/fs-extra';

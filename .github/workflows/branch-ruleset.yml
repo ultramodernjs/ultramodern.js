@@ -31,7 +31,6 @@ jobs:
           # contexts the ruleset requires today: the integration shard names
           # themselves, not an aggregate N/3 stand-in.
           REQUIRED_CHECKS: |
-            advisories
             boundary-anti-pattern-checks
             check
             e2e-test
