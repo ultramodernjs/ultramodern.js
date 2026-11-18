@@ -161,6 +161,7 @@ const declarationPluginSupportCommit =
   'ca40fbecaff494fe71a9960960ff84f394a4933f';
 const serverCompilerOwnerCommit = '3961f60e3ffef65183ecea01d803a6b552c19239';
 const scriptGlobCommit = 'dd35a9f82d9ccbb29cbcfd625708a267e449db45';
+const utilsGlobCommit = 'a6e3eac3381fa9c01ff9c344ffa0e35975cabf24';
 const appTools = 'packages/solutions/app-tools/package.json';
 const ultramodernAppTools =
   'packages/solutions/ultramodern-app-tools/package.json';
@@ -179,6 +180,22 @@ export const reviewedTransitions = Object.freeze([
     scriptGlobCommit,
     'scripts/prebundle/package.json',
     'devDependencies',
+    'fast-glob',
+    '3.3.3',
+    null,
+  ),
+  reviewedTransition(
+    utilsGlobCommit,
+    'scripts/prebundle/package.json',
+    'devDependencies',
+    'globby',
+    '16.2.4',
+    null,
+  ),
+  reviewedTransition(
+    utilsGlobCommit,
+    'packages/toolkit/utils/package.json',
+    'dependencies',
     'fast-glob',
     '3.3.3',
     null,

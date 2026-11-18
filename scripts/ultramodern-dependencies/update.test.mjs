@@ -1293,22 +1293,38 @@ test('accepts removal of the unused MF host router while retaining actual framew
   );
 });
 
-test('accepts the two script migrations off fast-glob without dropping the runtime dependency', () => {
-  for (const [file, field] of [
-    ['scripts/lint-package-json/package.json', 'dependencies'],
-    ['scripts/prebundle/package.json', 'devDependencies'],
-    ['packages/toolkit/utils/package.json', 'dependencies'],
+test('recognizes only the exact glob edges removed by the Node glob migrations', () => {
+  for (const [file, field, name, from] of [
+    [
+      'scripts/lint-package-json/package.json',
+      'dependencies',
+      'fast-glob',
+      '3.3.3',
+    ],
+    ['scripts/prebundle/package.json', 'devDependencies', 'fast-glob', '3.3.3'],
+    ['scripts/prebundle/package.json', 'devDependencies', 'globby', '16.2.4'],
+    [
+      'packages/toolkit/utils/package.json',
+      'dependencies',
+      'fast-glob',
+      '3.3.3',
+    ],
   ]) {
-    const expected = { [field]: { 'fast-glob': '3.3.3' } };
+    const expected = { [field]: { [name]: from } };
     const current = { [field]: {} };
-    if (file.startsWith('packages/')) {
-      assert.throws(() => plan(expected, current, file), /edge names changed/u);
-    } else {
-      const result = plan(expected, current, file);
-      assert.deepEqual(result.manifest, current);
-      assert.equal(result.edges[0].status, 'reviewed-removal');
-    }
+    const result = plan(expected, current, file);
+    assert.deepEqual(result.manifest, current);
+    assert.equal(result.edges[0].status, 'reviewed-removal');
   }
+  assert.throws(
+    () =>
+      plan(
+        { dependencies: { 'fast-glob': '3.3.3' } },
+        { dependencies: {} },
+        'packages/cli/builder/package.json',
+      ),
+    /edge names changed/u,
+  );
 });
 
 test('skips complete semantic fixtures but updates unrelated Tailwind fixture edges', () => {
