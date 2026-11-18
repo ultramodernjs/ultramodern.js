@@ -166,7 +166,6 @@
     // related to the SWC version built into Rspack
     "@swc/helpers",
     // pure esm packages can not be used now
-    "globby",
     "open",
     "strip-ansi",
     // align Node.js version minimum requirements

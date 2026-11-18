@@ -28,7 +28,6 @@ const dependencies = [
   'fs-extra',
   'browserslist',
   'chokidar',
-  'globby',
   'ora',
   'inquirer',
   'tsconfig-paths',
