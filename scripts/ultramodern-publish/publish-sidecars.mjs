@@ -98,6 +98,7 @@ const cliValueOptions = new Set([
   '--mode',
   '--profile',
   '--qualification',
+  '--github-output',
 ]);
 const cliBooleanOptions = new Set([
   '--check-registry',
@@ -137,8 +138,12 @@ function parseArgs(argv) {
       mode: {},
       profile: {},
       qualification: {},
+      'github-output': { key: 'githubOutput' },
     },
   });
+  // reconcile-sidecars' decision: publish-sidecars runs only on `publish`.
+  if (options.githubOutput !== undefined && !options.dryRun)
+    throw new Error('--github-output requires --dry-run');
 
   if (
     [options.checkRegistry, options.checkStaging, options.dryRun].filter(
@@ -847,9 +852,19 @@ async function publishSidecars(options, dependencies = {}) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  await (options.checkRegistry
+  const result = await (options.checkRegistry
     ? checkSidecarRegistry({}, options)
     : publishSidecars(options));
+  if (options.githubOutput !== undefined)
+    writeSidecarDecision(options.githubOutput, result);
+}
+
+function writeSidecarDecision(githubOutput, { published, reused }) {
+  const decision = published.length > 0 ? 'publish' : 'reuse';
+  fs.appendFileSync(githubOutput, `decision=${decision}\n`);
+  console.log(
+    `Sidecar decision: ${decision} (${published.length} to publish, ${reused.length} reused)`,
+  );
 }
 
 if (isDirectRun(import.meta.url)) {
@@ -876,4 +891,5 @@ export {
   readStagedSidecars,
   sidecarTarballsDirectory,
   verifyFreshSidecar,
+  writeSidecarDecision,
 };

@@ -36,7 +36,10 @@ trusted publishing. The publish workflow is intentionally tokenless: do not add
 default and requires the framework `version`. It keeps source qualification,
 clean-room acceptance and the Tractor rehearsal before either npm publisher.
 Published acceptance and Tractor still precede the cohort outcome and change
-record.
+record. In this mode `publish-sidecars` runs only when `reconcile-sidecars`
+finds a staged sidecar version that is not on npm yet; when every one already
+is, with the accepted bytes, provenance and tag, it is skipped and the cohort
+publishes on that reconciliation alone.
 
 `sidecars` prepares only the reviewed recipe closure. Leave `version` and all
 recovery inputs empty. Preparation authenticates upstream archives and patches,

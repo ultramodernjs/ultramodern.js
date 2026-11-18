@@ -34,6 +34,7 @@ const publicationJobs = [
   'Publish the qualified stable sidecars',
   'Publish accepted @bleedingdev tarballs',
 ];
+const reconcileJob = 'Reconcile the staged sidecars with the registry';
 const tractorJob =
   'Accept the exact published cohort in Tractor / Exact cohort passes Tractor Node and workerd acceptance';
 const positive = (value, label) => {
@@ -95,8 +96,9 @@ function assertPassedOriginalJob(job, run, runId) {
 // runs, so its own status and conclusion are not read: only the two jobs that
 // wrote to npm and the identity they uploaded. `jobs` lists every attempt. The
 // publish job ran in the publication attempt. `gh run rerun --failed` does not
-// re-run a publish-sidecars that already passed, so its latest execution up
-// to the publication attempt decides.
+// re-run a publish-sidecars that already passed or was skipped, so its latest
+// execution up to the publication attempt decides; a skipped one is accepted
+// only beside a passed reconcile-sidecars, read the same way.
 export function assertPublishedRun(run, jobs, artifacts, expected) {
   const { runId, producerAttempt, publicationAttempt } =
     originalAttempts(expected);
@@ -125,23 +127,34 @@ export function assertPublishedRun(run, jobs, artifacts, expected) {
     `Missing or duplicate original job: ${publishJob}`,
   );
   assertPassedOriginalJob(published[0], run, runId);
-  const sidecars = jobs.filter(
-    job =>
-      job.name === sidecarsJob &&
-      Number(job.run_attempt) <= Number(publicationAttempt),
-  );
-  const sidecarsAttempt = Math.max(
-    ...sidecars.map(job => Number(job.run_attempt)),
-  );
-  const latestSidecars = sidecars.filter(
-    job => Number(job.run_attempt) === sidecarsAttempt,
-  );
-  assert.equal(
-    latestSidecars.length,
-    1,
-    `Missing or duplicate original job: ${sidecarsJob}`,
-  );
-  assertPassedOriginalJob(latestSidecars[0], run, runId);
+  const latestUpToPublication = name => {
+    const executions = jobs.filter(
+      job =>
+        job.name === name &&
+        Number(job.run_attempt) <= Number(publicationAttempt),
+    );
+    const attempt = Math.max(...executions.map(job => Number(job.run_attempt)));
+    const latest = executions.filter(
+      job => Number(job.run_attempt) === attempt,
+    );
+    assert.equal(
+      latest.length,
+      1,
+      `Missing or duplicate original job: ${name}`,
+    );
+    return latest[0];
+  };
+  const sidecars = latestUpToPublication(sidecarsJob);
+  if (sidecars.status === 'completed' && sidecars.conclusion === 'skipped') {
+    // The publish job runs after a skipped sidecar publisher only when
+    // reconcile-sidecars passed and decided `reuse`: every exact sidecar
+    // version was already on npm, so this run published none.
+    assert.equal(String(sidecars.run_id), runId);
+    assert.equal(sidecars.head_sha, run.head_sha);
+    assertPassedOriginalJob(latestUpToPublication(reconcileJob), run, runId);
+  } else {
+    assertPassedOriginalJob(sidecars, run, runId);
+  }
   const names = acceptanceArtifactNames({
     runId,
     producerAttempt,
