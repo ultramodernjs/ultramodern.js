@@ -18,9 +18,12 @@ import {
 // Consumer: publish-bleedingdev.yml preflight, publish, and exact registry verification.
 import fs from 'node:fs';
 import path from 'node:path';
-import { npmPublishAttempts, npmPublishRetryDelayMs } from './constants.mjs';
+import {
+  npmPublishAttempts,
+  npmPublishRetryDelayMs,
+  ultramodernCreateSourceName,
+} from './constants.mjs';
 import { run, sleep } from './commands.mjs';
-import { publishLevels } from './manifest.mjs';
 import {
   createRegistryPropagationDeadline,
   pollRegistryPropagation,
@@ -1223,11 +1226,14 @@ async function publishManifestPackages(
   // npm publish error shares it, so a cohort that errors on many packages
   // still waits out one propagation window in total.
   const propagationDeadline = createRegistryPropagationDeadline();
-  const levels = publishLevels(manifest).map(level =>
-    level.map(targetName => artifactsByTarget.get(targetName)),
-  );
+  const createTarget =
+    manifest.aliases?.[ultramodernCreateSourceName] ??
+    ultramodernCreateSourceName;
+  const members = publishItems.filter(item => item.targetName !== createTarget);
+  const create = publishItems.filter(item => item.targetName === createTarget);
+  const concurrency = resolveRegistryConcurrency(options);
   console.log(
-    `Publishing ${publishItems.length} immutable package artifact(s) in ${levels.length} dependency level(s)`,
+    `Publishing ${publishItems.length} immutable package artifact(s): ${members.length} at concurrency ${concurrency}, each once npm accepted its dependencies${create.length > 0 ? `, then ${createTarget}` : ''}`,
   );
   const publishOne = async artifact => {
     const state = preflight.get(artifact.targetName);
@@ -1259,15 +1265,78 @@ async function publishManifestPackages(
     );
     registry.verifyPackageArtifact(artifact, artifact.artifactPath);
   };
-  // A level starts only after every publish of the previous level has
-  // returned, so consumers never reach npm before their cohort dependencies.
-  for (const level of levels) {
-    await mapWithConcurrency(
-      level,
-      resolveRegistryConcurrency(options),
-      publishOne,
-    );
+  // A member is sent only after npm accepted every cohort package it depends
+  // on, and once one upload has failed none starts, so neither a running nor a
+  // failed publish leaves a package on npm whose dependency is missing. There
+  // is no barrier per dependency level: a member waits for its own
+  // dependencies, never for an unrelated slower upload. create, the package
+  // users install the cohort through, starts only after every other member
+  // was accepted.
+  await publishAfterDependencies(
+    members,
+    manifest.dependencyGraph,
+    concurrency,
+    publishOne,
+  );
+  for (const artifact of create) {
+    await publishOne(artifact);
   }
+}
+
+// Runs `publish` for each item once every dependency of it in `graph` has
+// returned successfully, at most `limit` at a time; among the items that are
+// ready, the earliest in `items` starts first. After the first failure no item
+// starts; the ones already running finish and that first error is thrown.
+function publishAfterDependencies(items, graph, limit, publish) {
+  const waiting = [...items];
+  const accepted = new Set();
+  let running = 0;
+  let failure;
+  return new Promise((resolve, reject) => {
+    const startReady = () => {
+      for (let index = 0; index < waiting.length; ) {
+        if (failure || running >= limit) {
+          break;
+        }
+        const item = waiting[index];
+        if (!(graph[item.targetName] ?? []).every(name => accepted.has(name))) {
+          index += 1;
+          continue;
+        }
+        waiting.splice(index, 1);
+        running += 1;
+        Promise.resolve()
+          .then(() => publish(item))
+          .then(
+            () => accepted.add(item.targetName),
+            error => {
+              failure ??= { error };
+            },
+          )
+          .finally(() => {
+            running -= 1;
+            startReady();
+          });
+      }
+      if (running > 0) {
+        return;
+      }
+      if (failure) {
+        reject(failure.error);
+      } else if (waiting.length > 0) {
+        reject(
+          new Error(
+            `Cohort members depend on packages this publish never accepted: ${waiting
+              .map(item => item.targetName)
+              .join(', ')}`,
+          ),
+        );
+      } else {
+        resolve();
+      }
+    };
+    startReady();
+  });
 }
 
 export {

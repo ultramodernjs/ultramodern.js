@@ -1,12 +1,11 @@
-import type { PathLike } from 'node:fs';
+import { glob } from 'node:fs/promises';
 import net from 'node:net';
 import type {
   CreateBuilderOptions as _CreateBuilderOptions,
   BuilderConfig,
 } from '@modern-js/builder';
-import { type GlobbyOptions, getPort, upath } from '@modern-js/utils';
+import { getPort, upath } from '@modern-js/utils';
 import fs from '@modern-js/utils/fs-extra';
-import _ from '@modern-js/utils/lodash';
 import {
   type ConsoleType,
   logger,
@@ -15,7 +14,6 @@ import {
 } from '@rsbuild/core';
 import assert from 'assert';
 import createServer from 'connect';
-import { join } from 'path';
 import { URL } from 'url';
 import serveStaticMiddle from './static.js';
 
@@ -26,8 +24,9 @@ type CreateBuilderOptions = Omit<
   'bundlerType' | 'config'
 >;
 
-export interface GlobContentJSONOptions extends GlobbyOptions {
+export interface GlobContentJSONOptions {
   maxSize?: number;
+  exclude?: string[];
 }
 
 export interface StaticServerOptions {
@@ -88,23 +87,22 @@ export async function runStaticServer(
   return { port, hostname, close: () => listener.close() };
 }
 
-const filenameToGlobExpr = (file: PathLike) => {
-  let _file = upath.normalizeSafe(file.toString());
-  fs.statSync(file).isDirectory() && (_file += '/**/*');
-  return _file;
-};
-
 export const globContentJSON = async (
-  paths: PathLike | PathLike[],
+  dir: string,
   options?: GlobContentJSONOptions,
 ) => {
-  const { globby, fs } = await import('@modern-js/utils');
-  const _paths = _.castArray(paths).map(filenameToGlobExpr);
-  const files = await globby(_paths, options);
   let totalSize = 0;
   const maxSize = 1024 * (options?.maxSize ?? 4096);
   const ret: Record<string, string> = {};
-  for await (const file of files) {
+  for await (const entry of glob('**/*', {
+    cwd: dir,
+    exclude: options?.exclude,
+    withFileTypes: true,
+  })) {
+    if (!entry.isFile()) {
+      continue;
+    }
+    const file = upath.join(entry.parentPath, entry.name);
     const { size } = await fs.stat(file);
     totalSize += size;
     if (maxSize && totalSize > maxSize) {
@@ -243,9 +241,8 @@ export async function build({
 
   const unwrapOutputJSON = async (ignoreMap = true, maxSize = 4096) => {
     return globContentJSON(distPath, {
-      absolute: true,
       maxSize,
-      ignore: ignoreMap ? [join(distPath, '/**/*.map')] : [],
+      exclude: ignoreMap ? ['**/*.map'] : [],
     });
   };
 

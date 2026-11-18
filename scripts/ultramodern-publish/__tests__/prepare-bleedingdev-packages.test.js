@@ -1157,13 +1157,9 @@ test('trusted publishing rejects the entire absent cohort before the first regis
   }
 });
 
-test('full-cohort publish runs each dependency level concurrently and never starts a consumer before its dependencies return', async t => {
-  mockTrustedWorkflowEnvironment(t);
-  const { publishManifestPackages } = await import(
-    '../prepare-bleedingdev-packages.mjs'
-  );
-  // plugin-a depends on runtime -> utils; plugin-b and utils share level 0.
-  const fixture = await createArtifactFixture([
+// utils <- runtime <- plugin-a, then eight independent plugins, then create.
+const createPoolFixture = () =>
+  createArtifactFixture([
     {
       sourceName: '@modern-js/plugin-a',
       targetName: '@bleedingdev/modern-js-plugin-a',
@@ -1172,62 +1168,281 @@ test('full-cohort publish runs each dependency level concurrently and never star
           'npm:@bleedingdev/modern-js-runtime@3.2.0-ultramodern.1',
       },
     },
-    {
-      sourceName: '@modern-js/plugin-b',
-      targetName: '@bleedingdev/modern-js-plugin-b',
+    ...'bcdefghi'.split('').map(letter => ({
+      sourceName: `@modern-js/plugin-${letter}`,
+      targetName: `@bleedingdev/modern-js-plugin-${letter}`,
       dependencies: {},
-    },
+    })),
   ]);
-  const { manifest } = fixture.releaseArtifacts;
+const createTarget = '@bleedingdev/modern-js-ultramodern-create';
+const poolOptions = (publishConcurrency, dryRun = true) => ({
+  dryRun,
+  publishConcurrency,
+  tag: 'latest',
+  version: '3.2.0-ultramodern.1',
+});
+// Records every upload's start and end; `behaviour[targetName]` replaces the
+// default acceptance after 5 ms.
+const recordUploads = (behaviour = {}) => {
   const events = [];
   const inFlight = new Set();
   let maxInFlight = 0;
+  const publishPackage = async artifact => {
+    events.push(['start', artifact.targetName]);
+    inFlight.add(artifact.targetName);
+    maxInFlight = Math.max(maxInFlight, inFlight.size);
+    try {
+      await (
+        behaviour[artifact.targetName] ??
+        (() => new Promise(resolve => setTimeout(resolve, 5)))
+      )();
+    } catch (error) {
+      events.push(['fail', artifact.targetName]);
+      throw error;
+    } finally {
+      inFlight.delete(artifact.targetName);
+    }
+    events.push(['end', artifact.targetName]);
+    return artifact.targetName;
+  };
+  const indexOf = (kind, targetName) =>
+    events.findIndex(
+      ([eventKind, name]) => eventKind === kind && name === targetName,
+    );
+  const started = () =>
+    events.filter(([kind]) => kind === 'start').map(([, name]) => name);
+  return {
+    events,
+    indexOf,
+    maxInFlight: () => maxInFlight,
+    publishPackage,
+    started,
+  };
+};
+const absentRegistry = {
+  lookupRegistryDistTag: async () => '3.1.0-ultramodern.previous',
+  lookupRegistryPackageDist: async () => null,
+};
+// A promise the test settles by hand, so an upload ends exactly when asked.
+const gate = () => {
+  let open;
+  let fail;
+  const promise = new Promise((resolve, reject) => {
+    open = resolve;
+    fail = reject;
+  });
+  return { fail, open, wait: () => promise };
+};
+const utilsTarget = '@bleedingdev/modern-js-utils';
+const runtimeTarget = '@bleedingdev/modern-js-runtime';
+const pluginATarget = '@bleedingdev/modern-js-plugin-a';
+// Every dependency edge: the dependency returned before its consumer started.
+const assertDependenciesReturnedFirst = (uploads, manifest) => {
+  for (const [targetName, dependencies] of Object.entries(
+    manifest.dependencyGraph,
+  )) {
+    if (uploads.indexOf('start', targetName) === -1) {
+      continue;
+    }
+    for (const dependency of dependencies) {
+      const end = uploads.indexOf('end', dependency);
+      assert.ok(
+        end !== -1 && end < uploads.indexOf('start', targetName),
+        `${targetName} started before npm accepted ${dependency}`,
+      );
+    }
+  }
+};
+
+test('the cohort uploads each member once npm accepted its dependencies, at most N at a time, without level barriers, create last', async t => {
+  mockTrustedWorkflowEnvironment(t);
+  const { publishManifestPackages } = await import(
+    '../prepare-bleedingdev-packages.mjs'
+  );
+  const fixture = await createPoolFixture();
+  const { manifest } = fixture.releaseArtifacts;
+  const members = manifest.publishOrder.filter(name => name !== createTarget);
+  assert.equal(manifest.publishOrder.at(-1), createTarget);
+  assert.equal(members.length, 11);
 
   try {
-    await publishManifestPackages(
-      fixture.releaseArtifacts,
-      {
-        dryRun: true,
-        publishConcurrency: 8,
-        tag: 'latest',
-        version: '3.2.0-ultramodern.1',
-      },
-      {
-        lookupRegistryDistTag: async () => '3.1.0-ultramodern.previous',
-        lookupRegistryPackageDist: async () => null,
-        publishPackage: async artifact => {
-          events.push(['start', artifact.targetName]);
-          inFlight.add(artifact.targetName);
-          maxInFlight = Math.max(maxInFlight, inFlight.size);
-          await new Promise(resolve => setTimeout(resolve, 10));
-          inFlight.delete(artifact.targetName);
-          events.push(['end', artifact.targetName]);
-          return artifact.targetName;
-        },
-      },
-    );
-
-    const indexOf = (kind, targetName) =>
-      events.findIndex(
-        ([eventKind, eventTarget]) =>
-          eventKind === kind && eventTarget === targetName,
+    for (const concurrency of [2, 8]) {
+      // utils is slow, so the independent plugins overtake it.
+      const slowUtils = gate();
+      const uploads = recordUploads({ [utilsTarget]: slowUtils.wait });
+      const published = publishManifestPackages(
+        fixture.releaseArtifacts,
+        poolOptions(concurrency),
+        { ...absentRegistry, publishPackage: uploads.publishPackage },
       );
-    for (const targetName of manifest.publishOrder) {
-      for (const dependency of manifest.dependencyGraph[targetName]) {
+      // Every plugin that does not depend on utils finishes while it is held.
+      const independent = members.filter(
+        name => ![utilsTarget, runtimeTarget, pluginATarget].includes(name),
+      );
+      while (!independent.every(name => uploads.indexOf('end', name) !== -1)) {
+        await new Promise(resolve => setTimeout(resolve, 1));
+      }
+      // runtime and plugin-a wait for utils; nothing waits for a level.
+      assert.equal(uploads.indexOf('start', runtimeTarget), -1);
+      assert.equal(uploads.indexOf('start', pluginATarget), -1);
+      slowUtils.open();
+      await published;
+
+      assertDependenciesReturnedFirst(uploads, manifest);
+      // The pool is as wide as the cap and never wider.
+      assert.equal(uploads.maxInFlight(), concurrency);
+      // create starts only after every other member returned.
+      for (const member of members) {
         assert.ok(
-          indexOf('end', dependency) < indexOf('start', targetName),
-          `${targetName} started before ${dependency} returned`,
+          uploads.indexOf('end', member) <
+            uploads.indexOf('start', createTarget),
+          `create started before ${member} returned at concurrency ${concurrency}`,
+        );
+      }
+      assert.deepEqual(
+        uploads.started().sort(),
+        [...manifest.publishOrder].sort(),
+      );
+      assert.equal(uploads.events.length, manifest.publishOrder.length * 2);
+    }
+  } finally {
+    removeDir(fixture.root);
+  }
+});
+
+test('a failed upload leaves no consumer of it on npm: nothing starts after it, its dependents never do, create never does', async t => {
+  mockTrustedWorkflowEnvironment(t);
+  const { publishManifestPackages } = await import(
+    '../prepare-bleedingdev-packages.mjs'
+  );
+  const fixture = await createPoolFixture();
+  const { manifest } = fixture.releaseArtifacts;
+
+  try {
+    // utils fails while the independent plugins are still in flight: those
+    // finish, its consumers (runtime, plugin-a) never start, nor does
+    // anything else, and the failure surfaces.
+    const failingUtils = gate();
+    const held = gate();
+    const behaviour = { [utilsTarget]: failingUtils.wait };
+    for (const name of manifest.publishOrder) {
+      if (name !== utilsTarget) {
+        behaviour[name] = held.wait;
+      }
+    }
+    const uploads = recordUploads(behaviour);
+    const published = publishManifestPackages(
+      fixture.releaseArtifacts,
+      poolOptions(8),
+      { ...absentRegistry, publishPackage: uploads.publishPackage },
+    );
+    while (uploads.started().length < 8) {
+      await new Promise(resolve => setTimeout(resolve, 1));
+    }
+    const inFlight = uploads.started();
+    assert.ok(inFlight.includes(utilsTarget));
+    assert.ok(!inFlight.includes(runtimeTarget));
+    failingUtils.fail(new Error('fixture: npm publish failed for utils'));
+    await new Promise(resolve => setTimeout(resolve, 5));
+    held.open();
+    await assert.rejects(published, /fixture: npm publish failed for utils/u);
+
+    assert.deepEqual(uploads.started(), inFlight);
+    assert.equal(uploads.indexOf('start', runtimeTarget), -1);
+    assert.equal(uploads.indexOf('start', pluginATarget), -1);
+    assert.equal(uploads.indexOf('start', createTarget), -1);
+    assertDependenciesReturnedFirst(uploads, manifest);
+    for (const name of inFlight.filter(name => name !== utilsTarget)) {
+      assert.notEqual(uploads.indexOf('end', name), -1);
+    }
+  } finally {
+    removeDir(fixture.root);
+  }
+});
+
+test('a rerun after a failed upload reuses what npm accepted and uploads only the rest, create last', async t => {
+  mockTrustedWorkflowEnvironment(t);
+  const { publishManifestPackages } = await import(
+    '../prepare-bleedingdev-packages.mjs'
+  );
+  const fixture = await createPoolFixture();
+  const { manifest } = fixture.releaseArtifacts;
+  const artifacts = new Map(
+    fixture.releaseArtifacts.packages.map(item => [item.targetName, item]),
+  );
+  // The fake registry keeps the integrity npm accepted for each target.
+  const npm = new Map();
+  const registry = {
+    lookupRegistryDistTag: async name =>
+      npm.has(name) ? '3.2.0-ultramodern.1' : '3.1.0-ultramodern.previous',
+    lookupRegistryPackageDist: async name =>
+      npm.has(name)
+        ? { ...registryDistFor(artifacts.get(name)), integrity: npm.get(name) }
+        : null,
+    preflightTrustedPublishingPackages: async () => {},
+    verifyRegistryPackageDist: async (item, dist) => {
+      assert.equal(
+        dist.integrity,
+        item.integrity,
+        `${item.targetName} drifted`,
+      );
+    },
+  };
+  const accept = artifact => {
+    npm.set(artifact.targetName, artifact.integrity);
+    return artifact.targetName;
+  };
+  const failing = '@bleedingdev/modern-js-plugin-c';
+
+  try {
+    const first = [];
+    await assert.rejects(
+      publishManifestPackages(fixture.releaseArtifacts, poolOptions(2, false), {
+        ...registry,
+        publishPackage: async artifact => {
+          first.push(artifact.targetName);
+          await new Promise(resolve => setTimeout(resolve, 5));
+          if (artifact.targetName === failing) {
+            throw new Error('fixture: npm publish failed for plugin-c');
+          }
+          return accept(artifact);
+        },
+      }),
+      /fixture: npm publish failed for plugin-c/u,
+    );
+    assert.equal(npm.has(failing), false);
+    assert.equal(npm.has(createTarget), false);
+    const placed = [...npm.keys()];
+    assert.ok(placed.length > 0);
+    // What the failed attempt left on npm is installable: every package it
+    // placed has each of its cohort dependencies there too.
+    for (const name of placed) {
+      for (const dependency of manifest.dependencyGraph[name]) {
+        assert.ok(
+          npm.has(dependency),
+          `${name} is on npm without ${dependency}`,
         );
       }
     }
-    // utils and plugin-b share the first level and publish together.
-    assert.equal(maxInFlight, 2);
-    // create keeps its publish-last contract as a level of its own.
-    assert.deepEqual(events.slice(-2), [
-      ['start', '@bleedingdev/modern-js-ultramodern-create'],
-      ['end', '@bleedingdev/modern-js-ultramodern-create'],
-    ]);
-    assert.equal(events.length, manifest.publishOrder.length * 2);
+
+    const second = [];
+    await publishManifestPackages(
+      fixture.releaseArtifacts,
+      poolOptions(2, false),
+      {
+        ...registry,
+        publishPackage: async artifact => {
+          second.push(artifact.targetName);
+          return accept(artifact);
+        },
+      },
+    );
+    assert.deepEqual(
+      [...second].sort(),
+      manifest.publishOrder.filter(name => !placed.includes(name)).sort(),
+    );
+    assert.equal(second.at(-1), createTarget);
+    assert.deepEqual([...npm.keys()].sort(), [...manifest.publishOrder].sort());
   } finally {
     removeDir(fixture.root);
   }

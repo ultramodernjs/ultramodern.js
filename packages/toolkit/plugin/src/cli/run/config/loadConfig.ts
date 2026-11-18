@@ -1,5 +1,4 @@
-import { compatibleRequire, fs, globby } from '@modern-js/utils';
-import type { Stats } from 'fs';
+import { compatibleRequire, fs } from '@modern-js/utils';
 import { createJiti } from 'jiti';
 import path from 'path';
 
@@ -14,34 +13,6 @@ export const getConfigFilePath = (
     return configFilePath;
   }
   return path.resolve(appDirectory, configFilePath);
-};
-
-/**
- *
- * @param targetDir target dir
- * @param overtime Unit of second
- */
-export const clearFilesOverTime = async (
-  targetDir: string,
-  overtime: number,
-) => {
-  try {
-    // when stats is true, globby return Stats[]
-    const files = (await globby(`${targetDir}/**/*`, {
-      stats: true,
-      absolute: true,
-    })) as unknown as { stats: Stats; path: string }[];
-    const currentTime = Date.now();
-    if (files.length > 0) {
-      for (const file of files) {
-        if (currentTime - file.stats.birthtimeMs >= overtime * 1000) {
-          fs.unlinkSync(file.path);
-        }
-      }
-    }
-  } catch (err) {
-    // ignore error when clear files
-  }
 };
 
 /**

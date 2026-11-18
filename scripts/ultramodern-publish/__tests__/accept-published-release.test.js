@@ -221,6 +221,112 @@ test('only an owner-dispatched main publish whose npm jobs passed in the publica
   );
 });
 
+// publish-bleedingdev.yml skips the sidecar publisher when reconcile-sidecars
+// decided `reuse` (every exact sidecar version already on npm), and publish
+// runs after that skip only on that decision.
+test('a skipped sidecar publisher is accepted only beside a passed reconciliation', async () => {
+  const { api, run, jobs, artifacts, expected } = await fixture();
+  const reconcile = {
+    ...jobs[0],
+    name: 'Reconcile the staged sidecars with the registry',
+    conclusion: 'success',
+    run_attempt: 1,
+  };
+  const skipped = { ...jobs[0], conclusion: 'skipped', run_attempt: 1 };
+  const withSidecars = (...extra) => [skipped, ...extra, ...jobs.slice(1)];
+  assert.equal(
+    api.assertPublishedRun(run, withSidecars(reconcile), artifacts, expected)
+      .identity,
+    `bleedingdev-release-identity-run-${runId}-attempt-1-publication-attempt-2`,
+  );
+  // A failed-job rerun carries both over and may relabel them.
+  api.assertPublishedRun(
+    run,
+    [
+      { ...skipped, run_attempt: 2 },
+      { ...reconcile, run_attempt: 2 },
+      ...jobs.slice(1),
+    ],
+    artifacts,
+    expected,
+  );
+  for (const [label, sidecarJobs] of [
+    ['no reconciliation', withSidecars()],
+    [
+      'failed reconciliation',
+      withSidecars({ ...reconcile, conclusion: 'failure' }),
+    ],
+    [
+      'skipped reconciliation',
+      withSidecars({ ...reconcile, conclusion: 'skipped' }),
+    ],
+    [
+      'running reconciliation',
+      withSidecars({ ...reconcile, status: 'in_progress', conclusion: null }),
+    ],
+    [
+      'reconciliation only after publication',
+      withSidecars({ ...reconcile, run_attempt: 3 }),
+    ],
+    [
+      'reconciliation on another commit',
+      withSidecars({ ...reconcile, head_sha: 'e'.repeat(40) }),
+    ],
+    [
+      'reconciliation of another run',
+      withSidecars({ ...reconcile, run_id: 99 }),
+    ],
+    [
+      'reconciliation that failed when it was last run',
+      withSidecars(reconcile, {
+        ...reconcile,
+        run_attempt: 2,
+        conclusion: 'failure',
+      }),
+    ],
+    ['duplicate reconciliation', withSidecars(reconcile, reconcile)],
+    [
+      'skip on another commit',
+      [{ ...skipped, head_sha: 'e'.repeat(40) }, reconcile, ...jobs.slice(1)],
+    ],
+    [
+      'skip of another run',
+      [{ ...skipped, run_id: 99 }, reconcile, ...jobs.slice(1)],
+    ],
+  ])
+    assert.throws(
+      () => api.assertPublishedRun(run, sidecarJobs, artifacts, expected),
+      undefined,
+      label,
+    );
+  // A sidecar publisher that ran must still have passed.
+  for (const conclusion of ['failure', 'cancelled'])
+    assert.throws(
+      () =>
+        api.assertPublishedRun(
+          run,
+          [{ ...skipped, conclusion }, reconcile, ...jobs.slice(1)],
+          artifacts,
+          expected,
+        ),
+      /Original job did not pass: Publish the qualified stable sidecars/u,
+    );
+  assert.throws(
+    () =>
+      api.assertPublishedRun(
+        run,
+        [
+          { ...skipped, status: 'in_progress', conclusion: null },
+          reconcile,
+          ...jobs.slice(1),
+        ],
+        artifacts,
+        expected,
+      ),
+    /Original job: Publish the qualified stable sidecars/u,
+  );
+});
+
 test('expired, duplicate, wrong-source and foreign-run identity artifacts fail closed', async () => {
   const { api, run, jobs, artifacts, expected } = await fixture();
   for (const patch of [
