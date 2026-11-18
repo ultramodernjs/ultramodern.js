@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
+import { globSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import ncc from '@vercel/ncc';
-import fastGlob from 'fast-glob';
 import fs from 'fs-extra';
 import { dirname, join } from 'path';
 import { rollup } from 'rollup';
@@ -106,11 +106,19 @@ function emitPackageJson(task: ParsedTask) {
   fs.writeJSONSync(outputPath, pickedPackageJson);
 }
 
+const licenseName = /^(?:license|licence|copying|notice)(?:\..*)?$/i;
+
+function licenseFiles(directory: string) {
+  return fs
+    .readdirSync(directory)
+    .filter(
+      name =>
+        licenseName.test(name) && fs.statSync(join(directory, name)).isFile(),
+    );
+}
+
 function emitLicense(task: ParsedTask, declarationInputs: string[]) {
-  const licenses = fastGlob.sync('{license,licence,copying,notice}{,.*}', {
-    cwd: task.depPath,
-    caseSensitiveMatch: false,
-  });
+  const licenses = licenseFiles(task.depPath);
   if (licenses.length === 0) {
     throw new Error(`Missing license for ${task.depName}`);
   }
@@ -133,13 +141,7 @@ function emitLicense(task: ParsedTask, declarationInputs: string[]) {
         source.name,
         pick(source, ['name', 'version', 'license']),
       );
-      for (const file of fastGlob.sync(
-        '{license,licence,copying,notice}{,.*}',
-        {
-          cwd: directory,
-          caseSensitiveMatch: false,
-        },
-      )) {
+      for (const file of licenseFiles(directory)) {
         fs.copySync(
           join(directory, file),
           join(
@@ -186,10 +188,9 @@ function emitExtraFiles(task: ParsedTask) {
 }
 
 function removeSourceMap(task: ParsedTask) {
-  const maps = fastGlob.sync(join(task.distPath, '**/*.map'));
-  maps.forEach(mapPath => {
-    fs.removeSync(mapPath);
-  });
+  for (const mapPath of globSync('**/*.map', { cwd: task.distPath })) {
+    fs.removeSync(join(task.distPath, mapPath));
+  }
 }
 
 export async function prebundle(task: ParsedTask) {

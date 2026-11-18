@@ -3,15 +3,14 @@
  * to avoid changesets calculate version for this pkgs
  */
 
-import { fastGlob } from '@modern-js/utils';
 import fs from 'fs';
 import path from 'path';
 
 const run = () => {
   const root = path.join(__dirname, '../integration');
-  const files = fastGlob.sync('**/package.json', {
+  const files = fs.globSync('**/package.json', {
     cwd: root,
-    ignore: ['**/node_modules/**'],
+    exclude: ['**/node_modules/**'],
   });
 
   files.forEach(file => {

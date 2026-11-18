@@ -1,5 +1,5 @@
+import { globSync } from 'node:fs';
 import logger from 'consola';
-import glob from 'fast-glob';
 import fs from 'fs-extra';
 import { join } from 'path';
 import { lintExportsField } from './rules/lintExportsField';
@@ -18,10 +18,10 @@ export type PackageJSON = {
 };
 
 async function getAllPackageJson(): Promise<PackageJSON[]> {
-  const pattern = join(ROOT, 'packages', '**', 'package.json');
-  const files = glob.sync(pattern, {
-    ignore: ['**/node_modules/**'],
-  });
+  const files = globSync('packages/**/package.json', {
+    cwd: ROOT,
+    exclude: ['**/node_modules/**'],
+  }).map(file => join(ROOT, file));
 
   const contents = await Promise.all(files.map(file => fs.readJsonSync(file)));
 

@@ -112,15 +112,12 @@ function compile(file) {
   if (result.error) throw result.error;
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
-const positive = `import { chokidar, fastGlob, inquirer, lodash, upath } from '@modern-js/utils';
+const positive = `import { chokidar, inquirer, lodash, upath } from '@modern-js/utils';
 import { defineConfig } from '@modern-js/app-tools';
 import type { AppUserConfig } from '@modern-js/ultramodern-app-tools';
 const watcher = chokidar.watch('src/**/*.ts');
 watcher.add(['src/**/*.tsx']).unwatch('src/generated/**');
 const closed: Promise<void> = watcher.close();
-const paths: Promise<string[]> = fastGlob('**/*.ts');
-const entries = fastGlob.sync('**/*.ts', { objectMode: true });
-const entryPath: string = entries[0].path;
 const answer: Promise<{ name: string }> = inquirer.prompt<{ name: string }>([{ type: 'input', name: 'name', message: 'Name' }]);
 const prompt = new inquirer.ui.Prompt({}, {});
 const values: string[] = lodash.map([{ name: 'yes' }], item => item.name);
@@ -223,11 +220,10 @@ try {
   const negative = join(temp, 'negative.ts');
   writeFileSync(
     negative,
-    `import { chokidar, fastGlob, inquirer, upath } from '@modern-js/utils';
+    `import { chokidar, inquirer, upath } from '@modern-js/utils';
 import { defineConfig } from '@modern-js/app-tools';
 import type { AppUserConfig } from '@modern-js/ultramodern-app-tools';
 chokidar.watch('src').ref();
-fastGlob.sync('src', { objectMode: 'yes' });
 inquirer.prompt<{ name: string }>([{ type: 'input', name: 'name', message: 'Name' }]).then(value => { const invalid: number = value.name; });
 upath.win32.normalize(42);
 defineConfig({ tools: { sass: { api: 'invalid' } }, output: { svgDefaultExport: 'invalid' } });
