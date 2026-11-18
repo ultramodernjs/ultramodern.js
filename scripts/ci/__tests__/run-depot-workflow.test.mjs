@@ -360,12 +360,8 @@ test('rejects required keys prefixed with another workflow or a path alias', asy
   }
 });
 
-test('dependency checks require both the dependency and advisory jobs', async () => {
-  for (const keys of [
-    ['check'],
-    ['check', 'unrelated'],
-    ['check', 'advisories'],
-  ]) {
+test('dependency checks require the dependency job', async () => {
+  for (const keys of [['unrelated'], ['check']]) {
     const api = fixture();
     const selected = api.snapshot.workflows[0];
     selected.workflowPath = '.depot/workflows/check-dependencies.yml';
@@ -376,7 +372,7 @@ test('dependency checks require both the dependency and advisory jobs', async ()
       attempts: [{ attempt: 1, status: 'finished' }],
     }));
     const run = api.run({ workflow: selected.workflowPath });
-    if (keys.includes('advisories')) await run;
+    if (keys.includes('check')) await run;
     else
       await assert.rejects(run, /Required Depot jobs|Required Depot job keys/);
   }

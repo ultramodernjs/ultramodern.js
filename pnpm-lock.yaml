@@ -3977,9 +3977,6 @@ importers:
       consola:
         specifier: ^3.4.2
         version: 3.4.2
-      fast-glob:
-        specifier: 3.3.3
-        version: 3.3.3
       fs-extra:
         specifier: ^11.4.1
         version: 11.4.1
@@ -4093,9 +4090,6 @@ importers:
       execa:
         specifier: 10.2.1
         version: 10.2.1
-      fast-glob:
-        specifier: 3.3.3
-        version: 3.3.3
       filesize:
         specifier: 11.0.32
         version: 11.0.32

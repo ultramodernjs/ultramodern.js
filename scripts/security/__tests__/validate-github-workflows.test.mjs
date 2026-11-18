@@ -116,72 +116,6 @@ test('the published cohort is awaited once, after the frozen publication CLI, be
   assert.ok(rootPackage.dependencies.semver);
 });
 
-test('repository advisory correction requires the blocking frozen production install before audit', () => {
-  const relativePath = '.github/workflows/check-dependencies.yml';
-  const read = () =>
-    yaml.load(
-      fs.readFileSync(
-        new URL(`../../../${relativePath}`, import.meta.url),
-        'utf8',
-      ),
-    );
-  const errors = workflow =>
-    validateWorkflowContent(relativePath, yaml.dump(workflow)).filter(error =>
-      error.includes('exact frozen production install'),
-    );
-  assert.deepEqual(errors(read()), []);
-  for (const mutate of [
-    job => {
-      job.steps = job.steps.filter(
-        step => step.name !== 'Install the frozen production graph',
-      );
-    },
-    job => {
-      job.steps.reverse();
-    },
-    job => {
-      job.if = 'false';
-    },
-    job => {
-      job['continue-on-error'] = true;
-    },
-    job => {
-      job.steps.find(
-        step => step.name === 'Install the frozen production graph',
-      ).if = 'false';
-    },
-    job => {
-      job.steps.find(
-        step => step.name === 'Install the frozen production graph',
-      ).background = true;
-    },
-    job => {
-      job.steps.find(
-        step => step.name === 'Install the frozen production graph',
-      )['continue-on-error'] = true;
-    },
-    job => {
-      job.steps.find(
-        step => step.name === 'Install the frozen production graph',
-      ).run = 'mise exec -- pnpm install --prod --ignore-scripts';
-    },
-    job => {
-      job.steps.find(
-        step => step.name === 'Fail on high or critical advisories',
-      ).if = 'false';
-    },
-    job => {
-      job.steps.find(
-        step => step.name === 'Fail on high or critical advisories',
-      )['continue-on-error'] = true;
-    },
-  ]) {
-    const workflow = read();
-    mutate(workflow.jobs.advisories);
-    assert.ok(errors(workflow).length > 0);
-  }
-});
-
 const githubExpression = expression => ['${{', expression, '}}'].join(' ');
 
 const publishWorkflowPath = '.github/workflows/publish-bleedingdev.yml';
@@ -2627,7 +2561,7 @@ test('release gates reject node:test filter flags', () => {
 });
 
 test('a later fixed test file cannot load an eager dependency before install', () => {
-  const first = 'scripts/security/__tests__/advisory-gate.test.mjs';
+  const first = 'scripts/ci/__tests__/required-build-cache.test.mjs';
   const later = 'scripts/security/__tests__/github-job-condition.test.mjs';
   const command = 'node --test ' + first;
   const options = {

@@ -12,7 +12,7 @@ const repositories = new Set([
 const pending = new Set(['queued', 'waiting', 'running']);
 const terminal = new Set(['finished', 'failed', 'cancelled', 'skipped']);
 const requiredJobs = new Map([
-  ['check-dependencies', { count: 2, keys: ['check', 'advisories'] }],
+  ['check-dependencies', { count: 1, keys: ['check'] }],
   ['ci-cache', { count: 1, keys: ['seed'] }],
   // JobStatus.jobDisplayName is the resolved YAML `name:`. Matrix jobKey
   // suffixes are unspecified, so use the explicit matrix job names.

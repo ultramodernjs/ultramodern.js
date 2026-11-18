@@ -94,11 +94,6 @@
       "types": "./dist/compiled/fs-extra/index.d.ts",
       "default": "./dist/compiled/fs-extra/index.js"
     },
-    "./fast-glob": {
-      "types": "./dist/types/fast-glob.d.ts",
-      "import": "./dist/esm-node/fast-glob.mjs",
-      "require": "./dist/cjs/fast-glob.js"
-    },
     "./gzip-size": {
       "types": "./dist/compiled/gzip-size/index.d.mts",
       "import": "./dist/compiled/gzip-size/index.mjs",
@@ -179,9 +174,6 @@
       ],
       "fs-extra": [
         "./dist/compiled/fs-extra/index.d.ts"
-      ],
-      "fast-glob": [
-        "./dist/types/fast-glob.d.ts"
       ],
       "gzip-size": [
         "./dist/compiled/gzip-size/index.d.mts"
