@@ -5,8 +5,8 @@
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
   "totalFiles": 1459,
-  "totalHunks": 4946,
-  "totalChangedLines": 104219,
+  "totalHunks": 4947,
+  "totalChangedLines": 104221,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -231,7 +231,7 @@
     {
       "file": "packages/cli/plugin-bff/src/cli/generator.ts",
       "hunks": 1,
-      "changedLines": 184
+      "changedLines": 188
     },
     {
       "file": "packages/cli/plugin-bff/src/cli/prefix.ts",
@@ -4840,8 +4840,8 @@
     },
     {
       "file": "packages/solutions/app-tools/src/plugins/serverBuild.ts",
-      "hunks": 12,
-      "changedLines": 69
+      "hunks": 13,
+      "changedLines": 67
     },
     {
       "file": "packages/solutions/app-tools/src/plugins/serverRuntime.ts",
