@@ -1042,8 +1042,12 @@ test('the next cohort recipe consumes only the exact two handed-off patch bytes'
   copy('patches/@tanstack__router-core@1.171.39.patch');
   const adapterPatch =
     '@octanejs__tanstack-router@0.3.6.shared-core-peer.patch';
-  copy(`patches/${adapterPatch}`, `${candidate}/${adapterPatch}`);
+  copy(`${candidate}/${adapterPatch}`);
   const recipe = releaseRecipe(options);
+  assert.equal(
+    recipe.packages['@octanejs/tanstack-router'].patchPath,
+    path.join(directory, candidate, adapterPatch),
+  );
   assert.match(
     recipe.packages['@octanejs/tanstack-router'].upstream.request,
     /tanstack-router-0\.3\.6\.tgz$/u,
