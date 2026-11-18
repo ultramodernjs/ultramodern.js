@@ -39,7 +39,9 @@ Published acceptance and Tractor still precede the cohort outcome and change
 record. In this mode `publish-sidecars` runs only when `reconcile-sidecars`
 finds a staged sidecar version that is not on npm yet; when every one already
 is, with the accepted bytes, provenance and tag, it is skipped and the cohort
-publishes on that reconciliation alone.
+publishes on that reconciliation alone. A failed-job rerun keeps that
+reconciliation from its earlier attempt, so the publish job then reads the
+sidecars from npm again and publishes only if every one still is.
 
 `sidecars` prepares only the reviewed recipe closure. Leave `version` and all
 recovery inputs empty. Preparation authenticates upstream archives and patches,

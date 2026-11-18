@@ -1118,6 +1118,57 @@ for (const [label, mutate, pattern] of [
     },
     /reconcile-sidecars must output only the decision/u,
   ],
+  [
+    'decision without the attempt that read npm',
+    workflow => {
+      delete workflow.jobs['reconcile-sidecars'].outputs.attempt;
+    },
+    /reconcile-sidecars must output only the decision .* and the attempt that read npm/u,
+  ],
+  [
+    'publish without the sidecar re-read for an earlier attempt',
+    workflow => {
+      const steps = workflow.jobs.publish.steps;
+      const at = steps.findIndex(step =>
+        String(step.run).includes('$RUNNER_TEMP/sidecar-decision'),
+      );
+      assert.ok(at > 0);
+      steps.splice(at, 1);
+    },
+    /publish must read the sidecars from npm again/u,
+  ],
+  [
+    'sidecar re-read that runs only in the first attempt',
+    workflow => {
+      const step = workflow.jobs.publish.steps.find(candidate =>
+        String(candidate.run).includes('$RUNNER_TEMP/sidecar-decision'),
+      );
+      step.if = "github.run_attempt == '1'";
+    },
+    /publish must read the sidecars from npm again/u,
+  ],
+  [
+    'sidecar re-read that accepts a publish decision',
+    workflow => {
+      const step = workflow.jobs.publish.steps.find(candidate =>
+        String(candidate.run).includes('$RUNNER_TEMP/sidecar-decision'),
+      );
+      step.run = step.run.replace(/\n\s*test .*\n?$/u, '\n');
+    },
+    /publish must read the sidecars from npm again/u,
+  ],
+  [
+    'sidecar re-read after the cohort upload',
+    workflow => {
+      const steps = workflow.jobs.publish.steps;
+      const at = steps.findIndex(step =>
+        String(step.run).includes('$RUNNER_TEMP/sidecar-decision'),
+      );
+      const [reread] = steps.splice(at, 1);
+      steps.splice(at + 1, 0, reread);
+    },
+    /publish must read the sidecars from npm again/u,
+  ],
 ])
   test(`release validator rejects a ${label}`, () => {
     assertPublishMutationRejected(label, mutate, pattern);

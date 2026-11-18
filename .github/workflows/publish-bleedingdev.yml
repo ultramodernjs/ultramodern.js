@@ -785,13 +785,16 @@ jobs:
   # when at least one staged sidecar version is not on npm yet and `reuse`
   # when every one already is, with the accepted bytes, provenance and tag.
   # publish-sidecars runs only on `publish`; publish accepts a skipped
-  # publish-sidecars only on `reuse`.
+  # publish-sidecars only on `reuse`. `attempt` is the run attempt that read
+  # npm: `gh run rerun --failed` keeps this job's result and outputs, so publish
+  # reads npm again when the decision comes from an earlier attempt.
   reconcile-sidecars:
     name: Reconcile the staged sidecars with the registry
     runs-on: ${{ vars.DEPOT_LINUX_RUNNER || 'depot-ubuntu-24.04-8' }}
     timeout-minutes: 15
     outputs:
       decision: ${{ steps.reconcile.outputs.decision }}
+      attempt: ${{ github.run_attempt }}
     if: >-
       inputs.mode == 'cohort' &&
       github.actor == 'BleedingDev' &&
@@ -1391,6 +1394,21 @@ jobs:
             --receipt "$BLEEDINGDEV_RELEASE_DIR/acceptance-receipt.renderer-features.json" \
             --acceptance-receipt "$BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT" \
             --run-identity "$PRODUCER_RUN_IDENTITY"
+
+      # The sidecar registry read authorizes the cohort only in the attempt
+      # that made it. A rerun keeps reconcile-sidecars from an earlier attempt,
+      # and a sidecars-mode publish may have moved a sidecar since, so this
+      # attempt reads npm again and publishes only if every exact sidecar is
+      # still there with the accepted bytes, provenance and tag.
+      - name: Re-read the sidecars on npm for a decision from an earlier attempt
+        if: needs.reconcile-sidecars.outputs.attempt != github.run_attempt
+        run: |
+          node scripts/ultramodern-publish/publish-sidecars.mjs \
+            --dry-run \
+            --out "$BLEEDINGDEV_RELEASE_DIR" \
+            --tag "$BLEEDINGDEV_PUBLISH_TAG" \
+            --github-output "$RUNNER_TEMP/sidecar-decision"
+          test "$(cat "$RUNNER_TEMP/sidecar-decision")" = 'decision=reuse'
 
       - name: Publish only the accepted tarballs
         env:
