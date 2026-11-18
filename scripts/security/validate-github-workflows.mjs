@@ -3435,6 +3435,19 @@ function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
       workflow.on.workflow_dispatch.inputs.native_manifest.type !== 'string')
   )
     fail('must require the exact native_manifest dispatch input');
+  if (!support) {
+    const dispatch = workflow.on?.workflow_dispatch;
+    const octane = dispatch?.inputs?.octane_candidate;
+    if (
+      !sameKeys(dispatch, ['inputs']) ||
+      !sameKeys(dispatch.inputs, ['octane_candidate']) ||
+      octane?.type !== 'choice' ||
+      octane.required !== true ||
+      octane.default !== 'octane-0.18.0' ||
+      JSON.stringify(octane.options) !== '["octane-0.18.0","octane-0.20.0"]'
+    )
+      fail('must select one of the two exact Octane cohorts at dispatch');
+  }
   const jobs = workflow.jobs ?? {};
   if (!sameKeys(jobs, ['produce', 'qualify', writer]))
     fail(`must have exactly produce, qualify and ${writer} jobs`);
@@ -3525,6 +3538,12 @@ function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
       JSON.stringify(job).includes('SUPPORT_REACT_CORE_ARCHIVE')
     )
       fail(`${id} must not receive the packed React core archive`);
+    if (
+      !support &&
+      steps[0]?.env?.NATIVE_OCTANE_CANDIDATE !==
+        `\${{ inputs.octane_candidate }}`
+    )
+      fail(`${id} must use the exact Octane candidate selected at dispatch`);
     if (id !== writer) {
       const installer = (job.steps ?? []).filter(step =>
         actionMatches(step, 'jdx/mise-action'),
