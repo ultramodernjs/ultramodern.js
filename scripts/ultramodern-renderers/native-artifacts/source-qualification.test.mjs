@@ -25,6 +25,7 @@ import {
   qualifyRouterSource,
   qualifyRuntimePairSource,
   runtimeHandoffFiles,
+  runtimePairCandidates,
   unpackNpm,
   verifyRuntimeHandoff,
 } from './source-qualification.mjs';
@@ -621,6 +622,265 @@ test('runtime pair receipt checks each package’s own bytes from the single own
     assert.equal(calls, 1, label);
     assert.deepEqual(fs.readdirSync(f.directory), f.controls, label);
   }
+});
+
+const octane20 = 'octane-0.20.0';
+const octane20Inputs = async () =>
+  (
+    await import('../octane-corrections/qualify-runtime.mjs')
+  ).octane20RuntimeInputs();
+// Recipe identities come only from the selected owning source. The patch files
+// are fabricated protocol controls at the owning patch paths; no 0.20 handoff
+// bytes or digests exist yet.
+async function runtime20Control(t) {
+  const directory = root(t);
+  const inputs = await octane20Inputs();
+  const patches = {};
+  const items = Object.fromEntries(
+    inputs.packages.map(input => {
+      const patch = Buffer.from(
+        `fabricated ${input.name} ${octane20} protocol control, never a production patch`,
+      );
+      const patchPath = path.join(
+        directory,
+        inputs.runtimePair[input.name].patchPath,
+      );
+      fs.mkdirSync(path.dirname(patchPath), { recursive: true });
+      fs.writeFileSync(patchPath, patch);
+      patches[input.name] = patch;
+      return [
+        input.name,
+        {
+          patchPath,
+          patchSha256: sha256(patch),
+          upstream: {
+            request: input.url,
+            integrity: input.integrity,
+            repository: 'octanejs/octane',
+            commit: inputs.source.commit,
+            sourceArchiveIntegrity: inputs.sourceIntegrity,
+            licenseSha256: input.licenseSha256,
+          },
+        },
+      ];
+    }),
+  );
+  return {
+    directory,
+    items,
+    patches,
+    inputs,
+    controls: fs.readdirSync(directory),
+  };
+}
+const neverRuns = {
+  execute: () => assert.fail('must reject before toolchain'),
+  qualifier: () => assert.fail('must reject before owning build'),
+};
+
+test('runtime pair adapter selects only an exact Octane candidate literal', async t => {
+  const f = runtimeControl(t);
+  assert.deepEqual(runtimePairCandidates, ['octane-0.18.0', octane20]);
+  for (const octaneCandidate of [
+    'octane-0.19.0',
+    'octane-0.20',
+    'octane-0.20.0 ',
+    'OCTANE-0.20.0',
+    'octane@0.20.0',
+    '',
+    null,
+    0.2,
+  ])
+    await assert.rejects(
+      qualifyRuntimePairSource(
+        { items: f.items, workDirectory: f.directory, octaneCandidate },
+        neverRuns,
+      ),
+      /Unknown Octane runtime candidate/u,
+      String(octaneCandidate),
+    );
+  assert.deepEqual(fs.readdirSync(f.directory), f.controls);
+});
+
+test('octane-0.20.0 pair passes its exact owning inputs to the one owning build', async t => {
+  const f = await runtime20Control(t);
+  const failure = new Error('HMR gate');
+  let calls = 0;
+  await assert.rejects(
+    qualifyRuntimePairSource(
+      { items: f.items, workDirectory: f.directory, octaneCandidate: octane20 },
+      {
+        pnpmBinary: '/unit/pnpm-12.21.0',
+        execute: () => '12.21.0\n',
+        qualifier: async options => {
+          calls++;
+          assert.deepEqual(Object.keys(options).sort(), [
+            'expectedPatches',
+            'inputs',
+            'pnpm',
+            'runner',
+            'work',
+            'writePatch',
+          ]);
+          assert.deepEqual(options.inputs, f.inputs);
+          assert.equal(
+            options.inputs.source.commit,
+            f.items.octane.upstream.commit,
+          );
+          assert.equal(options.writePatch, false);
+          assert.deepEqual(options.expectedPatches, f.patches);
+          assert.equal(options.pnpm, '/unit/pnpm-12.21.0');
+          throw failure;
+        },
+      },
+    ),
+    error => error === failure,
+  );
+  assert.equal(calls, 1);
+  assert.deepEqual(fs.readdirSync(f.directory), f.controls);
+});
+
+test('octane-0.18.0 stays the default and never receives other owning inputs', async t => {
+  const f = runtimeControl(t);
+  for (const selection of [{}, { octaneCandidate: 'octane-0.18.0' }]) {
+    const failure = new Error('unit stop');
+    await assert.rejects(
+      qualifyRuntimePairSource(
+        { items: f.items, workDirectory: f.directory, ...selection },
+        {
+          pnpmBinary: '/unit/pnpm-12.21.0',
+          execute: () => '12.21.0\n',
+          qualifier: async options => {
+            assert.equal(Object.hasOwn(options, 'inputs'), false);
+            throw failure;
+          },
+        },
+      ),
+      error => error === failure,
+    );
+  }
+});
+
+test('recipes cannot cross Octane candidates', async t => {
+  const current = runtimeControl(t);
+  const next = await runtime20Control(t);
+  await assert.rejects(
+    qualifyRuntimePairSource(
+      {
+        items: current.items,
+        workDirectory: current.directory,
+        octaneCandidate: octane20,
+      },
+      neverRuns,
+    ),
+    /octane: runtime recipe has another package identity/u,
+  );
+  await assert.rejects(
+    qualifyRuntimePairSource(
+      { items: next.items, workDirectory: next.directory },
+      neverRuns,
+    ),
+    /octane: runtime recipe has another package identity/u,
+  );
+});
+
+for (const name of pairNames)
+  for (const kind of [
+    'license',
+    'request',
+    'archive',
+    'previous source',
+    'previous source archive',
+    'patch digest',
+    'previous patch path',
+    'swapped patch path',
+  ])
+    test(`octane-0.20.0 pair rejects ${name} with a ${kind} before toolchain or build execution`, async t => {
+      const f = await runtime20Control(t);
+      const item = f.items[name];
+      const other = f.items[otherPair(name)];
+      const previous = runtimeRecipes().packages[name];
+      if (kind === 'license')
+        item.upstream.licenseSha256 = other.upstream.licenseSha256;
+      if (kind === 'request') item.upstream.request = previous.upstream.request;
+      if (kind === 'archive')
+        item.upstream.integrity = previous.upstream.integrity;
+      if (kind === 'previous source')
+        item.upstream.commit = previous.upstream.commit;
+      if (kind === 'previous source archive')
+        item.upstream.sourceArchiveIntegrity =
+          previous.upstream.sourceArchiveIntegrity;
+      if (kind === 'patch digest') item.patchSha256 = other.patchSha256;
+      if (kind === 'previous patch path') {
+        item.patchPath = path.join(
+          f.directory,
+          path.relative(
+            path.dirname(path.dirname(previous.patchPath)),
+            previous.patchPath,
+          ),
+        );
+        fs.writeFileSync(item.patchPath, f.patches[name]);
+      }
+      if (kind === 'swapped patch path') item.patchPath = other.patchPath;
+      const controls = fs.readdirSync(f.directory);
+      await assert.rejects(
+        qualifyRuntimePairSource(
+          {
+            items: f.items,
+            workDirectory: f.directory,
+            octaneCandidate: octane20,
+          },
+          neverRuns,
+        ),
+        error =>
+          error.message.includes(name) &&
+          !error.message.includes('must reject'),
+      );
+      assert.deepEqual(fs.readdirSync(f.directory), controls);
+    });
+
+test('octane-0.20.0 receipt checks each package’s own bytes against the selected recipe', async t => {
+  const f = await runtime20Control(t);
+  const receipt = name => ({
+    sourceArchiveBytes: Buffer.from('fabricated source archive control'),
+    builtPatchBytes: f.patches[name],
+    licenseBytes: Buffer.from('fabricated license control'),
+  });
+  for (const [label, value, expected] of [
+    [
+      'foreign Rspack patch',
+      () => ({
+        octane: receipt('octane'),
+        '@octanejs/rspack-plugin': {
+          ...receipt('@octanejs/rspack-plugin'),
+          builtPatchBytes: f.patches.octane,
+        },
+      }),
+      /@octanejs\/rspack-plugin: runtime owning build differs from recipe patch/u,
+    ],
+    [
+      'another license',
+      () => Object.fromEntries(pairNames.map(name => [name, receipt(name)])),
+      /octane: recipe differs from its owning package license/u,
+    ],
+  ])
+    await assert.rejects(
+      qualifyRuntimePairSource(
+        {
+          items: f.items,
+          workDirectory: f.directory,
+          octaneCandidate: octane20,
+        },
+        {
+          pnpmBinary: '/unit/pnpm-12.21.0',
+          execute: () => '12.21.0\n',
+          qualifier: async () => value(),
+        },
+      ),
+      expected,
+      label,
+    );
+  assert.deepEqual(fs.readdirSync(f.directory), f.controls);
 });
 
 test('closed pair composition authenticates per-package licenses before any qualifier runs', async t => {
