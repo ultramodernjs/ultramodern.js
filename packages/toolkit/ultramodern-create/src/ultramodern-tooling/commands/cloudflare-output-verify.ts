@@ -5,6 +5,7 @@ import {
   readUltramodernConfig,
   workspaceAppsFromToolingConfig,
 } from '../config';
+import { reportCloudflareOutputChecks } from './cloudflare-output-checks';
 import type { CommandContext } from './context';
 import { readOption } from './options';
 
@@ -102,28 +103,13 @@ Without --app or --output, every generated workspace app is verified.
   const verifierRequire = createRequire(
     path.join(context.workspaceRoot, 'package.json'),
   );
-  const { verifyCloudflareOutput, verifyCloudflareOutputMutationPolicy } =
-    verifierRequire(
-      '@modern-js/app-tools-extensions/cloudflare-output-verifier',
-    ) as typeof import('@modern-js/app-tools-extensions/cloudflare-output-verifier');
-  let failed = false;
-  for (const target of targets) {
-    const result = await verifyCloudflareOutput({
-      outputDirectory: target.outputDirectory,
-      importWorker: true,
-    });
-    if (result.ok) {
-      console.log(`[ultramodern] Cloudflare output verified: ${target.label}`);
-    } else {
-      failed = true;
-      console.error(`[ultramodern] Cloudflare output failed: ${target.label}`);
-      for (const issue of result.issues) {
-        console.error(
-          `- ${issue.code}: ${issue.message}${issue.path ? ` (${issue.path})` : ''}`,
-        );
-      }
-    }
-  }
+  const verifierPath = verifierRequire.resolve(
+    '@modern-js/app-tools-extensions/cloudflare-output-verifier',
+  );
+  const { verifyCloudflareOutputMutationPolicy } = verifierRequire(
+    verifierPath,
+  ) as typeof import('@modern-js/app-tools-extensions/cloudflare-output-verifier');
+  let failed = await reportCloudflareOutputChecks(verifierPath, targets);
   const policyResult = await verifyCloudflareOutputMutationPolicy({
     scanRoots: [context.workspaceRoot],
     excludePaths: [],

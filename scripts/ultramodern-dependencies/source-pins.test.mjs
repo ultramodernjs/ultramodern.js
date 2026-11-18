@@ -6,6 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { ultramodernSandpackFiles } from '../../packages/toolkit/ultramodern-sandpack-profile/src/index.ts';
+import provisioning from '../lib/browser-provisioning.js';
 import { targets } from './snapshot.mjs';
 import {
   auxiliarySourcePins,
@@ -344,30 +345,53 @@ test('actual browser provisioner resolves latest exact default without installat
     path.join(os.tmpdir(), `source-pin-${process.pid}-`),
   );
   try {
+    // The child's Playwright registry lives in temp. A PLAYWRIGHT_BROWSERS_PATH
+    // already set elsewhere is not the directory the cache restores.
+    const elsewhere = path.join(temp, 'elsewhere');
     const env = {
       ...process.env,
-      RUNNER_TEMP: temp,
+      HOME: temp,
+      XDG_CACHE_HOME: path.join(temp, 'xdg'),
+      LOCALAPPDATA: temp,
+      PLAYWRIGHT_BROWSERS_PATH: elsewhere,
       GITHUB_ENV: path.join(temp, 'env'),
       GITHUB_OUTPUT: path.join(temp, 'output'),
     };
     delete env.ULTRAMODERN_BROWSER_SMOKE_PLAYWRIGHT_PACKAGE;
-    execFileSync(
-      process.execPath,
-      [
-        'scripts/ultramodern-production-readiness/provision-acceptance-browsers.mjs',
-        '--resolve',
-      ],
-      { cwd: root, env },
-    );
-    assert.match(
-      fs.readFileSync(env.GITHUB_OUTPUT, 'utf8'),
-      /version=1\.65\.1/u,
-    );
-    assert.match(
+    const provisioner =
+      'scripts/ultramodern-production-readiness/provision-acceptance-browsers.mjs';
+    execFileSync(process.execPath, [provisioner, '--resolve'], {
+      cwd: root,
+      env,
+    });
+    // The registry directory every other job caches browsers in.
+    const browsersPath = provisioning.browserCachePath({
+      environment: { ...env, PLAYWRIGHT_BROWSERS_PATH: '' },
+      homedir: temp,
+    });
+    assert.ok(browsersPath.startsWith(temp + path.sep), browsersPath);
+    const output = fs.readFileSync(env.GITHUB_OUTPUT, 'utf8');
+    assert.match(output, /version=1\.65\.1/u);
+    assert.ok(output.includes(`cache_path=${browsersPath}\n`), output);
+    assert.equal(
       fs.readFileSync(env.GITHUB_ENV, 'utf8'),
-      /PLAYWRIGHT_BROWSERS_PATH=/u,
+      `PLAYWRIGHT_BROWSERS_PATH=${browsersPath}\n`,
     );
-    assert.equal(fs.existsSync(path.join(temp, 'ms-playwright')), false);
+    assert.equal(fs.existsSync(browsersPath), false);
+    // --install fails closed before installing into another directory.
+    assert.throws(
+      () =>
+        execFileSync(
+          process.execPath,
+          [provisioner, '--install', '--version', '1.65.1'],
+          { cwd: root, env, stdio: 'pipe' },
+        ),
+      error =>
+        String(error.stderr).includes(
+          `PLAYWRIGHT_BROWSERS_PATH is ${elsewhere}, not the ${browsersPath} the browser cache restores.`,
+        ),
+    );
+    assert.equal(fs.existsSync(elsewhere), false);
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
   }

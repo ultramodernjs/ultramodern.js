@@ -11,7 +11,6 @@ const {
   installBrowsers,
   parseProvisionArgs,
   provisionBrowsers,
-  runnerTempBrowsersPath,
   writeGithubEnv,
 } = require('../browser-provisioning');
 
@@ -233,27 +232,6 @@ test('cache key and path follow the playwright version and registry directory', 
       }),
     /PLAYWRIGHT_BROWSERS_PATH=0/u,
   );
-});
-
-test('the runner-temp browsers path is absolute and normalized', () => {
-  const runnerTemp = path.join(path.sep, 'home', 'runner', 'work', '_temp');
-  const browsersPath = runnerTempBrowsersPath({ RUNNER_TEMP: runnerTemp });
-  assert.equal(browsersPath, path.join(runnerTemp, 'ms-playwright'));
-  assert.ok(path.isAbsolute(browsersPath));
-  assert.equal(path.normalize(browsersPath), browsersPath);
-  for (const RUNNER_TEMP of [
-    undefined,
-    '',
-    'work/_temp',
-    `${runnerTemp}${path.sep}..${path.sep}_temp`,
-    `${runnerTemp}${path.sep}.${path.sep}x`,
-  ]) {
-    assert.throws(
-      () => runnerTempBrowsersPath({ RUNNER_TEMP }),
-      /RUNNER_TEMP must be an absolute, normalized directory/u,
-      String(RUNNER_TEMP),
-    );
-  }
 });
 
 test('writeGithubEnv exports to later steps and fails without GITHUB_ENV', () =>
