@@ -3,6 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  artifactPolicy,
+  bindArtifactProtocol,
+} from '../../ultramodern-artifacts/protocol.mjs';
+import {
   validateRecipe,
   verifySourceQualification,
 } from '../../ultramodern-artifacts/reconstruct.mjs';
@@ -40,6 +44,17 @@ const adapterName = '@octanejs/tanstack-router';
 const corrections = 'scripts/ultramodern-renderers/octane-corrections';
 const candidateDirectory = `${corrections}/octane-0.20.0`;
 
+// Only the producer selects this tuple before its archive is available.
+export const octane20ArtifactProtocol = bindArtifactProtocol({
+  ...artifactPolicy(nativeProtocol),
+  cohort: {
+    ...nativeProtocol.cohort,
+    octane: '0.20.0',
+    '@octanejs/tanstack-router': '0.3.6',
+    '@octanejs/rspack-plugin': '0.2.12',
+  },
+});
+
 function octaneRecipeInputs(root, octaneCandidate) {
   if (octaneCandidate === 'octane-0.18.0')
     return {
@@ -59,7 +74,7 @@ function octaneRecipeInputs(root, octaneCandidate) {
   const { upstream, candidates } = JSON.parse(
     fs.readFileSync(path.join(root, candidateDirectory, 'provenance.json')),
   );
-  const protocol = nativeProtocol.octane20ArtifactProtocol;
+  const protocol = octane20ArtifactProtocol;
   const inputs = [adapterName, ...runtimePairNames].map(name => {
     const pkg = upstream.packages[name];
     assert.equal(pkg.version, protocol.cohort[name]);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import * as core from '../../ultramodern-artifacts/main.mjs';
 import * as installedProtocol from './protocol.mjs';
-import { releaseRecipe } from './recipes.mjs';
+import { octane20ArtifactProtocol, releaseRecipe } from './recipes.mjs';
 export const currentProducer = (env = process.env) =>
   core.currentProducer({ protocol: installedProtocol, env });
 export const writerApi = token =>
@@ -23,7 +23,7 @@ export async function main(
   );
   const protocol =
     octaneCandidate === 'octane-0.20.0'
-      ? installedProtocol.octane20ArtifactProtocol
+      ? octane20ArtifactProtocol
       : installedProtocol;
   return core.runArtifactCommand({
     protocol,
