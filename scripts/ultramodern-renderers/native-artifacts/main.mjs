@@ -1,23 +1,33 @@
 #!/usr/bin/env node
+import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import * as core from '../../ultramodern-artifacts/main.mjs';
-import * as protocol from './protocol.mjs';
+import * as installedProtocol from './protocol.mjs';
 import { releaseRecipe } from './recipes.mjs';
-import { reconstruct } from './reconstruct.mjs';
 export const currentProducer = (env = process.env) =>
-  core.currentProducer({ protocol, env });
-export const writerApi = token => core.writerApi({ protocol, token });
+  core.currentProducer({ protocol: installedProtocol, env });
+export const writerApi = token =>
+  core.writerApi({ protocol: installedProtocol, token });
 export async function main(
   argv = process.argv.slice(2),
   {
     env = process.env,
     recipeFactory = releaseRecipe,
-    reconstructArtifacts = reconstruct,
+    reconstructArtifacts,
   } = {},
 ) {
+  const octaneCandidate = env.NATIVE_OCTANE_CANDIDATE ?? 'octane-0.18.0';
+  assert(
+    ['octane-0.18.0', 'octane-0.20.0'].includes(octaneCandidate),
+    'unknown Octane candidate',
+  );
+  const protocol =
+    octaneCandidate === 'octane-0.20.0'
+      ? installedProtocol.octane20ArtifactProtocol
+      : installedProtocol;
   return core.runArtifactCommand({
     protocol,
-    recipeFactory,
+    recipeFactory: () => recipeFactory({ octaneCandidate }),
     argv,
     env,
     reconstructArtifacts,

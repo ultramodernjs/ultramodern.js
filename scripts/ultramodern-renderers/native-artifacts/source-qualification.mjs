@@ -579,12 +579,25 @@ export async function qualifyRouterSource({
 /** The adapter's published layout is source; its actual compilation is the owning Vite test plugin. */
 export async function qualifyAdapterSource({
   item,
-  source,
   workDirectory,
   packedDirectory,
   fetchArtifact = fetch,
+  octaneCandidate = 'octane-0.18.0',
 }) {
-  assertOwningLicense('@octanejs/tanstack-router', item.upstream.licenseSha256);
+  const name = '@octanejs/tanstack-router';
+  assertOwningLicense(name, item.upstream.licenseSha256);
+  const { pinnedAdapterCandidate } = await import(
+    '../octane-corrections/qualify-shared-core-peer.mjs'
+  );
+  const { adapter, source } = pinnedAdapterCandidate(octaneCandidate);
+  assert.equal(item.upstream.repository, 'octanejs/octane');
+  assert.equal(item.upstream.commit, source.commit, 'Adapter source commit');
+  assert.equal(item.upstream.request, adapter.url, 'Adapter npm request');
+  assert.equal(
+    item.upstream.integrity,
+    adapter.integrity,
+    'Adapter npm digest',
+  );
   const { assertSharedCoreManifest, sharedCoreManifest } = await import(
     '../octane-corrections/shared-core-peer.mjs'
   );
@@ -630,8 +643,10 @@ export async function qualifyAdapterSource({
       });
       assertSharedCoreManifest(
         JSON.parse(fs.readFileSync(path.join(actual, 'package.json'))),
+        octaneCandidate,
       );
       await qualifyAdapter({
+        octaneCandidate,
         packedDirectory,
         assertSameLayout,
         work: root,
@@ -662,7 +677,7 @@ export async function qualifyAdapterSource({
         fs.readFileSync(path.join(original, 'package.json')),
       );
       const peerManifest = sharedCoreManifest(emittedManifest);
-      assertSharedCoreManifest(peerManifest);
+      assertSharedCoreManifest(peerManifest, octaneCandidate);
       json(path.join(emitted, 'package.json'), peerManifest);
       const actualBuiltPatch = builtPatch(original, emitted);
       assertPatch(item, actualBuiltPatch);
@@ -680,9 +695,55 @@ export const runtimePairNames = Object.freeze([
   'octane',
   '@octanejs/rspack-plugin',
 ]);
-function assertRuntimeIdentity(name, item) {
+/** Exact owning runtime sources a pair recipe may select. */
+export const runtimePairCandidates = Object.freeze([
+  'octane-0.18.0',
+  'octane-0.20.0',
+]);
+const runtimeOwnerModule = '../octane-corrections/qualify-runtime.mjs';
+/** Resolves the selected owning runtime source. octane-0.18.0 keeps the
+ * reviewed static inputs and the owning qualifier's default inputs. Any other
+ * owning source is loaded lazily, so the producer CLI import closure does not
+ * gain the owning build implementation. */
+async function selectRuntimeSource(octaneCandidate) {
+  assert(
+    typeof octaneCandidate === 'string' &&
+      runtimePairCandidates.includes(octaneCandidate),
+    `Unknown Octane runtime candidate: ${String(octaneCandidate)}`,
+  );
+  if (octaneCandidate === 'octane-0.18.0')
+    return {
+      candidate: octaneCandidate,
+      packages: octaneInputs,
+      commit: octaneSource.commit,
+      sourceArchiveIntegrity: runtimeSourceIntegrity,
+    };
+  const owner = await import(runtimeOwnerModule);
+  const inputs = owner.octane20RuntimeInputs();
+  exactKeys(
+    inputs.runtimePair,
+    runtimePairNames,
+    `${octaneCandidate}: owning runtime pair`,
+  );
+  return {
+    candidate: octaneCandidate,
+    packages: inputs.packages,
+    commit: inputs.source.commit,
+    sourceArchiveIntegrity: inputs.sourceIntegrity,
+    runtimePair: inputs.runtimePair,
+    inputs,
+  };
+}
+function assertRuntimeIdentity(name, item, selected) {
   assertOwningLicense(name, item.upstream.licenseSha256);
-  const upstream = octaneInputs.find(input => input.name === name);
+  if (selected.runtimePair)
+    assert.equal(
+      item.upstream.licenseSha256,
+      selected.runtimePair[name].licenseSha256,
+      `${name}: recipe differs from its ${selected.candidate} owning package license`,
+    );
+  const upstream = selected.packages.find(input => input.name === name);
+  assert(upstream, `${name}: ${selected.candidate} has no owning package`);
   assert.equal(
     item.upstream.request,
     upstream.url,
@@ -696,14 +757,23 @@ function assertRuntimeIdentity(name, item) {
   assert.equal(item.upstream.repository, 'octanejs/octane');
   assert.equal(
     item.upstream.commit,
-    octaneSource.commit,
+    selected.commit,
     `${name}: runtime recipe has another owning source`,
   );
   assert.equal(
     item.upstream.sourceArchiveIntegrity,
-    runtimeSourceIntegrity,
+    selected.sourceArchiveIntegrity,
     `${name}: runtime recipe has another owning source archive`,
   );
+  if (selected.runtimePair)
+    assert(
+      typeof item.patchPath === 'string' &&
+        item.patchPath
+          .split(path.sep)
+          .join('/')
+          .endsWith(`/${selected.runtimePair[name].patchPath}`),
+      `${name}: runtime recipe patch is not the ${selected.candidate} owning patch path`,
+    );
   const expectedPatch = fs.readFileSync(item.patchPath);
   assert.equal(
     sha256(expectedPatch),
@@ -716,16 +786,19 @@ function assertRuntimeIdentity(name, item) {
 /** Adapter to the one owning runtime build, which qualifies octane and its
  * Rspack plugin together. Every package receipt is checked against its own
  * recipe. A failed query/HMR gate propagates; reconstruction or a current
- * unqualified patch can never produce this receipt. */
+ * unqualified patch can never produce this receipt. octaneCandidate selects
+ * the exact owning source every identity is checked against; only a candidate
+ * other than octane-0.18.0 passes its owning inputs to the qualifier. */
 export async function qualifyRuntimePairSource(
-  { items, workDirectory, packedDirectory },
+  { items, workDirectory, packedDirectory, octaneCandidate = 'octane-0.18.0' },
   { qualifier = runOwningRuntime, execute = execFileSync, pnpmBinary } = {},
 ) {
+  const selected = await selectRuntimeSource(octaneCandidate);
   exactKeys(items, runtimePairNames, 'runtime owning pair recipe');
   const identities = Object.fromEntries(
     runtimePairNames.map(name => [
       name,
-      assertRuntimeIdentity(name, items[name]),
+      assertRuntimeIdentity(name, items[name], selected),
     ]),
   );
   return ownedQualification(
@@ -740,6 +813,7 @@ export async function qualifyRuntimePairSource(
         writePatch: false,
         runner: { run, disk, register },
         pnpm: pnpmBinary,
+        ...(selected.inputs ? { inputs: selected.inputs } : {}),
       });
       exactKeys(receipts, runtimePairNames, 'runtime owning pair receipt');
       for (const name of runtimePairNames) {
@@ -803,12 +877,19 @@ export async function qualifyRuntimePairSource(
 async function runOwningRuntime(options) {
   // Loading the owning build implementation belongs behind qualification, not
   // the producer CLI's dependency-free inventory/publish import closure.
-  const owner = await import('../octane-corrections/qualify-runtime.mjs');
-  assert.equal(
-    owner.sourceIntegrity,
-    runtimeSourceIntegrity,
-    'Owning qualifier source archive changed',
-  );
+  const owner = await import(runtimeOwnerModule);
+  if (options.inputs === undefined)
+    assert.equal(
+      owner.sourceIntegrity,
+      runtimeSourceIntegrity,
+      'Owning qualifier source archive changed',
+    );
+  else
+    assert.deepEqual(
+      options.inputs,
+      owner.octane20RuntimeInputs(),
+      'Owning octane-0.20.0 qualifier inputs changed',
+    );
   return owner.qualifyRuntimePair(options);
 }
 

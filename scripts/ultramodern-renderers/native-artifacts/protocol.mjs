@@ -48,6 +48,19 @@ const nativePolicy = Object.freeze({
   reconstructionPrefix: 'native-reconstruction-',
   validateUpstream,
 });
+
+// Qualify and publish the next Octane tuple before any workspace selects it.
+// The default binding below remains the authority for installed consumers.
+export const octane20ArtifactProtocol = bindArtifactProtocol({
+  ...nativePolicy,
+  cohort: {
+    ...nativePolicy.cohort,
+    octane: '0.20.0',
+    '@octanejs/tanstack-router': '0.3.6',
+    '@octanejs/rspack-plugin': '0.2.12',
+  },
+});
+
 export const {
   protocol,
   repository,

@@ -100,6 +100,15 @@ for (const [label, mutate] of Object.entries({
   'another trigger': workflow => {
     workflow.on.pull_request = {};
   },
+  'moving Octane input': workflow => {
+    workflow.on.workflow_dispatch.inputs.octane_candidate.options.push(
+      'latest',
+    );
+  },
+  'different publication cohort': workflow => {
+    workflow.jobs.release.steps.at(-1).env.NATIVE_OCTANE_CANDIDATE =
+      'octane-0.18.0';
+  },
   'top-level write': workflow => {
     workflow.permissions.contents = 'write';
   },

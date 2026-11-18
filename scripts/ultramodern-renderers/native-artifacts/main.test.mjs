@@ -123,3 +123,26 @@ test('qualification rejects substituted downloaded bytes before any owning suite
     /strictly equal|run/u,
   );
 });
+
+test('the next Octane producer rejects an old manifest and an unknown candidate before qualification', async t => {
+  const f = control(t);
+  const directory = path.join(f.root, 'transport');
+  fs.mkdirSync(directory);
+  for (const [filename, bytes] of f.payloads)
+    fs.writeFileSync(path.join(directory, filename), bytes);
+  const recipeFactory = () => assert.fail('must reject before qualification');
+  await assert.rejects(
+    main(['qualify', directory], {
+      env: { ...f.env, NATIVE_OCTANE_CANDIDATE: 'octane-0.20.0' },
+      recipeFactory,
+    }),
+    /version/u,
+  );
+  await assert.rejects(
+    main(['produce', directory], {
+      env: { ...f.env, NATIVE_OCTANE_CANDIDATE: 'octane-latest' },
+      recipeFactory,
+    }),
+    /unknown Octane candidate/u,
+  );
+});
