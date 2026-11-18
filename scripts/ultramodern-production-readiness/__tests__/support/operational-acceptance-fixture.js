@@ -353,6 +353,7 @@ async function createOperationalAcceptanceReceiptFixture({
             }
           : id === 'dependency-closure-audit'
             ? {
+                advisories: { auditLevel: 'high', acknowledged: [] },
                 closureIdentities: structuredClone(fixtureClosureIdentities),
               }
             : id === 'resolution-parity'
