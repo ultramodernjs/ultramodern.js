@@ -991,6 +991,78 @@ function handedOffTree(t) {
   return directory;
 }
 
+test('the next cohort recipe consumes only the exact two handed-off patch bytes', async t => {
+  const directory = root(t);
+  const corrections = 'scripts/ultramodern-renderers/octane-corrections';
+  const candidate = `${corrections}/octane-0.20.0`;
+  const options = { root: directory, octaneCandidate: 'octane-0.20.0' };
+  const write = (file, bytes) => {
+    const target = path.join(directory, file);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, bytes);
+    return { path: file, bytes: bytes.length, sha256: sha256(bytes) };
+  };
+  const copy = (file, from = file) =>
+    write(file, fs.readFileSync(new URL(`../../../${from}`, import.meta.url)));
+  const inputs = [
+    `${candidate}/runtime-source.patch`,
+    `${candidate}/rspack-source.patch`,
+    `${candidate}/rspack-tests.patch`,
+    `${corrections}/runtime-tests.patch`,
+    `${corrections}/typescript-compat/typescript-source.patch`,
+    `${corrections}/typescript-compat/native-signals-source.patch`,
+    `${corrections}/typescript-compat/volar-core-source.patch`,
+    `${candidate}/provenance.json`,
+    `${candidate}/runtime-build-package.json`,
+    `${candidate}/runtime-build-pnpm-lock.yaml`,
+  ].map(file => copy(file));
+  assert.throws(() => releaseRecipe(options), /awaits the authenticated/u);
+  const patches = [
+    write('patches/octane@0.20.0.patch', Buffer.from('runtime test fixture')),
+    write(
+      'patches/@octanejs__rspack-plugin@0.2.12.patch',
+      Buffer.from('Rspack test fixture'),
+    ),
+  ];
+  write(
+    `${candidate}/runtime-handoff.json`,
+    Buffer.from(
+      JSON.stringify({
+        schema: 'runtime-patch-handoff/v1',
+        candidate: options.octaneCandidate,
+        sourceSha: '1'.repeat(40),
+        run: { id: '123', attempt: '1' },
+        toolchain: { node: '26.13.1', pnpm: '12.21.0', mise: '2026.11.8' },
+        inputs,
+        patches,
+      }),
+    ),
+  );
+  copy('scripts/ultramodern-renderers/router-corrections/provenance.json');
+  copy('patches/@tanstack__router-core@1.171.39.patch');
+  const adapterPatch =
+    '@octanejs__tanstack-router@0.3.6.shared-core-peer.patch';
+  copy(`patches/${adapterPatch}`, `${candidate}/${adapterPatch}`);
+  const recipe = releaseRecipe(options);
+  assert.match(
+    recipe.packages['@octanejs/tanstack-router'].upstream.request,
+    /tanstack-router-0\.3\.6\.tgz$/u,
+  );
+  const runtime = runtimeRecipes(options, {
+    pairQualifier: async args => args,
+  });
+  const selected = await runtime.qualifySource({ workDirectory: directory });
+  assert.equal(selected.octaneCandidate, options.octaneCandidate);
+  assert.equal(selected.items.octane.patchSha256, patches[0].sha256);
+  const poisoned = path.join(directory, patches[0].path);
+  fs.writeFileSync(poisoned, Buffer.alloc(patches[0].bytes));
+  await assert.rejects(
+    runtime.qualifyPacked({ workDirectory: directory }),
+    /Handoff digest: patches\/octane/u,
+  );
+  assert.throws(() => releaseRecipe(options), /Handoff digest/u);
+});
+
 test('production pair pins exactly CI handoff 43988363275/1, not the prior runtime patch', () => {
   const pair = runtimeRecipes();
   assert.equal(
