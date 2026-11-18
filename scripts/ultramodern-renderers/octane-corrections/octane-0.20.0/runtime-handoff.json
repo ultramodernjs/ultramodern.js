@@ -1,0 +1,71 @@
+{
+  "schema": "runtime-patch-handoff/v1",
+  "candidate": "octane-0.20.0",
+  "sourceSha": "aaf19658a39f656f806ac8213543fe56243eb1ec",
+  "run": { "id": "44296887336", "attempt": "1" },
+  "toolchain": { "node": "26.13.1", "pnpm": "12.21.0", "mise": "2026.11.8" },
+  "inputs": [
+    {
+      "path": "scripts/ultramodern-renderers/octane-corrections/octane-0.20.0/runtime-source.patch",
+      "bytes": 463384,
+      "sha256": "72f471de67345b596d9c575149456436fd715657e549cb767656fd433bccd718"
+    },
+    {
+      "path": "scripts/ultramodern-renderers/octane-corrections/octane-0.20.0/rspack-source.patch",
+      "bytes": 26873,
+      "sha256": "2d4385db6c0e0027a88a61ae6669b2c4b789906948340ccf8e06a0304ad2e74c"
+    },
+    {
+      "path": "scripts/ultramodern-renderers/octane-corrections/octane-0.20.0/rspack-tests.patch",
+      "bytes": 70301,
+      "sha256": "1110956640b54cfa4b483c1c3b62ac367947967681055f80d0dfb543a3ade143"
+    },
+    {
+      "path": "scripts/ultramodern-renderers/octane-corrections/runtime-tests.patch",
+      "bytes": 309421,
+      "sha256": "3275ec906de97e70a5f5a331cf821eecf90dc98850e00222af230176829be0a2"
+    },
+    {
+      "path": "scripts/ultramodern-renderers/octane-corrections/typescript-compat/typescript-source.patch",
+      "bytes": 7982,
+      "sha256": "71898145840705e712954009bf5a94877302181ac2aef3ece3ec907cd17404cc"
+    },
+    {
+      "path": "scripts/ultramodern-renderers/octane-corrections/typescript-compat/native-signals-source.patch",
+      "bytes": 5823,
+      "sha256": "057a5f475311f5c2c437773c15c658b024b583b13d94f1e6958f6453ccc9558f"
+    },
+    {
+      "path": "scripts/ultramodern-renderers/octane-corrections/typescript-compat/volar-core-source.patch",
+      "bytes": 1532,
+      "sha256": "e2384c2a171989340e9ceb85bdbf0ac1d4e3a26a30154a0e920503b8cb9b254f"
+    },
+    {
+      "path": "scripts/ultramodern-renderers/octane-corrections/octane-0.20.0/provenance.json",
+      "bytes": 6513,
+      "sha256": "24c9fd71fa5e8e2aa14297b55903af2eef5b436b358b5d17337085ed6cad0732"
+    },
+    {
+      "path": "scripts/ultramodern-renderers/octane-corrections/octane-0.20.0/runtime-build-package.json",
+      "bytes": 926,
+      "sha256": "07547ddd5b9f9ab3af49b1aa2bb6f1206f040e435753774f47dc594b43098cbc"
+    },
+    {
+      "path": "scripts/ultramodern-renderers/octane-corrections/octane-0.20.0/runtime-build-pnpm-lock.yaml",
+      "bytes": 101560,
+      "sha256": "19f85f9e16fd6c7829cf7c9793c04212af3814ebe2152cf832443ed5e7489a97"
+    }
+  ],
+  "patches": [
+    {
+      "path": "patches/octane@0.20.0.patch",
+      "bytes": 2148964,
+      "sha256": "b81dfd366a14935b0a90f449916a8434d2c398f007dcdafcc6a0911235491493"
+    },
+    {
+      "path": "patches/@octanejs__rspack-plugin@0.2.12.patch",
+      "bytes": 26393,
+      "sha256": "bd448e034c50f526e9a580e4595ab73417cf19273ddf9fc1254cdfe71b51fcfb"
+    }
+  ]
+}
