@@ -160,7 +160,6 @@ test('generated dependency policy applies current fixes only within each reviewe
     'undici@>=8.0.0 <8.12.4': '8.12.4',
     'seroval@>=1.0.0 <1.8.1': '1.8.1',
     'seroval-plugins@>=1.0.0 <1.8.0': '1.8.0',
-    'solid-js@2.0.0>@solidjs/signals': '2.0.0',
     'qs@>=6.0.0 <6.17.1': '6.17.1',
     'smol-toml@>=1.0.0 <1.9.1': '1.9.1',
     'dompurify@>=3.0.0 <3.4.18': '3.4.18',

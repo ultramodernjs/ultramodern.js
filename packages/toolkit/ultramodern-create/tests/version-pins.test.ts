@@ -96,7 +96,6 @@ test('local source generation uses native workspace requests without copied rele
       'tar@>=7.0.0 <7.5.23': '7.5.23',
       'seroval@>=1.0.0 <1.8.1': '1.8.1',
       'seroval-plugins@>=1.0.0 <1.8.0': '1.8.0',
-      'solid-js@2.0.0>@solidjs/signals': '2.0.0',
       'qs@>=6.0.0 <6.17.1': '6.17.1',
       'smol-toml@>=1.0.0 <1.9.1': '1.9.1',
       'serialize-javascript@>=7.0.0 <7.1.4': '7.1.4',
@@ -573,8 +572,6 @@ test('workspace validation rejects competing selectors but permits unrelated ove
     'express>body-parser',
     'dompurify',
     'mermaid>dompurify',
-    '@solidjs/signals',
-    'solid-js@2>@solidjs/signals@^2.0.0',
   ]) {
     assert.throws(
       () =>

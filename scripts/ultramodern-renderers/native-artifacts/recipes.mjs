@@ -91,7 +91,7 @@ function octaneRecipeInputs(root, octaneCandidate) {
     inputs,
     commit: upstream.commit,
     archiveIntegrity: upstream.sourceArchive.integrity,
-    adapterPath: `patches/${adapterFilename}`,
+    adapterPath: `${candidateDirectory}/${adapterFilename}`,
     adapterPatch: candidates[adapterFilename].sha256,
     runtimePaths: runtime.map(input => `patches/${patchName(input)}.patch`),
   };

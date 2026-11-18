@@ -173,21 +173,6 @@ test('evidence-reviewed native and toolchain pins reject stale and unnoticed ver
   );
 });
 
-test('reviewed Solid policy pins the nested signals edge to its cohort', () => {
-  const file =
-    'packages/toolkit/ultramodern-create/src/ultramodern-workspace/policy.ts';
-  const selector = `solid-js@${targets['solid-js']}>@solidjs/signals`;
-  const exact = `'${selector}': '${targets['@solidjs/signals']}'`;
-  const source = read(file);
-  assert(source.includes(exact));
-  const drift = source.replace(exact, `'${selector}': '^2.0.0'`);
-  assert(
-    inspect({ [file]: drift }).errors.some(error =>
-      error.includes(`missing reviewed source pin ${exact}`),
-    ),
-  );
-});
-
 test('reviewed native URLs follow the activated descriptor, not a legacy one', () => {
   const owner = 'packages/runtime/renderer-octane/package.json';
   const manifest = JSON.parse(read(owner));

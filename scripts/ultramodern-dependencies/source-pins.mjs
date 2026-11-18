@@ -175,7 +175,6 @@ function reviewedSourcePins(read) {
     [`${generator}policy.ts`]: [
       "'isomorphic-ws@5.0.0>ws:peer': '*'",
       "'ws@>=8.0.0 <8.23.0': '8.23.0'",
-      `'solid-js@${targets['solid-js']}>@solidjs/signals': '${targets['@solidjs/signals']}'`,
     ],
     [`${generator}mise-bootstrap.ts`]: [
       'https://github.com/jdx/mise/releases/download/v2026.11.8/',
