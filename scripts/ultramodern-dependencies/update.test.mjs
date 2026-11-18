@@ -1061,6 +1061,24 @@ test('accepts removal of the unused MF host router while retaining actual framew
   );
 });
 
+test('accepts the two script migrations off fast-glob without dropping the runtime dependency', () => {
+  for (const [file, field] of [
+    ['scripts/lint-package-json/package.json', 'dependencies'],
+    ['scripts/prebundle/package.json', 'devDependencies'],
+    ['packages/toolkit/utils/package.json', 'dependencies'],
+  ]) {
+    const expected = { [field]: { 'fast-glob': '3.3.3' } };
+    const current = { [field]: {} };
+    if (file.startsWith('packages/')) {
+      assert.throws(() => plan(expected, current, file), /edge names changed/u);
+    } else {
+      const result = plan(expected, current, file);
+      assert.deepEqual(result.manifest, current);
+      assert.equal(result.edges[0].status, 'reviewed-removal');
+    }
+  }
+});
+
 test('skips complete semantic fixtures but updates unrelated Tailwind fixture edges', () => {
   const fixture = {
     dependencies: { react: '^18.3.1', '@modern-js/runtime': '2.71.1' },

@@ -111,12 +111,29 @@ const svgrDeclarationsCommit = '7c27dc97387bbac67c051c9865bce114d04779b8';
 const declarationPluginSupportCommit =
   'ca40fbecaff494fe71a9960960ff84f394a4933f';
 const serverCompilerOwnerCommit = '3961f60e3ffef65183ecea01d803a6b552c19239';
+const scriptGlobCommit = 'dd35a9f82d9ccbb29cbcfd625708a267e449db45';
 const appTools = 'packages/solutions/app-tools/package.json';
 const ultramodernAppTools =
   'packages/solutions/ultramodern-app-tools/package.json';
 const appToolsExtensions =
   'packages/solutions/app-tools-extensions/package.json';
 export const reviewedTransitions = Object.freeze([
+  reviewedTransition(
+    scriptGlobCommit,
+    'scripts/lint-package-json/package.json',
+    'dependencies',
+    'fast-glob',
+    '3.3.3',
+    null,
+  ),
+  reviewedTransition(
+    scriptGlobCommit,
+    'scripts/prebundle/package.json',
+    'devDependencies',
+    'fast-glob',
+    '3.3.3',
+    null,
+  ),
   reviewedTransition(
     cohortCommit,
     ultramodernAppTools,
