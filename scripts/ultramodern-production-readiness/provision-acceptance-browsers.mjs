@@ -7,9 +7,12 @@
 // the cache key, the cache path and the install, exactly as for workspace
 // runtimes.
 //
-// The browsers live in $RUNNER_TEMP/ms-playwright. --resolve exports that as
-// PLAYWRIGHT_BROWSERS_PATH through GITHUB_ENV, so the install step, the cache
-// restore/save and the acceptance profile all read one directory.
+// The browsers live in the runner's own Playwright registry directory, the
+// path every other job restores `playwright-chromium-<version>-<os>` to, so
+// this job hits the same cache entry. --resolve also exports that directory as
+// PLAYWRIGHT_BROWSERS_PATH through GITHUB_ENV: the acceptance profile moves
+// XDG_CACHE_HOME, so on Linux it needs the directory stated, and the install
+// step, the cache restore and the acceptance profile all read one directory.
 //
 //   --resolve                  pure for an exact specifier: installs nothing
 //   --install --version <v>    materializes the runtime, then installs browsers
@@ -43,21 +46,18 @@ try {
     if (values.version !== undefined) {
       throw new Error('--version applies only to --install');
     }
-    const browsersPath = provisioning.runnerTempBrowsersPath();
-    provisioning.writeGithubEnv({ PLAYWRIGHT_BROWSERS_PATH: browsersPath });
-    provisioning.writeGithubOutputs(
-      provisioning.resolveBrowserOutputs(resolveSmokeVersion(), {
-        ...process.env,
-        PLAYWRIGHT_BROWSERS_PATH: browsersPath,
-      }),
-    );
+    const outputs = provisioning.resolveBrowserOutputs(resolveSmokeVersion());
+    provisioning.writeGithubEnv({
+      PLAYWRIGHT_BROWSERS_PATH: outputs.cache_path,
+    });
+    provisioning.writeGithubOutputs(outputs);
   } else {
     if (values.version === undefined) {
       throw new Error(
         '--install requires --version <playwright version> from the matching --resolve step',
       );
     }
-    const browsersPath = provisioning.runnerTempBrowsersPath();
+    const browsersPath = provisioning.browserCachePath();
     if (process.env.PLAYWRIGHT_BROWSERS_PATH !== browsersPath) {
       throw new Error(
         `PLAYWRIGHT_BROWSERS_PATH is ${String(process.env.PLAYWRIGHT_BROWSERS_PATH)}, not the ${browsersPath} the browser cache restores. Run --resolve earlier in the same job; it exports the path through GITHUB_ENV.`,

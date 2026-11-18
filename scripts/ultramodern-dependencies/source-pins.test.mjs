@@ -6,6 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { ultramodernSandpackFiles } from '../../packages/toolkit/ultramodern-sandpack-profile/src/index.ts';
+import provisioning from '../lib/browser-provisioning.js';
 import { targets } from './snapshot.mjs';
 import {
   auxiliarySourcePins,
@@ -346,7 +347,6 @@ test('actual browser provisioner resolves latest exact default without installat
   try {
     const env = {
       ...process.env,
-      RUNNER_TEMP: temp,
       GITHUB_ENV: path.join(temp, 'env'),
       GITHUB_OUTPUT: path.join(temp, 'output'),
     };
@@ -359,15 +359,15 @@ test('actual browser provisioner resolves latest exact default without installat
       ],
       { cwd: root, env },
     );
-    assert.match(
-      fs.readFileSync(env.GITHUB_OUTPUT, 'utf8'),
-      /version=1\.65\.1/u,
-    );
-    assert.match(
+    // The registry directory every other job caches browsers in.
+    const browsersPath = provisioning.browserCachePath({ environment: env });
+    const output = fs.readFileSync(env.GITHUB_OUTPUT, 'utf8');
+    assert.match(output, /version=1\.65\.1/u);
+    assert.ok(output.includes(`cache_path=${browsersPath}\n`), output);
+    assert.equal(
       fs.readFileSync(env.GITHUB_ENV, 'utf8'),
-      /PLAYWRIGHT_BROWSERS_PATH=/u,
+      `PLAYWRIGHT_BROWSERS_PATH=${browsersPath}\n`,
     );
-    assert.equal(fs.existsSync(path.join(temp, 'ms-playwright')), false);
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
   }

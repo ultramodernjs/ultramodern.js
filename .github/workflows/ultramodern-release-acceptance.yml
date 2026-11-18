@@ -104,8 +104,10 @@ jobs:
       # Resolves the same browser-smoke runtime the acceptance profile uses and
       # reports its playwright version, so the cache key below comes from a
       # resolved runtime output instead of a workflow version literal. It also
-      # exports PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/ms-playwright to the
-      # later steps; cache_path is that same directory.
+      # exports PLAYWRIGHT_BROWSERS_PATH to the later steps as the runner's
+      # Playwright registry (~/.cache/ms-playwright); cache_path is that same
+      # directory, the one the renderer leg and qualification restore, so the
+      # key and path match their cache entry.
       - name: Resolve browser smoke runtime
         id: browser-runtime
         run: >-

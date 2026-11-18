@@ -103,24 +103,6 @@ function browserCachePath({
   );
 }
 
-// The browsers directory for a job whose runtime reads an explicit
-// PLAYWRIGHT_BROWSERS_PATH. RUNNER_TEMP is the runner's own absolute per-job
-// directory. A job-level `env:` cannot name it (the `runner` context is not
-// available there), so the resolving step exports it through GITHUB_ENV.
-function runnerTempBrowsersPath(environment = process.env) {
-  const runnerTemp = environment.RUNNER_TEMP;
-  if (
-    typeof runnerTemp !== 'string' ||
-    !path.isAbsolute(runnerTemp) ||
-    path.normalize(runnerTemp) !== runnerTemp
-  ) {
-    throw new Error(
-      `RUNNER_TEMP must be an absolute, normalized directory, found ${String(runnerTemp)}. Run on a GitHub Actions runner, or set RUNNER_TEMP to such a directory.`,
-    );
-  }
-  return path.join(runnerTemp, 'ms-playwright');
-}
-
 function browserInstallArgs(
   platform = process.platform,
   { systemDependenciesInstalled = false } = {},
@@ -322,7 +304,6 @@ module.exports = {
   resolveBrowserOutputs,
   resolvePlaywrightVersion,
   resolveSharedPlaywrightVersion,
-  runnerTempBrowsersPath,
   writeGithubEnv,
   writeGithubOutputs,
 };
