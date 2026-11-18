@@ -1278,6 +1278,10 @@ const sidecarsReuseResult = Object.freeze({
 });
 const bleedingdevSidecarDecisionCommand =
   'node scripts/ultramodern-publish/publish-sidecars.mjs --dry-run --out "$BLEEDINGDEV_RELEASE_DIR" --tag "$BLEEDINGDEV_PUBLISH_TAG" --github-output "$GITHUB_OUTPUT"';
+const bleedingdevSidecarRereadCommands = Object.freeze([
+  'node scripts/ultramodern-publish/publish-sidecars.mjs --dry-run --out "$BLEEDINGDEV_RELEASE_DIR" --tag "$BLEEDINGDEV_PUBLISH_TAG" --github-output "$RUNNER_TEMP/sidecar-decision"',
+  'test "$(cat "$RUNNER_TEMP/sidecar-decision")" = \'decision=reuse\'',
+]);
 
 function collectBleedingdevModeInputErrors(workflow, relativePath) {
   const errors = [];
@@ -2123,7 +2127,10 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
   );
   if (
     JSON.stringify(reconciler?.outputs) !==
-      JSON.stringify({ decision: decisionStep }) ||
+      JSON.stringify({
+        decision: decisionStep,
+        attempt: actionExpression('github.run_attempt'),
+      }) ||
     reconcileSteps.filter(step => step.id === 'reconcile').length !== 1 ||
     reconcileSteps[decisionAt]?.if !== undefined ||
     normalizedStepRun(reconcileSteps[decisionAt]) !==
@@ -2132,7 +2139,43 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
     reconcileSteps[decisionCheckAt]?.if !== undefined
   ) {
     errors.push(
-      `${relativePath} reconcile-sidecars must output only the decision of its fixed publish-sidecars.mjs --dry-run step and fail unless that decision is publish or reuse`,
+      `${relativePath} reconcile-sidecars must output only the decision of its fixed publish-sidecars.mjs --dry-run step and the attempt that read npm, and fail unless that decision is publish or reuse`,
+    );
+  }
+  // `gh run rerun --failed` keeps reconcile-sidecars' outputs from the attempt
+  // that ran it, so a decision from an earlier attempt is read again from npm
+  // in the publish job, right before the first cohort upload, and must still
+  // be reuse.
+  const publishSteps = Array.isArray(jobs.publish?.steps)
+    ? jobs.publish.steps
+    : [];
+  const rereads = step =>
+    JSON.stringify(
+      normalizeShellContinuations(stripShellComments(String(step?.run ?? '')))
+        .split('\n')
+        .map(line => line.replace(/\s+/gu, ' ').trim())
+        .filter(Boolean),
+    ) === JSON.stringify(bleedingdevSidecarRereadCommands);
+  const rereadAt = publishSteps.findIndex(rereads);
+  const cohortUploadAt = publishSteps.findIndex(step =>
+    normalizedStepRun(step).includes(
+      'node scripts/ultramodern-publish/prepare-bleedingdev-packages.mjs --publish-existing',
+    ),
+  );
+  const bundleAt = publishSteps.findIndex(
+    step =>
+      actionMatches(step, 'actions/download-artifact') &&
+      step.with?.path === '.modern/bleedingdev-publish' &&
+      String(step.with?.name).includes('BLEEDINGDEV_RELEASE_BUNDLE_ARTIFACT'),
+  );
+  if (
+    publishSteps.filter(rereads).length !== 1 ||
+    publishSteps[rereadAt]?.if !==
+      'needs.reconcile-sidecars.outputs.attempt != github.run_attempt' ||
+    !(bundleAt >= 0 && bundleAt < rereadAt && rereadAt === cohortUploadAt - 1)
+  ) {
+    errors.push(
+      `${relativePath} publish must read the sidecars from npm again, right before the cohort upload, whenever reconcile-sidecars' decision comes from an earlier attempt, and require reuse`,
     );
   }
   for (const jobId of bleedingdevIntegrationEvidenceJobs) {

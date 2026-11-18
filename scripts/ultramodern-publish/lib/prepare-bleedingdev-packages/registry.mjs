@@ -1233,9 +1233,9 @@ async function publishManifestPackages(
   const create = publishItems.filter(item => item.targetName === createTarget);
   const concurrency = resolveRegistryConcurrency(options);
   console.log(
-    `Publishing ${publishItems.length} immutable package artifact(s): ${members.length} at concurrency ${concurrency}${create.length > 0 ? `, then ${createTarget}` : ''}`,
+    `Publishing ${publishItems.length} immutable package artifact(s): ${members.length} at concurrency ${concurrency}, each once npm accepted its dependencies${create.length > 0 ? `, then ${createTarget}` : ''}`,
   );
-  const publishOne = async (artifact, wait) => {
+  const publishOne = async artifact => {
     const state = preflight.get(artifact.targetName);
     if (!state) {
       throw new Error(
@@ -1256,7 +1256,7 @@ async function publishManifestPackages(
         acceptedTools: manifest.tools,
         provenanceExpectation,
       },
-      { propagationDeadline, wait },
+      { propagationDeadline },
     );
     console.log(
       options.dryRun
@@ -1265,47 +1265,78 @@ async function publishManifestPackages(
     );
     registry.verifyPackageArtifact(artifact, artifact.artifactPath);
   };
-  // Every member but create shares one bounded pool in publishOrder, which is
-  // topological, so a dependency is always sent before its consumers. npm does
-  // not serve versions in upload order, so a barrier per dependency level only
-  // added rounds. What the levels still guarded is the state a failed upload
-  // leaves on npm, and the pool keeps that bounded to the uploads in flight:
-  // no upload starts while a started one waits to retry a failed attempt, and
-  // none starts once one has failed. create, the package users install the
-  // cohort through, starts only after every other member was accepted.
-  let failed = false;
-  const retrying = new Set();
-  let resumeWaiters = [];
-  const publishPooled = async artifact => {
-    while (retrying.size > 0) {
-      await new Promise(resolve => resumeWaiters.push(resolve));
-    }
-    if (failed) {
-      return;
-    }
-    const wait = delay => {
-      retrying.add(artifact.targetName);
-      return sleep(delay);
-    };
-    try {
-      await publishOne(artifact, wait);
-    } catch (error) {
-      failed = true;
-      throw error;
-    } finally {
-      if (retrying.delete(artifact.targetName) && retrying.size === 0) {
-        const waiters = resumeWaiters;
-        resumeWaiters = [];
-        for (const resume of waiters) {
-          resume();
-        }
-      }
-    }
-  };
-  await mapWithConcurrency(members, concurrency, publishPooled);
+  // A member is sent only after npm accepted every cohort package it depends
+  // on, and once one upload has failed none starts, so neither a running nor a
+  // failed publish leaves a package on npm whose dependency is missing. There
+  // is no barrier per dependency level: a member waits for its own
+  // dependencies, never for an unrelated slower upload. create, the package
+  // users install the cohort through, starts only after every other member
+  // was accepted.
+  await publishAfterDependencies(
+    members,
+    manifest.dependencyGraph,
+    concurrency,
+    publishOne,
+  );
   for (const artifact of create) {
     await publishOne(artifact);
   }
+}
+
+// Runs `publish` for each item once every dependency of it in `graph` has
+// returned successfully, at most `limit` at a time; among the items that are
+// ready, the earliest in `items` starts first. After the first failure no item
+// starts; the ones already running finish and that first error is thrown.
+function publishAfterDependencies(items, graph, limit, publish) {
+  const waiting = [...items];
+  const accepted = new Set();
+  let running = 0;
+  let failure;
+  return new Promise((resolve, reject) => {
+    const startReady = () => {
+      for (let index = 0; index < waiting.length; ) {
+        if (failure || running >= limit) {
+          break;
+        }
+        const item = waiting[index];
+        if (!(graph[item.targetName] ?? []).every(name => accepted.has(name))) {
+          index += 1;
+          continue;
+        }
+        waiting.splice(index, 1);
+        running += 1;
+        Promise.resolve()
+          .then(() => publish(item))
+          .then(
+            () => accepted.add(item.targetName),
+            error => {
+              failure ??= { error };
+            },
+          )
+          .finally(() => {
+            running -= 1;
+            startReady();
+          });
+      }
+      if (running > 0) {
+        return;
+      }
+      if (failure) {
+        reject(failure.error);
+      } else if (waiting.length > 0) {
+        reject(
+          new Error(
+            `Cohort members depend on packages this publish never accepted: ${waiting
+              .map(item => item.targetName)
+              .join(', ')}`,
+          ),
+        );
+      } else {
+        resolve();
+      }
+    };
+    startReady();
+  });
 }
 
 export {
