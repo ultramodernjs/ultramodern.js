@@ -6,7 +6,7 @@
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
   "totalFiles": 1459,
   "totalHunks": 4946,
-  "totalChangedLines": 104255,
+  "totalChangedLines": 104384,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -3660,8 +3660,8 @@
     },
     {
       "file": "packages/server/bff-core/src/router/utils.ts",
-      "hunks": 3,
-      "changedLines": 13
+      "hunks": 5,
+      "changedLines": 73
     },
     {
       "file": "packages/server/bff-core/src/utils/alias.ts",
@@ -3699,6 +3699,11 @@
       "changedLines": 16
     },
     {
+      "file": "packages/server/bff-core/tests/getFiles.test.ts",
+      "hunks": 1,
+      "changedLines": 76
+    },
+    {
       "file": "packages/server/bff-core/tests/operationContractInterop.test.ts",
       "hunks": 1,
       "changedLines": 95
@@ -3722,11 +3727,6 @@
       "file": "packages/server/bff-core/tests/optionalZodPeer.test.ts",
       "hunks": 1,
       "changedLines": 46
-    },
-    {
-      "file": "packages/server/bff-core/tests/router.test.ts",
-      "hunks": 3,
-      "changedLines": 28
     },
     {
       "file": "packages/server/bff-core/tests/utils.test.ts",
@@ -5556,7 +5556,7 @@
     {
       "file": "packages/toolkit/plugin/src/cli/run/config/loadConfig.ts",
       "hunks": 7,
-      "changedLines": 13
+      "changedLines": 42
     },
     {
       "file": "packages/toolkit/plugin/src/cli/run/create.ts",
@@ -7141,12 +7141,12 @@
     {
       "file": "packages/toolkit/utils/package.json",
       "hunks": 25,
-      "changedLines": 178
+      "changedLines": 173
     },
     {
       "file": "packages/toolkit/utils/rslib.config.mts",
       "hunks": 18,
-      "changedLines": 120
+      "changedLines": 119
     },
     {
       "file": "packages/toolkit/utils/src/cli/commands.ts",
@@ -7221,7 +7221,7 @@
     {
       "file": "packages/toolkit/utils/src/compiled.ts",
       "hunks": 9,
-      "changedLines": 103
+      "changedLines": 101
     },
     {
       "file": "packages/toolkit/utils/src/index.ts",
