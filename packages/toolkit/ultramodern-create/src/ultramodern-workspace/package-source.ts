@@ -13,8 +13,8 @@ import type {
   UltramodernWorkspaceOptions,
 } from './types';
 
+// Stable Solid is a raw registry dependency; support v4 carries no Solid archive.
 const supportVersions = {
-  'solid-js': '2.0.0-rc.22',
   '@effect/opentelemetry': '4.1.4',
   '@rstest/core': '0.12.6',
   'ioredis-mock': '8.13.1',
@@ -60,7 +60,7 @@ type ArtifactDescriptor<
   };
 };
 export type SupportArtifacts = ArtifactDescriptor<
-  'ultramodern.support-artifacts.v3',
+  'ultramodern.support-artifacts.v4',
   '.github/workflows/support-artifacts.yml',
   typeof supportVersions
 >;
@@ -181,7 +181,7 @@ function parseArtifactDescriptor(
 /** Project publisher-admitted framework metadata, not archive authentication. */
 export function parseSupportArtifacts(value: unknown): SupportArtifacts {
   return parseArtifactDescriptor(value, {
-    protocol: 'ultramodern.support-artifacts.v3',
+    protocol: 'ultramodern.support-artifacts.v4',
     workflow: '.github/workflows/support-artifacts.yml',
     tagPrefix: 'support-artifacts',
     manifestFilename: 'support-artifacts.json',

@@ -8,10 +8,10 @@
   "dependencies": {
     "@modern-js/plugin-i18n": "workspace:*",
     "@modern-js/runtime": "workspace:*",
-    "i18next": "27.1.2",
+    "i18next": "27.1.5",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-i18next": "18.0.1"
+    "react-i18next": "18.0.2"
   },
   "devDependencies": {
     "@modern-js/app-tools": "workspace:*"

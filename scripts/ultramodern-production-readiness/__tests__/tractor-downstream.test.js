@@ -39,6 +39,8 @@ const producerReactDependencies = {
 const releaseAgePromise = import(
   '../published-create-proof/release-age-audit.mjs'
 );
+// Stable Solid is a registry package; support artifacts never host it.
+const registrySolid = '2.0.0';
 
 function releaseAgeEntry(selector, overrides = {}) {
   const separator = selector.lastIndexOf('@');
@@ -332,6 +334,7 @@ test('cohort staging projects packed tooling hosts per importer, including optio
   writeAuthenticatedCohort(root);
   const next = structuredClone(release);
   const support = await supportArtifactsDescriptor();
+  assert.equal(Object.hasOwn(support.packages, 'solid-js'), false);
   const framework = {
     runtime: {},
     'fixture-tools': {
@@ -347,7 +350,7 @@ test('cohort staging projects packed tooling hosts per importer, including optio
       devDependencies: { '@modern-js/fixture-tests': 'workspace:*' },
     },
     'fixture-solid': {
-      peerDependencies: { 'solid-js': support.packages['solid-js'].version },
+      peerDependencies: { 'solid-js': registrySolid },
     },
     'fixture-library': {
       peerDependencies: {
@@ -437,7 +440,7 @@ test('cohort staging projects packed tooling hosts per importer, including optio
       },
     },
     'apps/solid-runtime/package.json': {
-      dependencies: { 'solid-js': support.packages['solid-js'].version },
+      dependencies: { 'solid-js': registrySolid },
       devDependencies: { '@modern-js/fixture-tools': 'catalog:ultramodern' },
     },
   };
@@ -557,9 +560,9 @@ test('cohort staging projects packed tooling hosts per importer, including optio
     'The exact producer compiler peer reaches the consumer installer',
   );
   const expectedHosts = {
-    'package.json': ['rsbuild-plugin-dts', 'solid-js'],
-    'apps/shell-super-app/package.json': ['rsbuild-plugin-dts', 'solid-js'],
-    'apps/ui-only/package.json': ['rsbuild-plugin-dts', 'solid-js'],
+    'package.json': ['rsbuild-plugin-dts'],
+    'apps/shell-super-app/package.json': ['rsbuild-plugin-dts'],
+    'apps/ui-only/package.json': ['rsbuild-plugin-dts'],
     'apps/headless/package.json': [],
     'packages/shared-library/package.json': ['rsbuild-plugin-dts'],
     'apps/solid-runtime/package.json': ['rsbuild-plugin-dts'],
@@ -567,6 +570,11 @@ test('cohort staging projects packed tooling hosts per importer, including optio
   for (const [relative, names] of Object.entries(expectedHosts)) {
     const manifest = JSON.parse(
       fs.readFileSync(path.join(root, relative), 'utf8'),
+    );
+    assert.equal(
+      manifest.devDependencies?.['solid-js'],
+      undefined,
+      `${relative}: the registry Solid peer is not projected as a support host`,
     );
     assert.deepEqual(
       Object.keys(manifest.devDependencies)
@@ -606,7 +614,8 @@ test('cohort staging projects packed tooling hosts per importer, including optio
         'utf8',
       ),
     ).dependencies['solid-js'],
-    support.packages['solid-js'].request,
+    registrySolid,
+    'The authored registry Solid request stays unchanged',
   );
   const staged = Object.keys(importers).map(file =>
     fs.readFileSync(path.join(root, file), 'utf8'),
@@ -1151,7 +1160,8 @@ test('cohort staging matches the supplied authenticated packed generator for eve
       );
       assert.equal(
         manifest.devDependencies['solid-js'],
-        support.packages['solid-js'].request,
+        undefined,
+        `${relative}: registry Solid is never a support-hosted tooling peer`,
       );
     }
     if (Object.keys(expected).length)

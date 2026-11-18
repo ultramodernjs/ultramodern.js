@@ -56,6 +56,37 @@ const octaneArtifacts: Record<string, { version: string }> = JSON.parse(
     'utf8',
   ),
 ).ultramodern.nativeArtifacts.packages;
+// The owning Solid renderer pins the exact runtime tuple it shares.
+const solidRenderer: {
+  dependencies: Record<string, string>;
+  peerDependencies: Record<string, string>;
+} = JSON.parse(
+  fs.readFileSync(
+    path.resolve(__dirname, '../../../../runtime/renderer-solid/package.json'),
+    'utf8',
+  ),
+);
+const solidTuple = {
+  'solid-js': solidRenderer.peerDependencies['solid-js'],
+  '@solidjs/web': solidRenderer.dependencies['@solidjs/web'],
+  '@solidjs/signals': solidRenderer.dependencies['@solidjs/signals'],
+};
+
+/** The installed package directory that owns `file`. */
+function packageRoot(file: string, name: string): string {
+  let directory = path.dirname(fs.realpathSync(file));
+  for (;;) {
+    const manifest = path.join(directory, 'package.json');
+    if (
+      fs.existsSync(manifest) &&
+      JSON.parse(fs.readFileSync(manifest, 'utf8')).name === name
+    )
+      return directory;
+    const parent = path.dirname(directory);
+    if (parent === directory) throw new Error(`${file} has no ${name} owner`);
+    directory = parent;
+  }
+}
 const nativeRenderers = ['solid', 'octane'] as const;
 type NativeRenderer = (typeof nativeRenderers)[number];
 
@@ -171,10 +202,22 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
         expect(bindings.imports).not.toHaveProperty(name);
         expect(bindings.versions).not.toHaveProperty(name);
       }
-      expect(bindings.versions['solid-js']).toBe('2.0.0-rc.22');
-      expect(bindings.versions['@solidjs/web']).toBe('2.0.0-rc.22');
+      for (const [name, version] of Object.entries(solidTuple))
+        expect(bindings.versions[name]).toBe(version);
       expect(bindings.aliases['@solidjs/web$']).toBe(
         bindings.imports['@solidjs/web'],
+      );
+      // The shared signals provider must be the one copy solid-js loads.
+      const solid = packageRoot(bindings.imports['solid-js'], 'solid-js');
+      expect(
+        packageRoot(bindings.imports['@solidjs/signals'], '@solidjs/signals'),
+      ).toBe(
+        packageRoot(
+          createRequire(path.join(solid, 'package.json')).resolve(
+            '@solidjs/signals/package.json',
+          ),
+          '@solidjs/signals',
+        ),
       );
     },
   );
@@ -189,7 +232,9 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
       const installed = versions(renderer);
       const runtime = renderer === 'solid' ? 'solid-js' : 'octane';
       expect(installed[runtime]).toBe(
-        renderer === 'solid' ? '2.0.0-rc.22' : octaneArtifacts.octane.version,
+        renderer === 'solid'
+          ? solidTuple['solid-js']
+          : octaneArtifacts.octane.version,
       );
       expect(installed['@modern-js/renderer-core/']).toMatch(/^\d+\.\d+\.\d+/u);
       expect(() => resolveNativeSharedVersions(renderer, os.tmpdir())).toThrow(

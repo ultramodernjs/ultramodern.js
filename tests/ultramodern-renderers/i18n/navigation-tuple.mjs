@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
-const solidVersion = '2.0.0-rc.22';
+const solidVersion = '2.0.0';
 
 /** Resolve through each real package owner, including pnpm's nested graph. */
 export function installedPackage(ownerRoot, request) {

@@ -146,11 +146,11 @@
     "@modern-js/types": "workspace:*",
     "@modern-js/utils": "workspace:*",
     "@swc/helpers": "^0.5.24",
-    "i18next-browser-languagedetector": "^8.3.0",
+    "i18next-browser-languagedetector": "^8.3.1",
     "i18next-chained-backend": "^5.0.8",
     "i18next-fs-backend": "^2.6.12",
     "i18next-http-backend": "^4.0.10",
-    "i18next-http-middleware": "^3.10.2"
+    "i18next-http-middleware": "^3.10.3"
   },
   "peerDependencies": {
     "@modern-js/runtime": "workspace:^3.11.3",
@@ -176,10 +176,10 @@
     "@scripts/rstest-config": "workspace:*",
     "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
-    "i18next": "27.1.2",
+    "i18next": "27.1.5",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-i18next": "18.0.1",
+    "react-i18next": "18.0.2",
     "ts-node": "^10.9.2",
     "typescript": "7.0.2"
   },

@@ -27,9 +27,9 @@ export const RSBUILD_PLUGIN_TAILWINDCSS_VERSION = '2.0.3';
 // The cohort consumes upstream Effect without a patch or sidecar.
 // See FORK-DIVERGENCE.md, packages/toolkit/ultramodern-create.
 export const EFFECT_VERSION = '4.1.4';
-export const EFFECT_TSGO_VERSION = '0.69.0';
+export const EFFECT_TSGO_VERSION = '0.70.0';
 export const TSRS_VERSION = '0.25.0-ts7.1.0-beta';
-// Reviewed 2026-11-16 npm release metadata. Only these exact compiler releases
+// Reviewed 2026-11-17 npm release metadata. Only these exact compiler releases
 // and their declared platform packages bypass the normal 24h release-age gate.
 export const COMPILER_RELEASE_AGE_EXCEPTIONS = Object.freeze(
   [
@@ -74,13 +74,13 @@ export const COMPILER_TRUST_EXCEPTIONS = Object.freeze([
 // TypeScript revision embedded in tsrs.
 export const TYPESCRIPT_STABLE_VERSION = '7.0.2';
 export const TYPESCRIPT_VERSION = TYPESCRIPT_STABLE_VERSION;
-export const OXLINT_VERSION = '1.93.0';
-export const OXFMT_VERSION = '0.78.0';
+export const OXLINT_VERSION = '1.94.0';
+export const OXFMT_VERSION = '0.79.0';
 // Upstream artifact identity and independently versioned MIT-notice correction.
 export const ULTRACITE_VERSION = '8.2.1';
 export const ULTRACITE_FORK_VERSION = '8.2.2';
 export const LEFTHOOK_VERSION = '2.2.2';
-export const I18NEXT_VERSION = '27.1.2';
+export const I18NEXT_VERSION = '27.1.5';
 export const MODULE_FEDERATION_NODE_VERSION = '2.7.53';
 // Wrangler owns this exact Miniflare release, not the older npm latest tag.
 export const MINIFLARE_VERSION = '5.20261113.0-beta';

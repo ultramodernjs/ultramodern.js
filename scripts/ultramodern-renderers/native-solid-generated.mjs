@@ -11,8 +11,9 @@ const nativePackages = [
   '@solidjs/signals',
   '@solidjs/compiler',
 ];
+const solidVersion = '2.0.0';
 const installedTuple = Object.freeze({
-  ...Object.fromEntries(nativePackages.map(name => [name, '2.0.0-rc.22'])),
+  ...Object.fromEntries(nativePackages.map(name => [name, solidVersion])),
   '@babel/core': '8.1.2',
   typescript: '7.0.2',
   seroval: '1.8.1',
@@ -31,7 +32,7 @@ export function verifyGeneratedSolidResult(result, binding) {
   assert.deepEqual(
     result.tuple,
     installedTuple,
-    'The generated consumer must use the actual Solid 2 RC22 tuple',
+    'The generated consumer must use the actual stable Solid 2.0.0 tuple',
   );
   const types = result.types;
   assert(Array.isArray(types?.entries) && types.entries.length > 0);
@@ -57,7 +58,7 @@ export function verifyGeneratedSolidResult(result, binding) {
   const checks = {
     strictGeneratedTypes: types.entries.length > 0,
     sameNativeOwner: nativePackages.every(
-      name => result.tuple[name] === '2.0.0-rc.22',
+      name => result.tuple[name] === solidVersion,
     ),
     retainedHydration:
       browser.retainedSsrNodes === true && browser.deferredHydration === true,

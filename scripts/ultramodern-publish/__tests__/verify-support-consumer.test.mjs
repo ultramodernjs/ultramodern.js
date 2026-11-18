@@ -51,11 +51,12 @@ const upstreamContracts = [
       'sha512-bWnjSNscmuI+GJze6ZupnHP8G/cTcsJF+bXCeQknk2SHQsgbNJnLrqiH9jZ2W4STPVXH2mDKKRX3iwPhc9Cn/Q==',
   },
   {
-    name: '@solidjs/web',
-    version: '2.0.0-rc.22',
-    request: 'https://registry.npmjs.org/@solidjs/web/-/web-2.0.0-rc.22.tgz',
+    name: '@tanstack/react-router-ssr-query',
+    version: '1.167.3',
+    request:
+      'https://registry.npmjs.org/@tanstack/react-router-ssr-query/-/react-router-ssr-query-1.167.3.tgz',
     integrity:
-      'sha512-m2HvRD0jqes659bGjuCtXVbz4TChP0aO4lRLmbRYgEbmCnh7UUPI564jgbq/b4mbcp0gVwHDmi7uoSGeLaUuZA==',
+      'sha512-HA0pxuPuhU+rwoe+z1Xcbytuoo6ZbcROpgNgNSm38s3/hGLmgzOBLzDg+Vyx6ex26QilnPbZ+5Ypet5mImm9bQ==',
   },
   {
     name: '@rstest/adapter-rsbuild',
@@ -67,6 +68,8 @@ const upstreamContracts = [
   },
 ];
 const upstream = new Map();
+// The active v4 runtime support input; its fork owner is plugin-tanstack.
+const R = '@tanstack/react-router';
 const producer = {
   repository: p.repository,
   repositoryId: p.repositoryId,
@@ -128,7 +131,7 @@ function unpack(bytes, dir) {
     fs.chmodSync(absolute, file.mode & 0o777);
   }
 }
-function fixture(selected = ['solid-js']) {
+function fixture(selected = [R]) {
   const root = fs.mkdtempSync(path.join(directory, 'consumer-'));
   const manifest = structuredClone(canonical);
   const payloads = new Map(
@@ -255,31 +258,31 @@ function fixture(selected = ['solid-js']) {
 test('one selected runtime: real full archive bytes and physical owner peer; immutable static receipt', async () => {
   const f = fixture();
   const owner = f.framework('@synthetic/renderer', {
-    'solid-js': p.cohort['solid-js'],
+    [R]: p.cohort[R],
   });
   const receipt = await verifySupportConsumer(f);
-  assert.deepEqual(receipt.selectedPackages, ['solid-js']);
+  assert.deepEqual(receipt.selectedPackages, [R]);
   assert.equal(
     receipt.packages[0].files,
-    inspectSupportTarball(
-      f.payloads.get(p.assetFilename('solid-js', p.cohort['solid-js'])),
-    ).fileCount,
+    inspectSupportTarball(f.payloads.get(p.assetFilename(R, p.cohort[R])))
+      .fileCount,
   );
   assert.equal(
     receipt.packages[0].directory,
-    fs.realpathSync(path.join(f.root, 'node_modules/solid-js')),
+    fs.realpathSync(path.join(f.root, 'node_modules', R)),
   );
   assert(
-    receipt.resolutions.some(
-      item => item.owner === owner && item.name === 'solid-js',
-    ),
+    receipt.resolutions.some(item => item.owner === owner && item.name === R),
   );
   assert(Object.isFrozen(receipt.packages[0]));
   // Same actual installed control, changed in place only in this owned fixture.
-  const runtime = path.join(f.root, 'node_modules/solid-js/dist/server.js');
+  const runtime = path.join(
+    f.root,
+    'node_modules/@tanstack/react-router/dist/esm/index.js',
+  );
   const file = fs.existsSync(runtime)
     ? runtime
-    : path.join(f.root, 'node_modules/solid-js/package.json');
+    : path.join(f.root, 'node_modules', R, 'package.json');
   fs.appendFileSync(file, '\n ');
   await assert.rejects(verifySupportConsumer(f), /installed bytes differ/);
 });
@@ -287,7 +290,7 @@ test('the complete cohort or dev-only tools do not force public Redis/rstest pee
   const f = fixture(Object.keys(p.cohort));
   f.framework(
     '@synthetic/renderer',
-    { 'solid-js': p.cohort['solid-js'] },
+    { [R]: p.cohort[R] },
     {
       devDependencies: {
         '@rstest/core': p.cohort['@rstest/core'],
@@ -343,12 +346,12 @@ test('the complete cohort or dev-only tools do not force public Redis/rstest pee
 test('correct bytes in a private duplicate still reject physical peer mismatch', async () => {
   const f = fixture();
   const owner = f.framework('@synthetic/renderer', {
-    'solid-js': p.cohort['solid-js'],
+    [R]: p.cohort[R],
   });
   await verifySupportConsumer(f);
   unpack(
-    f.payloads.get(p.assetFilename('solid-js', p.cohort['solid-js'])),
-    path.join(owner, 'node_modules/solid-js'),
+    f.payloads.get(p.assetFilename(R, p.cohort[R])),
+    path.join(owner, 'node_modules', R),
   );
   await assert.rejects(verifySupportConsumer(f), /wrong physical peer/);
 });
@@ -363,7 +366,7 @@ for (const [label, mutate, pattern] of [
   [
     'uninstalled',
     f =>
-      fs.rmSync(path.join(f.root, 'node_modules/solid-js'), {
+      fs.rmSync(path.join(f.root, 'node_modules', R), {
         recursive: true,
       }),
     /Cannot find module/,
@@ -371,7 +374,7 @@ for (const [label, mutate, pattern] of [
   [
     'wrong root URL',
     f => {
-      f.rootManifest.devDependencies['solid-js'] = 'https://evil.invalid/a.tgz';
+      f.rootManifest.devDependencies[R] = 'https://evil.invalid/a.tgz';
       f.save();
     },
     /differs from support request/,
@@ -379,7 +382,7 @@ for (const [label, mutate, pattern] of [
   [
     'root semver projection',
     f => {
-      f.rootManifest.devDependencies['solid-js'] = p.cohort['solid-js'];
+      f.rootManifest.devDependencies[R] = p.cohort[R];
       f.save();
     },
     /differs from support request/,
@@ -389,8 +392,8 @@ for (const [label, mutate, pattern] of [
     f => {
       f.framework(
         '@synthetic/renderer',
-        { 'solid-js': p.cohort['solid-js'] },
-        { ultramodern: { sourceName: '@modern-js/renderer-solid' } },
+        { [R]: p.cohort[R] },
+        { ultramodern: { sourceName: '@modern-js/plugin-tanstack' } },
       );
     },
     /exact support descriptor/,
@@ -398,7 +401,7 @@ for (const [label, mutate, pattern] of [
   [
     'wrong owner peer',
     f => {
-      f.framework('@synthetic/renderer', { 'solid-js': '99.0.0' });
+      f.framework('@synthetic/renderer', { [R]: '99.0.0' });
     },
     /wrong framework peer/,
   ],
@@ -410,7 +413,7 @@ for (const [label, mutate, pattern] of [
         {},
         {
           dependencies: {
-            'solid-js': f.descriptor.packages['solid-js'].request,
+            [R]: f.descriptor.packages[R].request,
           },
         },
       );
@@ -432,25 +435,21 @@ for (const [label, mutate, pattern] of [
   ],
   [
     'extra file',
-    f =>
-      fs.writeFileSync(path.join(f.root, 'node_modules/solid-js/extra.js'), ''),
+    f => fs.writeFileSync(path.join(f.root, 'node_modules', R, 'extra.js'), ''),
     /unexpected installed file/,
   ],
   [
     'mode change',
     f =>
-      fs.chmodSync(
-        path.join(f.root, 'node_modules/solid-js/package.json'),
-        0o600,
-      ),
+      fs.chmodSync(path.join(f.root, 'node_modules', R, 'package.json'), 0o600),
     /mode differs/,
   ],
   [
     'exports mutation',
     f => {
-      const file = path.join(f.root, 'node_modules/solid-js/package.json');
+      const file = path.join(f.root, 'node_modules', R, 'package.json');
       const m = JSON.parse(fs.readFileSync(file));
-      m.exports['./evil'] = './dist/server.js';
+      m.exports['./evil'] = './dist/esm/index.js';
       fs.writeFileSync(file, JSON.stringify(m));
     },
     /installed bytes differ/,
@@ -465,7 +464,7 @@ for (const [label, mutate, pattern] of [
   [
     'duplicate selection',
     f => {
-      f.selectedPackages = ['solid-js', 'solid-js'];
+      f.selectedPackages = [R, R];
     },
     /Duplicate selected/,
   ],
@@ -480,7 +479,7 @@ for (const [label, mutate, pattern] of [
     'wrong GitHub SHA256',
     f => {
       f.release.assets.find(
-        a => a.name === p.assetFilename('solid-js', p.cohort['solid-js']),
+        a => a.name === p.assetFilename(R, p.cohort[R]),
       ).digest = `sha256:${'0'.repeat(64)}`;
     },
     /GitHub asset digest mismatch/,
@@ -488,8 +487,7 @@ for (const [label, mutate, pattern] of [
   [
     'wrong descriptor URL',
     f => {
-      f.descriptor.packages['solid-js'].request =
-        'https://evil.invalid/archive.tgz';
+      f.descriptor.packages[R].request = 'https://evil.invalid/archive.tgz';
     },
     /./,
   ],
@@ -500,13 +498,13 @@ for (const [label, mutate, pattern] of [
     await assert.rejects(verifySupportConsumer(f), pattern);
   });
 test('explicit selected names cannot skip another actual direct support input', async () => {
-  const f = fixture(['solid-js', '@rstest/core']);
-  f.selectedPackages = ['solid-js'];
+  const f = fixture([R, '@rstest/core']);
+  f.selectedPackages = [R];
   await assert.rejects(verifySupportConsumer(f), /omit actual direct/);
 });
 test('transport SHA512 and canonical tar controls cannot be replaced by matching installed bytes', async () => {
   const f = fixture();
-  const filename = p.assetFilename('solid-js', p.cohort['solid-js']);
+  const filename = p.assetFilename(R, p.cohort[R]);
   f.payloads.set(filename, Buffer.from('corrupt'));
   await assert.rejects(verifySupportConsumer(f), /SHA512 mismatch/);
   const g = fixture();
@@ -520,11 +518,11 @@ test('transport SHA512 and canonical tar controls cannot be replaced by matching
   files.set('extra.js', { bytes: Buffer.from('evil'), mode: 0o644 });
   const bytes = packFiles(files);
   g.payloads.set(filename, bytes);
-  g.manifest.packages['solid-js'].integrity = p.integrity(bytes);
+  g.manifest.packages[R].integrity = p.integrity(bytes);
   g.seal();
   g.rootManifest.ultramodern.supportArtifacts = g.descriptor;
   g.save();
-  unpack(bytes, path.join(g.root, 'node_modules/solid-js'));
+  unpack(bytes, path.join(g.root, 'node_modules', R));
   await assert.rejects(verifySupportConsumer(g), /tar bytes mismatch/);
 });
 test('CLI requires root/descriptor and exposes no policy override/skip', () => {
@@ -535,18 +533,18 @@ test('CLI requires root/descriptor and exposes no policy override/skip', () => {
       '--descriptor',
       '/descriptor.json',
       '--select',
-      'solid-js,@rstest/core',
+      `${R},@rstest/core`,
     ]),
     {
       root: '/consumer',
       descriptorPath: '/descriptor.json',
-      selectedPackages: ['solid-js', '@rstest/core'],
+      selectedPackages: [R, '@rstest/core'],
     },
   );
   for (const argv of [
     [],
     ['--root', '/a'],
-    ['--root', '/a', '--descriptor', '/b', '--skip', 'solid-js'],
+    ['--root', '/a', '--descriptor', '/b', '--skip', R],
     ['--root', '/a', '--root', '/b'],
     ['--root=/a'],
   ])
@@ -556,7 +554,7 @@ test('CLI requires root/descriptor and exposes no policy override/skip', () => {
 test('follows public framework aliases and import-only intermediates, not dependency-history guesses', async () => {
   const f = fixture();
   const renderer = f.framework('@synthetic/renderer', {
-    'solid-js': p.cohort['solid-js'],
+    [R]: p.cohort[R],
   });
   delete f.rootManifest.dependencies['@synthetic/renderer'];
   f.rootManifest.dependencies.alias = 'npm:@synthetic/renderer@1.0.0';
@@ -587,7 +585,7 @@ for (const [request, catalog] of [
     const renderer = f.framework(
       target,
       {
-        'solid-js': p.cohort['solid-js'],
+        [R]: p.cohort[R],
       },
       request === 'catalog:ultramodern'
         ? { exports: { '.': { import: './entry.cjs' } } }
@@ -625,11 +623,11 @@ for (const [request, catalog] of [
 }
 test('catalog resolution cannot replace exact direct support authority', async () => {
   const f = fixture();
-  f.rootManifest.devDependencies['solid-js'] = 'catalog:';
+  f.rootManifest.devDependencies[R] = 'catalog:';
   f.save();
   fs.writeFileSync(
     path.join(f.root, 'pnpm-workspace.yaml'),
-    `catalog:\n  solid-js: ${f.descriptor.packages['solid-js'].request}\n`,
+    `catalog:\n  '${R}': ${f.descriptor.packages[R].request}\n`,
   );
   await assert.rejects(
     verifySupportConsumer(f),
@@ -639,7 +637,7 @@ test('catalog resolution cannot replace exact direct support authority', async (
 test('workspace catalog changes during transport invalidate the receipt', async () => {
   const f = fixture();
   const target = '@synthetic/renderer';
-  f.framework(target, { 'solid-js': p.cohort['solid-js'] });
+  f.framework(target, { [R]: p.cohort[R] });
   f.rootManifest.dependencies[target] = 'catalog:';
   f.save();
   const workspaceFile = path.join(f.root, 'pnpm-workspace.yaml');
@@ -653,16 +651,13 @@ test('workspace catalog changes during transport invalidate the receipt', async 
 });
 test('pnpm-like symlinks resolve to one physical support tree from real owner locations', async () => {
   const f = fixture();
-  const linked = path.join(f.root, 'node_modules/solid-js');
-  const physical = path.join(
-    f.root,
-    '.store/arbitrary-name/node_modules/solid-js',
-  );
+  const linked = path.join(f.root, 'node_modules', R);
+  const physical = path.join(f.root, '.store/arbitrary-name/node_modules', R);
   fs.mkdirSync(path.dirname(physical), { recursive: true });
   fs.renameSync(linked, physical);
   fs.symlinkSync(physical, linked);
   const renderer = f.framework('@synthetic/renderer', {
-    'solid-js': p.cohort['solid-js'],
+    [R]: p.cohort[R],
   });
   const realRenderer = path.join(
     f.root,
@@ -671,10 +666,13 @@ test('pnpm-like symlinks resolve to one physical support tree from real owner lo
   fs.mkdirSync(path.dirname(realRenderer), { recursive: true });
   fs.renameSync(renderer, realRenderer);
   fs.symlinkSync(realRenderer, renderer);
-  fs.symlinkSync(
-    physical,
-    path.join(f.root, '.store/other-arbitrary-name/node_modules/solid-js'),
+  const peerLink = path.join(
+    f.root,
+    '.store/other-arbitrary-name/node_modules',
+    R,
   );
+  fs.mkdirSync(path.dirname(peerLink), { recursive: true });
+  fs.symlinkSync(physical, peerLink);
   const receipt = await verifySupportConsumer(f);
   assert.equal(receipt.packages[0].directory, physical);
   assert(
@@ -687,7 +685,7 @@ test('declared dev-only tools need no public peer or installed host, but require
   const f = fixture();
   f.framework(
     '@synthetic/renderer',
-    { 'solid-js': p.cohort['solid-js'] },
+    { [R]: p.cohort[R] },
     {
       devDependencies: {
         '@rstest/core': p.cohort['@rstest/core'],
@@ -695,22 +693,16 @@ test('declared dev-only tools need no public peer or installed host, but require
       },
     },
   );
-  assert.deepEqual((await verifySupportConsumer(f)).selectedPackages, [
-    'solid-js',
-  ]);
+  assert.deepEqual((await verifySupportConsumer(f)).selectedPackages, [R]);
 });
-test('React workspace root must host the generator dependency on the required Solid adapter', async () => {
-  // Minimal installed projection of release 6: the React root selects these
-  // three support inputs, but create also requires renderer-solid by npm alias.
-  // Adapter availability is not the same thing as the selected app renderer.
-  const selected = [
-    '@effect/opentelemetry',
-    'rsbuild-plugin-dts',
-    '@tanstack/react-router',
-  ];
+test('workspace root must host the generator dependency on the required TanStack adapter', async () => {
+  // Minimal installed projection: a root without TanStack routing selects these
+  // two support inputs, but create also requires plugin-tanstack by npm alias.
+  // Adapter availability is not the same thing as the selected app router.
+  const selected = ['@effect/opentelemetry', 'rsbuild-plugin-dts'];
   const f = fixture(selected);
   const generatorName = '@bleedingdev/modern-js-ultramodern-create';
-  const rendererName = '@bleedingdev/modern-js-renderer-solid';
+  const rendererName = '@bleedingdev/modern-js-plugin-tanstack';
   const generator = f.framework(
     generatorName,
     {},
@@ -720,16 +712,16 @@ test('React workspace root must host the generator dependency on the required So
         supportArtifacts: f.descriptor,
       },
       dependencies: {
-        '@modern-js/renderer-solid': `npm:${rendererName}@1.0.0`,
+        '@modern-js/plugin-tanstack': `npm:${rendererName}@1.0.0`,
       },
     },
   );
   const renderer = f.framework(
     rendererName,
-    { 'solid-js': p.cohort['solid-js'] },
+    { [R]: p.cohort[R] },
     {
       ultramodern: {
-        sourceName: '@modern-js/renderer-solid',
+        sourceName: '@modern-js/plugin-tanstack',
         supportArtifacts: f.descriptor,
       },
     },
@@ -740,35 +732,34 @@ test('React workspace root must host the generator dependency on the required So
   });
   fs.symlinkSync(
     renderer,
-    path.join(generator, 'node_modules/@modern-js/renderer-solid'),
+    path.join(generator, 'node_modules/@modern-js/plugin-tanstack'),
   );
   f.save();
   await assert.rejects(
     verifySupportConsumer(f),
-    /solid-js: owner closure requires a selected direct host/,
+    /@tanstack\/react-router: owner closure requires a selected direct host/,
   );
 
   // The owner contract stays required; generation must provide its exact host.
-  f.rootManifest.devDependencies['solid-js'] =
-    f.descriptor.packages['solid-js'].request;
+  f.rootManifest.devDependencies[R] = f.descriptor.packages[R].request;
   f.save();
   unpack(
-    f.payloads.get(p.assetFilename('solid-js', p.cohort['solid-js'])),
-    path.join(f.root, 'node_modules/solid-js'),
+    f.payloads.get(p.assetFilename(R, p.cohort[R])),
+    path.join(f.root, 'node_modules', R),
   );
   const receipt = await verifySupportConsumer(f);
-  assert.deepEqual(receipt.selectedPackages, [...selected, 'solid-js'].sort());
+  assert.deepEqual(receipt.selectedPackages, [...selected, R].sort());
   assert(
     receipt.resolutions.some(
-      item => item.owner === renderer && item.name === 'solid-js',
+      item => item.owner === renderer && item.name === R,
     ),
   );
   fs.writeFileSync(
     path.join(f.root, 'pnpm-workspace.yaml'),
-    `catalog:\n  solid-js: ${f.descriptor.packages['solid-js'].request}\n`,
+    `catalog:\n  '${R}': ${f.descriptor.packages[R].request}\n`,
   );
-  for (const request of [p.cohort['solid-js'], 'catalog:']) {
-    f.rootManifest.devDependencies['solid-js'] = request;
+  for (const request of [p.cohort[R], 'catalog:']) {
+    f.rootManifest.devDependencies[R] = request;
     f.save();
     await assert.rejects(
       verifySupportConsumer(f),
@@ -778,10 +769,10 @@ test('React workspace root must host the generator dependency on the required So
 });
 test('private support aliases and orphan peer metadata reject', async () => {
   const f = fixture();
-  f.rootManifest.dependencies = { 'private-solid': 'npm:solid-js@2.0.0-rc.22' };
+  f.rootManifest.dependencies = { 'private-router': `npm:${R}@${p.cohort[R]}` };
   fs.symlinkSync(
-    path.join(f.root, 'node_modules/solid-js'),
-    path.join(f.root, 'node_modules/private-solid'),
+    path.join(f.root, 'node_modules', R),
+    path.join(f.root, 'node_modules/private-router'),
   );
   f.save();
   await assert.rejects(
@@ -799,7 +790,7 @@ test('private support aliases and orphan peer metadata reject', async () => {
 test('actual owner manifest changes during transport invalidate the receipt', async () => {
   const f = fixture();
   const owner = f.framework('@synthetic/renderer', {
-    'solid-js': p.cohort['solid-js'],
+    [R]: p.cohort[R],
   });
   const transport = f.fetchArtifact;
   f.fetchArtifact = async (url, options) => {
@@ -831,12 +822,12 @@ test('default GitHub reader authenticates through the transport instead of needi
 
 test('authenticated different gzip encoding accepts identical canonical tar and installed bytes', async () => {
   const f = fixture();
-  const filename = p.assetFilename('solid-js', p.cohort['solid-js']);
+  const filename = p.assetFilename(R, p.cohort[R]);
   const original = f.payloads.get(filename);
   const bytes = gzipSync(gunzipSync(original), { level: 1 });
   assert(!bytes.equals(original));
   f.payloads.set(filename, bytes);
-  f.manifest.packages['solid-js'].integrity = p.integrity(bytes);
+  f.manifest.packages[R].integrity = p.integrity(bytes);
   f.seal();
   f.rootManifest.ultramodern.supportArtifacts = f.descriptor;
   f.save();
@@ -1069,7 +1060,7 @@ test('installer boundary: actual workspace siblings have exact root-direct autho
     version: '1.0.0',
     main: './entry.cjs',
     ultramodern: { supportArtifacts: f.descriptor },
-    dependencies: { 'solid-js': f.descriptor.packages['solid-js'].request },
+    dependencies: { [R]: f.descriptor.packages[R].request },
   });
   fs.writeFileSync(path.join(sibling, 'entry.cjs'), 'throw Error("EXECUTED")');
   fs.mkdirSync(path.join(f.root, 'node_modules/@synthetic'), {
@@ -1093,18 +1084,17 @@ test('installer boundary: actual workspace siblings have exact root-direct autho
   const siblingManifest = JSON.parse(
     fs.readFileSync(path.join(sibling, 'package.json')),
   );
-  siblingManifest.dependencies['solid-js'] = p.cohort['solid-js'];
+  siblingManifest.dependencies[R] = p.cohort[R];
   writeManifest(sibling, siblingManifest);
   await assert.rejects(
     verifySupportWorkspace(f),
     /differs from support request/,
   );
-  siblingManifest.dependencies['solid-js'] =
-    f.descriptor.packages['solid-js'].request;
+  siblingManifest.dependencies[R] = f.descriptor.packages[R].request;
   writeManifest(sibling, siblingManifest);
   unpack(
-    f.payloads.get(p.assetFilename('solid-js', p.cohort['solid-js'])),
-    path.join(sibling, 'node_modules/solid-js'),
+    f.payloads.get(p.assetFilename(R, p.cohort[R])),
+    path.join(sibling, 'node_modules', R),
   );
   await assert.rejects(verifySupportWorkspace(f), /wrong physical peer/);
 });
@@ -1123,7 +1113,7 @@ test('workspace importers are verified at the same time and keep their order', a
     version: '1.0.0',
     main: './entry.cjs',
     ultramodern: { supportArtifacts: f.descriptor },
-    dependencies: { 'solid-js': f.descriptor.packages['solid-js'].request },
+    dependencies: { [R]: f.descriptor.packages[R].request },
   });
   fs.writeFileSync(path.join(sibling, 'entry.cjs'), 'throw Error("EXECUTED")');
   fs.mkdirSync(path.join(f.root, 'node_modules/@synthetic'), {
@@ -1184,7 +1174,7 @@ test('installer boundary: workspace discovery excludes installed descriptors and
     version: '1.0.0',
     main: './entry.cjs',
     ultramodern: { supportArtifacts: f.descriptor },
-    dependencies: { 'solid-js': f.descriptor.packages['solid-js'].request },
+    dependencies: { [R]: f.descriptor.packages[R].request },
   });
   assert.deepEqual(supportWorkspaceImporters(f.root), [f.root]);
   await assert.rejects(
@@ -1208,12 +1198,12 @@ test('installer boundary: support overrides cannot replace exact authority or pu
   const f = fixture();
   fs.writeFileSync(
     path.join(f.root, 'pnpm-workspace.yaml'),
-    'packages:\n  - packages/*\noverrides:\n  solid-js: npm:@unproven/solid@2.0.0-rc.22\n',
+    `packages:\n  - packages/*\noverrides:\n  '${R}': npm:@unproven/react-router@${p.cohort[R]}\n`,
   );
-  f.framework('@modern-js/renderer-solid', { 'solid-js': '^2.0.0-rc.22' });
+  f.framework('@modern-js/plugin-tanstack', { [R]: '^1.170.46' });
   await assert.rejects(verifySupportConsumer(f), /wrong framework peer/);
   delete f.rootManifest.dependencies;
-  f.rootManifest.devDependencies['solid-js'] = p.cohort['solid-js'];
+  f.rootManifest.devDependencies[R] = p.cohort[R];
   f.save();
   await assert.rejects(
     verifySupportConsumer(f),
@@ -1259,15 +1249,13 @@ test('builtin-named npm packages retain their physical dependency and peer closu
       name,
       version: '1.0.0',
       main: './entry.cjs',
-      peerDependencies: { 'solid-js': '^2.0.0-rc.22' },
+      peerDependencies: { [R]: '^1.170.46' },
     });
     delete f.rootManifest.dependencies[name];
     f.save();
     const receipt = await verifySupportConsumer(f);
     assert(
-      receipt.resolutions.some(
-        item => item.owner === owner && item.name === 'solid-js',
-      ),
+      receipt.resolutions.some(item => item.owner === owner && item.name === R),
       `${name}: the installed npm peer must be inspected, not the Node builtin`,
     );
     writeManifest(owner, {
@@ -1306,7 +1294,7 @@ test('nested named private package scopes do not replace the installed package o
     name: 'minifier-with-dist-scope',
     version: '1.0.0',
     main: './dist/bundle.min.js',
-    peerDependencies: { 'solid-js': '^2.0.0-rc.22' },
+    peerDependencies: { [R]: '^1.170.46' },
   });
   writeManifest(path.join(owner, 'dist'), {
     name: 'dist',
@@ -1321,9 +1309,7 @@ test('nested named private package scopes do not replace the installed package o
   );
   const receipt = await verifySupportConsumer(f);
   assert(
-    receipt.resolutions.some(
-      item => item.owner === owner && item.name === 'solid-js',
-    ),
+    receipt.resolutions.some(item => item.owner === owner && item.name === R),
   );
 });
 test('public entries outside the resolved physical package remain rejected', async () => {
@@ -1342,19 +1328,23 @@ test('public entries outside the resolved physical package remain rejected', asy
     /Resolved entry escapes owning package/u,
   );
 });
-test('actual upstream @solidjs/web manifest: admitting Solid range and workspace dev edge require no fork descriptor', async () => {
+test('actual upstream @tanstack/react-router-ssr-query manifest: admitting router range and foreign dev edge require no fork descriptor', async () => {
   const f = fixture();
-  const packed = actualUpstream.get('@solidjs/web');
-  assert.equal(packed.packageJson.peerDependencies['solid-js'], '^2.0.0-rc.22');
-  assert.equal(packed.packageJson.devDependencies['solid-js'], 'workspace:*');
+  const packed = actualUpstream.get('@tanstack/react-router-ssr-query');
+  assert.equal(packed.packageJson.peerDependencies[R], '>=1.170.33');
+  assert.equal(packed.packageJson.devDependencies[R], '1.170.37');
   const owner = upstreamOwner(f, packed.packageJson, packed);
-  for (const name of Object.keys(packed.packageJson.dependencies))
+  // React and Query peers are ordinary installed hosts, not support inputs.
+  for (const name of [
+    ...Object.keys(packed.packageJson.dependencies),
+    ...Object.keys(packed.packageJson.peerDependencies).filter(
+      name => name !== R,
+    ),
+  ])
     stubOrdinaryDependency(f, name);
   const receipt = await verifySupportConsumer(f);
   assert(
-    receipt.resolutions.some(
-      item => item.owner === owner && item.name === 'solid-js',
-    ),
+    receipt.resolutions.some(item => item.owner === owner && item.name === R),
   );
 });
 test('actual upstream @rstest/adapter-rsbuild manifest: admitting rstest range needs no fork descriptor', async () => {
@@ -1371,7 +1361,7 @@ test('actual upstream @rstest/adapter-rsbuild manifest: admitting rstest range n
   );
 });
 test('ordinary upstream dev-only support tooling is irrelevant when unselected or selected', async () => {
-  for (const selected of [['solid-js'], ['solid-js', '@rstest/core']]) {
+  for (const selected of [[R], [R, '@rstest/core']]) {
     const f = fixture(selected);
     upstreamOwner(f, {
       name: 'upstream-test-tool-user',
@@ -1391,9 +1381,7 @@ test('ordinary upstream optional disabled support integration does not select OT
     peerDependencies: { '@effect/opentelemetry': '^4.1.0' },
     peerDependenciesMeta: { '@effect/opentelemetry': { optional: true } },
   });
-  assert.deepEqual((await verifySupportConsumer(f)).selectedPackages, [
-    'solid-js',
-  ]);
+  assert.deepEqual((await verifySupportConsumer(f)).selectedPackages, [R]);
 });
 
 test('upstream ranges cannot conceal incompatible peers, required closure, or private copies', async () => {
@@ -1402,7 +1390,7 @@ test('upstream ranges cannot conceal incompatible peers, required closure, or pr
     name: 'upstream-wrong-range',
     version: '1.0.0',
     main: './entry.cjs',
-    peerDependencies: { 'solid-js': '^1.0.0' },
+    peerDependencies: { [R]: '^2.0.0' },
   });
   await assert.rejects(
     verifySupportConsumer(wrongRange),
@@ -1425,12 +1413,12 @@ test('upstream ranges cannot conceal incompatible peers, required closure, or pr
       name: 'upstream-private-copy',
       version: '1.0.0',
       main: './entry.cjs',
-      [block]: { 'solid-js': '^2.0.0-rc.22' },
+      [block]: { [R]: '^1.170.46' },
     });
     await verifySupportConsumer(duplicate);
     unpack(
-      duplicate.payloads.get(p.assetFilename('solid-js', p.cohort['solid-js'])),
-      path.join(owner, 'node_modules/solid-js'),
+      duplicate.payloads.get(p.assetFilename(R, p.cohort[R])),
+      path.join(owner, 'node_modules', R),
     );
     await assert.rejects(
       verifySupportConsumer(duplicate),
@@ -1444,13 +1432,11 @@ test('ordinary upstream dependency range can share the canonical installed host'
     name: 'upstream-runtime-dependency',
     version: '1.0.0',
     main: './entry.cjs',
-    dependencies: { 'solid-js': '^2.0.0-rc.22' },
+    dependencies: { [R]: '^1.170.46' },
   });
   const receipt = await verifySupportConsumer(f);
   assert(
-    receipt.resolutions.some(
-      item => item.owner === owner && item.name === 'solid-js',
-    ),
+    receipt.resolutions.some(item => item.owner === owner && item.name === R),
   );
 });
 test('foreign descriptor presence commits even without edges or on dev-only tooling', async () => {
@@ -1468,10 +1454,10 @@ test('foreign descriptor presence commits even without edges or on dev-only tool
 });
 test('actual source name and sourceName metadata keep exact fork authority, including dev-only owners', async () => {
   for (const identity of [
-    { name: '@modern-js/renderer-solid' },
+    { name: '@modern-js/plugin-tanstack' },
     {
-      name: '@bleedingdev/modern-js-renderer-solid',
-      ultramodern: { sourceName: '@modern-js/renderer-solid' },
+      name: '@bleedingdev/modern-js-plugin-tanstack',
+      ultramodern: { sourceName: '@modern-js/plugin-tanstack' },
     },
   ]) {
     const missing = fixture();
@@ -1479,7 +1465,7 @@ test('actual source name and sourceName metadata keep exact fork authority, incl
       ...identity,
       version: '1.0.0',
       main: './entry.cjs',
-      peerDependencies: { 'solid-js': '^2.0.0-rc.22' },
+      peerDependencies: { [R]: '^1.170.46' },
     });
     await assert.rejects(
       verifySupportConsumer(missing),
@@ -1494,7 +1480,7 @@ test('actual source name and sourceName metadata keep exact fork authority, incl
         ...identity.ultramodern,
         supportArtifacts: ranged.descriptor,
       },
-      peerDependencies: { 'solid-js': '^2.0.0-rc.22' },
+      peerDependencies: { [R]: '^1.170.46' },
     });
     await assert.rejects(verifySupportConsumer(ranged), /wrong framework peer/);
   }
@@ -1512,7 +1498,7 @@ test('workspace pipeline verifies every selected real importer and rejects a sec
   const { verifySupportWorkspace, supportWorkspaceImporters } = await import(
     '../verify-support-workspace.mjs'
   );
-  const f = fixture(['solid-js']);
+  const f = fixture([R]);
   fs.writeFileSync(
     path.join(f.root, 'pnpm-workspace.yaml'),
     'packages:\n  - apps/*\n  - "!apps/excluded"\n',
@@ -1529,7 +1515,7 @@ test('workspace pipeline verifies every selected real importer and rejects a sec
   );
   writeManifest(path.join(f.root, 'apps/excluded'), {
     name: '@synthetic/excluded',
-    dependencies: { 'solid-js': 'bad' },
+    dependencies: { [R]: 'bad' },
   });
   assert.deepEqual(supportWorkspaceImporters(f.root), [f.root, app].sort());
   const receipt = await verifySupportWorkspace(f);
@@ -1540,7 +1526,7 @@ test('workspace pipeline verifies every selected real importer and rejects a sec
   writeManifest(app, {
     ...structuredClone(f.rootManifest),
     name: '@synthetic/app',
-    devDependencies: { 'solid-js': p.cohort['solid-js'] },
+    devDependencies: { [R]: p.cohort[R] },
   });
   await assert.rejects(
     verifySupportWorkspace(f),
@@ -1549,7 +1535,7 @@ test('workspace pipeline verifies every selected real importer and rejects a sec
 });
 
 test('selected importer fetches only its payload and upstream, never unrelated support payloads', async () => {
-  const f = fixture(['solid-js']);
+  const f = fixture([R]);
   f.framework(
     '@synthetic/dev-tools',
     {},
@@ -1561,10 +1547,8 @@ test('selected importer fetches only its payload and upstream, never unrelated s
     return f.fetchArtifact(...args);
   };
   const receipt = await verifySupportConsumer({ ...f, fetchArtifact });
-  assert.deepEqual(receipt.selectedPackages, ['solid-js']);
-  for (const name of Object.keys(p.cohort).filter(
-    name => name !== 'solid-js',
-  )) {
+  assert.deepEqual(receipt.selectedPackages, [R]);
+  for (const name of Object.keys(p.cohort).filter(name => name !== R)) {
     assert(!requests.includes(f.descriptor.packages[name].request));
     assert(!requests.includes(inputs[name].upstream.request));
   }
@@ -1573,12 +1557,12 @@ test('selected importer fetches only its payload and upstream, never unrelated s
 test('actual release source and packed owner admission requires descriptor and never rewrites registry metadata', async () => {
   const { assertReleaseSupportOwners, verifyReleaseSupportOwners } =
     await import('../lib/support-release-admission.mjs');
-  const f = fixture(['solid-js']);
+  const f = fixture([R]);
   const manifest = {
-    name: '@modern-js/renderer-solid',
+    name: '@modern-js/plugin-tanstack',
     version: '1.0.0',
     publishConfig: { access: 'public' },
-    peerDependencies: { 'solid-js': p.cohort['solid-js'] },
+    peerDependencies: { [R]: p.cohort[R] },
   };
   assert.throws(
     () => assertReleaseSupportOwners([manifest]),
@@ -1628,7 +1612,7 @@ test('actual release source and packed owner admission requires descriptor and n
   fs.appendFileSync(artifactPath, 'tampered');
   await assert.rejects(verifyReleaseSupportOwners([item], f), /size mismatch/);
   const wrong = structuredClone(manifest);
-  wrong.peerDependencies['solid-js'] = '^2.0.0-rc.22';
+  wrong.peerDependencies[R] = '^1.170.46';
   await assert.rejects(
     verifyReleaseSupportOwners(
       [
@@ -1647,7 +1631,7 @@ test('actual release source and packed owner admission requires descriptor and n
     ),
     /wrong framework peer/,
   );
-  assert.equal(manifest.peerDependencies['solid-js'], p.cohort['solid-js']);
+  assert.equal(manifest.peerDependencies[R], p.cohort[R]);
 });
 
 test('release preparation and recovery invoke packed admission before publish and ERP invokes install admission', () => {
@@ -1706,7 +1690,7 @@ test('real frozen-install command seam fails when the generated importer lacks o
   const { supportAdmissionRun } = await import(
     '../lib/support-release-admission.mjs'
   );
-  const f = fixture(['solid-js']);
+  const f = fixture([R]);
   delete f.rootManifest.ultramodern;
   f.save();
   const calls = [];

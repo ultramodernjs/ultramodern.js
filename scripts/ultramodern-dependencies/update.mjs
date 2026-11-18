@@ -170,6 +170,24 @@ function replacement({ file, field, name, value }) {
   return { ...edge, to, status: value === to ? 'current' : 'update' };
 }
 
+// Owner-scoped retirement: a support name this file owns is retired when the
+// admitted support descriptor omits it (the v4 candidate has no Solid
+// correction). Retirement grants no authority; v3 baselines still bind the
+// existing shipped edges.
+export function retiredSupportNames(owned, supportPackages) {
+  if (supportPackages === undefined) return [];
+  return owned.filter(name => !Object.hasOwn(supportPackages, name));
+}
+
+// An owner whose every support name is retired drops its support metadata; a
+// mixed owner keeps some names and therefore adopts the admitted descriptor.
+export function retiresSupportMetadata(owned, supportPackages) {
+  return (
+    owned.length > 0 &&
+    retiredSupportNames(owned, supportPackages).length === owned.length
+  );
+}
+
 export function planManifestUpdate({
   path: file,
   expected,
@@ -198,6 +216,10 @@ export function planManifestUpdate({
       artifactOwners[kind][file]?.includes(name),
     );
   const admittedPin = name => artifacts[ownerKind(name)]?.packages[name];
+  const supportOwned = artifactOwners.supportArtifacts[file] ?? [];
+  const supportPackages = artifacts.supportArtifacts?.packages;
+  const retiredSupport = name =>
+    retiredSupportNames(supportOwned, supportPackages).includes(name);
   // Each reviewed baseline proves only the exact selections its owning kind
   // makes from its own accepted descriptor; other baseline content is ignored.
   const baselines = {
@@ -316,31 +338,51 @@ export function planManifestUpdate({
     !Object.hasOwn(expected.devDependencies ?? {}, 'solid-js')
   ) {
     const name = 'solid-js';
-    const version = '2.0.0-rc.22';
+    const version = targets[name];
+    const support = admittedPin(name);
+    const retired = retiredSupport(name);
+    const authorized = (value, ...accepted) =>
+      value !== undefined && accepted.includes(value);
     const original =
       ['2.0.0-rc.15', version].includes(current.dependencies?.[name]) &&
       !Object.hasOwn(current.peerDependencies ?? {}, name) &&
       !Object.hasOwn(current.devDependencies ?? {}, name);
+    // Shipped historical state: the reviewed v3 peer and hosted dev pins.
     const migrated =
       !Object.hasOwn(current.dependencies ?? {}, name) &&
-      current.peerDependencies?.[name] === version &&
-      (current.devDependencies?.[name] === version ||
-        (admittedPin(name) &&
-          current.devDependencies?.[name] === admittedPin(name).request) ||
-        (priorPin('devDependencies', name) !== undefined &&
-          current.devDependencies?.[name] ===
-            priorPin('devDependencies', name)));
+      authorized(
+        current.peerDependencies?.[name],
+        version,
+        priorPin('peerDependencies', name),
+        support?.version,
+      ) &&
+      authorized(
+        current.devDependencies?.[name],
+        version,
+        priorPin('devDependencies', name),
+        support?.request,
+      );
     assert(
       (original || migrated) &&
         !Object.hasOwn(current.peerDependenciesMeta ?? {}, name),
       `${file}: unreviewed Solid host tuple`,
     );
+    // Without a newer admission the accepted historical state stays; an admitted
+    // support pin or a retirement moves it to the snapshot target.
+    const keep = migrated && !support && !retired;
     for (const value of [reviewed, actualManifest, manifest]) {
       delete value.dependencies[name];
-      const pin = value === reviewed ? expected.dependencies[name] : version;
-      (value.peerDependencies ??= {})[name] = pin;
-      (value.devDependencies ??= {})[name] =
-        value !== reviewed && migrated ? current.devDependencies[name] : pin;
+      if (value === reviewed) {
+        (value.peerDependencies ??= {})[name] = expected.dependencies[name];
+        (value.devDependencies ??= {})[name] = expected.dependencies[name];
+        continue;
+      }
+      (value.peerDependencies ??= {})[name] = keep
+        ? current.peerDependencies[name]
+        : (support?.version ?? version);
+      (value.devDependencies ??= {})[name] = keep
+        ? current.devDependencies[name]
+        : (support?.request ?? version);
     }
     edges.push({
       path: file,
@@ -352,16 +394,17 @@ export function planManifestUpdate({
         'qualified Solid runtime is supplied by the required exact host peer',
     });
     if (original)
-      changes.push(
-        {
-          field: 'dependencies',
-          name,
-          from: current.dependencies[name],
-          to: null,
-        },
-        { field: 'peerDependencies', name, from: null, to: version },
-        { field: 'devDependencies', name, from: null, to: version },
-      );
+      changes.push({
+        field: 'dependencies',
+        name,
+        from: current.dependencies[name],
+        to: null,
+      });
+    for (const field of ['peerDependencies', 'devDependencies']) {
+      const from = current[field]?.[name] ?? null;
+      const to = manifest[field][name];
+      if (from !== to) changes.push({ field, name, from, to });
+    }
   }
   const trace = traceConsolidation;
   if (
@@ -552,6 +595,7 @@ export function planManifestUpdate({
             'authenticated hosted bytes match reviewed canonical correction',
         };
       } else if (
+        !retiredSupport(name) &&
         prior !== undefined &&
         actual[name] === prior &&
         actual[name] !== value
@@ -563,10 +607,20 @@ export function planManifestUpdate({
           status: 'current',
           reason: `reviewed baseline ${ownerKind(name) === 'nativeArtifacts' ? 'native' : 'support'} artifact selection`,
         };
+      const transition = coordinatedTransitions[name];
+      const reviewedIntermediate =
+        edge.status === 'update' &&
+        transition?.via?.includes(actual[name]) &&
+        transition.from.includes(value) &&
+        edge.target === transition.to;
       assert(
         artifact ||
           actual[name] === value ||
-          (edge.to !== undefined && actual[name] === edge.to),
+          (edge.to !== undefined && actual[name] === edge.to) ||
+          reviewedIntermediate ||
+          (retiredSupport(name) &&
+            prior !== undefined &&
+            actual[name] === prior),
         `${file}: unexpected old edge ${field}.${name}: ${actual[name]}`,
       );
       edges.push({ path: file, field, ...edge });
@@ -583,23 +637,32 @@ export function planManifestUpdate({
       artifacts[kind] && artifactOwners[kind][file]
         ? artifacts[kind]
         : undefined;
+    const retires =
+      kind === 'supportArtifacts' &&
+      retiresSupportMetadata(supportOwned, supportPackages);
     const verified = [
       before,
       ...(priors[kind] ? [priors[kind]] : []),
       ...(admitted ? [admitted] : []),
+      // After a full retirement the only reviewed state is the absence.
+      ...(retires ? [undefined] : []),
     ];
     assert(
       verified.some(value => isDeepStrictEqual(actual, value)),
       `${file}: unverified ${kind} metadata`,
     );
     // Without a newer admission, a verified state is left unchanged.
-    const selected = admitted ?? actual;
+    const selected = retires ? undefined : (admitted ?? actual);
     if (!isDeepStrictEqual(actual, selected)) {
-      (manifest.ultramodern ??= {})[kind] = structuredClone(selected);
+      if (selected === undefined) {
+        delete manifest.ultramodern[kind];
+        if (Object.keys(manifest.ultramodern).length === 0)
+          delete manifest.ultramodern;
+      } else (manifest.ultramodern ??= {})[kind] = structuredClone(selected);
       changes.push({
         field: `ultramodern.${kind}`,
         from: actual ?? null,
-        to: selected,
+        to: selected ?? null,
       });
     }
   }

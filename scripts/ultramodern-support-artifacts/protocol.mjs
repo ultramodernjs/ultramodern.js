@@ -20,8 +20,7 @@ export const inputs = freeze(
     fs.readFileSync(new URL('./inputs.json', import.meta.url), 'utf8'),
   ),
 );
-const consumerCohort = Object.freeze({
-  'solid-js': '2.0.0-rc.22',
+const cohort = Object.freeze({
   '@effect/opentelemetry': '4.1.4',
   '@rstest/core': '0.12.6',
   'ioredis-mock': '8.13.1',
@@ -29,14 +28,12 @@ const consumerCohort = Object.freeze({
   '@tanstack/react-router': '1.170.46',
   'rsbuild-plugin-dts': '1.0.7',
 });
-// Producer-only candidate: stable Solid needs no support correction. Consumers
-// stay on v3 until its artifact admission replaces the v3 binding.
-const candidateCohort = Object.freeze(
-  Object.fromEntries(
-    Object.entries(consumerCohort).filter(([name]) => name !== 'solid-js'),
-  ),
+assert.deepEqual(
+  Object.keys(inputs).sort(),
+  Object.keys(cohort).sort(),
+  'support inputs must be exactly the active cohort',
 );
-const inspectCohortTarball = cohort => bytes => {
+export function inspectSupportTarball(bytes) {
   // DefinitelyTyped's authenticated archive has a single historical root name.
   // Normalize only that exact root for the unchanged strict npm-layout parser.
   const tar = gunzipSync(bytes, { maxOutputLength: 128 * 1024 * 1024 });
@@ -87,9 +84,8 @@ const inspectCohortTarball = cohort => bytes => {
     cohort[inspected.packageJson.name],
   );
   return inspected;
-};
-export const inspectSupportTarball = inspectCohortTarball(consumerCohort);
-const validateCohortUpstream = cohort => (value, name, version) => {
+}
+function validateUpstream(value, name, version) {
   assert(Object.hasOwn(cohort, name));
   assert.equal(version, cohort[name]);
   exactKeys(
@@ -98,42 +94,22 @@ const validateCohortUpstream = cohort => (value, name, version) => {
     'fixed support provenance',
   );
   assert.deepEqual(value, inputs[name].upstream);
-};
-function validateNpmLicense({ name, upstream, files }) {
-  if (name === 'solid-js') {
-    assert.equal(upstream.licenseLocation, 'source-only');
-    assert(
-      !files.has('LICENSE'),
-      'Solid npm license presence changed; re-review source-only license contract',
-    );
-  } else {
-    assert(files.has(upstream.licensePath));
-    assert.equal(
-      sha256(files.get(upstream.licensePath)),
-      upstream.licenseSha256,
-    );
-  }
 }
-const bindSupportProtocol = (protocol, cohort) =>
-  bindArtifactProtocol({
-    protocol,
-    repository: 'ultramodernjs/ultramodern.js',
-    repositoryId: 1151231350,
-    workflow: '.github/workflows/support-artifacts.yml',
-    cohort,
-    manifestFilename: 'support-artifacts.json',
-    tagPrefix: 'support-artifacts',
-    releaseTitle: 'Support artifacts',
-    reconstructionPrefix: 'support-reconstruction-',
-    validateUpstream: validateCohortUpstream(cohort),
-    inspectNpmTarball: inspectCohortTarball(cohort),
-    validateNpmLicense,
-  });
-export const supportProtocol = bindSupportProtocol(
-  'ultramodern.support-artifacts.v3',
-  consumerCohort,
-);
-export const candidateSupportProtocol = bindSupportProtocol(
-  'ultramodern.support-artifacts.v4',
-  candidateCohort,
-);
+function validateNpmLicense({ upstream, files }) {
+  assert(files.has(upstream.licensePath));
+  assert.equal(sha256(files.get(upstream.licensePath)), upstream.licenseSha256);
+}
+export const supportProtocol = bindArtifactProtocol({
+  protocol: 'ultramodern.support-artifacts.v4',
+  repository: 'ultramodernjs/ultramodern.js',
+  repositoryId: 1151231350,
+  workflow: '.github/workflows/support-artifacts.yml',
+  cohort,
+  manifestFilename: 'support-artifacts.json',
+  tagPrefix: 'support-artifacts',
+  releaseTitle: 'Support artifacts',
+  reconstructionPrefix: 'support-reconstruction-',
+  validateUpstream,
+  inspectNpmTarball: inspectSupportTarball,
+  validateNpmLicense,
+});

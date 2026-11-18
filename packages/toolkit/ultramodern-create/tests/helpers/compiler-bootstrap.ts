@@ -48,7 +48,7 @@ export function compilerBootstrapFixture(
     path.join(effectRoot, 'package.json'),
     JSON.stringify({
       name: '@effect/tsgo',
-      version: '0.69.0',
+      version: '0.70.0',
       bin: { 'effect-tsgo': 'dist/effect-tsgo.cjs' },
     }),
   );

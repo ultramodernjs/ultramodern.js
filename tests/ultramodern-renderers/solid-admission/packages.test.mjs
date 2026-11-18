@@ -156,7 +156,8 @@ test('live standalone, i18n and federation proof producers cannot retain the old
       new URL(filename, import.meta.url),
       'utf8',
     );
-    assert.equal(source.includes('2.0.0-rc.15'), false, filename);
+    for (const retired of ['2.0.0-rc.15', '2.0.0-rc.22', 'support-artifacts-'])
+      assert.equal(source.includes(retired), false, `${filename}: ${retired}`);
     if (filename !== './run.mjs') {
       const pins = [];
       const ast = parseSync(source, { babelrc: false, configFile: false });
@@ -235,6 +236,9 @@ test('native owner metadata retains the accepted artifact and rejects stale decl
       value.dependencies['solid-js'] = '2.0.0-rc.15';
     },
     value => {
+      value.peerDependencies['solid-js'] = '2.0.0-rc.22';
+    },
+    value => {
       value.dependencies['@tanstack/router-core'] = '1.171.37';
     },
     value => {
@@ -308,6 +312,8 @@ test('the verifier enforces the latest tuple and obsolete-runtime rejection in a
     assert.equal(graph.versions[name], version, name);
   for (const [name, stale] of [
     ['solid-js', '2.0.0-rc.15'],
+    ['solid-js', '2.0.0-rc.22'],
+    ['@solidjs/signals', '2.0.0-rc.22'],
     ['@babel/core', '7.29.7'],
     ['@rsbuild/core', '2.2.11'],
     ['@rspack/core', '2.2.8'],

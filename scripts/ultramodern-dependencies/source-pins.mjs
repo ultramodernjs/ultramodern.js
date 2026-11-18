@@ -186,6 +186,7 @@ function reviewedSourcePins(read) {
     [`${generator}policy.ts`]: [
       "'isomorphic-ws@5.0.0>ws:peer': '*'",
       "'ws@>=8.0.0 <8.23.0': '8.23.0'",
+      `'solid-js@${targets['solid-js']}>@solidjs/signals': '${targets['@solidjs/signals']}'`,
     ],
     [`${generator}mise-bootstrap.ts`]: [
       'https://github.com/jdx/mise/releases/download/v2026.11.8/',
@@ -316,12 +317,6 @@ function reviewedSourcePins(read) {
       patch('@tanstack/router-core'),
       `assert.equal(core.version, '${core}')`,
     ],
-    'scripts/ultramodern-renderers/solid-corrections/qualify-held-read.mjs': [
-      pnpmManager(toolchain.pnpm),
-    ],
-    'scripts/ultramodern-renderers/solid-corrections/qualify.mjs': [
-      pnpmManager(toolchain.pnpm),
-    ],
     // Support run 43934193068 attempt 2 qualified the corrected plugin with
     // the framework toolchain.
     'scripts/ultramodern-support-artifacts/dts-plugin.mjs': [
@@ -358,6 +353,9 @@ function reviewedSourcePins(read) {
     ],
     'tests/ultramodern-renderers/solid-admission/run.mjs': [
       `router: '@modern-js/renderer-solid@${solidVersion}'`,
+    ],
+    'scripts/ultramodern-renderers/native-solid-generated.mjs': [
+      `const solidVersion = '${targets['solid-js']}'`,
     ],
     'tests/ultramodern-renderers/i18n/navigation-tuple.mjs': [
       `const solidVersion = '${targets['solid-js']}'`,

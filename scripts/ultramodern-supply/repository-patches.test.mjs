@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import { parse, parseAllDocuments } from 'yaml';
 import inventory from '../../packages/toolkit/ultramodern-create/src/ultramodern-workspace/patch-inventory.ts';
+import { targets } from '../ultramodern-dependencies/snapshot.mjs';
 
 const root = new URL('../../', import.meta.url);
 const read = file => fs.readFileSync(new URL(file, root));
@@ -143,23 +144,64 @@ test('repository Effect telemetry resolves only the support archive built from t
   assert.equal(descriptor.version, support.version);
 });
 
-test('repository Solid resolves only the support archive built from the canonical correction', () => {
-  const support = supportInputs['solid-js'];
-  const patch = retiredPatch('solid-js', support.version);
-  const producerPatch = read(support.patchPath);
-  assert.equal(sha256(producerPatch), support.patchSha256);
-  assert.deepEqual(
-    read(patch.path),
-    Buffer.concat([
-      Buffer.from('diff --git a/types/index.d.ts b/types/index.d.ts\n'),
-      producerPatch,
-    ]),
-  );
-  const descriptor = assertQualifiedArchiveOnly(
+test('repository Solid resolves the stable registry family without a support archive', () => {
+  const family = [
     'solid-js',
-    support.patchSha256,
-  );
-  assert.equal(descriptor.version, support.version);
+    '@solidjs/signals',
+    '@solidjs/web',
+    '@solidjs/compiler',
+  ];
+  for (const name of family) {
+    const version = targets[name];
+    assert.match(version, /^\d+\.\d+\.\d+$/u, name);
+    const key = `${name}@${version}`;
+    assert.equal(Object.hasOwn(supportInputs, name), false, name);
+    assert.equal(
+      inventory.some(patch => patch.packageName === name),
+      false,
+    );
+    assert.deepEqual(
+      Object.keys(lock.packages).filter(id => id.startsWith(`${name}@`)),
+      [key],
+      name,
+    );
+    const resolution = lock.packages[key].resolution;
+    assert.match(resolution.integrity, /^sha512-/u, name);
+    assert.equal(Object.hasOwn(resolution, 'tarball'), false, name);
+    assert.equal(
+      Object.keys(lock.patchedDependencies ?? {}).some(id =>
+        id.startsWith(`${name}@`),
+      ),
+      false,
+      name,
+    );
+  }
+  for (const importer of Object.keys(lock.importers)) {
+    const manifest = JSON.parse(read(`${importer}/package.json`));
+    const support = manifest.ultramodern?.supportArtifacts;
+    if (support) {
+      assert.equal(
+        support.protocol,
+        'ultramodern.support-artifacts.v4',
+        importer,
+      );
+      assert.equal(
+        Object.hasOwn(support.packages, 'solid-js'),
+        false,
+        importer,
+      );
+    }
+    for (const block of [
+      'dependencies',
+      'devDependencies',
+      'optionalDependencies',
+    ])
+      for (const name of family) {
+        const specifier = manifest[block]?.[name];
+        if (specifier !== undefined)
+          assert.equal(specifier, targets[name], `${importer} ${name}`);
+      }
+  }
 });
 
 test('published MF aliases retain their canonical corrections without unused upstream patch selectors', () => {

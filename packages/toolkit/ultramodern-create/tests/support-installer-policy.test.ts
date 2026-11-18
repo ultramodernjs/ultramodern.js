@@ -363,7 +363,8 @@ test.each([true, false])(
         for (const mutation of [
           value => delete value.packageExtensions['@rslib/core@1.0.7'],
           value => {
-            value.overrides['solid-js'] = support.packages['solid-js'].request;
+            value.overrides['@tanstack/react-router'] =
+              support.packages['@tanstack/react-router'].request;
           },
           value => {
             value.catalog = { '@tanstack/react-router': '1.170.46' };

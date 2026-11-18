@@ -15,10 +15,10 @@ const completed = () => ({
   installedCopies: 12,
   // This is the complete installedTuple() output from generated-consumer.mjs.
   tuple: {
-    'solid-js': '2.0.0-rc.22',
-    '@solidjs/web': '2.0.0-rc.22',
-    '@solidjs/signals': '2.0.0-rc.22',
-    '@solidjs/compiler': '2.0.0-rc.22',
+    'solid-js': '2.0.0',
+    '@solidjs/web': '2.0.0',
+    '@solidjs/signals': '2.0.0',
+    '@solidjs/compiler': '2.0.0',
     '@babel/core': '8.1.2',
     typescript: '7.0.2',
     seroval: '1.8.1',
@@ -69,20 +69,20 @@ test('the actual eight-package installed tuple qualifies and every version remai
     delete missing.tuple[name];
     assert.throws(
       () => verifyGeneratedSolidResult(missing, binding),
-      /Solid 2 RC22 tuple/u,
+      /stable Solid 2\.0\.0 tuple/u,
     );
     const drifted = completed();
     drifted.tuple[name] = '0.0.0';
     assert.throws(
       () => verifyGeneratedSolidResult(drifted, binding),
-      /Solid 2 RC22 tuple/u,
+      /stable Solid 2\.0\.0 tuple/u,
     );
   }
   const unexpected = completed();
   unexpected.tuple['unexpected-native-owner'] = '1.0.0';
   assert.throws(
     () => verifyGeneratedSolidResult(unexpected, binding),
-    /Solid 2 RC22 tuple/u,
+    /stable Solid 2\.0\.0 tuple/u,
   );
 });
 
@@ -106,19 +106,22 @@ test('the generated Solid row requires the completed strict/browser result', () 
   }
 });
 
-test('Solid 1, stale manifests and absent generated entry/type evidence cannot qualify', () => {
+test('Solid 1, retired release candidates, stale manifests and absent generated entry/type evidence cannot qualify', () => {
   for (const mutate of [
     result => {
       result.tuple['solid-js'] = '1.9.17';
     },
-    result => {
+    ...['2.0.0-rc.15', '2.0.0-rc.22'].map(version => result => {
       for (const name of [
         'solid-js',
         '@solidjs/web',
         '@solidjs/signals',
         '@solidjs/compiler',
       ])
-        result.tuple[name] = '2.0.0-rc.15';
+        result.tuple[name] = version;
+    }),
+    result => {
+      result.tuple['@solidjs/signals'] = '2.0.0-rc.22';
     },
     result => {
       result.manifestSha256 = 'e'.repeat(64);

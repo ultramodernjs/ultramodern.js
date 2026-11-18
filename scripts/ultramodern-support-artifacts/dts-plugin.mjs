@@ -25,9 +25,9 @@ const identity = JSON.parse(
 // Exact consumer toolchain; Rslib and its own plugin dependency stay unpatched.
 const fixtureDependencies = Object.freeze({
   '@rslib/core': '1.0.7',
-  '@rsbuild/core': '2.3.2',
+  '@rsbuild/core': '2.3.3',
   tsrs: '0.25.0-ts7.1.0-beta',
-  '@effect/tsgo': '0.69.0',
+  '@effect/tsgo': '0.70.0',
 });
 const declaration =
   "export const greet = (name: string): string => 'hi ' + name;\n";

@@ -27,6 +27,7 @@ let canonical;
 // suite creates its own under the OS temp dir and restores the caller's env.
 const callerOwnedTempDir = process.env.OWNED_TEMP_DIR;
 const upstreamBytes = new Map();
+const R = '@tanstack/react-router';
 const source = 'a'.repeat(40);
 const producer = {
   repository: p.repository,
@@ -259,25 +260,25 @@ for (const [label, mutate] of Object.entries({
     d.protocol = 'ultramodern.native-artifacts.v1';
   },
   mixed: d => {
-    d.packages.octane = d.packages['solid-js'];
+    d.packages.octane = d.packages[R];
   },
   cohort: d => {
     delete d.packages['@rstest/core'];
   },
   version: d => {
-    d.packages['solid-js'].version = '2.0.0-rc.21';
+    d.packages[R].version = '1.170.45';
   },
   source: d => {
-    d.packages['solid-js'].upstream.commit = 'b'.repeat(40);
+    d.packages[R].upstream.commit = 'b'.repeat(40);
   },
   patch: d => {
-    d.packages['solid-js'].patchSha256 = '0'.repeat(64);
+    d.packages[R].patchSha256 = '0'.repeat(64);
   },
   unknown: d => {
     d.skip = true;
   },
   'nested unknown': d => {
-    d.packages['solid-js'].bypass = true;
+    d.packages[R].bypass = true;
   },
 }))
   test(`typed presence commits, rejecting ${label}`, async () => {
@@ -287,22 +288,22 @@ for (const [label, mutate] of Object.entries({
   });
 for (const [label, mutate] of Object.entries({
   request: m => {
-    m.dependencies['solid-js'] = '2.0.0-rc.22';
+    m.dependencies[R] = p.cohort[R];
   },
   peer: m => {
-    m.peerDependencies['solid-js'] = '^2.0.0-rc.22';
+    m.peerDependencies[R] = '^1.170.46';
   },
   missing: m => {
-    delete m.dependencies['solid-js'];
+    delete m.dependencies[R];
   },
   conflict: m => {
-    m.devDependencies = { 'solid-js': 'wrong' };
+    m.devDependencies = { [R]: 'wrong' };
   },
   optional: m => {
-    m.peerDependenciesMeta = { 'solid-js': { optional: true } };
+    m.peerDependenciesMeta = { [R]: { optional: true } };
   },
   descriptor: m => {
-    m.ultramodern.supportArtifacts = { 'solid-js': 'legacy' };
+    m.ultramodern.supportArtifacts = { [R]: 'legacy' };
   },
 }))
   test(`packed owner rejects ${label}`, async () => {
@@ -314,7 +315,7 @@ for (const [label, mutate] of Object.entries({
 for (const variant of ['name', 'version', 'root', 'substitution'])
   test(`re-sealed ${variant} bytes cannot substitute canonical reconstruction`, async () => {
     const f = fixture();
-    const name = 'solid-js';
+    const name = R;
     const filename = p.assetFilename(name, p.cohort[name]);
     let bytes = packFiles(
       new Map([
@@ -373,25 +374,22 @@ test('authenticated transport may use another gzip provider but must preserve ev
 
 test('re-sealing gzip and metadata cannot hide changed canonical tar content', async () => {
   const f = fixture();
-  const filename = p.assetFilename('solid-js', p.cohort['solid-js']);
+  const filename = p.assetFilename(R, p.cohort[R]);
   const tar = gunzipSync(f.payloads.get(filename));
-  const source = Buffer.from('heldRead');
+  const source = Buffer.from('"@tanstack/router-core": "1.171.39"');
   const index = tar.indexOf(source);
   assert(index >= 0);
-  tar[index] = 'H'.charCodeAt(0);
+  tar[index + source.length - 2] = '8'.charCodeAt(0);
   const bytes = gzipSync(tar, { level: 1 });
   f.payloads.set(filename, bytes);
-  f.manifest.packages['solid-js'].integrity = p.integrity(bytes);
+  f.manifest.packages[R].integrity = p.integrity(bytes);
   f.seal();
   await assert.rejects(verifySupportInputs(f), /canonical.*tar|tar.*canonical/);
 });
 
 test('transport corruption with unchanged descriptor fails SHA512, and abort is honored', async () => {
   const f = fixture();
-  f.payloads.set(
-    p.assetFilename('solid-js', p.cohort['solid-js']),
-    Buffer.from('corrupt'),
-  );
+  f.payloads.set(p.assetFilename(R, p.cohort[R]), Buffer.from('corrupt'));
   await assert.rejects(verifySupportInputs(f), /SHA512 mismatch/);
   const controller = new AbortController();
   controller.abort(new Error('cancelled'));
@@ -405,11 +403,11 @@ test('a packed owner may own a subset, but cannot conceal another support edge',
   const f = fixture();
   const packed = owner(f, manifest => {
     manifest.dependencies = {
-      'solid-js': f.descriptor.packages['solid-js'].request,
+      [R]: f.descriptor.packages[R].request,
     };
-    manifest.peerDependencies = { 'solid-js': p.cohort['solid-js'] };
+    manifest.peerDependencies = { [R]: p.cohort[R] };
   });
-  packed.supportPackages = ['solid-js'];
+  packed.supportPackages = [R];
   assert.equal(
     Object.keys(await verifySupportInputs({ ...f, owningPackages: [packed] }))
       .length,
@@ -420,7 +418,7 @@ test('a packed owner may own a subset, but cannot conceal another support edge',
     /requires a selected direct host/,
   );
   const concealed = owner(f);
-  concealed.supportPackages = ['solid-js'];
+  concealed.supportPackages = [R];
   await assert.rejects(
     verifySupportInputs({ ...f, owningPackages: [concealed] }),
     /undeclared owner edge/,
@@ -430,18 +428,14 @@ test('a packed owner may own a subset, but cannot conceal another support edge',
 test('authenticated descriptor is a frozen snapshot, not mutable caller authority', async () => {
   const f = fixture();
   const authority = await authSupportDescriptor(f);
-  f.descriptor.packages['solid-js'].request =
-    'https://evil.invalid/substitute.tgz';
-  assert(Object.isFrozen(authority.descriptor.packages['solid-js']));
+  f.descriptor.packages[R].request = 'https://evil.invalid/substitute.tgz';
+  assert(Object.isFrozen(authority.descriptor.packages[R]));
   const pins = await verifyPackedSupportInputs({
     authority,
     owningPackages: f.owningPackages,
     fetchArtifact: f.fetchArtifact,
   });
-  assert.equal(
-    pins['solid-js'].request,
-    canonical.packages['solid-js'].request,
-  );
+  assert.equal(pins[R].request, canonical.packages[R].request);
 });
 
 test('a caller source expectation never bypasses actual GitHub source authentication', async () => {
@@ -462,7 +456,7 @@ test('role regression: framework semver peers need no implementation URL', async
   });
   packed.role = 'framework-peer';
   const pins = await verifySupportInputs({ ...f, owningPackages: [packed] });
-  assert.equal(pins['solid-js'].version, p.cohort['solid-js']);
+  assert.equal(pins[R].version, p.cohort[R]);
 });
 
 test('role regression: root direct URL authority does not need redundant peers', async () => {
@@ -472,10 +466,7 @@ test('role regression: root direct URL authority does not need redundant peers',
   });
   packed.role = 'root-direct';
   const pins = await verifySupportInputs({ ...f, owningPackages: [packed] });
-  assert.equal(
-    pins['solid-js'].request,
-    f.descriptor.packages['solid-js'].request,
-  );
+  assert.equal(pins[R].request, f.descriptor.packages[R].request);
 });
 
 test('role regression: ambiguous packed input has no default role', async () => {
@@ -496,33 +487,33 @@ function frameworkOwner(f, mutate = () => {}) {
 
 for (const [label, mutate] of Object.entries({
   'URL runtime dependency': (m, f) => {
-    m.dependencies = { 'solid-js': f.descriptor.packages['solid-js'].request };
+    m.dependencies = { [R]: f.descriptor.packages[R].request };
   },
   'semver runtime dependency': m => {
-    m.dependencies = { 'solid-js': p.cohort['solid-js'] };
+    m.dependencies = { [R]: p.cohort[R] };
   },
   'optional URL dependency': (m, f) => {
     m.optionalDependencies = {
-      'solid-js': f.descriptor.packages['solid-js'].request,
+      [R]: f.descriptor.packages[R].request,
     };
   },
   'missing peer': m => {
-    delete m.peerDependencies['solid-js'];
+    delete m.peerDependencies[R];
   },
   'range peer': m => {
-    m.peerDependencies['solid-js'] = '^2.0.0-rc.22';
+    m.peerDependencies[R] = '^1.170.46';
   },
   'URL peer': (m, f) => {
-    m.peerDependencies['solid-js'] = f.descriptor.packages['solid-js'].request;
+    m.peerDependencies[R] = f.descriptor.packages[R].request;
   },
   'optional peer': m => {
-    m.peerDependenciesMeta = { 'solid-js': { optional: true } };
+    m.peerDependenciesMeta = { [R]: { optional: true } };
   },
   'wrong dev URL': m => {
-    m.devDependencies = { 'solid-js': 'https://evil.invalid/solid.tgz' };
+    m.devDependencies = { [R]: 'https://evil.invalid/router.tgz' };
   },
   'range dev request': m => {
-    m.devDependencies = { 'solid-js': '^2.0.0-rc.22' };
+    m.devDependencies = { [R]: '^1.170.46' };
   },
   'mixed descriptor': m => {
     m.ultramodern = {
@@ -543,22 +534,16 @@ for (const [label, mutate] of Object.entries({
 
 test('framework dev-only exact URL or version is not required as a shipping dependency', async () => {
   const f = fixture();
-  for (const request of [
-    f.descriptor.packages['solid-js'].request,
-    p.cohort['solid-js'],
-  ]) {
+  for (const request of [f.descriptor.packages[R].request, p.cohort[R]]) {
     const framework = frameworkOwner(f, manifest => {
-      manifest.devDependencies = { 'solid-js': request };
+      manifest.devDependencies = { [R]: request };
       manifest.ultramodern = { supportArtifacts: f.descriptor };
     });
     const pins = await verifySupportInputs({
       ...f,
       owningPackages: [owner(f), framework],
     });
-    assert.equal(
-      pins['solid-js'].request,
-      f.descriptor.packages['solid-js'].request,
-    );
+    assert.equal(pins[R].request, f.descriptor.packages[R].request);
   }
 });
 
@@ -574,10 +559,10 @@ for (const [label, mutate] of Object.entries({
     delete m.dependencies;
   },
   'optional duplicate': m => {
-    m.optionalDependencies = { 'solid-js': m.dependencies['solid-js'] };
+    m.optionalDependencies = { [R]: m.dependencies[R] };
   },
   'wrong dev authority': m => {
-    m.devDependencies = { 'solid-js': p.cohort['solid-js'] };
+    m.devDependencies = { [R]: p.cohort[R] };
   },
 }))
   test(`root-direct rejects ${label}`, async () => {
@@ -606,7 +591,7 @@ for (const role of ['framework-peer', 'root-direct'])
   test(`${role} rejects concealed support edges`, async () => {
     const f = fixture();
     const packed = role === 'framework-peer' ? frameworkOwner(f) : owner(f);
-    packed.supportPackages = ['solid-js'];
+    packed.supportPackages = [R];
     await assert.rejects(
       verifySupportInputs({ ...f, owningPackages: [packed] }),
       /undeclared owner edge/,
@@ -631,7 +616,7 @@ test('only the owning Effect integration may declare a descriptor-bound optional
     /Effect.*direct|direct.*Effect/,
   );
   const wrong = frameworkOwner(f, manifest => {
-    manifest.peerDependenciesMeta = { 'solid-js': { optional: true } };
+    manifest.peerDependenciesMeta = { [R]: { optional: true } };
   });
   await assert.rejects(
     verifySupportInputs({ ...f, owningPackages: [owner(f), wrong] }),
@@ -650,7 +635,7 @@ for (const [label, mutate] of Object.entries({
     packed.bytes = { name: '@unit/projected' };
   },
   'duplicate ownership': packed => {
-    packed.supportPackages.push('solid-js');
+    packed.supportPackages.push(R);
   },
   'unknown ownership': packed => {
     packed.supportPackages.push('octane');

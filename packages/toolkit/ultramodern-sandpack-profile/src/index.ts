@@ -26,12 +26,12 @@ const packageJson = `${JSON.stringify(
         'npm:@bleedingdev/modern-js-plugin-tanstack@latest',
       '@modern-js/runtime': 'npm:@bleedingdev/modern-js-runtime@latest',
       effect: '4.1.4',
-      i18next: '27.1.2',
+      i18next: '27.1.5',
       react: '19.3.1',
       'react-dom': '19.3.1',
     },
     devDependencies: {
-      '@effect/tsgo': '0.69.0',
+      '@effect/tsgo': '0.70.0',
       '@modern-js/ultramodern-app-tools':
         'npm:@bleedingdev/modern-js-ultramodern-app-tools@latest',
       '@modern-js/app-tools': 'npm:@bleedingdev/modern-js-app-tools@latest',
