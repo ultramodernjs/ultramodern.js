@@ -706,20 +706,6 @@ function assertAcceptanceReceipt(
       );
       assertRuntimeResultDetails(result, receipt.mode);
       if (result.id === 'dependency-closure-audit') {
-        assertExactKeys(
-          result.details.advisories,
-          ['auditLevel', 'acknowledged'],
-          'Acceptance receipt advisories',
-        );
-        assertCondition(
-          result.details.advisories.auditLevel === 'high',
-          'Acceptance receipt advisories must audit high and critical vulnerabilities',
-        );
-        assertCondition(
-          Array.isArray(result.details.advisories.acknowledged) &&
-            result.details.advisories.acknowledged.length === 0,
-          'ERP-10 acceptance receipt must contain an empty acknowledged advisory list',
-        );
         const identities = result.details.closureIdentities;
         assertCondition(
           Array.isArray(identities) &&

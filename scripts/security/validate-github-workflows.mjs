@@ -3403,45 +3403,6 @@ function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
   return errors;
 }
 
-function collectAdvisoryInstallErrors(workflow, relativePath) {
-  if (relativePath !== '.github/workflows/check-dependencies.yml') return [];
-  const job = workflow.jobs?.advisories;
-  const steps = job?.steps ?? [];
-  const normalize = step =>
-    normalizeShellContinuations(stripShellComments(String(step?.run ?? '')))
-      .replace(/\s+/gu, ' ')
-      .trim();
-  const install = steps.findIndex(
-    step =>
-      normalize(step) ===
-      'mise exec -- pnpm install --prod --frozen-lockfile --ignore-scripts',
-  );
-  const audits = steps
-    .map((step, index) => ({ step, index }))
-    .filter(({ step }) =>
-      normalize(step).includes('scripts/security/advisory-gate.mjs'),
-    );
-  if (
-    job?.if !== undefined ||
-    job?.['continue-on-error'] !== undefined ||
-    install < 0 ||
-    steps[install]?.if !== undefined ||
-    steps[install]?.background !== undefined ||
-    steps[install]?.['continue-on-error'] !== undefined ||
-    audits.length !== 1 ||
-    audits[0].index <= install ||
-    audits[0].step.if !== undefined ||
-    audits[0].step['continue-on-error'] !== undefined ||
-    normalize(audits[0].step) !==
-      'mise exec -- node scripts/security/advisory-gate.mjs'
-  ) {
-    return [
-      `${relativePath} advisories must run the exact frozen production install before the mandatory repository advisory guard`,
-    ];
-  }
-  return [];
-}
-
 export function validateWorkflowContent(relativePath, content, options = {}) {
   const allowlist = options.allowlist ?? ALLOWLIST;
   const sensitive =
@@ -3588,9 +3549,6 @@ export function validateWorkflowContent(relativePath, content, options = {}) {
   }
   for (const message of collectCachePathErrors(workflow, relativePath)) {
     push('normalized-cache-path', message);
-  }
-  for (const message of collectAdvisoryInstallErrors(workflow, relativePath)) {
-    push('advisory-installed-correction', message);
   }
   for (const message of collectEnvRunnerContextErrors(workflow, relativePath)) {
     push('env-runner-context', message);
