@@ -11,8 +11,10 @@ import { fileURLToPath } from 'node:url';
 import {
   claimPort,
   claimPortAt,
+  claimPortRange,
   claimPorts,
   ephemeralPortFloor,
+  testPortRange,
 } from '../ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 
 const leaseModule = fileURLToPath(
@@ -43,12 +45,18 @@ async function unclaimedPort() {
   return claim.port;
 }
 
-test('claims lie below the ephemeral range and are distinct', async () => {
+test('claims lie in their own band and are distinct', async () => {
+  const band = claimPortRange();
+  // getPort() probes and returns ports in testPortRange without reading claim
+  // files, and bind(0) draws from the ephemeral range: neither may meet a claim.
+  assert(band.end <= testPortRange.start);
+  assert(band.end <= ephemeralPortFloor());
+  assert(band.end - band.start >= 1024);
   const set = await claimPorts(6);
   try {
     assert.equal(new Set(set.ports).size, 6);
     for (const port of set.ports) {
-      assert(port >= 20_000 && port < ephemeralPortFloor());
+      assert(port >= band.start && port < band.end);
       assert.equal(fs.readFileSync(claimFile(port), 'utf8'), `${process.pid}`);
     }
   } finally {

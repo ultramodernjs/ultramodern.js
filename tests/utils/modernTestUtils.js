@@ -7,6 +7,7 @@ const spawn = require('cross-spawn');
 const treeKill = require('tree-kill');
 const {
   leasePort,
+  testPortRange,
 } = require('../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs');
 const { launchOptions } = require('./launchOptions');
 
@@ -31,8 +32,9 @@ const kTestPortStatePath = path.join(
     .update(kRepoRoot)
     .digest('hex')}.json`,
 );
-const kTestPortRangeStart = 20_000;
-const kTestPortRangeEnd = 59_999;
+// Port claims (port-lease.mjs) stay below this band, so getPort never probes
+// or returns a port a claimer owns.
+const { start: kTestPortRangeStart, end: kTestPortRangeEnd } = testPortRange;
 
 function resolvePortAllocatorLockDir(packageDir) {
   const digest = crypto
