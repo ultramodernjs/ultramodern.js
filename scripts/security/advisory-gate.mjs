@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// Consumers: check-dependencies.yml (the monorepo lockfile on every PR) and the
-// ERP-10 acceptance profile (the lockfile generated from the release cohort).
+// Consumer: check-dependencies.yml (the monorepo lockfile on every PR).
 //
 // One general gate: `pnpm audit --prod` must report no high or critical
 // advisory. It replaces per-package range floors in sidecars; a vulnerable
