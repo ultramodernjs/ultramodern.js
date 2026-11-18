@@ -5,8 +5,8 @@
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
   "totalFiles": 1459,
-  "totalHunks": 4946,
-  "totalChangedLines": 104384,
+  "totalHunks": 4945,
+  "totalChangedLines": 104466,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -3660,8 +3660,8 @@
     },
     {
       "file": "packages/server/bff-core/src/router/utils.ts",
-      "hunks": 5,
-      "changedLines": 73
+      "hunks": 4,
+      "changedLines": 104
     },
     {
       "file": "packages/server/bff-core/src/utils/alias.ts",
@@ -3701,7 +3701,7 @@
     {
       "file": "packages/server/bff-core/tests/getFiles.test.ts",
       "hunks": 1,
-      "changedLines": 76
+      "changedLines": 127
     },
     {
       "file": "packages/server/bff-core/tests/operationContractInterop.test.ts",
