@@ -324,8 +324,9 @@ const nodeTargetOf = async (
 /**
  * Compile server sources with the stable TypeScript 7.0.2 compiler or the
  * supplied provider. One non-emitting Rspack pass discovers every app source
- * the roots reach, one program type-checks all of them, and only then does
- * one bundleless Rslib build emit JavaScript and declarations.
+ * the roots reach, one program type-checks all of them (unless
+ * `disableTsChecker` is set), and only then does one bundleless Rslib build
+ * emit JavaScript and declarations.
  */
 export const compileServerSources = async (
   appDirectory: string,
@@ -542,6 +543,7 @@ const compileProgram = async ({
 
   // One program checks every source that will run, including those reached
   // only through `source.alias`. The declaration program is this same file.
+  const checkTypes = config.disableTsChecker !== true;
   const reachedRoots = [...sources].filter(
     file => isChecked(file) && !roots.has(path.resolve(file)),
   );
@@ -551,10 +553,16 @@ const compileProgram = async ({
       ...(tsconfig.files ?? []),
       ...reachedRoots.map(file => toPosix(path.relative(tsconfigDir, file))),
     ];
+  }
+  // Without the checker, declarations still come from this program, unchecked.
+  if (!checkTypes) {
+    tsconfig.compilerOptions = { ...compilerOptions, noCheck: true };
+  }
+  if (reachedRoots.length > 0 || !checkTypes) {
     await fs.writeFile(resolvedConfigPath, JSON.stringify(tsconfig, null, 2));
   }
   // Declaration-only roots are still checked; an empty program is not.
-  if (roots.size > 0) {
+  if (checkTypes && roots.size > 0) {
     const result = await runTsgo(
       checker,
       ['-p', resolvedConfigPath, '--noEmit'],

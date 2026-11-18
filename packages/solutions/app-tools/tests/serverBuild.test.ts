@@ -40,7 +40,7 @@ async function fixture() {
     },
     getNormalizedConfig: () => ({
       source: { alias: {} },
-      output: { sourceMap: false },
+      output: { sourceMap: false, disableTsChecker: true },
       tools: { serverCompiler: compiler },
     }),
     onAfterBuild: (callback: () => Promise<void>) => {
@@ -68,7 +68,7 @@ async function fixture() {
 }
 
 describe('server build compilation policy', () => {
-  it('forwards current exclusions supplied after setup', async () => {
+  it('forwards the type-check setting and exclusions supplied after setup', async () => {
     const app = await fixture();
     try {
       await writeFile(path.join(app.serverDir, 'cache.ts'), 'export {};\n');
@@ -79,7 +79,7 @@ describe('server build compilation policy', () => {
 
       expect(compile).toHaveBeenCalledWith(
         app.appDirectory,
-        { alias: {}, sourceMap: false },
+        { alias: {}, sourceMap: false, disableTsChecker: true },
         expect.objectContaining({ excludeFiles, compiler: app.compiler }),
       );
     } finally {

@@ -71,7 +71,11 @@ export const createBffGenerator = (api: CLIPluginAPI<AppTools>) => {
     await hooks.onBeforeBffCompile.call(context);
     const result = await compile(
       appDirectory,
-      { alias: combinedAlias, sourceMap: config.output?.sourceMap },
+      {
+        alias: combinedAlias,
+        sourceMap: config.output?.sourceMap,
+        disableTsChecker: config.output?.disableTsChecker,
+      },
       {
         sourceDirs,
         distDir,
