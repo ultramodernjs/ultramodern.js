@@ -4,13 +4,11 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { withFixtureBootstraps } = require('./sidecar-bootstrap-fixture.js');
 const load = () => import('../sidecar-bundle.mjs');
 const artifacts = () =>
   import('../lib/prepare-bleedingdev-packages/release-artifacts.mjs');
 
 async function fixture(t, profile = 'parser', metadata = {}) {
-  withFixtureBootstraps(t);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-contract-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const bundle = await load();
@@ -97,7 +95,7 @@ async function fixture(t, profile = 'parser', metadata = {}) {
 
 test('independent bundle accepts only its unchanged v2 artifact and exact same-run qualification', async t => {
   const f = await fixture(t);
-  assert.equal(f.accepted.sidecars.packages.length, 7);
+  assert.equal(f.accepted.sidecars.packages.length, 6);
   assert.equal(f.accepted.sidecars.manifest.schemaVersion, 2);
   assert.equal(
     f.accepted.sidecars.manifest.publishBefore,

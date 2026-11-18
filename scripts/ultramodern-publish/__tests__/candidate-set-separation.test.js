@@ -3,13 +3,9 @@ const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
-const { withFixtureBootstraps } = require('./sidecar-bootstrap-fixture.js');
 
-test('candidate bundle inputs are independent of the current published consumer graph', async t => {
-  withFixtureBootstraps(t);
-  const { sidecarNameProvenance, sidecarProfileRecipes } = await import(
-    '../sidecar-profiles.mjs'
-  );
+test('candidate bundle inputs are independent of the current published consumer graph', async () => {
+  const { sidecarProfileRecipes } = await import('../sidecar-profiles.mjs');
   const {
     assertRecipeConsumers,
     assertRecipeGraph,
@@ -43,14 +39,11 @@ test('candidate bundle inputs are independent of the current published consumer 
   // Some active recipes are reached only through generated workspace policy.
   // Check the actual release consumer roots, not just dependency fields.
   assertRepositoryRecipeConsumers(manifests);
-  const candidates = [
-    'mf-cohort',
-    'tanstack-redact',
-    'parser',
-    'picomatch-4',
-  ].flatMap(sidecarProfileRecipes);
-  assert.equal(candidates.length, 23);
-  assert.equal(new Set(candidates.map(recipe => recipe.id)).size, 23);
+  const candidates = ['mf-cohort', 'tanstack-redact', 'parser'].flatMap(
+    sidecarProfileRecipes,
+  );
+  assert.equal(candidates.length, 21);
+  assert.equal(new Set(candidates.map(recipe => recipe.id)).size, 21);
   assertRecipeGraph(candidates);
   // Live HEAD manifests are not a candidate oracle: they may already declare
   // candidate aliases. Each negative/positive case uses an explicit fixture.
@@ -68,37 +61,28 @@ test('candidate bundle inputs are independent of the current published consumer 
         }),
       error =>
         error.message.includes(
-          `npm:${recipe.fork.name}@${recipe.fork.version}`,
+          `declare npm:${recipe.fork.name}@${recipe.fork.version} in source`,
         ),
       `${recipe.id}: a previous consumer on the upstream identity must be rejected`,
     );
-  const four = candidates.find(recipe => recipe.id === 'picomatch-4');
   assertRecipeConsumers(candidates, {
-    generatorPins: [
-      {
-        'picomatch@>=4.0.0 <4.0.8': `npm:${four.fork.name}@${four.fork.version}`,
-      },
-    ],
+    generatorPins: [],
     publishedManifests: [
       {
         name: '@bleedingdev/modern-js-current-consumer',
         dependencies: Object.fromEntries(
-          candidates
-            .filter(recipe => recipe !== four)
-            .map(recipe => [
-              recipe.upstream.name,
-              `npm:${recipe.fork.name}@${recipe.fork.version}`,
-            ]),
+          candidates.map(recipe => [
+            recipe.upstream.name,
+            `npm:${recipe.fork.name}@${recipe.fork.version}`,
+          ]),
         ),
       },
     ],
   });
-  // Active names keep their chronology; a new name carries its pinned bootstrap.
   for (const candidate of candidates)
     assert.deepEqual(
       candidate.provenance,
-      active.find(recipe => recipe.id === candidate.id)?.provenance ??
-        sidecarNameProvenance(candidate.fork.name),
+      active.find(recipe => recipe.id === candidate.id).provenance,
     );
   const file = path.join(root, 'scripts/ultramodern-supply/sidecars.json');
   const before = fs.readFileSync(file);

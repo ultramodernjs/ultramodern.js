@@ -322,8 +322,6 @@ function reviewedSourcePins(read) {
     'scripts/ultramodern-renderers/solid-corrections/qualify.mjs': [
       pnpmManager(toolchain.pnpm),
     ],
-    // Exact registry source for the reviewed 4.x correction candidate.
-    'scripts/ultramodern-publish/sidecar-profiles.mjs': ['picomatch@4.0.7'],
     // Support run 43934193068 attempt 2 qualified the corrected plugin with
     // the framework toolchain.
     'scripts/ultramodern-support-artifacts/dts-plugin.mjs': [
