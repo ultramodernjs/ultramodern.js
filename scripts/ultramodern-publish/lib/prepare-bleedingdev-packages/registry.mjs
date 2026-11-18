@@ -18,9 +18,12 @@ import {
 // Consumer: publish-bleedingdev.yml preflight, publish, and exact registry verification.
 import fs from 'node:fs';
 import path from 'node:path';
-import { npmPublishAttempts, npmPublishRetryDelayMs } from './constants.mjs';
+import {
+  npmPublishAttempts,
+  npmPublishRetryDelayMs,
+  ultramodernCreateSourceName,
+} from './constants.mjs';
 import { run, sleep } from './commands.mjs';
-import { publishLevels } from './manifest.mjs';
 import {
   createRegistryPropagationDeadline,
   pollRegistryPropagation,
@@ -1223,13 +1226,16 @@ async function publishManifestPackages(
   // npm publish error shares it, so a cohort that errors on many packages
   // still waits out one propagation window in total.
   const propagationDeadline = createRegistryPropagationDeadline();
-  const levels = publishLevels(manifest).map(level =>
-    level.map(targetName => artifactsByTarget.get(targetName)),
-  );
+  const createTarget =
+    manifest.aliases?.[ultramodernCreateSourceName] ??
+    ultramodernCreateSourceName;
+  const members = publishItems.filter(item => item.targetName !== createTarget);
+  const create = publishItems.filter(item => item.targetName === createTarget);
+  const concurrency = resolveRegistryConcurrency(options);
   console.log(
-    `Publishing ${publishItems.length} immutable package artifact(s) in ${levels.length} dependency level(s)`,
+    `Publishing ${publishItems.length} immutable package artifact(s): ${members.length} at concurrency ${concurrency}${create.length > 0 ? `, then ${createTarget}` : ''}`,
   );
-  const publishOne = async artifact => {
+  const publishOne = async (artifact, wait) => {
     const state = preflight.get(artifact.targetName);
     if (!state) {
       throw new Error(
@@ -1250,7 +1256,7 @@ async function publishManifestPackages(
         acceptedTools: manifest.tools,
         provenanceExpectation,
       },
-      { propagationDeadline },
+      { propagationDeadline, wait },
     );
     console.log(
       options.dryRun
@@ -1259,14 +1265,46 @@ async function publishManifestPackages(
     );
     registry.verifyPackageArtifact(artifact, artifact.artifactPath);
   };
-  // A level starts only after every publish of the previous level has
-  // returned, so consumers never reach npm before their cohort dependencies.
-  for (const level of levels) {
-    await mapWithConcurrency(
-      level,
-      resolveRegistryConcurrency(options),
-      publishOne,
-    );
+  // Every member but create shares one bounded pool in publishOrder, which is
+  // topological, so a dependency is always sent before its consumers. npm does
+  // not serve versions in upload order, so a barrier per dependency level only
+  // added rounds. What the levels still guarded is the state a failed upload
+  // leaves on npm, and the pool keeps that bounded to the uploads in flight:
+  // no upload starts while a started one waits to retry a failed attempt, and
+  // none starts once one has failed. create, the package users install the
+  // cohort through, starts only after every other member was accepted.
+  let failed = false;
+  const retrying = new Set();
+  let resumeWaiters = [];
+  const publishPooled = async artifact => {
+    while (retrying.size > 0) {
+      await new Promise(resolve => resumeWaiters.push(resolve));
+    }
+    if (failed) {
+      return;
+    }
+    const wait = delay => {
+      retrying.add(artifact.targetName);
+      return sleep(delay);
+    };
+    try {
+      await publishOne(artifact, wait);
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      if (retrying.delete(artifact.targetName) && retrying.size === 0) {
+        const waiters = resumeWaiters;
+        resumeWaiters = [];
+        for (const resume of waiters) {
+          resume();
+        }
+      }
+    }
+  };
+  await mapWithConcurrency(members, concurrency, publishPooled);
+  for (const artifact of create) {
+    await publishOne(artifact);
   }
 }
 
