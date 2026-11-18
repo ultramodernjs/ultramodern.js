@@ -571,7 +571,7 @@ test('peer ranges prove liveness but are not judged', () => {
   }
 });
 
-test('a tarball dependent is found under its cut virtual-store name', t => {
+test('a tarball dependent resolves its own hashed name in a warm virtual store', t => {
   const root = mkdtempSync(
     path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'overrides-store-'),
   );
@@ -591,12 +591,17 @@ test('a tarball dependent is found under its cut virtual-store name', t => {
       JSON.stringify({ name: '@scope/core', version }),
     );
   };
-  install('@scope+core@https+++example.com+releases+download+fo_0a1b', '1.2.3');
+  install(
+    '@scope+core@https+++example.com+releases+download+fo_9f8e0000000000000000000000000000',
+    '1.2.4',
+  );
   install('@scope+core@2.0.0_peer@1.0.0', '2.0.0');
+  assert.equal(readInstalledManifest(root)('@scope/core', url), undefined);
+  install(
+    '@scope+core@https+++example.com+releases+download+fo_3b83b9314ddaeba810e9f43deba8e396',
+    '1.2.3',
+  );
   const read = readInstalledManifest(root);
   assert.equal(read('@scope/core', url)?.version, '1.2.3');
   assert.equal(read('@scope/core', '2.0.0')?.version, '2.0.0');
-  // Two cut names sharing the prefix are ambiguous and stay unresolved.
-  install('@scope+core@https+++example.com+releases+download+fo_9f8e', '1.2.4');
-  assert.equal(readInstalledManifest(root)('@scope/core', url), undefined);
 });

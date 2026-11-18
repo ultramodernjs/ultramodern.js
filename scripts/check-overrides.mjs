@@ -15,6 +15,7 @@
 //     value leaves the major its selector names;
 //   - a dependent whose installed package.json declares a range in another
 //     major than the version an override forces on it.
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -495,7 +496,8 @@ export function findForcedMajors(lockfileText, readManifest) {
 // Reads packages from pnpm's virtual store, whose directory names are
 // `<name>@<version>` with path characters as `+` plus an optional
 // `_<peers>` suffix. pnpm cuts long names, such as tarball URLs, and ends them
-// with `_<hash>`; such a cut prefix must name exactly one store entry.
+// with `_<hash>` derived from the complete escaped name. A warm store may
+// retain several releases with the same cut prefix.
 export function readInstalledManifest(root = repoRoot) {
   const store = path.join(root, 'node_modules', '.pnpm');
   const entries = readdirSync(store);
@@ -505,11 +507,16 @@ export function readInstalledManifest(root = repoRoot) {
       dir => dir === prefix || dir.startsWith(`${prefix}_`),
     );
     if (!entry && version.includes('://')) {
-      const cut = entries.filter(dir => {
-        const head = dir.slice(0, dir.lastIndexOf('_'));
+      const hash = createHash('sha256')
+        .update(prefix)
+        .digest('hex')
+        .slice(0, 32);
+      const suffix = `_${hash}`;
+      entry = entries.find(dir => {
+        if (!dir.endsWith(suffix)) return false;
+        const head = dir.slice(0, -suffix.length);
         return head.length > name.length + 1 && prefix.startsWith(head);
       });
-      if (cut.length === 1) [entry] = cut;
     }
     if (!entry) return undefined;
     try {
