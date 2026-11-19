@@ -19,6 +19,7 @@ export const sidecarQualificationProbeKeys = Object.freeze([
 ]);
 export const sidecarProfiles = Object.freeze({
   parser: Object.freeze({
+    qualificationDependencies: Object.freeze({ oxlint: '1.94.0' }),
     recipeIds: sidecarRecipeIds,
     probeKeys: sidecarQualificationProbeKeys,
     publishBefore: sidecarPublishBefore,

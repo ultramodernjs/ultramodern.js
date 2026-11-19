@@ -702,13 +702,13 @@
     },
     "fork": {
       "name": "@bleedingdev/ultracite",
-      "version": "8.2.2"
+      "version": "8.2.3"
     },
     "license": "MIT",
     "artifacts": ["*"],
     "patch": {
-      "path": "patches/ultracite@8.2.1.patch",
-      "sha256": "5d81abe0bb21b38a7c6dd92a8770f1be6446ef07a291b4091b91fd137f690a2c"
+      "path": "patches/ultracite@8.2.1-typed-js.patch",
+      "sha256": "2e7742803b3ff9246fd31c052ed3f304784bc703a74a5aa6154749d6a2023df4"
     },
     "manifestChanges": {
       "dependencies": {
