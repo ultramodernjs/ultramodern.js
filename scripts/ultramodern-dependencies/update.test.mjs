@@ -25,8 +25,8 @@ const showAt = (revision, file) =>
     }),
   );
 
-// The reviewed v4 candidate cohort (PR #330) and the shipped v3 cohort, read from
-// immutable git bytes rather than the in-flight protocol module.
+// The reviewed v4 cohort and historical v3 cohort, read from immutable git bytes
+// rather than the in-flight protocol module.
 const v4Packages = Object.fromEntries(
   [
     '@effect/opentelemetry',
@@ -40,7 +40,7 @@ const v4Packages = Object.fromEntries(
 const v3Packages = Object.fromEntries(
   Object.keys(
     showAt(
-      supportBaselineRevision,
+      '0024faeea760417227135429fe2727ae471abbe4',
       'packages/runtime/renderer-solid/package.json',
     ).ultramodern.supportArtifacts.packages,
   ).map(name => [name, {}]),
@@ -181,10 +181,10 @@ test('only the reviewed support baseline keeps its exact owned selections', () =
   );
 });
 
-test('the shipped support-v3 activation stays current only through the reviewed baseline', () => {
-  // Activation 92307d27 shipped these exact support selections; the accepted
-  // cohort's main source is the reviewed baseline carrying them unchanged.
-  const activation = '92307d27ccf49a83bf0027aacd492e90b5b01c12';
+test('the reviewed support-v4 predecessor stays current and rejects historical selections', () => {
+  const activation = '75e3d5f6bccaac893773e33b65eb585bf7c8e936';
+  const priorV3 = '92307d27ccf49a83bf0027aacd492e90b5b01c12';
+  const priorBaseline = '0024faeea760417227135429fe2727ae471abbe4';
   const priorV2 = 'c4a6393979e763cf94cdcd18337e5047a8577d63';
   let files = 0;
   let selections = 0;
@@ -192,15 +192,21 @@ test('the shipped support-v3 activation stays current only through the reviewed 
     // Native-owned selections need their own native authority.
     if (artifactOwners.nativeArtifacts[file]) continue;
     const shipped = showAt(activation, file);
-    const descriptor = shipped.ultramodern.supportArtifacts;
-    assert.equal(descriptor.protocol, 'ultramodern.support-artifacts.v3');
+    const descriptor = shipped.ultramodern?.supportArtifacts;
+    // The reviewed v4 predecessor has already retired Solid-only support.
+    if (!descriptor) {
+      assert.equal(file, 'tests/integration/renderer-solid/package.json');
+      assert.equal(shipped.dependencies['solid-js'], targets['solid-js']);
+      continue;
+    }
+    assert.equal(descriptor.protocol, 'ultramodern.support-artifacts.v4');
     assert.deepEqual(
       [
         descriptor.producer.source,
         descriptor.producer.runId,
         descriptor.producer.runAttempt,
       ],
-      ['d62b29f5039311ec122012887ce6bf7c4a527d6e', 43934193068, 2],
+      ['bea0d22f405070b9beccba0cf6f1a7b3d5767784', 44174451205, 1],
     );
     const expected = showAt(sourceRevision, file);
     const bound = {
@@ -233,11 +239,13 @@ test('the shipped support-v3 activation stays current only through the reviewed 
         forged[field][name] = value.replace(/-\d+\/(?=[^/]+$)/u, '-9/');
         assert.notEqual(forged[field][name], value);
         assert.throws(() => invoke(forged), /unexpected old edge/);
-        // The superseded v2 selection is no longer reviewed authority.
-        const v2 = structuredClone(shipped);
-        v2[field][name] = showAt(priorV2, file)[field][name];
-        assert.notEqual(v2[field][name], value);
-        assert.throws(() => invoke(v2), /unexpected old edge/);
+        // Neither superseded protocol's selection remains baseline authority.
+        for (const revision of [priorV2, priorV3]) {
+          const historical = structuredClone(shipped);
+          historical[field][name] = showAt(revision, file)[field][name];
+          assert.notEqual(historical[field][name], value);
+          assert.throws(() => invoke(historical), /unexpected old edge/);
+        }
       }
     const forgedMetadata = structuredClone(shipped);
     forgedMetadata.ultramodern.supportArtifacts.producer.source = 'f'.repeat(
@@ -247,9 +255,8 @@ test('the shipped support-v3 activation stays current only through the reviewed 
       () => invoke(forgedMetadata),
       /unverified supportArtifacts metadata/,
     );
-    // Only the reviewed revision binds; even the activation commit or the
-    // prior v2 baseline presented as the baseline grant nothing.
-    for (const revision of [activation, priorV2])
+    // Superseded activation/baseline revisions grant nothing.
+    for (const revision of [priorV3, priorBaseline, priorV2])
       assert.throws(
         () => invoke(shipped, { ...bound, revision }),
         /unreviewed support baseline revision/,
@@ -261,6 +268,7 @@ test('the shipped support-v3 activation stays current only through the reviewed 
 
 test('only the reviewed native baseline keeps its exact owned selections', () => {
   const supersededNative = 'ea6b64f23735f29a2cb2a4647c04d2dc3a185cbc';
+  const priorBaseline = '2fdfae61808ab76cd26eba98668d559cc2fa7bf1';
   const nativeActivation = 'c40bbf9976ff568bad06be140dad2613fe25dafb';
   const nativeOnly = Object.keys(artifactOwners.nativeArtifacts).filter(
     file => !artifactOwners.supportArtifacts[file],
@@ -271,7 +279,7 @@ test('only the reviewed native baseline keeps its exact owned selections', () =>
     const prior = accepted.ultramodern.nativeArtifacts;
     assert.deepEqual(
       [prior.producer.source, prior.producer.runId, prior.producer.runAttempt],
-      ['9353b0cd3dc1fb73ebd1dc66f377e3356abeb178', 44131025154, 1],
+      ['7d4e7415b69a93439451cbcfbcbb4cc15d09edde', 44303834194, 1],
     );
     const expected = showAt(sourceRevision, file);
     const bound = { revision: nativeBaselineRevision, manifest: accepted };
@@ -345,16 +353,18 @@ test('only the reviewed native baseline keeps its exact owned selections', () =>
         // A later native run (stand-in id) needs admission, not the baseline.
         const later = structuredClone(accepted);
         later[field][name] = pin.request.replace(
-          '-44131025154-1/',
+          '-44303834194-1/',
           '-44331000000-1/',
         );
         assert.notEqual(later[field][name], to);
         assert.throws(() => invoke(later), /unexpected old edge/);
-        // The superseded native run is no longer reviewed authority.
-        const superseded = structuredClone(accepted);
-        superseded[field][name] = showAt(supersededNative, file)[field][name];
-        assert.notEqual(superseded[field][name], to);
-        assert.throws(() => invoke(superseded), /unexpected old edge/);
+        // Neither superseded native run remains reviewed authority.
+        for (const revision of [supersededNative, priorBaseline]) {
+          const superseded = structuredClone(accepted);
+          superseded[field][name] = showAt(revision, file)[field][name];
+          assert.notEqual(superseded[field][name], to);
+          assert.throws(() => invoke(superseded), /unexpected old edge/);
+        }
       }
     assert(selections >= 2, `${file}: native selections`);
     const forgedMetadata = structuredClone(accepted);
@@ -363,7 +373,12 @@ test('only the reviewed native baseline keeps its exact owned selections', () =>
       () => invoke(forgedMetadata),
       /unverified nativeArtifacts metadata/,
     );
-    for (const revision of ['f'.repeat(40), supersededNative, nativeActivation])
+    for (const revision of [
+      'f'.repeat(40),
+      supersededNative,
+      nativeActivation,
+      priorBaseline,
+    ])
       assert.throws(
         () => invoke(accepted, { revision, manifest: accepted }),
         /unreviewed native baseline revision/,
@@ -433,10 +448,10 @@ test('only the reviewed native baseline keeps its exact owned selections', () =>
   }
 });
 
-test('every native owner keeps the shipped native activation exactly', () => {
-  // Reviewed refresh 2fdfae61 carries qualified native run 44131025154, sourced
-  // from 9353b0cd, with the same descriptor and selections for every owner.
-  const activation = '2fdfae61808ab76cd26eba98668d559cc2fa7bf1';
+test('every native owner preserves the reviewed predecessor', () => {
+  // Reviewed merge #342 carries the same qualified descriptor and selections
+  // for every native owner, without claiming full release acceptance.
+  const activation = '75e3d5f6bccaac893773e33b65eb585bf7c8e936';
   const fields = ['dependencies', 'devDependencies', 'peerDependencies'];
   let selections = 0;
   for (const [file, names] of Object.entries(artifactOwners.nativeArtifacts)) {
@@ -449,7 +464,7 @@ test('every native owner keeps the shipped native activation exactly', () => {
         descriptor.producer.runId,
         descriptor.producer.runAttempt,
       ],
-      ['9353b0cd3dc1fb73ebd1dc66f377e3356abeb178', 44131025154, 1],
+      ['7d4e7415b69a93439451cbcfbcbb4cc15d09edde', 44303834194, 1],
     );
     assert.deepEqual(baseline.ultramodern.nativeArtifacts, descriptor);
     const supportBaseline = artifactOwners.supportArtifacts[file]
@@ -458,7 +473,7 @@ test('every native owner keeps the shipped native activation exactly', () => {
           manifest: showAt(supportBaselineRevision, file),
         }
       : undefined;
-    // Isolate native preservation from the refresh's newer support cohort.
+    // Bind support-owned selections independently, even at the same revision.
     const current = structuredClone(shipped);
     if (supportBaseline) {
       current.ultramodern.supportArtifacts =
@@ -496,7 +511,7 @@ test('every native owner keeps the shipped native activation exactly', () => {
 test('accepts only the exact reviewed server compiler owner move', () => {
   const utils = 'packages/server/utils/package.json';
   const extensions = 'packages/solutions/app-tools-extensions/package.json';
-  const shipped = '0024faeea760417227135429fe2727ae471abbe4';
+  const shipped = supportBaselineRevision;
   for (const file of [utils, extensions]) {
     const expected = showAt(sourceRevision, file);
     const current = showAt(shipped, file);
@@ -838,11 +853,11 @@ test('Solid renderer moves only its reviewed runtime input to the required host 
   );
 });
 
-test('Solid host tuple keeps the shipped rc.22 peer and v3 hosted dev only as historical proof', () => {
+test('Solid host tuple rejects the superseded rc.22 peer and v3 hosted dev', () => {
   const file = 'packages/runtime/renderer-solid/package.json';
   const support = showAt(supportBaselineRevision, file);
   const native = showAt(nativeBaselineRevision, file);
-  const shipped = structuredClone(support);
+  const shipped = showAt('0024faeea760417227135429fe2727ae471abbe4', file);
   shipped.ultramodern.nativeArtifacts = native.ultramodern.nativeArtifacts;
   for (const name of artifactOwners.nativeArtifacts[file])
     for (const field of ['dependencies', 'devDependencies', 'peerDependencies'])
@@ -859,18 +874,13 @@ test('Solid host tuple keeps the shipped rc.22 peer and v3 hosted dev only as hi
     });
   const bound = { revision: supportBaselineRevision, manifest: support };
   assert.equal(shipped.peerDependencies['solid-js'], '2.0.0-rc.22');
-  // Accepted only through the reviewed v3 baseline, never as the live target.
+  // A historical v3 selection cannot inherit the current v4 baseline authority.
   assert.throws(() => invoke(shipped), /unreviewed Solid host tuple/u);
-  const kept = invoke(shipped, bound);
-  assert.equal(kept.manifest.peerDependencies['solid-js'], '2.0.0-rc.22');
-  assert.equal(
-    kept.manifest.devDependencies['solid-js'],
-    shipped.devDependencies['solid-js'],
-  );
-  assert.deepEqual(
-    kept.manifest.ultramodern.supportArtifacts,
-    shipped.ultramodern.supportArtifacts,
-  );
+  assert.throws(() => invoke(shipped, bound), /unreviewed Solid host tuple/u);
+  const kept = invoke(support, bound);
+  assert.equal(kept.manifest.peerDependencies['solid-js'], targets['solid-js']);
+  assert.equal(kept.manifest.devDependencies['solid-js'], targets['solid-js']);
+  assert.equal(kept.manifest.ultramodern.supportArtifacts, undefined);
   assert.deepEqual(
     kept.changes.filter(change => change.name === 'solid-js'),
     [],
@@ -931,13 +941,14 @@ test('drops support metadata only when every owned support name is retired', () 
       assert.equal(retiresSupportMetadata(owned, v4), false, file);
 });
 
-test('without an admitted descriptor the Solid-only owners keep their shipped metadata', () => {
+test('without a newer admitted descriptor the Solid-only owners keep their reviewed retirement', () => {
   for (const file of [
     'packages/runtime/renderer-solid/package.json',
     'tests/integration/renderer-solid/package.json',
   ]) {
     const support = showAt(supportBaselineRevision, file);
     const native = showAt(nativeBaselineRevision, file);
+    assert.equal(support.ultramodern?.supportArtifacts, undefined);
     const shipped = structuredClone(support);
     if (artifactOwners.nativeArtifacts[file]) {
       shipped.ultramodern.nativeArtifacts = native.ultramodern.nativeArtifacts;
@@ -1145,7 +1156,11 @@ test('advances specifically reviewed compiler, Solid and Cloudflare source targe
 test('upgrades the shipped Effect compiler from the reviewed historical snapshot', () => {
   const file = 'package.json';
   const expected = showAt(sourceRevision, file);
-  const shipped = showAt('0024faeea760417227135429fe2727ae471abbe4', file);
+  const historical = showAt('0024faeea760417227135429fe2727ae471abbe4', file);
+  // Isolate the historical compiler input from the superseded support cohort.
+  const shipped = showAt(supportBaselineRevision, file);
+  shipped.devDependencies['@effect/tsgo'] =
+    historical.devDependencies['@effect/tsgo'];
   const invoke = manifest =>
     planManifestUpdate({
       path: file,
@@ -1920,7 +1935,7 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     }
   }
   assert(reviewedEdges > 50);
-  // Shipped v3 manifests move to a newly admitted descriptor only through the
+  // Reviewed v4 manifests move to a newly admitted descriptor only through the
   // reviewed baseline commit's exact owned support selections.
   const supportOnly = await admitArtifactDescriptors({
     ...options,
@@ -1940,8 +1955,8 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     );
     const prior = baseline.ultramodern?.supportArtifacts;
     if (!prior) continue;
-    assert.equal(prior.protocol, 'ultramodern.support-artifacts.v3');
-    assert.equal(prior.producer.runId, 43934193068);
+    assert.equal(prior.protocol, 'ultramodern.support-artifacts.v4');
+    assert.equal(prior.producer.runId, 44174451205);
     const expected = JSON.parse(
       execFileSync('git', ['-C', root, 'show', `${sourceRevision}:${file}`], {
         encoding: 'utf8',
@@ -2002,7 +2017,7 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     const prior = baseline.ultramodern.nativeArtifacts;
     assert.deepEqual(
       [prior.producer.source, prior.producer.runId, prior.producer.runAttempt],
-      ['9353b0cd3dc1fb73ebd1dc66f377e3356abeb178', 44131025154, 1],
+      ['7d4e7415b69a93439451cbcfbcbb4cc15d09edde', 44303834194, 1],
     );
     const expected = show(sourceRevision);
     const current = structuredClone(baseline);
