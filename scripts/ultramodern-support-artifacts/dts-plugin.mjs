@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stripVTControlCharacters } from 'node:util';
+import { gunzipSync } from 'node:zlib';
 import {
   applyExactPatch,
   packFiles,
@@ -25,9 +26,9 @@ const identity = JSON.parse(
 // Exact consumer toolchain; Rslib and its own plugin dependency stay unpatched.
 const fixtureDependencies = Object.freeze({
   '@rslib/core': '1.0.7',
-  '@rsbuild/core': '2.3.2',
+  '@rsbuild/core': '2.3.3',
   tsrs: '0.25.0-ts7.1.0-beta',
-  '@effect/tsgo': '0.69.0',
+  '@effect/tsgo': '0.70.0',
 });
 const declaration =
   "export const greet = (name: string): string => 'hi ' + name;\n";
@@ -278,11 +279,17 @@ export async function qualifyDtsPlugin({
       path.join(temporary, 'corrected'),
     );
     const archive = payload ?? corrected.archive;
-    assert.equal(
-      protocol.integrity(archive),
-      protocol.integrity(corrected.archive),
-      'actual payload differs from exact reconstruction',
-    );
+    if (payload) {
+      // The caller authenticates the compressed asset. Reconstruction compares
+      // the canonical tar bytes, since gzip encoding varies by host.
+      const options = { maxOutputLength: 128 * 1024 * 1024 };
+      assert(
+        gunzipSync(payload, options).equals(
+          gunzipSync(corrected.archive, options),
+        ),
+        'actual payload differs from exact reconstruction',
+      );
+    }
     const archivePath = path.join(temporary, `${name}-corrected.tgz`);
     fs.writeFileSync(archivePath, archive);
 
@@ -300,7 +307,7 @@ export async function qualifyDtsPlugin({
         },
       },
       'pnpm-workspace.yaml':
-        'packages: []\nstrictPeerDependencies: true\nautoInstallPeers: false\npackageImportMethod: clone-or-copy\n',
+        'packages: []\nminimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\nstrictPeerDependencies: true\nautoInstallPeers: false\npackageImportMethod: clone-or-copy\n',
     });
     const install = run(
       pnpm,

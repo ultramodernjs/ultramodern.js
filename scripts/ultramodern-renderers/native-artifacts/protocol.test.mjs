@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fixture } from './fixtures.test-support.mjs';
-import { assetFilename, releaseUrl, validateDescriptor } from './protocol.mjs';
-import { octane20ArtifactProtocol } from './recipes.mjs';
+import { validateDescriptor } from './protocol.mjs';
 import { authenticateDescriptor, readBytes } from './transport.mjs';
 
 test('authenticates the exact closed source/run/attempt manifest without claiming GitHub immutability', async () => {
@@ -10,44 +9,39 @@ test('authenticates the exact closed source/run/attempt manifest without claimin
   await authenticateDescriptor(f.descriptor, f);
 });
 
-test('the next Octane producer admits just its exact tuple without admitting it in the current consumer', () => {
+test('current native consumers admit only the qualified Octane 0.20 tuple and preserve Router Core', () => {
   const { descriptor } = fixture();
-  const { protocol, producer } = descriptor;
-  const next = structuredClone(descriptor.packages);
-  for (const [name, version] of [
-    ['octane', '0.20.0'],
-    ['@octanejs/tanstack-router', '0.3.6'],
-    ['@octanejs/rspack-plugin', '0.2.12'],
-  ]) {
-    next[name].version = version;
-    next[name].request = releaseUrl(producer, assetFilename(name, version));
-    next[name].upstream.request =
-      `https://registry.npmjs.org/${name}/-/${name.split('/').at(-1)}-${version}.tgz`;
-  }
-  validateDescriptor(descriptor);
-  assert.throws(() => octane20ArtifactProtocol.validateDescriptor(descriptor));
-  const candidate = octane20ArtifactProtocol.descriptorFor({
-    protocol,
-    producer,
-    packages: next,
+  const versions = value =>
+    Object.fromEntries(
+      Object.entries(value.packages).map(([name, item]) => [
+        name,
+        item.version,
+      ]),
+    );
+  assert.deepEqual(versions(descriptor), {
+    octane: '0.20.0',
+    '@octanejs/tanstack-router': '0.3.6',
+    '@octanejs/rspack-plugin': '0.2.12',
+    '@tanstack/router-core': '1.171.39',
   });
-  octane20ArtifactProtocol.validateDescriptor(candidate);
-  assert.deepEqual(
-    candidate.packages['@tanstack/router-core'],
-    descriptor.packages['@tanstack/router-core'],
-  );
-  assert.throws(() => validateDescriptor(candidate));
-  for (const name of Object.keys(next))
-    if (name !== '@tanstack/router-core')
-      assert.throws(() =>
-        octane20ArtifactProtocol.validateDescriptor({
-          ...candidate,
+  validateDescriptor(descriptor);
+  for (const [name, version] of [
+    ['octane', '0.18.0'],
+    ['@octanejs/tanstack-router', '0.3.4'],
+    ['@octanejs/rspack-plugin', '0.2.10'],
+  ]) {
+    assert.throws(
+      () =>
+        validateDescriptor({
+          ...descriptor,
           packages: {
-            ...candidate.packages,
-            [name]: descriptor.packages[name],
+            ...descriptor.packages,
+            [name]: { ...descriptor.packages[name], version },
           },
         }),
-      );
+      assert.AssertionError,
+    );
+  }
 });
 
 for (const [label, alter] of Object.entries({

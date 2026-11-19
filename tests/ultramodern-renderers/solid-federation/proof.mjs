@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -51,6 +52,29 @@ let browserSession = `lane-mf-proof-${process.pid}`;
 const real = (from, request) =>
   fs.realpath(path.join(from, 'node_modules', request));
 
+// Link the one @solidjs/signals that the installed solid-js resolves; the
+// renderer's own declaration must select that same installed copy.
+async function solidRuntime(rendererDirectory) {
+  const solid = await real(rendererDirectory, 'solid-js');
+  const signals = path.dirname(
+    await fs.realpath(
+      createRequire(path.join(solid, 'package.json')).resolve(
+        '@solidjs/signals/package.json',
+      ),
+    ),
+  );
+  assert.equal(
+    await real(rendererDirectory, '@solidjs/signals'),
+    signals,
+    'The renderer and solid-js must install one @solidjs/signals',
+  );
+  return {
+    'solid-js': solid,
+    '@solidjs/web': await real(rendererDirectory, '@solidjs/web'),
+    '@solidjs/signals': signals,
+  };
+}
+
 async function freePort() {
   const server = net.createServer();
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -67,9 +91,7 @@ async function linkDependencies(directory) {
       root,
       'packages/runtime/renderer-core',
     ),
-    'solid-js': await real(rendererSolid, 'solid-js'),
-    '@solidjs/web': await real(rendererSolid, '@solidjs/web'),
-    '@solidjs/signals': await real(rendererSolid, '@solidjs/signals'),
+    ...(await solidRuntime(rendererSolid)),
     typescript: await real(appTools, 'typescript'),
     '@types/node': await real(appTools, '@types/node'),
     '@module-federation/enhanced': sourceFederation.enhanced.root,
@@ -131,9 +153,9 @@ const packageJson = name =>
       '@module-federation/node':
         packedContext?.packageRequests['@module-federation/node'] ??
         sourceFederation.node.version,
-      'solid-js': '2.0.0-rc.22',
-      '@solidjs/web': '2.0.0-rc.22',
-      '@solidjs/signals': '2.0.0-rc.22',
+      'solid-js': '2.0.1',
+      '@solidjs/web': '2.0.1',
+      '@solidjs/signals': '2.0.1',
     },
   });
 

@@ -10,7 +10,7 @@ const source = readFileSync(
 );
 const tsrsVersion = '0.25.0-ts7.1.0-beta';
 const typescriptCommit = '3e9236361fa97a9e6c685f4833ac457ae2d8c50a';
-const effectVersion = '0.69.0';
+const effectVersion = '0.70.0';
 const tsrsPath = '/fixture/node_modules/tsrs/package.json';
 const effectPath = '/fixture/node_modules/@effect/tsgo/package.json';
 const nativeRoot = '/fixture/node_modules/@effect/tsgo-darwin-arm64';
@@ -177,7 +177,7 @@ test('the previous provider cannot reuse the newly reviewed capability contract'
   assert.throws(
     () =>
       loadProvider(documents => {
-        documents[effectPath].version = '0.67.0';
+        documents[effectPath].version = '0.69.0';
       }),
     /Unreviewed Effect tsrs capability contract/,
   );

@@ -402,6 +402,56 @@ test('an npm: alias override fails while the edge keeps another version', () => 
   );
 });
 
+test('disjoint npm alias overrides each accept only their own resolved line', () => {
+  const lockfile = `
+lockfileVersion: '9.0'
+overrides:
+  'picomatch@>=2.0.0 <2.3.3': npm:@bleedingdev/picomatch@2.3.3
+  'picomatch@>=4.0.0 <4.0.8': npm:@bleedingdev/picomatch-v4@4.0.8
+snapshots:
+  micromatch@4.0.8:
+    dependencies:
+      picomatch: '@bleedingdev/picomatch@2.3.3'
+  '@vercel/nft@1.11.6':
+    dependencies:
+      picomatch: '@bleedingdev/picomatch-v4@4.0.8'
+`;
+  const installed = name => ({
+    dependencies: { picomatch: name === 'micromatch' ? '^2.3.1' : '^4.0.3' },
+  });
+  assert.deepEqual(findOverrideViolations(lockfile, new Map()), []);
+  assert.deepEqual(findForcedMajors(lockfile, installed), []);
+  const wrongLine = lockfile.replace(
+    "picomatch: '@bleedingdev/picomatch@2.3.3'",
+    "picomatch: '@bleedingdev/picomatch-v4@4.0.8'",
+  );
+  assert.deepEqual(findForcedMajors(wrongLine, installed), [
+    'micromatch@4.0.8 declares picomatch@^2.3.1 but resolves @bleedingdev/picomatch-v4@4.0.8, another major. ' +
+      'Scope the picomatch override to the major it fixes, or drop micromatch@4.0.8.',
+  ]);
+  for (const [fresh, stale, selector] of [
+    ['@bleedingdev/picomatch@2.3.3', '2.3.2', '>=2.0.0 <2.3.3'],
+    ['@bleedingdev/picomatch-v4@4.0.8', '4.0.7', '>=4.0.0 <4.0.8'],
+  ]) {
+    const violations = findOverrideViolations(
+      lockfile.replace(`picomatch: '${fresh}'`, `picomatch: ${stale}`),
+      new Map(),
+    );
+    assert.equal(violations.length, 1);
+    assert(violations[0].startsWith(`'picomatch@${selector}':`));
+  }
+  assert.notDeepEqual(
+    findOverrideViolations(
+      lockfile.replace(
+        "picomatch: '@bleedingdev/picomatch@2.3.3'",
+        "picomatch: '@bleedingdev/picomatch@2.3.2'",
+      ),
+      new Map(),
+    ),
+    [],
+  );
+});
+
 test('digit-leading package names parse and validate', () => {
   assert.deepEqual(parseOverrideKey('parent>2-decode'), {
     parent: { name: 'parent', range: undefined },
@@ -521,7 +571,7 @@ test('peer ranges prove liveness but are not judged', () => {
   }
 });
 
-test('a tarball dependent is found under its cut virtual-store name', t => {
+test('a tarball dependent resolves its own hashed name in a warm virtual store', t => {
   const root = mkdtempSync(
     path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'overrides-store-'),
   );
@@ -541,12 +591,17 @@ test('a tarball dependent is found under its cut virtual-store name', t => {
       JSON.stringify({ name: '@scope/core', version }),
     );
   };
-  install('@scope+core@https+++example.com+releases+download+fo_0a1b', '1.2.3');
+  install(
+    '@scope+core@https+++example.com+releases+download+fo_9f8e0000000000000000000000000000',
+    '1.2.4',
+  );
   install('@scope+core@2.0.0_peer@1.0.0', '2.0.0');
+  assert.equal(readInstalledManifest(root)('@scope/core', url), undefined);
+  install(
+    '@scope+core@https+++example.com+releases+download+fo_3b83b9314ddaeba810e9f43deba8e396',
+    '1.2.3',
+  );
   const read = readInstalledManifest(root);
   assert.equal(read('@scope/core', url)?.version, '1.2.3');
   assert.equal(read('@scope/core', '2.0.0')?.version, '2.0.0');
-  // Two cut names sharing the prefix are ambiguous and stay unresolved.
-  install('@scope+core@https+++example.com+releases+download+fo_9f8e', '1.2.4');
-  assert.equal(readInstalledManifest(root)('@scope/core', url), undefined);
 });

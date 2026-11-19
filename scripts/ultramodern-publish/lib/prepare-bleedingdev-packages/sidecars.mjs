@@ -34,7 +34,6 @@ import {
   inspectNpmTarball,
 } from './release-artifacts.mjs';
 import { verifySidecar, reconstructSidecarRecipe } from '../../../ultramodern-supply/verify-sidecars.mjs';
-import { sidecarNameProvenance } from '../../sidecar-profiles.mjs';
 
 const { readJsonFile } = fsKit;
 const recipes = JSON.parse(
@@ -49,16 +48,15 @@ const recipeByRoot = new Map(
 const SIDECAR_PACKAGE_ROOTS = recipes.map(recipe => `packages/sidecar/${recipe.id}`);
 
 // The code-reviewed registry chronology each sidecar name must satisfy before a
-// published version is reused: the same schema as the cohort's policies. A name
-// only a reviewed candidate set introduces carries its pinned bootstrap there.
+// published version is reused: the same schema as the cohort's policies.
 function sidecarProvenancePolicy(name) {
-  const provenance = sidecarNameProvenance(name);
-  if (!provenance) {
+  const recipe = recipes.find(candidate => candidate.fork.name === name);
+  if (!recipe?.provenance) {
     throw new Error(
-      `${name} has no provenance policy in scripts/ultramodern-supply/sidecars.json or a reviewed candidate set`,
+      `${name} has no provenance policy in scripts/ultramodern-supply/sidecars.json`,
     );
   }
-  return provenance;
+  return recipe.provenance;
 }
 
 // Upstream CLI contracts that must survive republication verbatim.

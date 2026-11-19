@@ -9,17 +9,12 @@ import {
 import { qualifyOtel } from '../ultramodern-dependencies/otel-corrections/portable.mjs';
 import { qualifyPeerCorrections } from '../ultramodern-dependencies/test-peer-corrections/qualify.mjs';
 import { qualifyReactSupport } from '../ultramodern-renderers/react-router-corrections/support-adapter.mjs';
-import {
-  qualifyHeldRead,
-  qualifyHeldReadPacked,
-  readHeldReadRecipeBytes,
-} from '../ultramodern-renderers/solid-corrections/qualify-held-read.mjs';
 import { qualifyDtsPlugin } from './dts-plugin.mjs';
-import { inputs, supportProtocol } from './protocol.mjs';
+import { inputs, supportProtocol as protocol } from './protocol.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const peers = ['@rstest/core', 'ioredis-mock', '@types/ioredis-mock'];
-export function readRecipes(protocol = supportProtocol) {
+export function readRecipes() {
   const packages = Object.fromEntries(
     Object.keys(protocol.cohort).map(name => {
       const input = inputs[name];
@@ -58,7 +53,7 @@ function context(workDirectory) {
   assert.equal(process.versions.node, '26.13.1');
   return { toolchain, workDirectory };
 }
-function peerEvidence(result, protocol) {
+function peerEvidence(result) {
   assert(
     result.gates && result.artifacts.length === 3,
     'metadata owning gates/closed3 receipt required',
@@ -83,33 +78,11 @@ function peerEvidence(result, protocol) {
   }
   return evidence;
 }
-function solidEvidence(result) {
-  assert.equal(result.status, 'passed');
-  return {
-    sourceArchiveBytes: result.sourceArchive.bytes,
-    builtPatchBytes: result.patches['held-read-declarations.patch'].bytes,
-    licenseBytes: result.license.bytes,
-  };
-}
-export function releaseRecipe(protocol = supportProtocol) {
-  // Only v3 still carries the rc.22 heldRead correction.
-  const solid = Object.hasOwn(protocol.cohort, 'solid-js');
+export function releaseRecipe() {
   const recipe = {
-    packages: readRecipes(protocol),
+    packages: readRecipes(),
     async qualifySource({ workDirectory }) {
       const { toolchain } = context(workDirectory);
-      const heldRead = solid
-        ? await qualifyHeldRead({
-            workDirectory: path.join(
-              workDirectory,
-              `support-solid-${process.pid}-${Date.now()}`,
-            ),
-            storeDirectory: toolchain.storeDirectory,
-            nodeBinary: toolchain.node,
-            pnpmBinary: toolchain.pnpm,
-            recipeBytes: readHeldReadRecipeBytes(),
-          })
-        : undefined;
       const metadata = await qualifyPeerCorrections({
         workDirectory,
         toolchain,
@@ -125,8 +98,7 @@ export function releaseRecipe(protocol = supportProtocol) {
       const dts = await qualifyDtsPlugin({ workDirectory, toolchain });
       const evidence = {
         '@tanstack/react-router': react,
-        ...(solid ? { 'solid-js': solidEvidence(heldRead) } : {}),
-        ...peerEvidence(metadata, protocol),
+        ...peerEvidence(metadata),
         '@effect/opentelemetry': otel,
         'rsbuild-plugin-dts': dts,
       };
@@ -155,23 +127,6 @@ export function releaseRecipe(protocol = supportProtocol) {
         toolchain,
         reactArchiveBytes: payloads.get('@tanstack/react-router'),
       });
-      if (solid) {
-        const heldRead = await qualifyHeldReadPacked({
-          workDirectory: path.join(
-            workDirectory,
-            `support-solid-packed-${process.pid}-${Date.now()}`,
-          ),
-          toolchain,
-          recipeBytes: readHeldReadRecipeBytes(),
-          payloads: new Map([['solid-js', payloads.get('solid-js')]]),
-          manifest: {
-            name: 'solid-js',
-            version: protocol.cohort['solid-js'],
-            integrity: manifest.packages['solid-js'].integrity,
-          },
-        });
-        assert.equal(heldRead.evidence.transport.installedActualPayload, true);
-      }
       await qualifyPeerCorrections({
         workDirectory,
         toolchain,

@@ -94,7 +94,7 @@ test('local source generation uses native workspace requests without copied rele
       'axios@>=1.0.0 <1.21.1': '1.21.1',
       'brace-expansion@>=5.0.0 <5.0.13': '5.0.13',
       'tar@>=7.0.0 <7.5.23': '7.5.23',
-      'seroval@>=1.0.0 <1.8.1': '1.8.1',
+      'seroval@>=1.0.0 <1.8.1': '1.8.2',
       'seroval-plugins@>=1.0.0 <1.8.0': '1.8.0',
       'qs@>=6.0.0 <6.17.1': '6.17.1',
       'smol-toml@>=1.0.0 <1.9.1': '1.9.1',
@@ -399,7 +399,11 @@ generateUltramodernWorkspace(JSON.parse(process.argv[2]));`,
         '--store-dir',
         path.join(tempRoot, 'fresh-store'),
       ];
-      await promisify(execFile)('pnpm', installArgs, {
+      // A temporary cwd can make a version-manager shim select another pnpm.
+      // Reuse the executable that launched the tests and understands this policy.
+      const pnpm = process.env.npm_execpath;
+      assert(pnpm, 'Run the native release-age proof through pnpm');
+      await promisify(execFile)(pnpm, installArgs, {
         cwd: consumer,
         env,
         maxBuffer: 1024 * 1024,
@@ -438,7 +442,7 @@ generateUltramodernWorkspace(JSON.parse(process.argv[2]));`,
       await assert.rejects(
         // Resolve the changed manifest even when CI defaults to a frozen lock;
         // otherwise lock freshness rejects before the native age policy runs.
-        promisify(execFile)('pnpm', [...installArgs, '--no-frozen-lockfile'], {
+        promisify(execFile)(pnpm, [...installArgs, '--no-frozen-lockfile'], {
           cwd: consumer,
           env,
           maxBuffer: 1024 * 1024,

@@ -1440,13 +1440,7 @@ test('release validator keeps publication input validation bound to dispatch val
 test('release validator requires the closed sidecar profile choice and parser default', () => {
   const input =
     readPublishWorkflow().on.workflow_dispatch.inputs.sidecar_profile;
-  const options = [
-    'parser',
-    'mf-sdk',
-    'tanstack-redact',
-    'mf-cohort',
-    'picomatch-4',
-  ];
+  const options = ['parser', 'mf-sdk', 'tanstack-redact', 'mf-cohort'];
   assert.deepEqual(
     {
       required: input.required,
@@ -1591,7 +1585,7 @@ test('every dispatchable sidecar profile passes the actual publish input shell g
 test('release validator rejects SDK cohort inputs and unknown sidecar profiles', () => {
   const parserGuard = '[[ "$SIDECAR_PROFILE" == parser ]]';
   const sidecarGuard =
-    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == tanstack-redact || "$SIDECAR_PROFILE" == mf-cohort || "$SIDECAR_PROFILE" == picomatch-4 ]] || exit 1';
+    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == tanstack-redact || "$SIDECAR_PROFILE" == mf-cohort ]] || exit 1';
   for (const [label, guard, replacement] of [
     ['SDK in cohort mode', parserGuard, sidecarGuard],
     ['unguarded cohort profile', parserGuard, 'true'],

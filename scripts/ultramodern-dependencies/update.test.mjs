@@ -8,7 +8,12 @@ import {
   supportBaselineRevision,
   targets,
 } from './snapshot.mjs';
-import { planManifestUpdate, runUpdater } from './update.mjs';
+import {
+  planManifestUpdate,
+  retiredSupportNames,
+  retiresSupportMetadata,
+  runUpdater,
+} from './update.mjs';
 
 const plan = (expected, current = expected, path = 'package.json') =>
   planManifestUpdate({ path, expected, current, sourceRevision });
@@ -19,6 +24,37 @@ const showAt = (revision, file) =>
       encoding: 'utf8',
     }),
   );
+
+// The reviewed v4 candidate cohort (PR #330) and the shipped v3 cohort, read from
+// immutable git bytes rather than the in-flight protocol module.
+const v4Packages = Object.fromEntries(
+  [
+    '@effect/opentelemetry',
+    '@rstest/core',
+    '@tanstack/react-router',
+    '@types/ioredis-mock',
+    'ioredis-mock',
+    'rsbuild-plugin-dts',
+  ].map(name => [name, {}]),
+);
+const v3Packages = Object.fromEntries(
+  Object.keys(
+    showAt(
+      supportBaselineRevision,
+      'packages/runtime/renderer-solid/package.json',
+    ).ultramodern.supportArtifacts.packages,
+  ).map(name => [name, {}]),
+);
+
+function assertPreservedArtifactSelection(result, manifest, kind, names) {
+  assert.deepEqual(
+    result.manifest.ultramodern[kind],
+    manifest.ultramodern[kind],
+  );
+  for (const field of ['dependencies', 'devDependencies', 'peerDependencies'])
+    for (const name of names)
+      assert.equal(result.manifest[field]?.[name], manifest[field]?.[name]);
+}
 
 test('only the reviewed support baseline keeps its exact owned selections', () => {
   const file = 'packages/server/bff-effect/package.json';
@@ -180,7 +216,7 @@ test('the shipped support-v3 activation stays current only through the reviewed 
         supportBaseline,
       });
     const kept = invoke(shipped);
-    assert.equal(kept.changes.length, 0, `${file}: shipped state is current`);
+    assertPreservedArtifactSelection(kept, shipped, 'supportArtifacts', names);
     for (const name of names)
       for (const field of ['dependencies', 'devDependencies']) {
         const value = shipped[field]?.[name];
@@ -233,8 +269,10 @@ test('only the reviewed native baseline keeps its exact owned selections', () =>
   for (const file of nativeOnly) {
     const accepted = showAt(nativeBaselineRevision, file);
     const prior = accepted.ultramodern.nativeArtifacts;
-    assert.equal(prior.producer.runId, 43993884470);
-    assert.equal(prior.producer.runAttempt, 1);
+    assert.deepEqual(
+      [prior.producer.source, prior.producer.runId, prior.producer.runAttempt],
+      ['9353b0cd3dc1fb73ebd1dc66f377e3356abeb178', 44131025154, 1],
+    );
     const expected = showAt(sourceRevision, file);
     const bound = { revision: nativeBaselineRevision, manifest: accepted };
     const invoke = (current = accepted, nativeBaseline = bound) =>
@@ -258,8 +296,12 @@ test('only the reviewed native baseline keeps its exact owned selections', () =>
     );
     // Without a newer admission the accepted state stays, idempotently.
     const kept = invoke();
-    assert.deepEqual(kept.manifest, accepted);
-    assert.equal(kept.changes.length, 0);
+    assertPreservedArtifactSelection(
+      kept,
+      accepted,
+      'nativeArtifacts',
+      artifactOwners.nativeArtifacts[file],
+    );
     let selections = 0;
     for (const name of artifactOwners.nativeArtifacts[file])
       for (const field of [
@@ -303,8 +345,8 @@ test('only the reviewed native baseline keeps its exact owned selections', () =>
         // A later native run (stand-in id) needs admission, not the baseline.
         const later = structuredClone(accepted);
         later[field][name] = pin.request.replace(
-          '-43993884470-1/',
-          '-44131000000-1/',
+          '-44131025154-1/',
+          '-44331000000-1/',
         );
         assert.notEqual(later[field][name], to);
         assert.throws(() => invoke(later), /unexpected old edge/);
@@ -334,14 +376,14 @@ test('only the reviewed native baseline keeps its exact owned selections', () =>
     retagged.ultramodern.nativeArtifacts.producer.runAttempt = 2;
     assert.throws(
       () => invoke(retagged, { ...bound, manifest: retagged }),
-      /native baseline descriptor differs from its sealed manifest/,
+      /native baseline differs from immutable source/,
     );
     // Arbitrary JSON capabilities are not native protocol descriptors.
     const capability = structuredClone(accepted);
     capability.ultramodern.nativeArtifacts.accepted = true;
     assert.throws(
       () => invoke(capability, { ...bound, manifest: capability }),
-      /native descriptor: unknown or missing fields/,
+      /native baseline differs from immutable source/,
     );
   }
   // Optional declarations never inherit the baseline selection.
@@ -392,9 +434,9 @@ test('only the reviewed native baseline keeps its exact owned selections', () =>
 });
 
 test('every native owner keeps the shipped native activation exactly', () => {
-  // Activation c40bbf99 shipped native run 43993884470; the reviewed baseline
-  // carries the same descriptor and owned selections for every owner.
-  const activation = 'c40bbf9976ff568bad06be140dad2613fe25dafb';
+  // Reviewed refresh 2fdfae61 carries qualified native run 44131025154, sourced
+  // from 9353b0cd, with the same descriptor and selections for every owner.
+  const activation = '2fdfae61808ab76cd26eba98668d559cc2fa7bf1';
   const fields = ['dependencies', 'devDependencies', 'peerDependencies'];
   let selections = 0;
   for (const [file, names] of Object.entries(artifactOwners.nativeArtifacts)) {
@@ -407,7 +449,7 @@ test('every native owner keeps the shipped native activation exactly', () => {
         descriptor.producer.runId,
         descriptor.producer.runAttempt,
       ],
-      ['ea6b64f23735f29a2cb2a4647c04d2dc3a185cbc', 43993884470, 1],
+      ['9353b0cd3dc1fb73ebd1dc66f377e3356abeb178', 44131025154, 1],
     );
     assert.deepEqual(baseline.ultramodern.nativeArtifacts, descriptor);
     const supportBaseline = artifactOwners.supportArtifacts[file]
@@ -416,15 +458,25 @@ test('every native owner keeps the shipped native activation exactly', () => {
           manifest: showAt(supportBaselineRevision, file),
         }
       : undefined;
+    // Isolate native preservation from the refresh's newer support cohort.
+    const current = structuredClone(shipped);
+    if (supportBaseline) {
+      current.ultramodern.supportArtifacts =
+        supportBaseline.manifest.ultramodern.supportArtifacts;
+      for (const name of artifactOwners.supportArtifacts[file])
+        for (const field of fields)
+          if (Object.hasOwn(supportBaseline.manifest[field] ?? {}, name))
+            current[field][name] = supportBaseline.manifest[field][name];
+    }
     const kept = planManifestUpdate({
       path: file,
       expected: showAt(sourceRevision, file),
-      current: shipped,
+      current,
       sourceRevision,
       supportBaseline,
       nativeBaseline: { revision: nativeBaselineRevision, manifest: baseline },
     });
-    assert.equal(kept.changes.length, 0, `${file}: shipped state is current`);
+    assertPreservedArtifactSelection(kept, shipped, 'nativeArtifacts', names);
     for (const name of names)
       for (const field of fields) {
         const value = shipped[field]?.[name];
@@ -460,7 +512,17 @@ test('accepts only the exact reviewed server compiler owner move', () => {
         sourceRevision,
         supportBaseline,
       });
-    assert.equal(invoke(current).changes.length, 0, `${file}: shipped`);
+    const selected = invoke(current).manifest.dependencies;
+    for (const name of [
+      '@rslib/core',
+      'typescript',
+      '@modern-js/app-tools-extensions',
+    ])
+      assert.equal(
+        selected?.[name],
+        current.dependencies?.[name],
+        `${file}:${name}`,
+      );
     // The updater never performs the move itself.
     if (file === utils) {
       const result = invoke(current);
@@ -538,8 +600,20 @@ test('framework declaration plugin peer and development input stay raw exact', (
     },
   };
   const result = plan(input, added, file);
-  assert.deepEqual(result.manifest, added);
-  assert.equal(result.changes.length, 0);
+  assert.deepEqual(result.manifest, {
+    peerDependencies: {
+      ...added.peerDependencies,
+      '@rsbuild/core': targets['@rsbuild/core'],
+    },
+    devDependencies: {
+      ...added.devDependencies,
+      '@rsbuild/core': targets['@rsbuild/core'],
+    },
+  });
+  assert.deepEqual(
+    result.changes.map(edge => edge.name),
+    ['@rsbuild/core', '@rsbuild/core'],
+  );
   for (const [field, wrong] of [
     ['peerDependencies', '^1.0.7'],
     ['devDependencies', '1.0.6'],
@@ -624,7 +698,9 @@ test('accepts only exact reviewed post-source edge additions and moves', () => {
       ),
     /edge names changed/,
   );
-  const receiving = { devDependencies: { '@rsbuild/core': '2.3.2' } };
+  const receiving = {
+    devDependencies: { '@rsbuild/core': '2.3.2' },
+  };
   const received = {
     devDependencies: {
       ...receiving.devDependencies,
@@ -634,8 +710,16 @@ test('accepts only exact reviewed post-source edge additions and moves', () => {
     },
   };
   const receivedPlan = plan(receiving, received, extensions);
-  assert.deepEqual(receivedPlan.manifest, received);
-  assert.equal(receivedPlan.changes.length, 0);
+  assert.deepEqual(receivedPlan.manifest, {
+    devDependencies: {
+      ...received.devDependencies,
+      '@rsbuild/core': targets['@rsbuild/core'],
+    },
+  });
+  assert.deepEqual(
+    receivedPlan.changes.map(edge => edge.name),
+    ['@rsbuild/core'],
+  );
   for (const [name, wrong] of [
     ['prettier', '~3.9.10'],
     ['@rsbuild/plugin-svgr', '^2.0.5'],
@@ -710,18 +794,31 @@ test('TanStack integration requires the application router and core as one host 
 
 test('Solid renderer moves only its reviewed runtime input to the required host peer', () => {
   const file = 'packages/runtime/renderer-solid/package.json';
+  const target = targets['solid-js'];
   const input = { dependencies: { 'solid-js': '2.0.0-rc.15' } };
   const result = plan(input, input, file);
   assert.deepEqual(result.manifest, {
     dependencies: {},
-    peerDependencies: { 'solid-js': '2.0.0-rc.22' },
-    devDependencies: { 'solid-js': '2.0.0-rc.22' },
+    peerDependencies: { 'solid-js': target },
+    devDependencies: { 'solid-js': target },
   });
   assert.equal(plan(input, result.manifest, file).changes.length, 0);
+  assert.deepEqual(
+    plan(
+      input,
+      {
+        dependencies: {},
+        peerDependencies: { 'solid-js': '2.0.0' },
+        devDependencies: { 'solid-js': '2.0.0' },
+      },
+      file,
+    ).manifest,
+    result.manifest,
+  );
   for (const changed of [
     {
       ...result.manifest,
-      peerDependencies: { 'solid-js': '^2.0.0-rc.22' },
+      peerDependencies: { 'solid-js': `^${target}` },
     },
     {
       ...result.manifest,
@@ -730,15 +827,143 @@ test('Solid renderer moves only its reviewed runtime input to the required host 
     { ...result.manifest, devDependencies: {} },
     {
       ...result.manifest,
-      dependencies: { 'solid-js': '2.0.0-rc.22' },
+      dependencies: { 'solid-js': target },
     },
   ])
     assert.throws(() => plan(input, changed, file), /Solid host tuple/u);
   assert.equal(
     plan(input, input, 'packages/runtime/another-renderer/package.json')
       .manifest.dependencies['solid-js'],
-    '2.0.0-rc.22',
+    target,
   );
+});
+
+test('Solid host tuple keeps the shipped rc.22 peer and v3 hosted dev only as historical proof', () => {
+  const file = 'packages/runtime/renderer-solid/package.json';
+  const support = showAt(supportBaselineRevision, file);
+  const native = showAt(nativeBaselineRevision, file);
+  const shipped = structuredClone(support);
+  shipped.ultramodern.nativeArtifacts = native.ultramodern.nativeArtifacts;
+  for (const name of artifactOwners.nativeArtifacts[file])
+    for (const field of ['dependencies', 'devDependencies', 'peerDependencies'])
+      if (Object.hasOwn(native[field] ?? {}, name))
+        shipped[field][name] = native[field][name];
+  const invoke = (current, supportBaseline) =>
+    planManifestUpdate({
+      path: file,
+      expected: showAt(sourceRevision, file),
+      current,
+      sourceRevision,
+      supportBaseline,
+      nativeBaseline: { revision: nativeBaselineRevision, manifest: native },
+    });
+  const bound = { revision: supportBaselineRevision, manifest: support };
+  assert.equal(shipped.peerDependencies['solid-js'], '2.0.0-rc.22');
+  // Accepted only through the reviewed v3 baseline, never as the live target.
+  assert.throws(() => invoke(shipped), /unreviewed Solid host tuple/u);
+  const kept = invoke(shipped, bound);
+  assert.equal(kept.manifest.peerDependencies['solid-js'], '2.0.0-rc.22');
+  assert.equal(
+    kept.manifest.devDependencies['solid-js'],
+    shipped.devDependencies['solid-js'],
+  );
+  assert.deepEqual(
+    kept.manifest.ultramodern.supportArtifacts,
+    shipped.ultramodern.supportArtifacts,
+  );
+  assert.deepEqual(
+    kept.changes.filter(change => change.name === 'solid-js'),
+    [],
+  );
+});
+
+test('retires only owner-scoped Solid support that the v4 candidate omits', () => {
+  const v4 = v4Packages;
+  assert(!Object.hasOwn(v4, 'solid-js'));
+  const retiring = Object.keys(artifactOwners.supportArtifacts).filter(
+    file =>
+      retiredSupportNames(artifactOwners.supportArtifacts[file], v4).length,
+  );
+  assert.deepEqual(retiring, [
+    'packages/runtime/renderer-solid/package.json',
+    'tests/integration/renderer-solid/package.json',
+  ]);
+  // Each owner loses exactly the names the candidate omits, never another owner's.
+  for (const [file, owned] of Object.entries(artifactOwners.supportArtifacts))
+    assert.deepEqual(
+      retiredSupportNames(owned, v4),
+      owned.filter(name => !Object.hasOwn(v4, name)),
+      file,
+    );
+  assert.deepEqual(retiredSupportNames([], v4), []);
+  assert.deepEqual(
+    retiredSupportNames(
+      artifactOwners.supportArtifacts[retiring[0]],
+      undefined,
+    ),
+    [],
+  );
+});
+
+test('drops support metadata only when every owned support name is retired', () => {
+  const v4 = v4Packages;
+  const v3 = v3Packages;
+  for (const file of [
+    'packages/runtime/renderer-solid/package.json',
+    'tests/integration/renderer-solid/package.json',
+  ])
+    assert.equal(
+      retiresSupportMetadata(artifactOwners.supportArtifacts[file], v4),
+      true,
+      file,
+    );
+  // A mixed owner keeps its non-retired names and adopts the descriptor instead.
+  assert.deepEqual(retiredSupportNames(['solid-js', '@rstest/core'], v4), [
+    'solid-js',
+  ]);
+  assert.equal(retiresSupportMetadata(['solid-js', '@rstest/core'], v4), false);
+  // Without an admitted descriptor, or with the v3 cohort, nothing is dropped.
+  assert.equal(retiresSupportMetadata(['solid-js'], undefined), false);
+  assert.equal(retiresSupportMetadata(['solid-js'], v3), false);
+  assert.equal(retiresSupportMetadata([], v4), false);
+  for (const [file, owned] of Object.entries(artifactOwners.supportArtifacts))
+    if (!owned.some(name => !Object.hasOwn(v4, name)))
+      assert.equal(retiresSupportMetadata(owned, v4), false, file);
+});
+
+test('without an admitted descriptor the Solid-only owners keep their shipped metadata', () => {
+  for (const file of [
+    'packages/runtime/renderer-solid/package.json',
+    'tests/integration/renderer-solid/package.json',
+  ]) {
+    const support = showAt(supportBaselineRevision, file);
+    const native = showAt(nativeBaselineRevision, file);
+    const shipped = structuredClone(support);
+    if (artifactOwners.nativeArtifacts[file]) {
+      shipped.ultramodern.nativeArtifacts = native.ultramodern.nativeArtifacts;
+      for (const name of artifactOwners.nativeArtifacts[file])
+        for (const field of [
+          'dependencies',
+          'devDependencies',
+          'peerDependencies',
+        ])
+          if (Object.hasOwn(native[field] ?? {}, name))
+            shipped[field][name] = native[field][name];
+    }
+    const kept = planManifestUpdate({
+      path: file,
+      expected: showAt(sourceRevision, file),
+      current: structuredClone(shipped),
+      sourceRevision,
+      supportBaseline: { revision: supportBaselineRevision, manifest: support },
+      nativeBaseline: { revision: nativeBaselineRevision, manifest: native },
+    });
+    assert.deepEqual(kept.manifest.ultramodern, shipped.ultramodern, file);
+    assert(
+      kept.changes.every(change => !change.field.startsWith('ultramodern.')),
+      file,
+    );
+  }
 });
 
 test('updates ordinary declarations and root tool pins without changing scripts', () => {
@@ -899,12 +1124,12 @@ test('advances specifically reviewed compiler, Solid and Cloudflare source targe
   };
   const result = plan(input);
   assert.deepEqual(result.manifest.dependencies, {
-    '@effect/tsgo': '0.69.0',
+    '@effect/tsgo': '0.70.0',
     tsrs: '0.25.0-ts7.1.0-beta',
-    '@solidjs/compiler': '2.0.0-rc.22',
-    '@solidjs/signals': '2.0.0-rc.22',
-    '@solidjs/web': '2.0.0-rc.22',
-    'solid-js': '2.0.0-rc.22',
+    '@solidjs/compiler': targets['@solidjs/compiler'],
+    '@solidjs/signals': targets['@solidjs/signals'],
+    '@solidjs/web': targets['@solidjs/web'],
+    'solid-js': targets['solid-js'],
     miniflare: '5.20261113.0-beta',
     wrangler: '4.162.0',
     '@cloudflare/workers-types': '5.20261115.1',
@@ -914,6 +1139,57 @@ test('advances specifically reviewed compiler, Solid and Cloudflare source targe
   assert.throws(
     () => plan({ dependencies: { '@effect/tsgo': '0.68.0' } }),
     /unreviewed coordinated old edge/,
+  );
+});
+
+test('upgrades the shipped Effect compiler from the reviewed historical snapshot', () => {
+  const file = 'package.json';
+  const expected = showAt(sourceRevision, file);
+  const shipped = showAt('0024faeea760417227135429fe2727ae471abbe4', file);
+  const invoke = manifest =>
+    planManifestUpdate({
+      path: file,
+      expected,
+      current: manifest,
+      sourceRevision,
+      supportBaseline: {
+        revision: supportBaselineRevision,
+        manifest: showAt(supportBaselineRevision, file),
+      },
+      nativeBaseline: {
+        revision: nativeBaselineRevision,
+        manifest: showAt(nativeBaselineRevision, file),
+      },
+    });
+  const result = invoke(shipped);
+  assert.equal(result.manifest.devDependencies['@effect/tsgo'], '0.70.0');
+  assert.deepEqual(
+    result.changes.find(change => change.name === '@effect/tsgo'),
+    {
+      field: 'devDependencies',
+      name: '@effect/tsgo',
+      from: '0.69.0',
+      to: '0.70.0',
+    },
+  );
+  assert.equal(invoke(result.manifest).changes.length, 0);
+  const drifted = structuredClone(shipped);
+  drifted.devDependencies['@effect/tsgo'] = '0.68.0';
+  assert.throws(
+    () => invoke(drifted),
+    /unexpected old edge devDependencies\.@effect\/tsgo/u,
+  );
+});
+
+test('advances the shipped registry declarations without accepting nearby versions', () => {
+  const expected = { dependencies: { hono: '^4.13.13' } };
+  const shipped = { dependencies: { hono: '^4.13.18' } };
+  const refreshed = plan(expected, shipped).manifest;
+  assert.deepEqual(refreshed, { dependencies: { hono: '^4.13.19' } });
+  assert.equal(plan(expected, refreshed).changes.length, 0);
+  assert.throws(
+    () => plan(expected, { dependencies: { hono: '4.13.18' } }),
+    /unexpected old edge dependencies\.hono/u,
   );
 });
 
@@ -1058,6 +1334,40 @@ test('accepts removal of the unused MF host router while retaining actual framew
   assert.throws(
     () => plan(input, removed, 'packages/runtime/plugin-runtime/package.json'),
     /edge/,
+  );
+});
+
+test('recognizes only the exact glob edges removed by the Node glob migrations', () => {
+  for (const [file, field, name, from] of [
+    [
+      'scripts/lint-package-json/package.json',
+      'dependencies',
+      'fast-glob',
+      '3.3.3',
+    ],
+    ['scripts/prebundle/package.json', 'devDependencies', 'fast-glob', '3.3.3'],
+    ['scripts/prebundle/package.json', 'devDependencies', 'globby', '16.2.4'],
+    [
+      'packages/toolkit/utils/package.json',
+      'dependencies',
+      'fast-glob',
+      '3.3.3',
+    ],
+  ]) {
+    const expected = { [field]: { [name]: from } };
+    const current = { [field]: {} };
+    const result = plan(expected, current, file);
+    assert.deepEqual(result.manifest, current);
+    assert.equal(result.edges[0].status, 'reviewed-removal');
+  }
+  assert.throws(
+    () =>
+      plan(
+        { dependencies: { 'fast-glob': '3.3.3' } },
+        { dependencies: {} },
+        'packages/cli/builder/package.json',
+      ),
+    /edge names changed/u,
   );
 });
 
@@ -1485,6 +1795,24 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     readSupportGithub: readGithub,
     signal,
   };
+  assert.deepEqual(
+    Object.keys(descriptors.supportArtifacts.packages).sort(),
+    Object.keys(support.cohort).sort(),
+    'the admitted support descriptor is the exact six-package v4 cohort',
+  );
+  // A name the admitted support descriptor omits is retired: its selection is
+  // the live snapshot target, and a fully retired owner drops its support block.
+  const selectedValue = (kind, name, field) => {
+    const pin = descriptors[kind].packages[name];
+    if (pin === undefined) return targets[name];
+    return field === 'peerDependencies' ? pin.version : pin.request;
+  };
+  const retiredAway = (kind, file) =>
+    kind === 'supportArtifacts' &&
+    retiresSupportMetadata(
+      artifactOwners.supportArtifacts[file] ?? [],
+      descriptors.supportArtifacts.packages,
+    );
   const authority = await admitArtifactDescriptors(options);
   const selectedFiles = [
     ...new Set(
@@ -1506,6 +1834,19 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     '--detach',
     git('-C', checkout, 'rev-parse', 'HEAD').trim(),
   );
+  // Validate the candidate's tracked source selections, not the older HEAD
+  // copies. Only the artifact-owning manifests start from the shipped inputs.
+  const candidateChanges = execFileSync(
+    'git',
+    ['diff', '--binary', '--no-ext-diff', '--no-textconv', 'HEAD'],
+    { cwd: checkout, maxBuffer: 16 * 1024 * 1024 },
+  );
+  if (candidateChanges.length)
+    execFileSync('git', ['apply', '-'], {
+      cwd: root,
+      input: candidateChanges,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
   git('-C', root, 'checkout', sourceRevision, '--', ...selectedFiles);
   let reviewedEdges = 0;
   // The generator has no direct support edge but emits support requests from
@@ -1541,10 +1882,9 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
           'peerDependencies',
         ]) {
           if (!Object.hasOwn(result.manifest[field] ?? {}, name)) continue;
-          const pin = descriptors[kind].packages[name];
           assert.equal(
             result.manifest[field][name],
-            field === 'peerDependencies' ? pin.version : pin.request,
+            selectedValue(kind, name, field),
             `${file}:${field}.${name}`,
           );
           assert(
@@ -1556,7 +1896,10 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
         }
       }
       if (owners[file])
-        assert.deepEqual(result.manifest.ultramodern[kind], descriptors[kind]);
+        assert.deepEqual(
+          result.manifest.ultramodern?.[kind],
+          retiredAway(kind, file) ? undefined : descriptors[kind],
+        );
     }
     assert.equal(
       invoke(result.manifest).changes.length,
@@ -1583,7 +1926,7 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     ...options,
     nativeDescriptor: undefined,
   });
-  const supportV3 = descriptors.supportArtifacts;
+  const supportV4 = descriptors.supportArtifacts;
   let migratedEdges = 0;
   let migratedFiles = 0;
   for (const [file, names] of Object.entries(artifactOwners.supportArtifacts)) {
@@ -1618,7 +1961,10 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     // admitted one.
     assert.throws(() => invoke(baseline), /unexpected old|unverified|tuple/);
     const result = invoke(baseline, bound);
-    assert.deepEqual(result.manifest.ultramodern.supportArtifacts, supportV3);
+    assert.deepEqual(
+      result.manifest.ultramodern?.supportArtifacts,
+      retiredAway('supportArtifacts', file) ? undefined : supportV4,
+    );
     for (const name of names)
       for (const field of ['dependencies', 'devDependencies']) {
         const value = baseline[field]?.[name];
@@ -1626,7 +1972,7 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
         assert.equal(value, prior.packages[name].request, `${file}:${name}`);
         assert.equal(
           result.manifest[field][name],
-          supportV3.packages[name].request,
+          selectedValue('supportArtifacts', name, field),
         );
         migratedEdges++;
         const forged = structuredClone(baseline);
@@ -1654,7 +2000,10 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
       );
     const baseline = show(nativeBaselineRevision);
     const prior = baseline.ultramodern.nativeArtifacts;
-    assert.equal(prior.producer.runId, 43993884470);
+    assert.deepEqual(
+      [prior.producer.source, prior.producer.runId, prior.producer.runAttempt],
+      ['9353b0cd3dc1fb73ebd1dc66f377e3356abeb178', 44131025154, 1],
+    );
     const expected = show(sourceRevision);
     const current = structuredClone(baseline);
     const supportBound = { revision: supportBaselineRevision };
@@ -1860,7 +2209,8 @@ test('SYNTHETIC GitHub evidence ONLY: real reviewed native-four/support-six byte
     /unreviewed native patch/,
   );
   const forgedSupport = structuredClone(options.supportDescriptor);
-  forgedSupport.packages['solid-js'].patchSha256 = 'f'.repeat(64);
+  const [forgedName] = Object.keys(forgedSupport.packages);
+  forgedSupport.packages[forgedName].patchSha256 = 'f'.repeat(64);
   await assert.rejects(
     admitArtifactDescriptors({
       ...options,

@@ -212,7 +212,6 @@ describe('builder rspack', () => {
       cache: {
         storage: { type: 'filesystem' },
         type: 'persistent',
-        version: 'web-development',
       },
       devtool: 'cheap-module-source-map',
       experiments: { sourceImport: true },
@@ -271,7 +270,6 @@ describe('builder rspack', () => {
       cache: {
         storage: { type: 'filesystem' },
         type: 'persistent',
-        version: 'web-production',
       },
       mode: 'production',
       name: 'web',
@@ -315,7 +313,6 @@ describe('builder rspack', () => {
       cache: {
         storage: { type: 'filesystem' },
         type: 'persistent',
-        version: 'server-production',
       },
       mode: 'production',
       name: 'server',
@@ -377,7 +374,6 @@ describe('builder rspack', () => {
       cache: {
         storage: { type: 'filesystem' },
         type: 'persistent',
-        version: 'workerSSR-production',
       },
       mode: 'production',
       name: 'workerSSR',

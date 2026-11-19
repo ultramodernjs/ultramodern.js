@@ -15,6 +15,7 @@
 //     value leaves the major its selector names;
 //   - a dependent whose installed package.json declares a range in another
 //     major than the version an override forces on it.
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -192,11 +193,20 @@ export function findOverrideViolations(lockfileText, importerNames) {
         inRange(entry.version, parent.range),
     );
 
-  const violations = [];
-  for (const [key, rawValue] of Object.entries(lockfile.overrides ?? {})) {
-    const value = String(rawValue);
-    const { parent, target } = parseOverrideKey(key);
+  const overrideEntries = Object.entries(lockfile.overrides ?? {}).map(
+    ([key, value]) => ({ key, value: String(value), ...parseOverrideKey(key) }),
+  );
+  const rangedAliases = overrideEntries.filter(
+    ({ parent, target, value }) =>
+      !parent &&
+      !target.peer &&
+      target.range &&
+      semver.validRange(target.range) &&
+      value.startsWith('npm:'),
+  );
 
+  const violations = [];
+  for (const { key, value, parent, target } of overrideEntries) {
     const empty = [parent, target].find(spec => spec?.range === '');
     if (empty) {
       violations.push(
@@ -303,7 +313,21 @@ export function findOverrideViolations(lockfileText, importerNames) {
       const edge = childEdge(entry.snapshot, target.name);
       if (edge !== undefined) judged.add(String(edge).replace(/\(.*$/, ''));
     }
+    // An aliased edge no longer records its original version. An exact
+    // resolution owned by a disjoint selector isn't evidence of a stale edge.
+    const otherAliasLines =
+      target.range &&
+      semver.validRange(target.range) &&
+      value.startsWith('npm:')
+        ? rangedAliases.filter(
+            other =>
+              other.target.name === target.name &&
+              !semver.intersects(other.target.range, target.range),
+          )
+        : [];
     for (const version of judged) {
+      if (otherAliasLines.some(other => honours(version, other.value)))
+        continue;
       // An unranged selector matches any specifier, including git, file
       // and alias edges.
       const matches =
@@ -383,24 +407,41 @@ export function findUnscopedOverrides(overrides) {
  */
 export function findForcedMajors(lockfileText, readManifest) {
   const lockfile = parse(lockfileText);
-  const targets = new Set(
-    Object.keys(lockfile.overrides ?? {}).map(
-      key => parseOverrideKey(key).target.name,
+  const overrides = Object.entries(lockfile.overrides ?? {}).map(
+    ([key, value]) => ({
+      target: parseOverrideKey(key).target,
+      value: String(value),
+    }),
+  );
+  const targets = new Set(overrides.map(({ target }) => target.name));
+  const rangedAliases = Map.groupBy(
+    overrides.filter(
+      ({ target, value }) =>
+        target.range &&
+        semver.validRange(target.range) &&
+        value.startsWith('npm:'),
     ),
+    ({ target }) => target.name,
   );
   const violations = [];
   const judge = (dependent, name, declared, edge) => {
     const resolved = String(edge).replace(/\(.*$/, '');
+    // A ranged npm alias is also expected to stay on the dependency's API line.
+    const alias = rangedAliases
+      .get(name)
+      ?.some(({ value }) => honours(resolved, value));
+    const version = alias ? parseSpec(resolved).range : resolved;
     if (
-      !semver.valid(resolved) ||
+      !semver.valid(version) ||
       !semver.validRange(declared) ||
-      semver.satisfies(resolved, declared) ||
-      semver.satisfies(resolved, majorOf(declared))
+      semver.satisfies(version, declared) ||
+      semver.satisfies(version, majorOf(declared))
     ) {
       return;
     }
+    const identity = alias ? resolved : `${name}@${resolved}`;
     violations.push(
-      `${dependent} declares ${name}@${declared} but resolves ${name}@${resolved}, another major. ` +
+      `${dependent} declares ${name}@${declared} but resolves ${identity}, another major. ` +
         `Scope the ${name} override to the major it fixes, or drop ${dependent}.`,
     );
   };
@@ -455,7 +496,8 @@ export function findForcedMajors(lockfileText, readManifest) {
 // Reads packages from pnpm's virtual store, whose directory names are
 // `<name>@<version>` with path characters as `+` plus an optional
 // `_<peers>` suffix. pnpm cuts long names, such as tarball URLs, and ends them
-// with `_<hash>`; such a cut prefix must name exactly one store entry.
+// with `_<hash>` derived from the complete escaped name. A warm store may
+// retain several releases with the same cut prefix.
 export function readInstalledManifest(root = repoRoot) {
   const store = path.join(root, 'node_modules', '.pnpm');
   const entries = readdirSync(store);
@@ -465,11 +507,16 @@ export function readInstalledManifest(root = repoRoot) {
       dir => dir === prefix || dir.startsWith(`${prefix}_`),
     );
     if (!entry && version.includes('://')) {
-      const cut = entries.filter(dir => {
-        const head = dir.slice(0, dir.lastIndexOf('_'));
+      const hash = createHash('sha256')
+        .update(prefix)
+        .digest('hex')
+        .slice(0, 32);
+      const suffix = `_${hash}`;
+      entry = entries.find(dir => {
+        if (!dir.endsWith(suffix)) return false;
+        const head = dir.slice(0, -suffix.length);
         return head.length > name.length + 1 && prefix.startsWith(head);
       });
-      if (cut.length === 1) [entry] = cut;
     }
     if (!entry) return undefined;
     try {

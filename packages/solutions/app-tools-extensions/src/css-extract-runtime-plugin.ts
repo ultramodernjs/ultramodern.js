@@ -3,10 +3,10 @@ import type { Rspack } from '@rsbuild/core';
 const PLUGIN_NAME = 'ModernjsCssExtractRuntimePlugin';
 const CSS_LOADING_RUNTIME_MODULE = 'webpack/runtime/css loading';
 const CSS_EXTRACT_STYLESHEET_MATCH =
-  '\t\tif (tag.rel === "stylesheet" && (dataHref === href || dataHref === fullhref)) return tag;';
+  '\t\tif (tag.rel === "stylesheet" && dataHref && matches(dataHref)) return tag;';
 const CSS_EXTRACT_STYLESHEET_MATCH_WITH_NORMALIZED_URL = `\t\tvar absoluteHref = tag.href;
 \t\tvar absoluteFullHref = new URL(fullhref, document.baseURI).href;
-\t\tif (tag.rel === "stylesheet" && (dataHref === href || dataHref === fullhref || absoluteHref === absoluteFullHref)) return tag;`;
+\t\tif (tag.rel === "stylesheet" && ((dataHref && matches(dataHref)) || absoluteHref === absoluteFullHref)) return tag;`;
 
 const isAutomaticPublicPath = (publicPath: unknown) =>
   publicPath === 'auto' || publicPath === 'auto/';
@@ -19,8 +19,9 @@ export const normalizeCssExtractRuntimeStylesheetLookup = (
   // is browser-equivalent to the SSR link `/static/css/lazy.css`, but its
   // runtime lookup compares the two raw strings and inserts a duplicate link.
   // Compare the complete resolved URLs as well, while preserving the upstream
-  // raw `data-href` and `href` matching behaviour. Query strings remain part
-  // of canonical identity so a newly versioned stylesheet is never suppressed.
+  // `data-href`, `href` and HMR timestamp matching behaviour. Query strings
+  // remain part of canonical identity so a newly versioned stylesheet is never
+  // suppressed by URL normalization.
   if (!source.includes('__webpack_require__.miniCssF')) {
     return source;
   }

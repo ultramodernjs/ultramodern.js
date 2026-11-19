@@ -51,8 +51,8 @@ describe('Solid 2 native dependency ownership', () => {
   });
 
   test('shares native runtime owners without replacing the independent HTTP codec', () => {
-    expect(rendererAdapter.profile.compiler.version).toBe('2.0.0-rc.22');
-    expect(rendererAdapter.profile.hydration.version).toBe('2.0.0-rc.22');
+    expect(rendererAdapter.profile.compiler.version).toBe('2.0.1');
+    expect(rendererAdapter.profile.hydration.version).toBe('2.0.1');
     expect(rendererAdapter.federation.shared).toEqual(
       expect.arrayContaining(['solid-js', '@solidjs/web', '@solidjs/signals']),
     );

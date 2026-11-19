@@ -4,11 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { buildEnvironment } from '../ultramodern-dependencies/otel-corrections/portable.mjs';
 import { currentProducer, main } from './main.mjs';
-import {
-  candidateSupportProtocol as candidate,
-  inputs,
-  supportProtocol as p,
-} from './protocol.mjs';
+import { inputs, supportProtocol as p } from './protocol.mjs';
 import { readRecipes, releaseRecipe } from './recipes.mjs';
 import { validateRecipe, verifySourceQualification } from './reconstruct.mjs';
 
@@ -22,20 +18,17 @@ const producer = {
   runAttempt: 1,
   tag: `support-artifacts-${source}-1-1`,
 };
-function manifest(protocol = p) {
+function manifest() {
   return {
-    protocol: protocol.protocol,
+    protocol: p.protocol,
     producer: { ...producer },
     packages: Object.fromEntries(
-      Object.entries(protocol.cohort).map(([name, version]) => [
+      Object.entries(p.cohort).map(([name, version]) => [
         name,
         {
           version,
-          request: protocol.releaseUrl(
-            producer,
-            protocol.assetFilename(name, version),
-          ),
-          integrity: protocol.integrity(Buffer.from(name)),
+          request: p.releaseUrl(producer, p.assetFilename(name, version)),
+          integrity: p.integrity(Buffer.from(name)),
           upstream: structuredClone(inputs[name].upstream),
           patchSha256: inputs[name].patchSha256,
         },
@@ -55,31 +48,10 @@ const producerEnv = {
   GITHUB_RUN_ID: '1',
   GITHUB_RUN_ATTEMPT: '1',
 };
-test('closed v3 seven support identities and eight release assets', () => {
+test('active v4 has six support identities and seven release assets', () => {
   const m = manifest();
   p.validateManifest(m);
-  assert.equal(p.protocol, 'ultramodern.support-artifacts.v3');
-  assert.deepEqual(m.packages && Object.keys(m.packages).sort(), [
-    '@effect/opentelemetry',
-    '@rstest/core',
-    '@tanstack/react-router',
-    '@types/ioredis-mock',
-    'ioredis-mock',
-    'rsbuild-plugin-dts',
-    'solid-js',
-  ]);
-  assert.equal(Object.keys(m.packages).length + 1, 8);
-  assert.equal(p.cohort['rsbuild-plugin-dts'], '1.0.7');
-  assert.equal(p.manifestFilename, 'support-artifacts.json');
-  assert.equal(
-    p.descriptorFor(m).manifest.request,
-    p.releaseUrl(producer, 'support-artifacts.json'),
-  );
-});
-test('producer-only v4 candidate has six identities and seven release assets', () => {
-  const m = manifest(candidate);
-  candidate.validateManifest(m);
-  assert.equal(candidate.protocol, 'ultramodern.support-artifacts.v4');
+  assert.equal(p.protocol, 'ultramodern.support-artifacts.v4');
   assert.deepEqual(Object.keys(m.packages).sort(), [
     '@effect/opentelemetry',
     '@rstest/core',
@@ -88,26 +60,22 @@ test('producer-only v4 candidate has six identities and seven release assets', (
     'ioredis-mock',
     'rsbuild-plugin-dts',
   ]);
+  assert.deepEqual(Object.keys(inputs).sort(), Object.keys(m.packages).sort());
   assert.equal(Object.keys(m.packages).length + 1, 7);
-  assert.deepEqual(
-    candidate.descriptorFor(m).manifest.request,
+  assert.equal(p.cohort['rsbuild-plugin-dts'], '1.0.7');
+  assert.equal(p.manifestFilename, 'support-artifacts.json');
+  assert.equal(
+    p.descriptorFor(m).manifest.request,
     p.releaseUrl(producer, 'support-artifacts.json'),
   );
-  // Consumers keep the active v3 authority and reject the candidate until admission.
-  assert.throws(() => p.validateManifest(m));
-  assert.throws(() => candidate.validateManifest(manifest()));
-  const withSolid = manifest(candidate);
-  withSolid.packages['solid-js'] = manifest().packages['solid-js'];
-  assert.throws(() => candidate.validateManifest(withSolid));
-  const recipe = releaseRecipe(candidate);
+  const recipe = releaseRecipe();
   assert.deepEqual(
     Object.keys(recipe.packages).sort(),
     Object.keys(m.packages).sort(),
   );
-  assert.throws(() => validateRecipe(recipe));
-  validateRecipe(releaseRecipe());
+  validateRecipe(recipe);
 });
-test('producer CLI binds the v4 candidate, never the active v3 consumer cohort', async t => {
+test('producer CLI binds the active v4 protocol and rejects retired v3', async t => {
   assert(process.env.OWNED_TEMP_DIR, 'Use owned-temp-dir');
   const root = fs.mkdtempSync(
     path.join(process.env.OWNED_TEMP_DIR, 'support-cli-'),
@@ -118,13 +86,13 @@ test('producer CLI binds the v4 candidate, never the active v3 consumer cohort',
       path.join(root, 'support-artifacts.json'),
       JSON.stringify(m),
     );
-  write(manifest());
+  write({ ...manifest(), protocol: 'ultramodern.support-artifacts.v3' });
   await assert.rejects(
     main(['qualify', root], producerEnv),
     /support-artifacts\.v4/,
   );
   // A v4 manifest passes protocol validation and fails only on missing archives.
-  write(manifest(candidate));
+  write(manifest());
   await assert.rejects(
     main(['qualify', root], producerEnv),
     /Exact release payload set required/,
@@ -135,10 +103,15 @@ test('native/support mixing and missing identities fail closed', () => {
     m => (m.protocol = 'ultramodern.native-artifacts.v1'),
     m => (m.protocol = 'ultramodern.support-artifacts.v1'),
     m => (m.protocol = 'ultramodern.support-artifacts.v2'),
+    m => (m.protocol = 'ultramodern.support-artifacts.v3'),
     m => delete m.packages['@tanstack/react-router'],
     m => delete m.packages['rsbuild-plugin-dts'],
-    m => (m.packages.octane = m.packages['solid-js']),
-    m => delete m.packages['solid-js'],
+    m => (m.packages.octane = m.packages['@tanstack/react-router']),
+    m =>
+      (m.packages['solid-js'] = {
+        ...m.packages['@tanstack/react-router'],
+        version: '2.0.0-rc.22',
+      }),
   ]) {
     const m = manifest();
     mutate(m);
@@ -154,12 +127,14 @@ test('unknown fields and invented npm-source commit rejected', () => {
     m =>
       (m.packages['rsbuild-plugin-dts'].upstream.sourceArchiveIntegrity =
         m.packages['@effect/opentelemetry'].upstream.sourceArchiveIntegrity),
-    m => (m.packages['solid-js'].upstream.licenseLocation = 'npm'),
+    m =>
+      (m.packages['@tanstack/react-router'].upstream.licenseLocation =
+        'source-only'),
     m =>
       (m.packages['@tanstack/react-router'].upstream.commit = 'b'.repeat(40)),
     m =>
       (m.packages['@tanstack/react-router'].upstream.sourceArchiveIntegrity =
-        m.packages['solid-js'].upstream.sourceArchiveIntegrity),
+        m.packages['@tanstack/react-router'].upstream.integrity),
     m =>
       (m.packages['@tanstack/react-router'].upstream.licenseSha256 = 'b'.repeat(
         64,
@@ -172,7 +147,7 @@ test('unknown fields and invented npm-source commit rejected', () => {
 });
 test('immutable source provenance and exact canonical patch handoff', () => {
   assert.throws(() => {
-    inputs['solid-js'].upstream.commit = 'b'.repeat(40);
+    inputs['@tanstack/react-router'].upstream.commit = 'b'.repeat(40);
   });
   const recipe = {
     packages: readRecipes(),

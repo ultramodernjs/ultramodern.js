@@ -67,6 +67,12 @@ export type ServerCompilerProvider = (
 export interface ServerCompileConfig {
   alias?: Parameters<typeof mergeAlias>[0];
   sourceMap?: NonNullable<LibConfig['output']>['sourceMap'];
+  /**
+   * `output.disableTsChecker`: skip the server type check. Declarations are
+   * still emitted, from the same program without checking it (`noCheck`);
+   * the app owns type checking elsewhere.
+   */
+  disableTsChecker?: boolean;
 }
 
 export interface ServerCompileOptions {

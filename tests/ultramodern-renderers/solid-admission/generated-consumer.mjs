@@ -26,7 +26,7 @@ import { createSolidConsumerObserver } from './generated-observer.mjs';
 import { createRequestDiagnostics } from './generated-request-diagnostics.mjs';
 import { createAdmissionProcessScope } from './processes.mjs';
 
-const target = '2.0.0-rc.22';
+const target = '2.0.1';
 const sourceExtensions = /\.[cm]?tsx?$/u;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -252,6 +252,13 @@ async function installedTuple(appRoot, cohort) {
     await fs.realpath(requireApp.resolve('solid-js')),
     'Renderer and application selected different Solid runtimes',
   );
+  // Native federation shares the renderer-owned web and signals copies.
+  for (const name of ['@solidjs/web', '@solidjs/signals'])
+    assert.equal(
+      await fs.realpath(renderer.resolve(name)),
+      await fs.realpath(requireApp.resolve(name)),
+      `Renderer and application selected different ${name} instances`,
+    );
   for (const name of ['seroval', 'seroval-plugins/web', '@solidjs/signals']) {
     const expected = await fs.realpath(web.resolve(name));
     assert.equal(
@@ -270,7 +277,7 @@ async function installedTuple(appRoot, cohort) {
         if (manifest?.name === name.split('/')[0]) {
           assert.equal(
             manifest.version,
-            name === 'seroval' ? '1.8.1' : '1.8.0',
+            name === 'seroval' ? '1.8.2' : '1.8.0',
             `Solid native serializer drift: ${name}`,
           );
           tuple[manifest.name] = manifest.version;
@@ -528,12 +535,12 @@ export async function checkGeneratedSolidBrowser({
       'Solid hydration replaced exact server nodes',
     );
     traffic.phase('action');
-    await page.locator('input[name="name"]').fill('Solid RC22 acceptance');
+    await page.locator('input[name="name"]').fill('Solid 2.0.1 acceptance');
     await page.locator('[data-testid="native-submit"]').click();
     await page.waitForFunction(() =>
       document
         .querySelector('[data-testid="native-action-value"]')
-        ?.textContent.includes('Solid RC22 acceptance'),
+        ?.textContent.includes('Solid 2.0.1 acceptance'),
     );
     const requests = documentRequests.length;
     traffic.phase('about navigation');

@@ -58,7 +58,7 @@
     "@swc/helpers": "^0.5.24",
     "connect-history-api-fallback": "^2.0.0",
     "http-compression": "1.2.0",
-    "minimatch": "^11.0.8",
+    "minimatch": "^11.0.9",
     "path-to-regexp": "^9.0.0",
     "ws": "^8.23.0"
   },

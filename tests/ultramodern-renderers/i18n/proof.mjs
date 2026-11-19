@@ -12,6 +12,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +29,29 @@ const renderers = process.argv.slice(2).length
   : ['solid', 'octane'];
 const real = (from, request) =>
   fs.realpath(path.join(from, 'node_modules', request));
+
+// Link the one @solidjs/signals that the installed solid-js resolves; the
+// renderer's own declaration must select that same installed copy.
+async function solidRuntime(rendererDirectory) {
+  const solid = await real(rendererDirectory, 'solid-js');
+  const signals = path.dirname(
+    await fs.realpath(
+      createRequire(path.join(solid, 'package.json')).resolve(
+        '@solidjs/signals/package.json',
+      ),
+    ),
+  );
+  assert.equal(
+    await real(rendererDirectory, '@solidjs/signals'),
+    signals,
+    'The renderer and solid-js must install one @solidjs/signals',
+  );
+  return {
+    'solid-js': solid,
+    '@solidjs/web': await real(rendererDirectory, '@solidjs/web'),
+    '@solidjs/signals': signals,
+  };
+}
 
 async function freePort() {
   const server = net.createServer();
@@ -60,11 +84,7 @@ async function linkDependencies(directory, renderer) {
     typescript: await real(appTools, 'typescript'),
     '@types/node': await real(appTools, '@types/node'),
     ...(renderer === 'solid'
-      ? {
-          'solid-js': await real(rendererDirectory, 'solid-js'),
-          '@solidjs/web': await real(rendererDirectory, '@solidjs/web'),
-          '@solidjs/signals': await real(rendererDirectory, '@solidjs/signals'),
-        }
+      ? await solidRuntime(rendererDirectory)
       : {
           octane: await real(rendererDirectory, 'octane'),
           '@octanejs/tanstack-router': await real(
@@ -213,9 +233,9 @@ async function createApp(renderer) {
         i18next: '26.4.6',
         ...(renderer === 'solid'
           ? {
-              'solid-js': '2.0.0-rc.22',
-              '@solidjs/web': '2.0.0-rc.22',
-              '@solidjs/signals': '2.0.0-rc.22',
+              'solid-js': '2.0.1',
+              '@solidjs/web': '2.0.1',
+              '@solidjs/signals': '2.0.1',
             }
           : {
               octane: 'maintained',

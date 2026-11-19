@@ -137,8 +137,6 @@ function reviewedSourcePins(read) {
     // controls. The inventory's repository/workspace flags are checked by its
     // owning patch synchronizer and repository-patches tests.
     [`${generator}patch-inventory.ts`]: [
-      'patches/picomatch@2.3.2.patch',
-      'patches/picomatch@4.0.7.patch',
       coordinatedTransitions['@tanstack/redact'].to.slice('npm:'.length),
       patch('@tanstack/router-core'),
       patch('@effect/opentelemetry'),
@@ -157,12 +155,6 @@ function reviewedSourcePins(read) {
       'patches/@tanstack__router-core@1.171.37.patch',
       'patches/@svgr__babel-plugin-transform-svg-component@8.0.0.patch',
       `patches/@tanstack__redact@${targets['@tanstack/redact']}.patch`,
-    ],
-    // Deliberately fixed compatibility controls, not generated application pins.
-    // The qualification compares classic/native APIs against stable TypeScript.
-    [`${octane}oxc-latest/qualify.mjs`]: [
-      "'typescript-classic': 'npm:typescript@5.9.3'",
-      "'typescript-native': 'npm:typescript@7.1.0-dev.20260921.1'",
     ],
     [`${octane}typescript-compat/qualify-followup.mjs`]: [
       `@tsrx+core@${comparisonDependencies['@tsrx/core']}`,
@@ -257,31 +249,24 @@ function reviewedSourcePins(read) {
       ],
     // Inputs the native run reconstructed into the admitted descriptor.
     'scripts/ultramodern-renderers/native-artifacts/recipes.mjs': [
-      patch('octane'),
-      patch('@octanejs/rspack-plugin'),
-      patch('@octanejs/tanstack-router', '.shared-core-peer'),
+      `\`\${candidateDirectory}/\${adapterFilename}\``,
       patch('@tanstack/router-core'),
       coreTarball,
     ],
+    // Active runtime inputs come from the authenticated 0.20 handoff.
     'scripts/ultramodern-renderers/native-artifacts/source-qualification.mjs': [
       `pnpm: '${owningPnpm}'`,
       pnpmManager(owningPnpm),
-      patch('@octanejs/rspack-plugin'),
     ],
-    [`${octane}qualify-runtime.mjs`]: [patch('@octanejs/rspack-plugin')],
     [`${octane}qualify.mjs`]: [
       patch('@tanstack/router-core'),
       coreTarball,
       `assetFilename('@tanstack/router-core', '${core}')`,
     ],
-    [`${octane}reconstruct.mjs`]: [
-      patch('@octanejs/tanstack-router', '.shared-core-peer'),
+    [`${octane}shared-core-peer.mjs`]: [
+      `const sharedCoreVersion = '${core}'`,
+      `@octanejs/tanstack-router@${targets['@octanejs/tanstack-router']}`,
     ],
-    [`${octane}regenerate-shared-core-peer.mjs`]: [
-      patch('@octanejs/tanstack-router'),
-      patch('@octanejs/tanstack-router', '.shared-core-peer'),
-    ],
-    [`${octane}shared-core-peer.mjs`]: [`const sharedCoreVersion = '${core}'`],
     [`${router}qualify.mjs`]: [pnpmManager(owningPnpm)],
     [`${router}reconstruct.mjs`]: [
       coreTarball,
@@ -307,14 +292,6 @@ function reviewedSourcePins(read) {
       patch('@tanstack/router-core'),
       `assert.equal(core.version, '${core}')`,
     ],
-    'scripts/ultramodern-renderers/solid-corrections/qualify-held-read.mjs': [
-      pnpmManager(toolchain.pnpm),
-    ],
-    'scripts/ultramodern-renderers/solid-corrections/qualify.mjs': [
-      pnpmManager(toolchain.pnpm),
-    ],
-    // Exact registry source for the reviewed 4.x correction candidate.
-    'scripts/ultramodern-publish/sidecar-profiles.mjs': ['picomatch@4.0.7'],
     // Support run 43934193068 attempt 2 qualified the corrected plugin with
     // the framework toolchain.
     'scripts/ultramodern-support-artifacts/dts-plugin.mjs': [
@@ -351,6 +328,9 @@ function reviewedSourcePins(read) {
     ],
     'tests/ultramodern-renderers/solid-admission/run.mjs': [
       `router: '@modern-js/renderer-solid@${solidVersion}'`,
+    ],
+    'scripts/ultramodern-renderers/native-solid-generated.mjs': [
+      `const solidVersion = '${targets['solid-js']}'`,
     ],
     'tests/ultramodern-renderers/i18n/navigation-tuple.mjs': [
       `const solidVersion = '${targets['solid-js']}'`,

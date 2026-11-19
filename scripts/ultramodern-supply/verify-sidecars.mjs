@@ -50,12 +50,7 @@ export const unpublishedForkEdges = [
   },
   // These exact source consumers declare the parser-correction recipes until
   // their new fork names are published. This validates recipe reachability;
-  // it does not correct the current installation or compiled utility bytes.
-  {
-    importer: 'packages/toolkit/utils',
-    published: '@bleedingdev/modern-js-utils',
-    dependency: 'fast-glob',
-  },
+  // it does not correct the current installation.
   {
     importer: 'packages/cli/builder',
     published: '@bleedingdev/modern-js-builder',

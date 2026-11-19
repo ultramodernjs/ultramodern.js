@@ -86,7 +86,6 @@ describe('builder environment compat', () => {
       cache: {
         storage: { type: 'filesystem' },
         type: 'persistent',
-        version: 'client-development',
       },
       mode: 'development',
       output: { filename: 'static/js/[name].js' },
@@ -99,7 +98,6 @@ describe('builder environment compat', () => {
       cache: {
         storage: { type: 'filesystem' },
         type: 'persistent',
-        version: 'server-development',
       },
       mode: 'development',
       output: {
@@ -112,7 +110,6 @@ describe('builder environment compat', () => {
       cache: {
         storage: { type: 'filesystem' },
         type: 'persistent',
-        version: 'workerSSR-development',
       },
       mode: 'development',
       output: {

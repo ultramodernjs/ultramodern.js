@@ -63,7 +63,7 @@ function fixture(published: boolean) {
               : 'workspace:*',
           }
         : {},
-      peerDependencies: name === leaf ? { 'solid-js': '2.0.0-rc.22' } : {},
+      peerDependencies: name === leaf ? { 'solid-js': '2.0.0' } : {},
       ...changes,
     };
     fs.mkdirSync(root(name), { recursive: true });
@@ -97,10 +97,7 @@ test.each([false, true])(
     try {
       const manifests = readBundledFrameworkManifests(f.root, f.cohort);
       assert.deepEqual([...manifests.keys()], [create, tools, leaf]);
-      assert.equal(
-        manifests.get(leaf)?.peerDependencies['solid-js'],
-        '2.0.0-rc.22',
-      );
+      assert.equal(manifests.get(leaf)?.peerDependencies['solid-js'], '2.0.0');
     } finally {
       f.dispose();
     }

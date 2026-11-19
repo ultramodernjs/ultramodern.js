@@ -180,7 +180,7 @@ test('reviewed native URLs follow the activated descriptor, not a legacy one', (
   manifest.ultramodern.nativeArtifacts.packages.octane.version = '0.13.8';
   assert(
     inspect({ [owner]: JSON.stringify(manifest) }).errors.some(error =>
-      error.includes('activated native octane must be snapshot 0.18.0'),
+      error.includes('activated native octane must be snapshot 0.20.0'),
     ),
   );
   const profile = 'packages/runtime/renderer-octane/src/plugin/profile.ts';
@@ -331,7 +331,7 @@ test('rendered Sandpack package uses latest snapshot and exact compiler/toolchai
       assert.equal(version, targets[name] ?? version, name);
   assert.equal(manifest.dependencies.effect, targets.effect);
   assert.equal(manifest.dependencies.i18next, targets.i18next);
-  assert.equal(manifest.devDependencies['@effect/tsgo'], '0.69.0');
+  assert.equal(manifest.devDependencies['@effect/tsgo'], '0.70.0');
   assert.equal(manifest.devDependencies.tsrs, '0.25.0-ts7.1.0-beta');
   assert.equal(
     manifest.devDependencies['@types/node'],

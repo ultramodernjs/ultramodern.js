@@ -113,7 +113,6 @@ test.each(['react', 'solid', 'octane', 'none'] as const)(
       '@effect/opentelemetry',
       '@tanstack/react-router',
       'rsbuild-plugin-dts',
-      'solid-js',
     ]);
     assert.deepEqual(
       selectedSupport(manifest),
@@ -122,9 +121,16 @@ test.each(['react', 'solid', 'octane', 'none'] as const)(
             '@effect/opentelemetry',
             '@tanstack/react-router',
             'rsbuild-plugin-dts',
-            'solid-js',
           ]
-        : ['@effect/opentelemetry', 'rsbuild-plugin-dts', 'solid-js'],
+        : ['@effect/opentelemetry', 'rsbuild-plugin-dts'],
+    );
+    // Stable Solid is a registry dependency of its renderer, never a tooling host.
+    assert.equal(root.devDependencies['solid-js'], undefined);
+    assert.equal(
+      { ...manifest.dependencies, ...manifest.devDependencies }['solid-js'],
+      renderer === 'solid'
+        ? getRendererGenerationProfile('solid').dependencies['solid-js']
+        : undefined,
     );
     assert.doesNotThrow(() =>
       assertWorkspaceRootToolingDependencies(root, rootRenderer),
@@ -181,12 +187,15 @@ test.each(['react', 'solid', 'octane', 'none'] as const)(
       'peerDependencies',
     ]) {
       const wrongGroup = structuredClone(root);
-      const request = wrongGroup.devDependencies['solid-js'];
-      delete wrongGroup.devDependencies['solid-js'];
-      wrongGroup[group] = { ...wrongGroup[group], 'solid-js': request };
+      const request = wrongGroup.devDependencies['@tanstack/react-router'];
+      delete wrongGroup.devDependencies['@tanstack/react-router'];
+      wrongGroup[group] = {
+        ...wrongGroup[group],
+        '@tanstack/react-router': request,
+      };
       assert.throws(
         () => assertWorkspaceRootToolingDependencies(wrongGroup, rootRenderer),
-        /tooling host solid-js/u,
+        /tooling host @tanstack\/react-router/u,
       );
     }
     const wrongUrl = structuredClone(manifest);
@@ -196,18 +205,27 @@ test.each(['react', 'solid', 'octane', 'none'] as const)(
       () => assertRendererDependencies(wrongUrl, renderer),
       /tooling host rsbuild-plugin-dts/u,
     );
-    const foreign =
-      renderer === 'solid' ? '@tanstack/react-router' : 'solid-js';
+    const [foreign, foreignVersion, foreignRequest] =
+      renderer === 'solid'
+        ? [
+            '@tanstack/react-router',
+            supportArtifacts.packages['@tanstack/react-router'].version,
+            supportArtifacts.packages['@tanstack/react-router'].request,
+          ]
+        : [
+            'solid-js',
+            solidProfile.dependencies['solid-js'],
+            solidProfile.dependencies['solid-js'],
+          ];
     const foreignRuntime = structuredClone(manifest);
-    foreignRuntime.dependencies[foreign] =
-      supportArtifacts.packages[foreign].request;
+    foreignRuntime.dependencies[foreign] = foreignRequest;
     assert.throws(
       () => assertRendererDependencies(foreignRuntime, renderer),
       /foreign renderer package/u,
     );
     const arbitraryHost = structuredClone(manifest);
     arbitraryHost.devDependencies['foreign-ui'] =
-      `npm:${foreign}@${supportArtifacts.packages[foreign].version}`;
+      `npm:${foreign}@${foreignVersion}`;
     assert.throws(
       () => assertRendererDependencies(arbitraryHost, renderer),
       /foreign renderer package/u,
@@ -218,7 +236,7 @@ test.each(['react', 'solid', 'octane', 'none'] as const)(
         assertRendererDependencies(arbitraryHost, renderer, undefined, {
           catalogs: {
             foreign: {
-              'foreign-ui': `npm:${foreign}@${supportArtifacts.packages[foreign].version}`,
+              'foreign-ui': `npm:${foreign}@${foreignVersion}`,
             },
           },
         }),
@@ -259,7 +277,7 @@ test('installed optional peers require direct physical hosts; development owners
     });
     write('node_modules/@modern-js/fixture-renderer', {
       name: '@modern-js/fixture-renderer',
-      peerDependencies: { 'solid-js': '2.0.0-rc.22' },
+      peerDependencies: { '@tanstack/react-router': '1.170.46' },
       ultramodern: { supportArtifacts: support },
     });
     write('node_modules/@modern-js/test-tools', {
@@ -269,8 +287,9 @@ test('installed optional peers require direct physical hosts; development owners
     const direct = { '@modern-js/fixture-tools': 'workspace:*' };
     const manifests = readBundledFrameworkManifests(directory);
     assert.deepEqual(toolingSupportDependencies(direct, support, manifests), {
+      '@tanstack/react-router':
+        support.packages['@tanstack/react-router'].request,
       'rsbuild-plugin-dts': support.packages['rsbuild-plugin-dts'].request,
-      'solid-js': support.packages['solid-js'].request,
     });
     const require = createRequire(
       path.join(
@@ -284,10 +303,13 @@ test('installed optional peers require direct physical hosts; development owners
           require.resolve('@modern-js/fixture-renderer/package.json'),
           'utf8',
         ),
-      ).peerDependencies['solid-js'],
-      '2.0.0-rc.22',
+      ).peerDependencies['@tanstack/react-router'],
+      '1.170.46',
     );
-    for (const name of ['solid-js', 'rsbuild-plugin-dts'] as const) {
+    for (const name of [
+      '@tanstack/react-router',
+      'rsbuild-plugin-dts',
+    ] as const) {
       write(`node_modules/${name}`, {
         name,
         version: support.packages[name].version,
@@ -324,7 +346,7 @@ test('installed optional peers require direct physical hosts; development owners
       });
     await assert.rejects(
       verify,
-      /solid-js: owner closure requires a selected direct host/u,
+      /@tanstack\/react-router: owner closure requires a selected direct host/u,
     );
     assert.equal(authenticationCalls, 0);
     write('app', {
@@ -341,21 +363,17 @@ test('installed optional peers require direct physical hosts; development owners
     );
     write('node_modules/@modern-js/fixture-duplicate', {
       name: '@modern-js/fixture-duplicate',
-      peerDependencies: { 'solid-js': '2.0.0-rc.22' },
+      peerDependencies: { '@tanstack/react-router': '1.170.46' },
       ultramodern: { supportArtifacts: support },
     });
-    write('node_modules/@modern-js/fixture-duplicate/node_modules/solid-js', {
-      name: 'solid-js',
-      version: '2.0.0-rc.22',
+    const duplicate =
+      'node_modules/@modern-js/fixture-duplicate/node_modules/@tanstack/react-router';
+    write(duplicate, {
+      name: '@tanstack/react-router',
+      version: '1.170.46',
       main: './index.js',
     });
-    fs.writeFileSync(
-      path.join(
-        directory,
-        'node_modules/@modern-js/fixture-duplicate/node_modules/solid-js/index.js',
-      ),
-      '',
-    );
+    fs.writeFileSync(path.join(directory, duplicate, 'index.js'), '');
     write('node_modules/@modern-js/fixture-tools', {
       name: '@modern-js/fixture-tools',
       peerDependencies: {
@@ -434,7 +452,20 @@ test.each(['react', 'solid'] as const)(
         renderer,
         app.rendererGenerationProfile,
       );
-      for (const request of ['2.0.0-rc.22', 'https://example.com/solid.tgz']) {
+      assert.equal(
+        manifest.dependencies['solid-js'],
+        solidProfile.dependencies['solid-js'],
+      );
+      for (const request of [
+        '2.0.0-rc.22',
+        'npm:solid-js@2.0.0-rc.22',
+        'https://example.com/solid.tgz',
+        // A Solid archive shaped like an admitted support asset is not authority.
+        supportArtifacts.packages['rsbuild-plugin-dts'].request.replace(
+          'rsbuild-plugin-dts-1.0.7',
+          'solid-js-2.0.0',
+        ),
+      ]) {
         manifest.dependencies['solid-js'] = request;
         assert.throws(() =>
           assertRendererDependencies(
@@ -467,8 +498,11 @@ test.each(['react', 'solid'] as const)(
           typeof dependencies === 'object' &&
           !Array.isArray(dependencies),
       );
-      const name = renderer === 'solid' ? 'solid-js' : '@tanstack/react-router';
-      assert.equal(dependencies[name], supportArtifacts.packages[name].request);
+      if (renderer === 'react')
+        assert.equal(
+          dependencies['@tanstack/react-router'],
+          supportArtifacts.packages['@tanstack/react-router'].request,
+        );
       if (renderer === 'react')
         assert.equal(
           dependencies['@effect/opentelemetry'],
@@ -484,13 +518,13 @@ test.each(['react', 'solid'] as const)(
           supportArtifacts.packages[name].request,
         );
     }
-    // The generator requires both native adapters and the React tooling.
-    // Their runtime peers need root hosts independent of the app renderer.
-    for (const name of ['solid-js', '@tanstack/react-router'])
-      assert.equal(
-        emitted.root.devDependencies[name],
-        supportArtifacts.packages[name].request,
-      );
+    // The generator requires the React tooling; its corrected runtime peer
+    // needs a root host independent of the app renderer. Stable Solid needs none.
+    assert.equal(
+      emitted.root.devDependencies['@tanstack/react-router'],
+      supportArtifacts.packages['@tanstack/react-router'].request,
+    );
+    assert.equal(emitted.root.devDependencies['solid-js'], undefined);
     for (const name of ['@rstest/core', 'ioredis-mock', '@types/ioredis-mock'])
       assert.equal(emitted.root.devDependencies[name], undefined);
     assert.deepEqual(source.supportArtifacts, supportArtifacts);
@@ -587,21 +621,27 @@ test('shipped generator selects its admitted OTel correction for an Effect BFF',
 
 test('closed support inputs reject missing, mismatched and inactive authority', () => {
   for (const mutate of [
-    value => delete value.packages['solid-js'],
+    value =>
+      (value.packages['solid-js'] = {
+        ...value.packages['rsbuild-plugin-dts'],
+        version: '2.0.0',
+      }),
     value => delete value.packages['@tanstack/react-router'],
     value => delete value.packages['rsbuild-plugin-dts'],
     value => (value.protocol = 'ultramodern.support-artifacts.v1'),
     value => (value.protocol = 'ultramodern.support-artifacts.v2'),
+    value => (value.protocol = 'ultramodern.support-artifacts.v3'),
     value => (value.packages['rsbuild-plugin-dts'].version = '1.0.6'),
     value =>
       (value.packages['rsbuild-plugin-dts'].request = value.packages[
         'rsbuild-plugin-dts'
       ].request.replace('support-artifacts-', 'native-renderers-')),
-    value => (value.packages['solid-js'].version = '2.0.0-rc.21'),
+    value => (value.packages['@tanstack/react-router'].version = '1.170.45'),
     value =>
-      (value.packages['solid-js'].request = 'https://example.com/solid.tgz'),
+      (value.packages['@tanstack/react-router'].request =
+        'https://example.com/react-router.tgz'),
     value => (value.manifest.request = 'https://example.com/support.json'),
-    value => (value.packages.octane = value.packages['solid-js']),
+    value => (value.packages.octane = value.packages['rsbuild-plugin-dts']),
   ]) {
     const value = descriptor();
     mutate(value);
@@ -611,25 +651,34 @@ test('closed support inputs reject missing, mismatched and inactive authority', 
     readSupportArtifacts({ ultramodern: { supportArtifacts: null } }),
   );
   const support = parseSupportArtifacts(descriptor());
+  const router = support.packages['@tanstack/react-router'];
   assert.throws(() =>
-    selectSupportRequests({ 'solid-js': '2.0.0-rc.21' }, support),
+    selectSupportRequests({ '@tanstack/react-router': '1.170.45' }, support),
   );
   assert.throws(() =>
     selectSupportRequests(
-      { 'solid-js': support.packages['solid-js'].request },
+      { '@tanstack/react-router': router.request },
       undefined,
     ),
   );
   assert.equal(
     selectSupportRequests(
-      { 'solid-js': support.packages['solid-js'].request },
+      { '@tanstack/react-router': router.request },
       support,
-    )['solid-js'],
-    support.packages['solid-js'].request,
+    )['@tanstack/react-router'],
+    router.request,
   );
+  // Stable Solid stays a raw registry request with or without support authority.
+  for (const authority of [support, undefined])
+    assert.deepEqual(
+      selectSupportRequests({ 'solid-js': '2.0.0' }, authority),
+      {
+        'solid-js': '2.0.0',
+      },
+    );
 });
 
-test('Solid runtime uses the exact required host peer, never a private runtime dependency', () => {
+test('Solid runtime peers stable registry Solid, never a support archive', () => {
   const require = createRequire(import.meta.url);
   const manifest = JSON.parse(
     fs.readFileSync(
@@ -637,20 +686,21 @@ test('Solid runtime uses the exact required host peer, never a private runtime d
       'utf8',
     ),
   );
+  const pins = solidProfile.dependencies;
+  assert.equal(pins['solid-js'], '2.0.1');
+  for (const name of ['@solidjs/web', '@solidjs/signals', '@solidjs/compiler'])
+    assert.equal(pins[name], pins['solid-js']);
   assert.equal(manifest.dependencies['solid-js'], undefined);
   assert.equal(manifest.optionalDependencies?.['solid-js'], undefined);
-  const support = parseSupportArtifacts(manifest.ultramodern.supportArtifacts);
-  assert.equal(
-    support.packages['solid-js'].version,
-    protocol.cohort['solid-js'],
-  );
-  assert.equal(
-    manifest.peerDependencies['solid-js'],
-    support.packages['solid-js'].version,
-  );
+  assert.equal(manifest.peerDependencies['solid-js'], pins['solid-js']);
   assert.notEqual(manifest.peerDependenciesMeta?.['solid-js']?.optional, true);
-  assert.equal(
-    manifest.devDependencies['solid-js'],
-    support.packages['solid-js'].request,
-  );
+  assert.equal(manifest.devDependencies['solid-js'], pins['solid-js']);
+  for (const name of ['@solidjs/web', '@solidjs/signals'])
+    assert.equal(manifest.dependencies[name], pins[name]);
+  for (const group of ['peerDependencies', 'devDependencies'])
+    assert.equal(
+      manifest[group]['@solidjs/compiler'],
+      pins['@solidjs/compiler'],
+    );
+  assert.equal(manifest.ultramodern?.supportArtifacts, undefined);
 });

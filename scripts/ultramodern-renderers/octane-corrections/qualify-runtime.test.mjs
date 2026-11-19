@@ -13,79 +13,47 @@ import {
   octane20RuntimeInputs,
   packagePatch,
   phaseTracker,
+  qualifyRuntimePair,
   qualifyRuntimeTree,
 } from './qualify-runtime.mjs';
-import {
-  assertionInventory,
-  historicalLoadSuites,
-  recoveredHistoricalSuites,
-  summarizeSelectiveHydration,
-} from './qualify-selective-hydration.mjs';
 
-test('selective summary cannot convert recovered scope into full historical acceptance', () => {
-  const summary = summarizeSelectiveHydration({
-    sourceCommit: 'control',
-    inventory: [{ tree: 'baseline', suites: ['range-boundary.test.ts'] }],
-    results: [],
+for (const gate of ['transport failure', 'unauthenticated archive'])
+  test(`the default runtime qualifier authenticates the sole current owning source before builds: ${gate}`, async t => {
+    assert(process.env.OWNED_TEMP_DIR, 'Run tests inside owned-temp-dir');
+    const parent = fs.mkdtempSync(
+      path.join(process.env.OWNED_TEMP_DIR, 'runtime-default-'),
+    );
+    t.after(() => fs.rmSync(parent, { recursive: true, force: true }));
+    const work = path.join(parent, 'qualification');
+    const failure = new Error('owning source transport failed');
+    const requests = [];
+    t.mock.method(globalThis, 'fetch', async url => {
+      requests.push(url);
+      if (gate === 'transport failure') throw failure;
+      return new Response('tampered archive');
+    });
+    const lines = [];
+    await assert.rejects(
+      qualifyRuntimePair({
+        work,
+        runner: {
+          disk() {},
+          run: () => assert.fail('Unauthenticated source reached a build'),
+        },
+        phases: phaseTracker(line => lines.push(line)),
+      }),
+      gate === 'transport failure'
+        ? error => error === failure
+        : /Unauthenticated archive/u,
+    );
+    assert.deepEqual(requests, [
+      'https://codeload.github.com/octanejs/octane/tar.gz/1cdd9d2027bef63e6cec601952795e9ed84e1344',
+    ]);
+    assert.equal(fs.existsSync(work), false);
+    assert.match(lines.at(-1), /authenticate inputs: FAILED/u);
   });
-  assert.equal(summary.historicalEvidenceComplete, false);
-  assert.equal(summary.unresolvedHistoricalFailureCountDifference, 29);
-  assert.equal(recoveredHistoricalSuites.length, 11);
-  assert.equal(summary.inventory[0].totalHydrationSuites, 1);
-  assert.equal(
-    summary.inventory[0].recoveredHistoricalScope.filter(entry => entry.present)
-      .length,
-    1,
-  );
-});
 
-test('selective diagnostic preserves exact assertion names and suite-load evidence', () => {
-  assert.equal(historicalLoadSuites.length, 3);
-  assert.deepEqual(
-    assertionInventory(
-      {
-        testResults: [
-          {
-            name: '/operation/packages/octane/tests/hydration/range-boundary.test.ts',
-            message: 'Failed to resolve import "octane/behavior"',
-            assertionResults: [],
-          },
-          {
-            name: '/operation/packages/octane/tests/hydration/unclosed-range.test.ts',
-            assertionResults: [
-              {
-                fullName: 'preserves range (nested: true, dev: true)',
-                status: 'failed',
-                failureMessages: ['actual ownership failure'],
-              },
-            ],
-          },
-        ],
-      },
-      '/operation',
-    ),
-    [
-      {
-        suite: 'packages/octane/tests/hydration/range-boundary.test.ts',
-        loadError: 'Failed to resolve import "octane/behavior"',
-        assertions: [],
-      },
-      {
-        suite: 'packages/octane/tests/hydration/unclosed-range.test.ts',
-        loadError: null,
-        assertions: [
-          {
-            name: 'preserves range (nested: true, dev: true)',
-            status: 'failed',
-            errors: ['actual ownership failure'],
-          },
-        ],
-      },
-    ],
-  );
-});
-
-test('selective qualifier rejects test-name filters instead of weakening whole suites', () => {
+test('hydration qualifier rejects test-name filters instead of weakening whole suites', () => {
   assert(process.env.OWNED_TEMP_DIR, 'Run tests inside owned-temp-dir');
   const root = fs.mkdtempSync(
     path.join(process.env.OWNED_TEMP_DIR, 'suite-boundary-'),
@@ -250,7 +218,7 @@ test('npm layout reconstruction preserves identity and actual compiler/map/licen
       path.join(upstream, 'package.json'),
       JSON.stringify({
         name: 'octane',
-        version: '0.18.0',
+        version: '0.20.0',
         dependencies: { '@tsrx/core': '^0.5.5', esrap: '^2.3.2' },
         peerDependencies: { '@tsrx/oxc': '^0.8.0', typescript: '>=7.1.0-0' },
       }),
@@ -269,7 +237,7 @@ test('npm layout reconstruction preserves identity and actual compiler/map/licen
     };
     for (const [file, bytes] of Object.entries(emitted))
       fs.writeFileSync(path.join(source, 'dist', file), bytes);
-    assemblePackage(upstream, source, built, '0.18.0');
+    assemblePackage(upstream, source, built, '0.20.0');
     const patch = packagePatch(upstream, built);
     assert(
       !patch.includes(Buffer.from(work)),
@@ -288,7 +256,7 @@ test('npm layout reconstruction preserves identity and actual compiler/map/licen
       fs.readFileSync(path.join(reconstructed, 'package.json')),
     );
     assert.equal(manifest.name, 'octane');
-    assert.equal(manifest.version, '0.18.0');
+    assert.equal(manifest.version, '0.20.0');
     assert.equal(manifest.dependencies['@tsrx/core'], '^0.6.1');
     assert.equal(manifest.dependencies.esrap, '^2.4.0');
     assert.equal(
@@ -433,7 +401,7 @@ test('phase tracker reports the failed phase, last command and signal without re
   assert.equal(lines.length, 4);
 });
 
-test('the Octane 0.20 owning candidate selects its own runtime package, dependencies and output identity', t => {
+test('the sole owning inputs bind the current runtime, dependencies and output identity', t => {
   assert(process.env.OWNED_TEMP_DIR, 'Run tests inside owned-temp-dir');
   const inputs = octane20RuntimeInputs();
   assert.deepEqual(
@@ -457,6 +425,18 @@ test('the Octane 0.20 owning candidate selects its own runtime package, dependen
   assert.equal(
     inputs.runtimePair['@octanejs/rspack-plugin'].patchPath,
     'patches/@octanejs__rspack-plugin@0.2.12.patch',
+  );
+  assert.deepEqual(
+    inputs.patches.map(patch => path.relative(import.meta.dirname, patch)),
+    [
+      'octane-0.20.0/runtime-source.patch',
+      'typescript-compat/typescript-source.patch',
+      'typescript-compat/native-signals-source.patch',
+      'typescript-compat/volar-core-source.patch',
+      'runtime-tests.patch',
+      'octane-0.20.0/rspack-source.patch',
+      'octane-0.20.0/rspack-tests.patch',
+    ],
   );
   for (const patch of inputs.patches) assert.ok(fs.statSync(patch).isFile());
   const work = fs.mkdtempSync(

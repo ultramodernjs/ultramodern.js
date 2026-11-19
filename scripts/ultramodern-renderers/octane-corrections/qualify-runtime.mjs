@@ -6,28 +6,10 @@ import { devNull } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { writeHydrationReporter } from './hydration-reporter.mjs';
-import { packages, source } from './inputs.mjs';
 import { qualifyAllHydration } from './qualify-all-hydration.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repository = path.resolve(here, '../../..');
-export const sourceIntegrity =
-  'sha512-LyipVNIG/Wz8BOF2B8yxHf4xyeyh4IKyXFcg+XZnYdBEaXa57jwdqM1lI9UdX16jVC2fCNImvwj9EGw71jDn+A==';
-export const runtimePatchPath = 'patches/octane@0.18.0.patch';
-export const rspackPatchPath = 'patches/@octanejs__rspack-plugin@0.2.10.patch';
-/** The one owning build emits both halves; each keeps its own canonical identity. */
-export const runtimePair = Object.freeze({
-  octane: Object.freeze({
-    patchPath: runtimePatchPath,
-    licenseSha256:
-      'fe9a7b24f2d1540df1a4d273ba9b4b081844ecd1142839def5b7f242a13203b8',
-  }),
-  '@octanejs/rspack-plugin': Object.freeze({
-    patchPath: rspackPatchPath,
-    licenseSha256:
-      '4b83c082bc5305628aceda4130f495f30a6b992389b8d19229d508d38bc09a36',
-  }),
-});
 const runtimePatchOrder = Object.freeze([
   'runtime-source.patch',
   'typescript-compat/typescript-source.patch',
@@ -37,15 +19,6 @@ const runtimePatchOrder = Object.freeze([
   'rspack-source.patch',
   'rspack-tests.patch',
 ]);
-const currentInputs = Object.freeze({
-  source,
-  sourceIntegrity,
-  packages,
-  runtimePair,
-  dependencyDirectory: here,
-  patches: Object.freeze(runtimePatchOrder.map(name => path.join(here, name))),
-});
-
 export function octane20RuntimeInputs() {
   const directory = path.join(here, 'octane-0.20.0');
   const { upstream } = JSON.parse(
@@ -271,7 +244,6 @@ export function qualifyRuntimeTree(
     parityOnly = false,
     jsonReport,
     suites,
-    legacyAliases = false,
     authoritativeIds = false,
   } = {},
 ) {
@@ -349,11 +321,7 @@ export default defineConfig({
  }},`
      : ''
  }octane()],
- resolve:{alias:${
-   legacyAliases
-     ? `[{find:/^octane$/,replacement:${JSON.stringify(path.join(pkg, 'src/index.ts'))}},{find:/^octane\\/(.*)$/,replacement:${JSON.stringify(path.join(pkg, 'src') + '/')}+'$1'}]`
-     : JSON.stringify(aliases)
- }},
+ resolve:{alias:${JSON.stringify(aliases)}},
  test:{environment:'jsdom',include:${JSON.stringify(include)},maxWorkers:1,testTimeout:20000}
 });`,
   );
@@ -547,7 +515,7 @@ export function phaseTracker(write = line => process.stderr.write(line)) {
 export async function qualifyRuntimePair({
   work,
   expectedPatches,
-  inputs = currentInputs,
+  inputs = octane20RuntimeInputs(),
   writePatch = false,
   runner = {},
   pnpm = process.env.PNPM_BINARY ?? 'pnpm',
@@ -826,9 +794,7 @@ if (
     process.env.OWNED_TEMP_DIR,
     'Run via owned-temp-dir --need-gib 20 --run octane-runtime -- node <this-file>',
   );
-  const inputs = process.argv.includes('--octane-0.20.0')
-    ? octane20RuntimeInputs()
-    : currentInputs;
+  const inputs = octane20RuntimeInputs();
   const receipts = await qualifyRuntimePair({
     inputs,
     work: path.join(

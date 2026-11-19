@@ -80,16 +80,6 @@ export default [
       'Derive tpl from template.smart.ast on the declared Babel core peer, exactly as SVGR constructs it at runtime, instead of importing an undeclared private Babel template type. Repository qualification covers Babel 8 coexistence; published consumers require the corrected authenticated sidecar closure, not this repository-only patch. Generated workspaces remain patch-free.',
   },
   {
-    packageName: 'solid-js',
-    version: '2.0.0-rc.22',
-    path: 'patches/solid-js@2.0.0-rc.22.patch',
-    sha256: 'c6801d66cd6f7adc08a9aee55ddb32955ddf4b83139e9e61eba6e8931675e745',
-    repository: false,
-    workspace: null,
-    reason:
-      'Git-headed form of the reviewed support-producer declaration correction that re-exports the existing heldRead runtime primitive required by @solidjs/web 2.0.0-rc.22; the hunk is byte-identical to the producer input and retained as fixture evidence. Every repository resolution is the authenticated support 2.0.0-rc.22 archive whose descriptor pins the producer patch SHA-256 and whose bytes already carry the correction, so the repository no longer reapplies it. Generated workspaces remain patch-free.',
-  },
-  {
     packageName: 'ultracite',
     version: '8.2.1',
     path: 'patches/ultracite@8.2.1.patch',
@@ -98,26 +88,6 @@ export default [
     workspace: null,
     reason:
       'Include the upstream MIT notice omitted from the npm artifact, preserving the exact license.md bytes at registry source commit 943db54bde8bd34afd029f8f84ceddd1bb42ecdb.',
-  },
-  {
-    packageName: 'picomatch',
-    version: '2.3.2',
-    path: 'patches/picomatch@2.3.2.patch',
-    sha256: '1b702d20ae6bcdcbe35e484772e3ceecae5f9b004cd4be2e1bd40b5172e9afc2',
-    repository: true,
-    workspace: null,
-    reason:
-      'Bound repeated extglob analysis for GHSA-fc5q-39xc-vjpf on the compatible 2.x line. The repository audit verifies the exact installed correction; generated workspaces do not receive a patch.',
-  },
-  {
-    packageName: 'picomatch',
-    version: '4.0.7',
-    path: 'patches/picomatch@4.0.7.patch',
-    sha256: 'ec7809bedc98f3bdcfd79f9ae4a21a7c74915cf40e70ef640437cb6ffed17960',
-    repository: true,
-    workspace: null,
-    reason:
-      'Bound repeated extglob analysis for GHSA-fc5q-39xc-vjpf on the compatible 4.x line. The repository audit verifies the exact installed correction; generated workspaces do not receive a patch.',
   },
   {
     packageName: 'braces',

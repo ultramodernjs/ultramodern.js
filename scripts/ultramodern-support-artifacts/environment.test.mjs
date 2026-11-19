@@ -6,10 +6,6 @@ import path from 'node:path';
 import test from 'node:test';
 import { qualifyOtel } from '../ultramodern-dependencies/otel-corrections/portable.mjs';
 import { qualifyPeerCorrections } from '../ultramodern-dependencies/test-peer-corrections/qualify.mjs';
-import {
-  qualifyHeldRead,
-  readHeldReadRecipeBytes,
-} from '../ultramodern-renderers/solid-corrections/qualify-held-read.mjs';
 import { qualifyDtsPlugin } from './dts-plugin.mjs';
 
 const sentinels = {
@@ -23,7 +19,7 @@ const sentinels = {
   SUPPORT_SKIP_GATES: 'true',
 };
 
-for (const name of ['Solid', 'metadata3', 'OTel', 'DTS']) {
+for (const name of ['metadata3', 'OTel', 'DTS']) {
   test(`${name} actual qualification child rejects ambient credentials and policy`, async t => {
     const parent = fs.mkdtempSync(
       path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'support-env-'),
@@ -58,13 +54,6 @@ for (const name of ['Solid', 'metadata3', 'OTel', 'DTS']) {
           workDirectory,
           toolchain: { storeDirectory, run: inspect },
           log() {},
-        });
-      } else if (name === 'Solid') {
-        qualification = qualifyHeldRead({
-          workDirectory,
-          storeDirectory,
-          recipeBytes: readHeldReadRecipeBytes(),
-          run: (_command, _args, options) => inspect(options),
         });
       } else if (name === 'OTel') {
         qualification = qualifyOtel({

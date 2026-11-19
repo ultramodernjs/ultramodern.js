@@ -8,13 +8,16 @@ import { fileURLToPath } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { fixture } from '../ultramodern-renderers/native-artifacts/fixtures.test-support.mjs';
 import * as native from '../ultramodern-renderers/native-artifacts/protocol.mjs';
-import { reconstruct } from '../ultramodern-renderers/native-artifacts/reconstruct.mjs';
 import {
   canonicalTarSha256,
   packFiles as historicalPackFiles,
 } from './native-pack.test-reference.mjs';
 import { artifactPolicy, bindArtifactProtocol } from './protocol.mjs';
-import { validateRecipe, verifySourceQualification } from './reconstruct.mjs';
+import {
+  reconstructArtifact,
+  validateRecipe,
+  verifySourceQualification,
+} from './reconstruct.mjs';
 import { verifyPayloads } from './release.mjs';
 import { authenticateDescriptor } from './transport.mjs';
 
@@ -35,6 +38,15 @@ function readGolden(kind) {
   );
   return bytes;
 }
+
+const historical = bindArtifactProtocol({
+  ...artifactPolicy(native),
+  cohort: Object.fromEntries(
+    Object.entries(JSON.parse(readGolden('manifest')).packages).map(
+      ([name, item]) => [name, item.version],
+    ),
+  ),
+});
 
 function controlFiles(golden, name, stage) {
   const pkg = {
@@ -136,9 +148,9 @@ test('historical packer source and canonical tar reference are pinned independen
 
 test('native manifest preserves historical bytes except proven provider-local archive pins', () => {
   const golden = readGolden('manifest');
-  const f = fixture();
+  const f = fixture(historical);
   const archives = fixtureArchives(f);
-  const bytes = native.manifestBytes(f.manifest);
+  const bytes = historical.manifestBytes(f.manifest);
   assertGoldenParity(bytes, golden, archives, archives, 'fixture');
   assert.deepEqual(f.payloads.get(native.manifestFilename), bytes);
   assert.equal(f.descriptor.manifest.integrity, native.integrity(bytes));
@@ -200,7 +212,7 @@ test('actual reconstruction preserves four historical archives and strict manife
   assert(process.env.OWNED_TEMP_DIR, 'Use owned-temp-dir');
   const root = fs.mkdtempSync(path.join(process.env.OWNED_TEMP_DIR, 'golden-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const f = fixture();
+  const f = fixture(historical);
   const patch = Buffer.from(
     '--- a/index.js\n+++ b/index.js\n@@ -1 +1 @@\n-export const control = true;\n+export const control = false;\n',
   );
@@ -221,7 +233,8 @@ test('actual reconstruction preserves four historical archives and strict manife
     qualifyPacked() {},
   };
   const directory = path.join(root, 'out');
-  await reconstruct({
+  await reconstructArtifact({
+    protocol: historical,
     recipe,
     producer: f.producer,
     directory,
@@ -258,7 +271,7 @@ test('actual reconstruction preserves four historical archives and strict manife
 test('golden parity rejects fabricated content, metadata, inventory and compressed-byte mutations', () => {
   const goldenBytes = readGolden('manifest');
   const golden = JSON.parse(goldenBytes);
-  const f = fixture();
+  const f = fixture(historical);
   const archives = fixtureArchives(f);
   const name = Object.keys(golden.packages)[0];
   const mutations = {
@@ -286,7 +299,7 @@ test('golden parity rejects fabricated content, metadata, inventory and compress
     assert.throws(
       () =>
         assertGoldenParity(
-          native.manifestBytes(manifest),
+          historical.manifestBytes(manifest),
           goldenBytes,
           altered,
           archives,
@@ -306,7 +319,7 @@ test('golden parity rejects fabricated content, metadata, inventory and compress
   assert.throws(
     () =>
       assertGoldenParity(
-        native.manifestBytes(manifest),
+        historical.manifestBytes(manifest),
         goldenBytes,
         recompressed,
         archives,
@@ -326,7 +339,7 @@ test('golden parity rejects fabricated content, metadata, inventory and compress
   assert.throws(
     () =>
       assertGoldenParity(
-        native.manifestBytes(upstreamManifest),
+        historical.manifestBytes(upstreamManifest),
         goldenBytes,
         archives,
         changedUpstream,
@@ -338,7 +351,7 @@ test('golden parity rejects fabricated content, metadata, inventory and compress
   changedProvenance.packages[name].patchSha256 = 'd'.repeat(64);
   assert.throws(() =>
     assertGoldenParity(
-      native.manifestBytes(changedProvenance),
+      historical.manifestBytes(changedProvenance),
       goldenBytes,
       archives,
       archives,
@@ -347,7 +360,7 @@ test('golden parity rejects fabricated content, metadata, inventory and compress
   );
   assert.throws(() =>
     assertGoldenParity(
-      Buffer.concat([native.manifestBytes(f.manifest), Buffer.from('\n')]),
+      Buffer.concat([historical.manifestBytes(f.manifest), Buffer.from('\n')]),
       goldenBytes,
       archives,
       archives,

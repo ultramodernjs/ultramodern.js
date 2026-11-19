@@ -77,7 +77,7 @@ describe('builder rspack with cache', () => {
 
     const directories = Object.fromEntries(
       (await cacheProof.assertCacheIsolation(bundlerConfigs)).map(config => [
-        String(config.cache.version).split('-')[0],
+        config.name,
         config.cache.storage.location,
       ]),
     );

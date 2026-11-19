@@ -14,13 +14,11 @@ export const rslibPatchSha256 =
 export const supportBaselineRevision =
   '0024faeea760417227135429fe2727ae471abbe4';
 
-// The same accepted main source, carrying the shipped native activation
-// c40bbf99 (producer source ea6b64f2, run 43993884470 attempt 1). Its
-// manifests are a baseline only for native-owned metadata and the exact native
-// edges that select that descriptor; they grant no other edge or URL authority.
-// A later native run needs admission, never this baseline.
+// Immutable reviewed refresh carrying the already-qualified native 9353 cohort
+// (run 44131025154 attempt 1). This baseline grants only its exact native-owned
+// metadata and selections; the qualified 0.20 release still needs admission.
 export const nativeBaselineRevision =
-  '0024faeea760417227135429fe2727ae471abbe4';
+  '2fdfae61808ab76cd26eba98668d559cc2fa7bf1';
 
 // Owning source and actual packed runtime/type qualification establish this
 // consolidation. Corrected OTel distribution and release acceptance stay separate.
@@ -63,7 +61,50 @@ const mfTransitions = Object.fromEntries(
     },
   ]),
 );
+// Registry declarations reviewed against the immutable .7 checkout.
+// The isolated renderer build inputs and broad consumer peers are not moved.
+const registryAdvances = {
+  '@rsbuild/core': { from: ['2.3.2'], to: '2.3.3' },
+  '@rspack/core': { from: ['2.2.9'], via: ['2.3.2'], to: '2.3.3' },
+  '@vercel/nft': {
+    from: ['^1.11.0'],
+    via: ['^1.11.2', '^1.11.6'],
+    to: '1.11.7',
+  },
+  antd: { from: ['^6.6.6'], via: ['^6.7.0'], to: '6.7.1' },
+  browserslist: { from: ['4.29.5'], to: '4.29.6' },
+  'es-module-lexer': { from: ['^3.0.4'], to: '3.0.5' },
+  filesize: {
+    from: ['11.0.26'],
+    via: ['11.0.32', '11.0.34'],
+    to: '11.0.35',
+  },
+  hono: { from: ['^4.13.13'], via: ['^4.13.18'], to: '4.13.19' },
+  i18next: { from: ['26.4.6'], via: ['27.1.2'], to: '27.1.5' },
+  'i18next-browser-languagedetector': { from: ['^8.3.0'], to: '8.3.1' },
+  'i18next-http-middleware': {
+    from: ['^3.10.0'],
+    via: ['^3.10.2'],
+    to: '3.10.3',
+  },
+  minimatch: { from: ['^10.2.6'], via: ['^11.0.8'], to: '11.0.9' },
+  oxfmt: { from: ['0.73.0'], via: ['0.78.0'], to: '0.79.0' },
+  oxlint: { from: ['1.88.0'], via: ['1.93.0'], to: '1.94.0' },
+  'path-serializer': { from: ['0.7.0'], to: '0.8.1' },
+  'postcss-custom-properties': { from: ['15.0.4'], to: '15.0.5' },
+  puppeteer: { from: ['^25.14.0'], via: ['^25.17.0'], to: '25.18.1' },
+  'react-i18next': { from: ['17.0.18'], via: ['18.0.1'], to: '18.0.2' },
+  rollup: {
+    from: ['^4.64.7'],
+    via: ['^4.68.3', '^4.68.5'],
+    to: '4.68.6',
+  },
+  seroval: { from: ['1.6.9'], via: ['1.8.1'], to: '1.8.2' },
+  'type-fest': { from: ['5.10.0'], to: '6.0.1' },
+  vitest: { from: ['^5.0.5'], via: ['^5.1.0'], to: '5.1.1' },
+};
 export const coordinatedTransitions = Object.freeze({
+  ...registryAdvances,
   ...mfTransitions,
   '@module-federation/node': {
     from: ['2.7.52', 'npm:@bleedingdev/mf-node@2.7.53'],
@@ -77,12 +118,28 @@ export const coordinatedTransitions = Object.freeze({
     from: ['8.0.1'],
     to: 'npm:@bleedingdev/ultracite@8.2.2',
   },
-  '@effect/tsgo': { from: ['0.67.0'], to: '0.69.0' },
+  '@effect/tsgo': { from: ['0.67.0'], via: ['0.69.0'], to: '0.70.0' },
   tsrs: { from: ['0.21.0-ts7.1.0-beta'], to: '0.25.0-ts7.1.0-beta' },
-  '@solidjs/compiler': { from: ['2.0.0-rc.15'], to: '2.0.0-rc.22' },
-  '@solidjs/signals': { from: ['2.0.0-rc.15'], to: '2.0.0-rc.22' },
-  '@solidjs/web': { from: ['2.0.0-rc.15'], to: '2.0.0-rc.22' },
-  'solid-js': { from: ['2.0.0-rc.15'], to: '2.0.0-rc.22' },
+  '@solidjs/compiler': {
+    from: ['2.0.0-rc.15'],
+    via: ['2.0.0-rc.22', '2.0.0'],
+    to: '2.0.1',
+  },
+  '@solidjs/signals': {
+    from: ['2.0.0-rc.15'],
+    via: ['2.0.0-rc.22', '2.0.0'],
+    to: '2.0.1',
+  },
+  '@solidjs/web': {
+    from: ['2.0.0-rc.15'],
+    via: ['2.0.0-rc.22', '2.0.0'],
+    to: '2.0.1',
+  },
+  'solid-js': {
+    from: ['2.0.0-rc.15'],
+    via: ['2.0.0-rc.22', '2.0.0'],
+    to: '2.0.1',
+  },
   miniflare: { from: ['5.20261012.0-beta'], to: '5.20261113.0-beta' },
   wrangler: { from: ['4.151.0'], to: '4.162.0' },
   '@cloudflare/workers-types': {
@@ -111,12 +168,46 @@ const svgrDeclarationsCommit = '7c27dc97387bbac67c051c9865bce114d04779b8';
 const declarationPluginSupportCommit =
   'ca40fbecaff494fe71a9960960ff84f394a4933f';
 const serverCompilerOwnerCommit = '3961f60e3ffef65183ecea01d803a6b552c19239';
+const scriptGlobCommit = 'dd35a9f82d9ccbb29cbcfd625708a267e449db45';
+const utilsGlobCommit = 'a6e3eac3381fa9c01ff9c344ffa0e35975cabf24';
 const appTools = 'packages/solutions/app-tools/package.json';
 const ultramodernAppTools =
   'packages/solutions/ultramodern-app-tools/package.json';
 const appToolsExtensions =
   'packages/solutions/app-tools-extensions/package.json';
 export const reviewedTransitions = Object.freeze([
+  reviewedTransition(
+    scriptGlobCommit,
+    'scripts/lint-package-json/package.json',
+    'dependencies',
+    'fast-glob',
+    '3.3.3',
+    null,
+  ),
+  reviewedTransition(
+    scriptGlobCommit,
+    'scripts/prebundle/package.json',
+    'devDependencies',
+    'fast-glob',
+    '3.3.3',
+    null,
+  ),
+  reviewedTransition(
+    utilsGlobCommit,
+    'scripts/prebundle/package.json',
+    'devDependencies',
+    'globby',
+    '16.2.4',
+    null,
+  ),
+  reviewedTransition(
+    utilsGlobCommit,
+    'packages/toolkit/utils/package.json',
+    'dependencies',
+    'fast-glob',
+    '3.3.3',
+    null,
+  ),
   reviewedTransition(
     cohortCommit,
     ultramodernAppTools,
@@ -269,7 +360,7 @@ export const targets = Object.freeze({
   '@commitlint/cli': '21.2.4',
   '@commitlint/config-conventional': '21.2.4',
   '@effect/opentelemetry': '4.1.4',
-  '@effect/tsgo': '0.69.0',
+  '@effect/tsgo': '0.70.0',
   '@modelcontextprotocol/client': '2.4.0',
   '@modelcontextprotocol/ext-apps': '2.0.4',
   '@modelcontextprotocol/server': '2.4.0',
@@ -287,8 +378,8 @@ export const targets = Object.freeze({
   '@module-federation/runtime-tools': '2.9.3',
   '@module-federation/sdk': '2.9.3',
   '@module-federation/webpack-bundler-runtime': '2.9.3',
-  '@octanejs/rspack-plugin': '0.2.10',
-  '@octanejs/tanstack-router': '0.3.4',
+  '@octanejs/rspack-plugin': '0.2.12',
+  '@octanejs/tanstack-router': '0.3.6',
   '@opentelemetry/api': '1.10.0',
   '@opentelemetry/resources': '3.1.1',
   '@opentelemetry/sdk-logs': '3.1.1',
@@ -299,7 +390,6 @@ export const targets = Object.freeze({
   '@rsbuild/plugin-check-syntax': '2.1.0',
   '@rsbuild/plugin-typed-css-modules': '1.3.0',
   '@rslib/core': '1.0.7',
-  '@rspack/core': '2.3.2',
   '@rspress/core': '2.1.3',
   '@rspress/plugin-llms': '2.1.3',
   '@rspress/shared': '2.1.3',
@@ -308,9 +398,9 @@ export const targets = Object.freeze({
   '@rstest/browser-react': '0.12.6',
   '@rstest/core': '0.12.6',
   '@shikijs/transformers': '4.6.0',
-  '@solidjs/compiler': '2.0.0-rc.22',
-  '@solidjs/signals': '2.0.0-rc.22',
-  '@solidjs/web': '2.0.0-rc.22',
+  '@solidjs/compiler': '2.0.1',
+  '@solidjs/signals': '2.0.1',
+  '@solidjs/web': '2.0.1',
   '@storybook/addon-docs': '10.6.7',
   '@storybook/addon-onboarding': '10.6.7',
   '@storybook/react': '10.6.7',
@@ -329,10 +419,8 @@ export const targets = Object.freeze({
   '@types/node': '26.6.6',
   '@types/react': '19.3.0',
   '@types/react-dom': '19.3.0',
-  '@vercel/nft': '1.11.2',
   '@vitejs/plugin-react': '6.3.0',
   '@volar/language-core': '2.4.31',
-  antd: '6.7.0',
   axios: '1.21.1',
   'caniuse-lite': '1.0.30001826',
   'check-dependency-version-consistency': '6.0.1',
@@ -346,16 +434,12 @@ export const targets = Object.freeze({
   'enhanced-resolve': '5.27.0',
   entities: '9.0.0',
   execa: '10.2.1',
-  filesize: '11.0.32',
   glob: '14.0.6',
-  hono: '4.13.18',
   'http-compression': '1.2.0',
   'http-proxy-middleware': '4.2.2',
-  i18next: '27.1.2',
   'i18next-chained-backend': '5.0.8',
   'i18next-fs-backend': '2.6.12',
   'i18next-http-backend': '4.0.10',
-  'i18next-http-middleware': '3.10.2',
   inquirer: '14.3.0',
   'ioredis-mock': '8.13.1',
   ipx: '4.1.0',
@@ -365,38 +449,32 @@ export const targets = Object.freeze({
   'lint-staged': '17.6.1',
   memfs: '4.80.1',
   mermaid: '12.3.0',
-  minimatch: '11.0.8',
   nock: '15.0.6',
   nx: '24.0.6',
-  octane: '0.18.0',
+  octane: '0.20.0',
   ora: '10.0.0',
-  oxfmt: '0.78.0',
-  oxlint: '1.93.0',
   'path-to-regexp': '9.0.0',
   'pkg-types': '2.4.0',
   playwright: '1.65.1',
   'playwright-core': '1.65.1',
   postcss: '8.5.33',
   prettier: '3.10.1',
-  puppeteer: '25.17.0',
   qs: '6.17.1',
   react: '19.3.1',
   'react-dom': '19.3.1',
   'react-helmet-async': '3.1.0',
-  'react-i18next': '18.0.1',
   'react-router': '8.5.1',
   'react-router-dom': '7.18.5',
   'react-server-dom-rspack': '0.1.1',
   rimraf: '6.1.4',
-  rollup: '4.68.3',
   'rsbuild-plugin-dts': '1.0.7',
   'rsbuild-redact-plugin': '0.2.0',
   sass: '1.108.2',
   'sass-embedded': '1.108.2',
   semver: '7.8.6',
-  seroval: '1.8.1',
+  seroval: '1.8.2',
   'seroval-plugins': '1.8.0',
-  'solid-js': '2.0.0-rc.22',
+  'solid-js': '2.0.1',
   storybook: '10.6.7',
   'storybook-addon-modernjs': '3.6.3',
   'storybook-react-rsbuild': '3.6.3',
@@ -407,7 +485,7 @@ export const targets = Object.freeze({
   ultracite: '8.2.1',
   'url-join': '6.0.0',
   vite: '8.3.8',
-  vitest: '5.1.0',
+  vitest: '5.1.1',
   vue: '3.5.45',
   webpack: '5.112.2',
   ws: '8.23.0',
@@ -415,6 +493,9 @@ export const targets = Object.freeze({
   'zephyr-modernjs-plugin': '1.8.0',
   'zephyr-rspack-plugin': '1.8.0',
   zod: '4.6.7',
+  ...Object.fromEntries(
+    Object.entries(registryAdvances).map(([name, { to }]) => [name, to]),
+  ),
 });
 
 export const holds = Object.freeze({
@@ -429,10 +510,6 @@ export const holds = Object.freeze({
   '@octanejs/tanstack-router':
     'corrected renderer artifact and router-core pin',
   octane: 'corrected renderer artifact, TypeScript and OXC compatibility',
-  '@solidjs/compiler': 'Solid 2 next cohort; latest tag is an older RC',
-  '@solidjs/signals': 'Solid 2 next cohort; latest tag is an older RC',
-  '@solidjs/web': 'Solid 2 next cohort; latest tag is an older RC',
-  'solid-js': 'Solid 2 next cohort; latest tag is Solid 1',
   'react-router-dom': 'move router/DOM consumers together after peer review',
   'postcss-initial': '4.0.1 is newer than latest tag 3.0.4; never downgrade',
   '@rsbuild-image/core': 'no stable release beyond existing next.36',

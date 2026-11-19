@@ -1309,16 +1309,10 @@ function collectBleedingdevModeInputErrors(workflow, relativePath) {
     inputs.sidecar_profile?.required !== true ||
     inputs.sidecar_profile?.default !== 'parser' ||
     JSON.stringify(inputs.sidecar_profile?.options) !==
-      JSON.stringify([
-        'parser',
-        'mf-sdk',
-        'tanstack-redact',
-        'mf-cohort',
-        'picomatch-4',
-      ])
+      JSON.stringify(['parser', 'mf-sdk', 'tanstack-redact', 'mf-cohort'])
   ) {
     errors.push(
-      `${relativePath} sidecar profile must be the required parser/mf-sdk/tanstack-redact/mf-cohort/picomatch-4 choice with parser default`,
+      `${relativePath} sidecar profile must be the required parser/mf-sdk/tanstack-redact/mf-cohort choice with parser default`,
     );
   }
   const expression = value => ['${{', value, '}}'].join(' ');
@@ -1363,7 +1357,7 @@ function collectBleedingdevModeInputErrors(workflow, relativePath) {
     '[[ "$PUBLISH_VERSION" =~ ^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-ultramodern\\.[1-9][0-9]*$ ]]',
     ';;',
     'sidecars)',
-    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == tanstack-redact || "$SIDECAR_PROFILE" == mf-cohort || "$SIDECAR_PROFILE" == picomatch-4 ]] || exit 1',
+    '[[ "$SIDECAR_PROFILE" == parser || "$SIDECAR_PROFILE" == mf-sdk || "$SIDECAR_PROFILE" == tanstack-redact || "$SIDECAR_PROFILE" == mf-cohort ]] || exit 1',
     '[[ -z "$PUBLISH_VERSION" && -z "$RECOVERY_RUN_ID" && -z "$RECOVERY_RUN_ATTEMPT" && -z "$RECOVERY_QUALIFICATION_ATTEMPT" ]]',
     ';;',
     '*) exit 1 ;;',
@@ -1866,7 +1860,7 @@ function collectSidecarArtifactFlowErrors(workflow, relativePath) {
   const verifyCommand = `${publishBase} --check-staging`;
   const dryCommand = `${publishCommand} --dry-run`;
   const contractTestCommand =
-    'node --test scripts/ultramodern-publish/__tests__/sidecar-bundle.test.js scripts/ultramodern-publish/__tests__/sidecar-qualification.test.js scripts/ultramodern-publish/__tests__/sidecar-provenance.test.js scripts/ultramodern-publish/__tests__/sidecar-publish-lane.test.js scripts/ultramodern-publish/__tests__/packed-mf-sdk-probe.test.js scripts/ultramodern-publish/__tests__/packed-redact-probe.test.js scripts/ultramodern-publish/__tests__/candidate-set-separation.test.js scripts/ultramodern-publish/__tests__/mf-cohort-profile.test.js scripts/ultramodern-publish/__tests__/parser-picomatch-profile.test.js scripts/ultramodern-publish/__tests__/packed-mf-cohort-probe.test.js';
+    'node --test scripts/ultramodern-publish/__tests__/sidecar-bundle.test.js scripts/ultramodern-publish/__tests__/sidecar-qualification.test.js scripts/ultramodern-publish/__tests__/sidecar-provenance.test.js scripts/ultramodern-publish/__tests__/sidecar-publish-lane.test.js scripts/ultramodern-publish/__tests__/packed-mf-sdk-probe.test.js scripts/ultramodern-publish/__tests__/packed-redact-probe.test.js scripts/ultramodern-publish/__tests__/candidate-set-separation.test.js scripts/ultramodern-publish/__tests__/mf-cohort-profile.test.js scripts/ultramodern-publish/__tests__/packed-mf-cohort-probe.test.js';
   const testAt = qualifySteps.findIndex(
     step =>
       normalizedRun(step) === contractTestCommand && step.if === undefined,
@@ -3443,10 +3437,10 @@ function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
       !sameKeys(dispatch.inputs, ['octane_candidate']) ||
       octane?.type !== 'choice' ||
       octane.required !== true ||
-      octane.default !== 'octane-0.18.0' ||
-      JSON.stringify(octane.options) !== '["octane-0.18.0","octane-0.20.0"]'
+      octane.default !== 'octane-0.20.0' ||
+      JSON.stringify(octane.options) !== '["octane-0.20.0"]'
     )
-      fail('must select one of the two exact Octane cohorts at dispatch');
+      fail('must select the exact active Octane cohort at dispatch');
   }
   const jobs = workflow.jobs ?? {};
   if (!sameKeys(jobs, ['produce', 'qualify', writer]))

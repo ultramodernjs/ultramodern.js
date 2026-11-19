@@ -21,16 +21,16 @@ const workspaceRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const packageNames = ['@modern-js/renderer-core', '@modern-js/renderer-solid'];
 
 export const admissionTuple = Object.freeze({
-  'solid-js': '2.0.0-rc.22',
-  '@solidjs/web': '2.0.0-rc.22',
-  '@solidjs/signals': '2.0.0-rc.22',
-  '@solidjs/compiler': '2.0.0-rc.22',
-  '@rsbuild/core': '2.3.2',
-  '@rspack/core': '2.3.2',
+  'solid-js': '2.0.1',
+  '@solidjs/web': '2.0.1',
+  '@solidjs/signals': '2.0.1',
+  '@solidjs/compiler': '2.0.1',
+  '@rsbuild/core': '2.3.3',
+  '@rspack/core': '2.3.3',
   '@babel/core': '8.1.2',
   playwright: '1.65.1',
   typescript: '7.0.2',
-  seroval: '1.8.1',
+  seroval: '1.8.2',
   'seroval-plugins': '1.8.0',
   isbot: '5.2.3',
 });

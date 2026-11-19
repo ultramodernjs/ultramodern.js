@@ -68,8 +68,6 @@ allowBuilds:
 patchedDependencies:
   'rsbuild-plugin-dts@1.0.7': patches/rsbuild-plugin-dts@1.0.7.patch
   '@svgr/babel-plugin-transform-svg-component@8.0.0': patches/@svgr__babel-plugin-transform-svg-component@8.0.0.patch
-  'picomatch@2.3.2': patches/picomatch@2.3.2.patch
-  'picomatch@4.0.7': patches/picomatch@4.0.7.patch
   'braces@3.0.3': patches/braces@3.0.3.patch
   '@module-federation/sdk@2.9.3': patches/@module-federation__sdk@2.9.3.patch
 overrides:
@@ -103,8 +101,8 @@ overrides:
   'undici@>=8.0.0 <8.12.2': 8.12.4
   'body-parser@>=2.0.0 <2.4.0': 2.4.0
   'yaml@>=1.0.0 <1.10.3': 1.10.3
-  # Solid RC22's native serializers were qualified together at these versions.
-  'seroval@>=1.0.0 <1.8.1': 1.8.1
+  # Admit the native serializer releases together.
+  'seroval@>=1.0.0 <1.8.1': 1.8.2
   'seroval-plugins@>=1.0.0 <1.8.0': 1.8.0
   'yaml@>=2.0.0 <2.9.1': 2.9.1
   'qs@>=6.0.0 <6.16.0': 6.17.1
@@ -253,20 +251,10 @@ minimumReleaseAgeExclude:
   - '@bleedingdev/mf-sdk@2.9.5'
   - '@bleedingdev/mf-webpack-bundler-runtime@2.9.5'
   - '@bleedingdev/ultracite@8.2.2'
-  - '@solidjs/compiler-darwin-arm64@2.0.0-rc.22'
-  - '@solidjs/compiler-darwin-x64@2.0.0-rc.22'
-  - '@solidjs/compiler-linux-arm64-gnu@2.0.0-rc.22'
-  - '@solidjs/compiler-linux-x64-gnu@2.0.0-rc.22'
-  - '@solidjs/compiler-wasm32-wasi@2.0.0-rc.22'
-  - '@solidjs/compiler-win32-x64-msvc@2.0.0-rc.22'
-  - '@solidjs/compiler@2.0.0-rc.22'
-  - '@solidjs/signals@2.0.0-rc.22'
-  - '@solidjs/web@2.0.0-rc.22'
   - check-dependency-version-consistency@6.0.1
   - http-proxy-middleware@4.2.2
   - i18next-http-middleware@3.10.2
   - lint-staged@17.6.1
-  - solid-js@2.0.0-rc.22
 
 # Reviewed exact compiler release; keep no-downgrade for every other release.
 trustPolicyExclude:

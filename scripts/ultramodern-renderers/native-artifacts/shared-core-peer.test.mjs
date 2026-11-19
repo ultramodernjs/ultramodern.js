@@ -19,7 +19,7 @@ test('actual reconstructed production adapter requires one exact application cor
   const manifest = JSON.parse(
     fs.readFileSync(
       new URL(
-        '../octane-corrections/upstream-adapter-package.json',
+        '../octane-corrections/octane-0.20.0/upstream-adapter-package.json',
         import.meta.url,
       ),
     ),
@@ -34,7 +34,7 @@ test('actual reconstructed production adapter requires one exact application cor
     root,
   );
   const actual = JSON.parse(fs.readFileSync(path.join(root, 'package.json')));
-  assertSharedCoreManifest(actual);
+  assertSharedCoreManifest(actual, 'octane-0.20.0');
   for (const mutate of [
     m => {
       m.dependencies['@tanstack/router-core'] = '1.171.39';
@@ -60,7 +60,7 @@ test('actual reconstructed production adapter requires one exact application cor
   ]) {
     const wrong = structuredClone(actual);
     mutate(wrong);
-    assert.throws(() => assertSharedCoreManifest(wrong));
+    assert.throws(() => assertSharedCoreManifest(wrong, 'octane-0.20.0'));
   }
 });
 
@@ -86,7 +86,7 @@ test('reviewed canonical patches and immutable adapter payload match their exact
     );
 });
 
-test('new full npm-layout patch preserves every historical source hunk', () => {
+test('current full npm-layout patch preserves the reviewed source corrections', () => {
   const historical = fs.readFileSync(
     new URL(
       '../../../patches/@octanejs__tanstack-router@0.3.4.patch',

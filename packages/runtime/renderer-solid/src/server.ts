@@ -81,6 +81,23 @@ function applicationRequestEvent<Bindings extends object>(
     event = createRequestEvent(session.request, {
       locals: { session, bindings: session.platform.bindings },
     });
+    // Solid reads these references and Headers.get before onCompleteShell.
+    // Keep native identity and content writes, not replaceable reader hooks.
+    Object.defineProperty(event, 'response', {
+      configurable: false,
+      writable: false,
+    });
+    Object.defineProperties(event.response, {
+      status: { configurable: false },
+      statusText: { configurable: false },
+      headers: { configurable: false, writable: false },
+      committed: { configurable: false },
+    });
+    Object.defineProperty(event.response.headers, 'get', {
+      value: Headers.prototype.get,
+      configurable: false,
+      writable: false,
+    });
     requestEvents.set(session, event);
     nativeHeads.set(event, {
       response: event.response,
@@ -165,7 +182,6 @@ function readNativeHead(event: ApplicationRequestEvent) {
     'delete',
     'entries',
     'forEach',
-    'get',
     'getSetCookie',
     'has',
     'set',

@@ -1,21 +1,4 @@
 {
-  "solid-js": {
-    "version": "2.0.0-rc.22",
-    "patchPath": "scripts/ultramodern-renderers/solid-corrections/held-read-declarations.patch",
-    "patchSha256": "c439688aaacf2cddef3a254fba2c468a98b9110b9b40556bd8ba1865a23b5399",
-    "upstream": {
-      "kind": "git-source",
-      "request": "https://registry.npmjs.org/solid-js/-/solid-js-2.0.0-rc.22.tgz",
-      "integrity": "sha512-RGTA07/yyFoM0+ov1PlRPupSaCY6chQ/uFSDmlPwRewqN5TTkVsxIQqz/HJCG+UhtjsyxNoSoAQ9GLjGdlSpcQ==",
-      "sourceArchiveIntegrity": "sha512-/DtlvxLaZNj0HryN7zpprSgFnVwPPVyFHNF3RNKTDRbOAaDBrWXrGbcJKNvaXkPFcleOAbHpToujZcYelIYhFg==",
-      "licenseSha256": "59a76ed2f4a3ebe8d20a58869ef9c09420f796aa179420c8fb916f5557defc9b",
-      "licensePath": "LICENSE",
-      "archiveRoot": "package",
-      "repository": "solidjs/solid",
-      "commit": "221b5f99faf0f47dbe6d5c4c6cb77661053e44b8",
-      "licenseLocation": "source-only"
-    }
-  },
   "@effect/opentelemetry": {
     "version": "4.1.4",
     "patchPath": "patches/@effect__opentelemetry@4.1.4.patch",

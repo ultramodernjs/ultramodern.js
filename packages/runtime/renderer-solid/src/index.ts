@@ -1,8 +1,8 @@
 /** This entry contains identity only. Select client, router or server explicitly. */
 export const SOLID_RENDERER_PROFILE = {
   renderer: 'solid',
-  solid: '2.0.0-rc.22',
-  web: '2.0.0-rc.22',
+  solid: '2.0.1',
+  web: '2.0.1',
   router: '@modern-js/renderer-solid/router@3.8.3',
   routerSource: '4fbd65c5c3b40be87a6248867c22021c1c19bba8',
   routerCore: '1.171.39',
@@ -19,7 +19,7 @@ export const SOLID_RENDERER_PROFILE = {
     providerOverrides: 'unsupported',
   },
   nativePromiseMetadata: {
-    runtime: '2.0.0-rc.22',
+    runtime: '2.0.1',
     fields: ['s', 'v'],
     status: [0, 1, 2],
     handle: 'sealed-with-checked-metadata',

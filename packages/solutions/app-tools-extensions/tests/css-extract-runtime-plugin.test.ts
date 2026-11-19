@@ -4,7 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { rspack } from '@rsbuild/core';
-import { CssExtractRuntimePlugin } from '../src/css-extract-runtime-plugin';
+import {
+  CssExtractRuntimePlugin,
+  normalizeCssExtractRuntimeStylesheetLookup,
+} from '../src/css-extract-runtime-plugin';
 
 const tempDirectories: string[] = [];
 const cssLoaderPath = path.resolve(
@@ -81,6 +84,16 @@ interface BrowserSandbox {
 }
 
 describe('CssExtractRuntimePlugin', () => {
+  it('rejects an unsupported CSS extraction runtime instead of skipping normalization', () => {
+    expect(() =>
+      normalizeCssExtractRuntimeStylesheetLookup(
+        'var href = __webpack_require__.miniCssF(chunkId);',
+      ),
+    ).toThrow(
+      'Unsupported CssExtractRspackPlugin runtime shape: expected one stylesheet lookup, found 0.',
+    );
+  });
+
   it('reuses the equivalent SSR stylesheet without crossing runtime origins', async () => {
     const context = await fs.mkdtemp(
       path.join(os.tmpdir(), 'modern-css-extract-runtime-'),
@@ -174,7 +187,19 @@ describe('CssExtractRuntimePlugin', () => {
 
     expect(executeWithStylesheet('/static/css/lazy.css')).toEqual([]);
     expect(
+      executeWithStylesheet('https://inventory.example/static/css/lazy.css'),
+    ).toEqual([]);
+    expect(executeWithStylesheet('/static/css/./lazy.css')).toEqual([]);
+    expect(
       executeWithStylesheet('https://other.example/static/css/lazy.css'),
+    ).toHaveLength(1);
+    expect(
+      executeWithStylesheet('http://inventory.example/static/css/lazy.css'),
+    ).toHaveLength(1);
+    expect(
+      executeWithStylesheet(
+        'https://inventory.example:444/static/css/lazy.css',
+      ),
     ).toHaveLength(1);
     expect(
       executeWithStylesheet('/static/css/lazy.css?version=stale'),

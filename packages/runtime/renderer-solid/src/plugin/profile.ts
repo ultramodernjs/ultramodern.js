@@ -12,8 +12,8 @@ export const solidProfile: RendererBuildProfile<'solid'> = {
     roots: 'single',
     cleanup: 'exactly-once',
   },
-  compiler: { name: '@solidjs/compiler', version: '2.0.0-rc.22' },
-  hydration: { name: '@solidjs/web', version: '2.0.0-rc.22' },
+  compiler: { name: '@solidjs/compiler', version: '2.0.1' },
+  hydration: { name: '@solidjs/web', version: '2.0.1' },
   router: {
     name: '@modern-js/renderer-solid',
     version: '3.8.3',
@@ -24,11 +24,11 @@ export const solidProfile: RendererBuildProfile<'solid'> = {
   jsxImportSource: '@solidjs/web',
   dependencies: {
     '@tanstack/router-core':
-      'https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-ea6b64f23735f29a2cb2a4647c04d2dc3a185cbc-43993884470-1/tanstack-router-core-1.171.39.tgz',
-    'solid-js': '2.0.0-rc.22',
-    '@solidjs/web': '2.0.0-rc.22',
-    '@solidjs/signals': '2.0.0-rc.22',
-    '@solidjs/compiler': '2.0.0-rc.22',
+      'https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz',
+    'solid-js': '2.0.1',
+    '@solidjs/web': '2.0.1',
+    '@solidjs/signals': '2.0.1',
+    '@solidjs/compiler': '2.0.1',
     '@modern-js/renderer-solid': '3.8.3',
   },
   capabilities: {

@@ -7,9 +7,8 @@ on:
         description: Exact Octane runtime cohort to build
         type: choice
         required: true
-        default: octane-0.18.0
+        default: octane-0.20.0
         options:
-          - octane-0.18.0
           - octane-0.20.0
 
 permissions:

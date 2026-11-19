@@ -112,7 +112,7 @@ test('the actual packed-consumer workspace plan includes bounded generator seria
           `file:${item.tarball}`,
         ]),
       ),
-      'seroval@>=1.0.0 <1.8.1': '1.8.1',
+      'seroval@>=1.0.0 <1.8.1': '1.8.2',
       'seroval-plugins@>=1.0.0 <1.8.0': '1.8.0',
     },
   });
@@ -156,7 +156,8 @@ test('live standalone, i18n and federation proof producers cannot retain the old
       new URL(filename, import.meta.url),
       'utf8',
     );
-    assert.equal(source.includes('2.0.0-rc.15'), false, filename);
+    for (const retired of ['2.0.0-rc.15', '2.0.0-rc.22', 'support-artifacts-'])
+      assert.equal(source.includes(retired), false, `${filename}: ${retired}`);
     if (filename !== './run.mjs') {
       const pins = [];
       const ast = parseSync(source, { babelrc: false, configFile: false });
@@ -200,21 +201,21 @@ test('serializer planning rejects missing, broad, stale and computed generator c
     'utf8',
   );
   const expected = {
-    'seroval@>=1.0.0 <1.8.1': '1.8.1',
+    'seroval@>=1.0.0 <1.8.1': '1.8.2',
     'seroval-plugins@>=1.0.0 <1.8.0': '1.8.0',
   };
   assert.deepEqual(admissionSerializerOverrides(source), expected);
   for (const [from, to] of [
     ["'seroval@>=1.0.0 <1.8.1'", "'seroval'"],
     ["'seroval-plugins@>=1.0.0 <1.8.0'", "'seroval-plugins'"],
-    ["'seroval@>=1.0.0 <1.8.1': '1.8.1'", "'seroval@>=1.0.0 <1.8.1': '1.7.0'"],
+    ["'seroval@>=1.0.0 <1.8.1': '1.8.2'", "'seroval@>=1.0.0 <1.8.1': '1.7.0'"],
     [
       "'seroval-plugins@>=1.0.0 <1.8.0': '1.8.0'",
       "'seroval-plugins@>=1.0.0 <1.8.0': unknownVersion",
     ],
     [
-      "'seroval@>=1.0.0 <1.8.1': '1.8.1'",
-      "'seroval@>=1.0.0 <1.8.1': '1.8.1', 'seroval@>=1.0.0 <1.8.1': '1.7.0'",
+      "'seroval@>=1.0.0 <1.8.1': '1.8.2'",
+      "'seroval@>=1.0.0 <1.8.1': '1.8.2', 'seroval@>=1.0.0 <1.8.1': '1.7.0'",
     ],
   ]) {
     assert(source.includes(from));
@@ -233,6 +234,9 @@ test('native owner metadata retains the accepted artifact and rejects stale decl
   for (const change of [
     value => {
       value.dependencies['solid-js'] = '2.0.0-rc.15';
+    },
+    value => {
+      value.peerDependencies['solid-js'] = '2.0.0-rc.22';
     },
     value => {
       value.dependencies['@tanstack/router-core'] = '1.171.37';
@@ -308,6 +312,8 @@ test('the verifier enforces the latest tuple and obsolete-runtime rejection in a
     assert.equal(graph.versions[name], version, name);
   for (const [name, stale] of [
     ['solid-js', '2.0.0-rc.15'],
+    ['solid-js', '2.0.0-rc.22'],
+    ['@solidjs/signals', '2.0.0-rc.22'],
     ['@babel/core', '7.29.7'],
     ['@rsbuild/core', '2.2.11'],
     ['@rspack/core', '2.2.8'],

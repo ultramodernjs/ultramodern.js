@@ -240,7 +240,7 @@ test('compiler matrix uses four Depot builds without Intel Mac or Ubuntu 22.04',
   const checkout = steps.find(
     step => step.with?.repository === 'Effect-TS/tsgo',
   );
-  assert.equal(checkout.with.ref, '416fdf299111341e156fc94330cd481470494ac6');
+  assert.equal(checkout.with.ref, '0e722d359c969bdf1b1316f08e8637022cde3cce');
   const setup = steps.find(
     step => step.uses === './.github/actions/setup-repo',
   );

@@ -14,7 +14,7 @@ function currentManifest() {
   return {
     schemaVersion: 1,
     renderer: 'solid',
-    compilerVersion: '2.0.0-rc.22',
+    compilerVersion: '2.0.1',
     rendererIdentity: { ...identity },
     modules: {
       _base: '/',
@@ -66,12 +66,14 @@ test('rejects a missing module manifest before renderer lookup', () => {
 });
 
 test('rejects a manifest produced by another compiler ABI', () => {
-  const manifest = currentManifest();
-  manifest.compilerVersion = '2.0.0-rc.15';
-  assert.throws(
-    () => validateSolidModuleManifest(manifest, identity),
-    /compiler ABI mismatch/,
-  );
+  for (const compilerVersion of ['2.0.0-rc.15', '2.0.0-rc.22']) {
+    const manifest = currentManifest();
+    manifest.compilerVersion = compilerVersion;
+    assert.throws(
+      () => validateSolidModuleManifest(manifest, identity),
+      /compiler ABI mismatch/,
+    );
+  }
 });
 
 test('rejects a manifest without the application build identity', () => {

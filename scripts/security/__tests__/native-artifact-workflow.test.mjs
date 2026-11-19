@@ -105,6 +105,11 @@ for (const [label, mutate] of Object.entries({
       'latest',
     );
   },
+  'retired Octane input': workflow => {
+    workflow.on.workflow_dispatch.inputs.octane_candidate.options.push(
+      'octane-0.18.0',
+    );
+  },
   'different publication cohort': workflow => {
     workflow.jobs.release.steps.at(-1).env.NATIVE_OCTANE_CANDIDATE =
       'octane-0.18.0';

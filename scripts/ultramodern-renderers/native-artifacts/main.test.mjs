@@ -75,13 +75,21 @@ test('produce cannot reconstruct or publish before actual owning source byte pro
     calls.push('reconstruct');
     assert.equal(directory, output);
   };
-  await main(['produce', output], {
-    env: f.env,
-    recipeFactory: () => recipe,
-    reconstructArtifacts,
-  });
-  assert.deepEqual(calls, ['source', 'reconstruct']);
-  calls.length = 0;
+  for (const env of [
+    f.env,
+    { ...f.env, NATIVE_OCTANE_CANDIDATE: 'octane-0.20.0' },
+  ]) {
+    await main(['produce', output], {
+      env,
+      recipeFactory: options => {
+        assert.equal(options, undefined);
+        return recipe;
+      },
+      reconstructArtifacts,
+    });
+    assert.deepEqual(calls, ['source', 'reconstruct']);
+    calls.length = 0;
+  }
   recipe.qualifySource = async () => {
     calls.push('tampered-source');
     return {};
@@ -102,7 +110,7 @@ test('qualification rejects substituted downloaded bytes before any owning suite
   fs.mkdirSync(directory);
   for (const [filename, bytes] of f.payloads)
     fs.writeFileSync(path.join(directory, filename), bytes);
-  fs.writeFileSync(path.join(directory, 'octane-0.18.0.tgz'), 'substituted');
+  fs.writeFileSync(path.join(directory, 'octane-0.20.0.tgz'), 'substituted');
   await assert.rejects(
     main(['qualify', directory], {
       env: f.env,
@@ -124,25 +132,40 @@ test('qualification rejects substituted downloaded bytes before any owning suite
   );
 });
 
-test('the next Octane producer rejects an old manifest and an unknown candidate before qualification', async t => {
+test('current Octane qualification rejects a historical manifest before running owning suites', async t => {
   const f = control(t);
   const directory = path.join(f.root, 'transport');
   fs.mkdirSync(directory);
   for (const [filename, bytes] of f.payloads)
     fs.writeFileSync(path.join(directory, filename), bytes);
+  const historical = structuredClone(f.manifest);
+  historical.packages.octane.version = '0.18.0';
+  fs.writeFileSync(
+    path.join(directory, manifestFilename),
+    JSON.stringify(historical),
+  );
   const recipeFactory = () => assert.fail('must reject before qualification');
-  await assert.rejects(
-    main(['qualify', directory], {
-      env: { ...f.env, NATIVE_OCTANE_CANDIDATE: 'octane-0.20.0' },
-      recipeFactory,
-    }),
-    /version/u,
-  );
-  await assert.rejects(
-    main(['produce', directory], {
-      env: { ...f.env, NATIVE_OCTANE_CANDIDATE: 'octane-latest' },
-      recipeFactory,
-    }),
-    /unknown Octane candidate/u,
-  );
+  for (const env of [
+    f.env,
+    { ...f.env, NATIVE_OCTANE_CANDIDATE: 'octane-0.20.0' },
+  ])
+    await assert.rejects(
+      main(['qualify', directory], { env, recipeFactory }),
+      /version/u,
+    );
 });
+
+for (const candidate of ['octane-0.18.0', 'octane-latest'])
+  for (const command of ['produce', 'qualify'])
+    test(`${command} rejects ${candidate} before reading inputs or running owning suites`, async t => {
+      const f = control(t);
+      await assert.rejects(
+        main([command, path.join(f.root, 'missing')], {
+          env: { ...f.env, NATIVE_OCTANE_CANDIDATE: candidate },
+          recipeFactory: () => assert.fail('must reject before qualification'),
+          reconstructArtifacts: () =>
+            assert.fail('must reject before reconstruction'),
+        }),
+        /unknown Octane candidate/u,
+      );
+    });

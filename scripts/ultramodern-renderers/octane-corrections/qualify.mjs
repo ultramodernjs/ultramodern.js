@@ -7,8 +7,6 @@ import { packFiles } from '../native-artifacts/reconstruct.mjs';
 import { cohort, references } from './inputs.mjs';
 import {
   assertSharedCoreManifest,
-  defaultOctaneCandidate,
-  sharedCoreCandidate,
   sharedCoreVersion,
 } from './shared-core-peer.mjs';
 
@@ -35,7 +33,7 @@ export function assertCandidateSource(sourceRoot, pinned) {
     assert.equal(
       manifest.version,
       item.version,
-      `${pinned.candidate}: source ${item.name} is not ${item.version}`,
+      `source ${item.name} is not ${item.version}`,
     );
   }
 }
@@ -65,16 +63,13 @@ export async function qualify({
   verifyIntegrity,
   packedDirectory,
   assertSameLayout,
-  octaneCandidate = defaultOctaneCandidate,
 }) {
-  // Reject an unknown candidate before any fetch, install or write.
-  sharedCoreCandidate(octaneCandidate);
   const { qualifySharedCorePeer, pinnedAdapterCandidate, lockedIntegrity } =
     await import('./qualify-shared-core-peer.mjs');
-  const pinned = pinnedAdapterCandidate(octaneCandidate);
+  const pinned = pinnedAdapterCandidate();
   assertCandidateSource(sourceRoot, pinned);
   const correctedManifest = readJson(path.join(corrected, 'package.json'));
-  assertSharedCoreManifest(correctedManifest, octaneCandidate);
+  assertSharedCoreManifest(correctedManifest);
   const repository = path.resolve(here, '../../..');
   const corePatch = path.join(
     repository,
@@ -144,7 +139,7 @@ export async function qualify({
     ? fs.readFileSync(
         path.join(
           packedDirectory,
-          assetFilename('@octanejs/tanstack-router', pinned.adapterVersion),
+          assetFilename('@octanejs/tanstack-router', pinned.adapter.version),
         ),
       )
     : pack(corrected);
@@ -156,7 +151,6 @@ export async function qualify({
       run(command, args, cwd, { ...options, stdio: 'pipe', encoding: 'utf8' }),
     disk,
     register,
-    octaneCandidate,
   });
   // The peer controls inspected exactly the adapter and Core this suite runs.
   assert.deepEqual(
@@ -284,6 +278,6 @@ export default defineConfig({ plugins: [octane({ssr:true})], resolve: { alias: [
     );
   }
   console.log(
-    `${octaneCandidate} adapter ${pinned.adapterVersion} on octane ${pinned.octane.version}: source+packed 59/59 each; router-core correction SHA256 ${createHash('sha256').update(fs.readFileSync(corePatch)).digest('hex')}`,
+    `Octane adapter ${pinned.adapter.version} on octane ${pinned.octane.version}: source+packed 59/59 each; router-core correction SHA256 ${createHash('sha256').update(fs.readFileSync(corePatch)).digest('hex')}`,
   );
 }

@@ -80,7 +80,7 @@
     "@babel/parser": "^8.1.2",
     "@babel/traverse": "^8.1.2",
     "@babel/types": "^8.1.2",
-    "oxlint": "1.93.0",
+    "oxlint": "1.94.0",
     "resolve.exports": "2.0.4"
   },
   "devDependencies": {

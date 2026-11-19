@@ -37,9 +37,9 @@ const nativePolicy = Object.freeze({
   repositoryId: 1151231350,
   workflow: '.github/workflows/native-renderer-artifacts.yml',
   cohort: Object.freeze({
-    octane: '0.18.0',
-    '@octanejs/tanstack-router': '0.3.4',
-    '@octanejs/rspack-plugin': '0.2.10',
+    octane: '0.20.0',
+    '@octanejs/tanstack-router': '0.3.6',
+    '@octanejs/rspack-plugin': '0.2.12',
     '@tanstack/router-core': '1.171.39',
   }),
   manifestFilename: 'native-artifacts.json',

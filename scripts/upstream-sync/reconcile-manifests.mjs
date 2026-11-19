@@ -20,7 +20,7 @@ const acceptedCohort = {
     coordinatedTransitions['@module-federation/enhanced'].to,
   '@module-federation/modern-js-v3':
     coordinatedTransitions['@module-federation/modern-js-v3'].to,
-  '@rsbuild/core': '2.3.2',
+  '@rsbuild/core': coordinatedTransitions['@rsbuild/core'].to,
   // The canonical DTS correction preserves explicit native compiler selection.
   '@rslib/core': coordinatedTransitions['@rslib/core'].to,
   '@swc/core': targets['@swc/core'],

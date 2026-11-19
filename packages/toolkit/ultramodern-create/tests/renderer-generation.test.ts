@@ -106,7 +106,8 @@ for (const renderer of renderers) {
       mutate(
         'package.json',
         value => {
-          value.devDependencies['solid-js'] = 'https://example.com/solid.tgz';
+          value.devDependencies['@tanstack/react-router'] =
+            'https://example.com/react-router.tgz';
         },
         /exact support request/u,
       );
@@ -114,11 +115,12 @@ for (const renderer of renderers) {
         'package.json',
         value => {
           value.dependencies = {
-            'solid-js': value.devDependencies['solid-js'],
+            '@tanstack/react-router':
+              value.devDependencies['@tanstack/react-router'],
           };
-          delete value.devDependencies['solid-js'];
+          delete value.devDependencies['@tanstack/react-router'];
         },
-        /tooling host solid-js/u,
+        /tooling host @tanstack\/react-router/u,
       );
       mutate(
         'package.json',
@@ -133,7 +135,9 @@ for (const renderer of renderers) {
         `${appDirectory}/package.json`,
         value => {
           value.dependencies[foreign] =
-            value.ultramodern.supportArtifacts.packages[foreign].request;
+            renderer === 'solid'
+              ? value.ultramodern.supportArtifacts.packages[foreign].request
+              : '2.0.0';
         },
         /foreign renderer package/u,
       );
@@ -141,9 +145,7 @@ for (const renderer of renderers) {
         'packages/shared-contracts/package.json',
         value => {
           value.dependencies['foreign-ui'] =
-            renderer === 'solid'
-              ? 'npm:react@19.3.1'
-              : 'npm:solid-js@2.0.0-rc.22';
+            renderer === 'solid' ? 'npm:react@19.3.1' : 'npm:solid-js@2.0.0';
         },
         /foreign renderer package/u,
       );
@@ -207,22 +209,16 @@ for (const renderer of renderers) {
       const supportPins = new Map(Object.entries(support.packages));
       assert.equal(manifest.engines.node, '>=26.13.1');
       if (renderer === 'solid') {
-        for (const name of ['solid-js', '@solidjs/web', '@solidjs/signals']) {
-          assert.equal(
-            manifest.dependencies[name],
-            name === 'solid-js'
-              ? support.packages['solid-js'].request
-              : '2.0.0-rc.22',
-          );
-        }
-        assert.equal(
-          manifest.devDependencies['@solidjs/compiler'],
-          '2.0.0-rc.22',
-        );
+        // Stable Solid installs from the registry; support carries no Solid.
+        assert.equal(supportPins.has('solid-js'), false);
+        for (const name of ['solid-js', '@solidjs/web', '@solidjs/signals'])
+          assert.equal(manifest.dependencies[name], '2.0.1');
+        assert.equal(manifest.devDependencies['@solidjs/compiler'], '2.0.1');
+        assert.equal(rootManifest.devDependencies['solid-js'], undefined);
       }
       if (renderer === 'octane') {
         assert.equal(manifest.dependencies['@tsrx/oxc'], '0.24.0');
-        assert.equal(manifest.dependencies.seroval, '1.8.1');
+        assert.equal(manifest.dependencies.seroval, '1.8.2');
         assert.equal(manifest.dependencies['seroval-plugins'], '1.8.0');
       }
       if (renderer !== 'react') {
@@ -501,14 +497,9 @@ declare const ULTRAMODERN_SITE_URL: string;
                       '@effect/opentelemetry',
                       '@tanstack/react-router',
                       'rsbuild-plugin-dts',
-                      'solid-js',
                     ]
                   : relativePath === `${appDirectory}/package.json`
-                    ? [
-                        '@effect/opentelemetry',
-                        'rsbuild-plugin-dts',
-                        ...(renderer === 'octane' ? ['solid-js'] : []),
-                      ]
+                    ? ['@effect/opentelemetry', 'rsbuild-plugin-dts']
                     : [];
               assert.ok(
                 hosts.includes(name),
