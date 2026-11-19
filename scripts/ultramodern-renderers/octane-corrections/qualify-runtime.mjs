@@ -18,6 +18,7 @@ const runtimePatchOrder = Object.freeze([
   'runtime-tests.patch',
   'rspack-source.patch',
   'rspack-tests.patch',
+  'css-properties-source.patch',
 ]);
 export function octane20RuntimeInputs() {
   const directory = path.join(here, 'octane-0.20.0');
@@ -32,6 +33,7 @@ export function octane20RuntimeInputs() {
     'runtime-source.patch',
     'rspack-source.patch',
     'rspack-tests.patch',
+    'css-properties-source.patch',
   ]);
   return {
     source: { ...upstream.sourceArchive, commit: upstream.commit },
@@ -41,7 +43,10 @@ export function octane20RuntimeInputs() {
       inputs.map(({ name, version, licenseSha256 }) => [
         name,
         {
-          patchPath: `patches/${name.replace('/', '__')}@${version}.patch`,
+          patchPath:
+            name === 'octane'
+              ? 'patches/octane@0.20.0.css-properties.patch'
+              : `patches/${name.replace('/', '__')}@${version}.patch`,
           licenseSha256,
         },
       ]),

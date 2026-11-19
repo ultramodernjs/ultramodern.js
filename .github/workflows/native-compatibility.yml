@@ -183,9 +183,6 @@ jobs:
           } from './scripts/ultramodern-renderers/octane-corrections/qualify-runtime.mjs';
 
           const inputs = octane20RuntimeInputs();
-          inputs.patches.push(path.resolve(
-            'scripts/ultramodern-renderers/octane-corrections/octane-0.20.0/css-properties-source.patch',
-          ));
           const owned = fs.realpathSync(process.env.OWNED_TEMP_DIR);
           const patchOutputDirectory = path.join(owned, 'patch-output');
           await qualifyRuntimePair({

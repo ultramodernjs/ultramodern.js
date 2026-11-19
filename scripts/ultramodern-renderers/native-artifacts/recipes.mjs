@@ -53,7 +53,11 @@ function octaneRecipeInputs(root) {
     archiveIntegrity: upstream.sourceArchive.integrity,
     adapterPath: `${candidateDirectory}/${adapterFilename}`,
     adapterPatch: candidates[adapterFilename].sha256,
-    runtimePaths: runtime.map(input => `patches/${patchName(input)}.patch`),
+    runtimePaths: runtime.map(input =>
+      input.name === 'octane'
+        ? 'patches/octane@0.20.0.css-properties.patch'
+        : `patches/${patchName(input)}.patch`,
+    ),
   };
 }
 
@@ -61,7 +65,7 @@ function verifyCandidateHandoff(root, runtimePaths) {
   const receiptPath = path.join(
     root,
     candidateDirectory,
-    'runtime-handoff.json',
+    'css-properties-runtime-handoff.json',
   );
   assert(
     fs.existsSync(receiptPath),
@@ -89,6 +93,7 @@ function verifyCandidateHandoff(root, runtimePaths) {
     `${candidateDirectory}/provenance.json`,
     `${candidateDirectory}/runtime-build-package.json`,
     `${candidateDirectory}/runtime-build-pnpm-lock.yaml`,
+    `${candidateDirectory}/css-properties-source.patch`,
   ];
   const verify = (entries, expected) => {
     assert.deepEqual(
@@ -268,7 +273,7 @@ export function composeRecipe({
   validateRecipe({ protocol: nativeProtocol, recipe });
   return recipe;
 }
-/** Active production inputs from authenticated runtime handoff 44296887336/1. */
+/** Active production inputs from authenticated runtime handoff 44543237408/1. */
 export function runtimeRecipes(
   { root = repo } = {},
   { pairQualifier = qualifyRuntimePairSource } = {},

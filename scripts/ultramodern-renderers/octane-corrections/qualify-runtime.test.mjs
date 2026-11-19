@@ -324,7 +324,7 @@ test('qualified pair writes both generated patches only to the owned output dire
     [
       'patches',
       'patches/@octanejs__rspack-plugin@0.2.12.patch',
-      'patches/octane@0.20.0.patch',
+      'patches/octane@0.20.0.css-properties.patch',
     ],
   );
   assert.equal(fs.existsSync(fixture.work), false);
@@ -709,7 +709,7 @@ test('the sole owning inputs bind the current runtime, dependencies and output i
   assert.equal(manifest.dependencies.octane, inputs.packages[0].version);
   assert.equal(
     inputs.runtimePair.octane.patchPath,
-    'patches/octane@0.20.0.patch',
+    'patches/octane@0.20.0.css-properties.patch',
   );
   assert.equal(
     inputs.runtimePair['@octanejs/rspack-plugin'].patchPath,
@@ -725,6 +725,7 @@ test('the sole owning inputs bind the current runtime, dependencies and output i
       'runtime-tests.patch',
       'octane-0.20.0/rspack-source.patch',
       'octane-0.20.0/rspack-tests.patch',
+      'octane-0.20.0/css-properties-source.patch',
     ],
   );
   for (const patch of inputs.patches) assert.ok(fs.statSync(patch).isFile());
