@@ -36,10 +36,24 @@ const inputs = [
   `${correctionDirectory}/octane-0.20.0/provenance.json`,
   `${correctionDirectory}/octane-0.20.0/runtime-build-package.json`,
   `${correctionDirectory}/octane-0.20.0/runtime-build-pnpm-lock.yaml`,
+  `${correctionDirectory}/octane-0.20.0/css-properties-source.patch`,
 ];
 const patches = [
+  'patches/octane@0.20.0.css-properties.patch',
+  'patches/@octanejs__rspack-plugin@0.2.12.patch',
+];
+const acceptedPatches = [
   'patches/octane@0.20.0.patch',
   'patches/@octanejs__rspack-plugin@0.2.12.patch',
+];
+const sourcePatchOrder = [
+  inputs[0],
+  inputs[4],
+  inputs[5],
+  inputs[6],
+  inputs[3],
+  inputs[1],
+  inputs[2],
 ];
 const rejectedCandidates = [
   'octane-0.18.0',
@@ -116,8 +130,15 @@ test('the Octane candidate is a fixed choice that reaches shell only through env
   }
 });
 
-/** Run the qualify step with stubbed mise, pnpm and node, so no qualifier work starts. */
-function runQualifyStep(t, selected = candidate) {
+/**
+ * Run the actual shell and inline JS in a synthetic checkout. Only the expensive
+ * qualifier and tool discovery are fixtures; no authenticated repository file
+ * is copied, overwritten or presented as a newly qualified build.
+ */
+function runQualifyStep(
+  t,
+  { selected = candidate, pluginChanged = false, pnpmVersion = '12.21.0' } = {},
+) {
   const cwd = fs.mkdtempSync(
     path.join(
       process.env.OWNED_TEMP_DIR ?? os.tmpdir(),
@@ -127,9 +148,62 @@ function runQualifyStep(t, selected = candidate) {
   t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
   const bin = path.join(cwd, 'bin');
   const pnpm = path.join(cwd, 'pnpm');
-  const argv = path.join(cwd, 'node-argv');
+  const call = path.join(cwd, 'qualify-call.json');
+  const files = Object.fromEntries(
+    [...inputs, ...acceptedPatches].map(file => [
+      file,
+      Buffer.from(`synthetic scratch input: ${file}\n`),
+    ]),
+  );
+  const generatedOctane = Buffer.from('synthetic scratch Octane output\n');
+  const generatedPlugin = pluginChanged
+    ? Buffer.from('synthetic changed plugin output\n')
+    : files[acceptedPatches[1]];
+  stageFiles(cwd, files);
+  const runtimePair = Object.fromEntries(
+    ['octane', '@octanejs/rspack-plugin'].map((name, index) => [
+      name,
+      { patchPath: acceptedPatches[index], licenseSha256: 'fixture-license' },
+    ]),
+  );
+  const owningInputs = {
+    source: { commit: 'synthetic-source' },
+    sourceIntegrity: 'synthetic-integrity',
+    packages: [
+      { name: 'octane', version: '0.20.0' },
+      { name: '@octanejs/rspack-plugin', version: '0.2.12' },
+    ],
+    runtimePair,
+    dependencyDirectory: path.join(cwd, correctionDirectory, candidate),
+    patches: sourcePatchOrder.map(file => path.join(cwd, file)),
+  };
+  fs.writeFileSync(
+    path.join(cwd, correctionDirectory, 'qualify-runtime.mjs'),
+    `
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+export const octane20RuntimeInputs = () => (${JSON.stringify(owningInputs)});
+export const assertSameBytes = (actual, expected, label) =>
+  assert(actual.equals(expected), label);
+export async function qualifyRuntimePair(options) {
+  fs.writeFileSync(${JSON.stringify(call)}, JSON.stringify({
+    ...options, pnpm: process.env.PNPM_BINARY,
+  }));
+  const patches = ${JSON.stringify({
+    [acceptedPatches[0]]: generatedOctane.toString('base64'),
+    [acceptedPatches[1]]: generatedPlugin.toString('base64'),
+  })};
+  for (const [file, bytes] of Object.entries(patches)) {
+    const output = path.join(options.patchOutputDirectory, file);
+    fs.mkdirSync(path.dirname(output), { recursive: true });
+    fs.writeFileSync(output, Buffer.from(bytes, 'base64'));
+  }
+}
+`,
+  );
   fs.mkdirSync(bin);
-  fs.writeFileSync(pnpm, '#!/usr/bin/env bash\necho 12.21.0\n', {
+  fs.writeFileSync(pnpm, `#!/usr/bin/env bash\necho ${pnpmVersion}\n`, {
     mode: 0o755,
   });
   fs.writeFileSync(
@@ -137,48 +211,94 @@ function runQualifyStep(t, selected = candidate) {
     `#!/usr/bin/env bash\necho ${pnpm}\n`,
     { mode: 0o755 },
   );
-  fs.writeFileSync(
-    path.join(bin, 'node'),
-    '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$QUALIFY_ARGV"\n',
-    { mode: 0o755 },
-  );
+  fs.symlinkSync(process.execPath, path.join(bin, 'node'));
   const result = runBash(stepNamed(names.qualify).run, {
     cwd,
     env: {
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
       RUNNER_TEMP: cwd,
       OCTANE_CANDIDATE: selected,
-      QUALIFY_ARGV: argv,
     },
   });
   assert.equal(fs.existsSync(path.join(cwd, 'injected')), false);
+  for (const [file, bytes] of Object.entries(files))
+    assert.equal(
+      sha256(fs.readFileSync(path.join(cwd, file))),
+      sha256(bytes),
+      file,
+    );
+  assert.deepEqual(
+    fs.readdirSync(cwd).filter(name => name.startsWith('runtime-qualify-')),
+    [],
+    'The shell trap must clean its owned qualification and patch output',
+  );
   return {
     result,
-    argv: fs.existsSync(argv)
-      ? fs.readFileSync(argv, 'utf8').trimEnd().split('\n')
+    cwd,
+    files,
+    generatedOctane,
+    owningInputs,
+    pnpm,
+    call: fs.existsSync(call)
+      ? JSON.parse(fs.readFileSync(call, 'utf8'))
       : undefined,
   };
 }
 
-test('manual qualifier passes only the current Octane flag', t => {
-  const { result, argv } = runQualifyStep(t);
+test('manual qualifier adds only CSS source to current owning inputs and confines both generated patches', t => {
+  const { result, call, cwd, files, generatedOctane, owningInputs, pnpm } =
+    runQualifyStep(t);
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(argv, [
-    'scripts/ultramodern-renderers/octane-corrections/qualify-runtime.mjs',
-    '--octane-0.20.0',
-    '--write-patch',
+  assert.deepEqual(call.inputs, {
+    ...owningInputs,
+    patches: [...owningInputs.patches, path.join(cwd, inputs.at(-1))],
+  });
+  assert.equal(call.writePatch, true);
+  assert.equal(call.pnpm, pnpm);
+  assert(path.isAbsolute(call.patchOutputDirectory));
+  assert.equal(
+    path.dirname(call.work),
+    path.dirname(call.patchOutputDirectory),
+  );
+  assert.notEqual(call.work, call.patchOutputDirectory);
+  assert.notEqual(call.patchOutputDirectory, cwd);
+  assert.deepEqual(
+    fs.readFileSync(path.join(cwd, patches[0])),
+    generatedOctane,
+  );
+  assert.notEqual(sha256(generatedOctane), sha256(files[acceptedPatches[0]]));
+  assert.deepEqual(fs.readdirSync(path.join(cwd, 'patches')).sort(), [
+    '@octanejs__rspack-plugin@0.2.12.patch',
+    'octane@0.20.0.css-properties.patch',
+    'octane@0.20.0.patch',
   ]);
+});
+
+test('a changed generated plugin prevents copying the new Octane patch', t => {
+  const { result, cwd, call } = runQualifyStep(t, { pluginChanged: true });
+  assert.notEqual(result.status, 0);
+  assert(call, 'The owning qualifier ran before the plugin equality gate');
+  assert.match(result.stderr, /must not change the Rspack plugin patch/u);
+  assert.equal(fs.existsSync(path.join(cwd, patches[0])), false);
+});
+
+test('an unreviewed pnpm cannot start qualification or create a patch', t => {
+  const { result, cwd, call } = runQualifyStep(t, { pnpmVersion: '12.20.0' });
+  assert.notEqual(result.status, 0);
+  assert.equal(call, undefined);
+  assert.equal(fs.existsSync(path.join(cwd, patches[0])), false);
 });
 
 test('manual qualifier rejects legacy, moving and injected candidates before starting', t => {
   for (const selected of rejectedCandidates) {
-    const { result, argv } = runQualifyStep(t, selected);
+    const { result, call, cwd } = runQualifyStep(t, { selected });
     assert.notEqual(result.status, 0, selected);
-    assert.equal(argv, undefined, selected);
+    assert.equal(call, undefined, selected);
+    assert.equal(fs.existsSync(path.join(cwd, patches[0])), false, selected);
   }
 });
 
-test('manual qualifier writes canonical patches from the reviewed pnpm', () => {
+test('manual qualifier uses the reviewed pnpm without a separate install or build shortcut', () => {
   const qualify = stepNamed(names.qualify);
   assert.equal(qualify.if, manualCondition);
   assert.equal(qualify['continue-on-error'], undefined);
@@ -247,19 +367,15 @@ function stageFiles(cwd, files) {
   }
 }
 
-/** Run the receipt step against candidate files staged in a scratch checkout. */
+/** Stage the new receipt after executing the synthetic scratch qualifier step. */
 function runReceipt(t, selected = candidate, env = {}) {
-  const cwd = fs.mkdtempSync(
-    path.join(process.env.OWNED_TEMP_DIR ?? os.tmpdir(), 'runtime-receipt-'),
-  );
-  t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
-  const files = Object.fromEntries(
-    [...inputs, ...patches].map(file => [
-      file,
-      fs.readFileSync(new URL(file, root)),
-    ]),
-  );
-  stageFiles(cwd, files);
+  const qualification = runQualifyStep(t);
+  assert.equal(qualification.result.status, 0, qualification.result.stderr);
+  const { cwd } = qualification;
+  const files = {
+    ...qualification.files,
+    [patches[0]]: qualification.generatedOctane,
+  };
   const handoff = path.join(cwd, 'handoff');
   const result = runBash(stepNamed(names.receipt).run, {
     cwd,
@@ -275,6 +391,12 @@ function runReceipt(t, selected = candidate, env = {}) {
     },
   });
   assert.equal(fs.existsSync(path.join(cwd, 'injected')), false);
+  for (const [file, bytes] of Object.entries(files))
+    assert.equal(
+      sha256(fs.readFileSync(path.join(cwd, file))),
+      sha256(bytes),
+      file,
+    );
   return { result, files, handoff };
 }
 
@@ -315,7 +437,7 @@ test('receipt binds the checkout SHA, run identity, toolchain and every staged f
     );
 });
 
-test('receipt reproduces authenticated handoff 44296887336 without changing input order, patches or toolchains', t => {
+test('accepted handoff 44296887336 remains immutable data with its own original paths and digests', () => {
   const expected = JSON.parse(
     fs.readFileSync(
       new URL(
@@ -338,16 +460,19 @@ test('receipt reproduces authenticated handoff 44296887336 without changing inpu
       'bd448e034c50f526e9a580e4595ab73417cf19273ddf9fc1254cdfe71b51fcfb',
     ],
   );
-  const { result, handoff } = runReceipt(t, candidate, {
-    SOURCE_SHA: expected.sourceSha,
-    RUN_ID: expected.run.id,
-    RUN_ATTEMPT: expected.run.attempt,
-  });
-  assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(
-    JSON.parse(fs.readFileSync(path.join(handoff, 'receipt.json'), 'utf8')),
-    expected,
+    expected.patches.map(file => file.path),
+    acceptedPatches,
   );
+  assert.deepEqual(
+    expected.inputs.map(file => file.path),
+    inputs.slice(0, -1),
+  );
+  for (const file of [...expected.inputs, ...expected.patches]) {
+    const bytes = fs.readFileSync(new URL(file.path, root));
+    assert.equal(bytes.length, file.bytes, file.path);
+    assert.equal(sha256(bytes), file.sha256, file.path);
+  }
 });
 
 test('receipt rejects legacy, moving and injected candidates without writing a handoff', t => {

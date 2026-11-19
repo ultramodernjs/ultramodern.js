@@ -173,7 +173,38 @@ jobs:
           owned="$(mktemp -d "$RUNNER_TEMP/runtime-qualify-XXXXXX")"
           trap 'rm -rf -- "$owned"' EXIT
           OWNED_TEMP_DIR="$owned" PNPM_BINARY="$pnpm_binary" \
-            node scripts/ultramodern-renderers/octane-corrections/qualify-runtime.mjs --octane-0.20.0 --write-patch
+            node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import {
+            assertSameBytes,
+            octane20RuntimeInputs,
+            qualifyRuntimePair,
+          } from './scripts/ultramodern-renderers/octane-corrections/qualify-runtime.mjs';
+
+          const inputs = octane20RuntimeInputs();
+          inputs.patches.push(path.resolve(
+            'scripts/ultramodern-renderers/octane-corrections/octane-0.20.0/css-properties-source.patch',
+          ));
+          const owned = fs.realpathSync(process.env.OWNED_TEMP_DIR);
+          const patchOutputDirectory = path.join(owned, 'patch-output');
+          await qualifyRuntimePair({
+            inputs,
+            work: path.join(owned, 'qualification'),
+            writePatch: true,
+            patchOutputDirectory,
+          });
+          const pluginPatch = inputs.runtimePair['@octanejs/rspack-plugin'].patchPath;
+          assertSameBytes(
+            fs.readFileSync(path.join(patchOutputDirectory, pluginPatch)),
+            fs.readFileSync(pluginPatch),
+            'CSS properties correction must not change the Rspack plugin patch',
+          );
+          fs.copyFileSync(
+            path.join(patchOutputDirectory, inputs.runtimePair.octane.patchPath),
+            'patches/octane@0.20.0.css-properties.patch',
+          );
+          JS
 
       - name: Stage runtime patch handoff receipt
         if: success() && github.event_name == 'workflow_dispatch' && inputs.runtime_patch_handoff == true && github.workflow_ref == format('{0}/.github/workflows/native-compatibility.yml@{1}', github.repository, github.ref)
@@ -207,9 +238,10 @@ jobs:
             `${corrections}/octane-0.20.0/provenance.json`,
             `${corrections}/octane-0.20.0/runtime-build-package.json`,
             `${corrections}/octane-0.20.0/runtime-build-pnpm-lock.yaml`,
+            `${corrections}/octane-0.20.0/css-properties-source.patch`,
           ];
           const patches = [
-            'patches/octane@0.20.0.patch',
+            'patches/octane@0.20.0.css-properties.patch',
             'patches/@octanejs__rspack-plugin@0.2.12.patch',
           ];
           const describe = file => {

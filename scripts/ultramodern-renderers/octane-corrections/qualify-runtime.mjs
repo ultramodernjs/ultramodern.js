@@ -510,13 +510,15 @@ export function phaseTracker(write = line => process.stderr.write(line)) {
  * One owning build qualifies both halves of the runtime pair. Returns one
  * receipt per package (authenticated source archive, actual built patch and
  * license bytes) only after source tests, the owning build, packed tests, and
- * exact reconstruction of both packages pass.
+ * exact reconstruction of both packages pass. An optional empty, absolute
+ * patchOutputDirectory stages both patches without changing accepted artifacts.
  */
 export async function qualifyRuntimePair({
   work,
   expectedPatches,
   inputs = octane20RuntimeInputs(),
   writePatch = false,
+  patchOutputDirectory,
   runner = {},
   pnpm = process.env.PNPM_BINARY ?? 'pnpm',
   storeDirectory = path.join(process.env.HOME, '.local/share/pnpm/store'),
@@ -540,6 +542,42 @@ export async function qualifyRuntimePair({
     path.isAbsolute(work),
     'An absolute operation-owned directory is required',
   );
+  const patchRoot = patchOutputDirectory ?? repository;
+  const patchPaths = Object.fromEntries(
+    Object.entries(runtimePair).map(([name, { patchPath }]) => {
+      const output = path.resolve(patchRoot, patchPath);
+      const relative = path.relative(patchRoot, output);
+      assert(
+        relative &&
+          relative !== '..' &&
+          !relative.startsWith(`..${path.sep}`) &&
+          !path.isAbsolute(relative) &&
+          !path.isAbsolute(patchPath),
+        'Runtime patch output must stay inside its output directory',
+      );
+      return [name, output];
+    }),
+  );
+  if (patchOutputDirectory !== undefined) {
+    assert.equal(writePatch, true, 'Patch output requires writePatch: true');
+    assert(
+      path.isAbsolute(patchOutputDirectory),
+      'An absolute patch output directory is required',
+    );
+    const relative = path.relative(work, patchOutputDirectory);
+    assert(
+      relative === '..' ||
+        relative.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relative),
+      'Patch output must be outside the cleaned qualification directory',
+    );
+    fs.mkdirSync(patchOutputDirectory, { recursive: true });
+    assert.equal(
+      fs.readdirSync(patchOutputDirectory).length,
+      0,
+      'Patch output directory must be empty',
+    );
+  }
   fs.mkdirSync(work, { recursive: true });
   assert.equal(
     fs.readdirSync(work).length,
@@ -761,12 +799,14 @@ export async function qualifyRuntimePair({
     // Canonical artifacts and producer bytes remain unavailable until every
     // source and packed gate for both halves of this owning build has passed.
     for (const [name, receipt] of Object.entries(receipts)) {
-      const canonical = path.join(repository, runtimePair[name].patchPath);
-      if (writePatch) fs.writeFileSync(canonical, receipt.builtPatchBytes);
-      else
+      const output = patchPaths[name];
+      if (writePatch) {
+        fs.mkdirSync(path.dirname(output), { recursive: true });
+        fs.writeFileSync(output, receipt.builtPatchBytes);
+      } else
         assertSameBytes(
           receipt.builtPatchBytes,
-          fs.readFileSync(canonical),
+          fs.readFileSync(output),
           `Canonical patch drift: ${runtimePair[name].patchPath}`,
         );
     }

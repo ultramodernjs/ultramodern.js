@@ -961,6 +961,123 @@ describe('native Module Federation plugin', () => {
     );
   }
 
+  it('invalidates persistent server cache when federation switches between SSR and CSR, retaining warm restores', async () => {
+    const root = app({
+      'package.json': '{}',
+      'module-federation.config.mjs': `export default { name: 'host' };`,
+      'entry.js': `import('./bootstrap.js');`,
+      'bootstrap.js': `import { value } from 'shared-value'; globalThis.result = value;`,
+      'shared.js': 'export const value = 42;',
+    });
+    // Entry identity must survive symlink and platform-specific path spelling.
+    const linkedRoot = path.join(app({}), 'application');
+    fs.symlinkSync(root, linkedRoot, 'junction');
+    const core = createRequire(import.meta.url).resolve('@rsbuild/core');
+    const entryBuilt: boolean[] = [];
+    for (const ssr of [true, true, false, false, true, true]) {
+      const hooks = setup('solid', root, { server: { ssr } });
+      const config = {
+        cache: {
+          type: 'persistent',
+          version: 'native-server',
+          storage: {
+            type: 'filesystem',
+            directory: path.join(root, 'cache'),
+          },
+        },
+        output: { publicPath: '/' },
+      };
+      await hooks.modifyRspackConfig(config, {
+        environment: { name: 'server' },
+      });
+      // A fresh process must restore the cache without retaining the previous
+      // compiler's dependency factories in its JavaScript or native state.
+      const result = JSON.parse(
+        execFileSync(
+          process.execPath,
+          [
+            '-e',
+            `
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { rspack } = require(process.argv[1]);
+const root = process.argv[2];
+const input = JSON.parse(process.argv[3]);
+const federated = process.argv[4] === 'true';
+const compiler = rspack({
+  ...input,
+  context: root, name: 'server', mode: 'production', target: 'async-node',
+  entry: './entry.js',
+  resolve: { alias: { 'shared-value': path.join(root, 'shared.js') } },
+  output: { ...input.output, path: path.join(root, 'dist'), filename: '[name].cjs' },
+  optimization: { minimize: false, concatenateModules: false },
+  plugins: federated ? [new rspack.sharing.ConsumeSharedPlugin({
+    consumes: { 'shared-value': { import: './shared.js', requiredVersion: false } },
+    enhanced: true,
+  })] : [],
+});
+compiler.run((error, stats) => compiler.close(closeError => {
+  if (error || closeError || stats.hasErrors()) {
+    console.error(error || closeError || stats.toString({ all: false, errors: true }));
+    process.exitCode = 1;
+    return;
+  }
+  const compilation = stats.compilation;
+  const dependency = compilation.entries.get('main').dependencies[0];
+  const entry = compilation.moduleGraph.getModule(dependency);
+  assert(entry, 'The native graph must resolve the entry dependency');
+  const built = [...compilation.builtModules]
+    .some(module => module.identifier() === entry.identifier());
+  process.stdout.write(JSON.stringify({ built }));
+}));
+`,
+            core,
+            linkedRoot,
+            JSON.stringify(config),
+            String(ssr),
+          ],
+          { encoding: 'utf8', maxBuffer: 1024 * 1024 },
+        ),
+      );
+      entryBuilt.push(result.built);
+    }
+    expect(entryBuilt).toEqual([true, false, true, false, true, false]);
+  });
+
+  it('invalidates persistent client cache when federation configuration is removed', async () => {
+    const root = app({
+      'package.json': '{}',
+      'module-federation.config.mjs': `export default { name: 'host' };`,
+    });
+    const enabled = { cache: { type: 'persistent', version: 'authored' } };
+    await setup('solid', root).modifyRspackConfig(enabled, {
+      environment: { name: 'client' },
+    });
+    fs.unlinkSync(path.join(root, 'module-federation.config.mjs'));
+    const disabled = { cache: { type: 'persistent', version: 'authored' } };
+    await setup('solid', root).modifyRspackConfig(disabled, {
+      environment: { name: 'client' },
+    });
+    expect(enabled.cache.version).toContain('authored');
+    expect(disabled.cache.version).toContain('authored');
+    expect(enabled.cache.version).not.toBe(disabled.cache.version);
+  });
+
+  it.each([false, { type: 'memory' }, true, undefined])(
+    'does not change non-persistent cache selection %j',
+    async cache => {
+      const root = app({
+        'package.json': '{}',
+        'module-federation.config.mjs': `export default { name: 'host' };`,
+      });
+      const config = { cache };
+      await setup('solid', root).modifyRspackConfig(config, {
+        environment: { name: 'client' },
+      });
+      expect(config.cache).toBe(cache);
+    },
+  );
+
   it.each(nativeRenderers)(
     'installs a Node container on an SSR %s host',
     async renderer => {
