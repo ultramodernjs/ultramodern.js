@@ -1362,6 +1362,7 @@ function createNodeBackendProofResult() {
     liveArtifacts: {
       manifest: {
         url: manifestUrl,
+        transportUrl: 'http://127.0.0.1:3021/backend-mf-manifest.json',
         logicalPath: 'backend-mf-manifest.json',
         statusCode: 200,
         byteLength: 1024,
@@ -1370,6 +1371,7 @@ function createNodeBackendProofResult() {
       },
       container: {
         url: containerEntry,
+        transportUrl: 'http://127.0.0.1:3021/backendRemoteEntry.cjs',
         logicalPath: 'backendRemoteEntry.cjs',
         statusCode: 200,
         byteLength: 2048,
@@ -1380,7 +1382,7 @@ function createNodeBackendProofResult() {
     liveApi: {
       method: 'GET',
       route: '/inventory-api/inventory/readiness',
-      url: 'http://localhost:3021/inventory-api/inventory/readiness',
+      url: 'http://127.0.0.1:3021/inventory-api/inventory/readiness',
       statusCode: 200,
       marker: {
         unitId: 'inventory',
@@ -2378,7 +2380,7 @@ test('canonical backend proof shape contract rejects missing live correlation wh
   assert.equal(
     validateNodeBackendFederationProofResult(crossOrigin).ok,
     false,
-    'the runtime entry must match the manifest and API origin',
+    'the runtime entry must match the declared container identity',
   );
 
   for (const logicalPath of ['/api/index.js', 'api/nested/../../outside.js']) {
@@ -2401,6 +2403,75 @@ test('canonical backend proof shape contract rejects missing live correlation wh
   );
 });
 
+test('Node backend proof correlates loopback transport separately from exact public artifact identities', async () => {
+  const { validateNodeBackendFederationProofResult } = await import(
+    '../../browser-smoke/backend-proof-contract.mjs'
+  );
+  const valid = createNodeBackendProofResult();
+  valid.manifestUrl =
+    'https://stage.example.test//edge/inventory/backend-mf-manifest.json?revision=1#manifest';
+  valid.containerEntry =
+    'https://stage.example.test//edge/inventory/backendRemoteEntry.cjs?revision=1#entry';
+  valid.runtimeEntry = valid.containerEntry;
+  valid.liveArtifacts.manifest.url = valid.manifestUrl;
+  valid.liveArtifacts.container.url = valid.containerEntry;
+  assert.deepEqual(validateNodeBackendFederationProofResult(valid), {
+    appId: 'inventory',
+    failures: [],
+    ok: true,
+  });
+  for (const mutate of [
+    proof => {
+      delete proof.liveArtifacts.manifest.transportUrl;
+    },
+    proof => {
+      proof.liveArtifacts.container.transportUrl = proof.containerEntry;
+    },
+    proof => {
+      proof.liveArtifacts.container.transportUrl =
+        'http://127.0.0.1:3022/backendRemoteEntry.cjs';
+    },
+    proof => {
+      proof.liveArtifacts.manifest.transportUrl =
+        'http://127.0.0.1:3021/other/backend-mf-manifest.json';
+    },
+    proof => {
+      proof.liveArtifacts.container.transportUrl += '?revision=1';
+    },
+    proof => {
+      proof.liveArtifacts.container.transportUrl += '#entry';
+    },
+    proof => {
+      proof.liveArtifacts.container.transportUrl =
+        'http://user:secret@127.0.0.1:3021/backendRemoteEntry.cjs';
+    },
+    proof => {
+      proof.liveArtifacts.manifest.url = proof.manifestUrl.replace(
+        'revision=1',
+        'revision=2',
+      );
+    },
+    proof => {
+      proof.liveApi.url =
+        'https://stage.example.test/inventory-api/inventory/readiness';
+    },
+    proof => {
+      proof.liveApi.url =
+        'http://127.0.0.1:3022/inventory-api/inventory/readiness';
+    },
+    proof => {
+      proof.liveApi.url += '?redirect=stage';
+    },
+    proof => {
+      proof.liveApi.url += '#readiness';
+    },
+  ]) {
+    const forged = structuredClone(valid);
+    mutate(forged);
+    assert.equal(validateNodeBackendFederationProofResult(forged).ok, false);
+  }
+});
+
 test('Node backend proof accepts native RPC operations only when live URL, envelope, and backend artifacts remain bound', async () => {
   const { validateNodeBackendFederationProofResult } = await import(
     '../../browser-smoke/backend-proof-contract.mjs'
@@ -2412,7 +2483,7 @@ test('Node backend proof accepts native RPC operations only when live URL, envel
     serialization: 'json',
     group: 'inventory',
     route: '/inventory-api/rpc',
-    url: 'http://localhost:3021/inventory-api/rpc',
+    url: 'http://127.0.0.1:3021/inventory-api/rpc',
     operations: [
       { method: 'list', itemId: 'starter-inventory', status: 'pass' },
       { method: 'get', itemId: 'starter-inventory', status: 'pass' },

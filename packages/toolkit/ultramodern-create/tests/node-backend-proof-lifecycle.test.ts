@@ -438,6 +438,14 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 const require = createRequire(process.cwd() + '/package.json');
 const proof = await import(${JSON.stringify(proofUrl)});
+const { validateNodeBackendFederationProofResult } = await import(${JSON.stringify(
+            pathToFileURL(
+              path.resolve(
+                __dirname,
+                '../../../../scripts/ultramodern-production-readiness/browser-smoke/backend-proof-contract.mjs',
+              ),
+            ).href,
+          )});
 const runtime = await proof.importBackendFederationRuntime();
 const federation = await import(pathToFileURL(require.resolve('@modern-js/plugin-bff-extensions/backend-federation-manifest/node')).href);
 const effect = await import(pathToFileURL(require.resolve('@modern-js/bff-effect/effect')).href);
@@ -579,6 +587,8 @@ const readRequests = () => fs.readFileSync(path.join(output, 'requests.jsonl'), 
 const restRuntime = await proof.startNodeRuntime(restApp, '.output', { startupTimeoutMs: 5000 });
 try {
   const result = await proof.proveBackend(restApp, runtime, '.output');
+  const validation = validateNodeBackendFederationProofResult(result);
+  assert.equal(validation.ok, true, validation.failures.join('; '));
   assert.equal(result.status, 'pass');
   assert.equal(result.manifestUrl, manifest.backendFederation.manifestUrl);
   assert.equal(result.containerEntry, manifest.entry.url);
