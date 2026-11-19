@@ -2159,10 +2159,10 @@ importers:
         version: 1.162.5
       '@tanstack/react-router':
         specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@tanstack/router-core':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -2345,11 +2345,11 @@ importers:
         specifier: workspace:*
         version: link:../../tsconfig
       '@octanejs/rspack-plugin':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-rspack-plugin-0.2.12.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-rspack-plugin-0.2.12.tgz(@rspack/core@2.3.3(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-rspack-plugin-0.2.12.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-rspack-plugin-0.2.12.tgz(@rspack/core@2.3.3(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@octanejs/tanstack-router':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-tanstack-router-0.3.6.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-tanstack-router-0.3.6.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz)(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-tanstack-router-0.3.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-tanstack-router-0.3.6.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz)(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@rsbuild/core':
         specifier: 2.3.3
         version: 2.3.3(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)
@@ -2360,8 +2360,8 @@ importers:
         specifier: workspace:*
         version: link:../../../scripts/rstest-config
       '@tanstack/router-core':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz
       '@tsrx/oxc':
         specifier: 0.24.0
         version: 0.24.0
@@ -2384,8 +2384,8 @@ importers:
         specifier: 31.0.1
         version: 31.0.1(@noble/hashes@2.4.0)
       octane:
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -2436,8 +2436,8 @@ importers:
         specifier: 2.0.1
         version: 2.0.1
       '@tanstack/router-core':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
@@ -3354,8 +3354,8 @@ importers:
         specifier: workspace:*
         version: link:../../tsconfig
       '@octanejs/rspack-plugin':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-rspack-plugin-0.2.12.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-rspack-plugin-0.2.12.tgz(@rspack/core@2.3.3(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-rspack-plugin-0.2.12.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-rspack-plugin-0.2.12.tgz(@rspack/core@2.3.3(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@rsbuild/plugin-svgr':
         specifier: 2.0.5
         version: 2.0.5(@rsbuild/core@2.3.3(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0))(@rspack/core@2.3.3(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(supports-color@10.2.2)(typescript@7.0.2)
@@ -3378,8 +3378,8 @@ importers:
         specifier: ^0.28.2
         version: 0.28.2
       octane:
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -3834,8 +3834,8 @@ importers:
         specifier: workspace:*
         version: link:../../../scripts/rslib
       '@octanejs/rspack-plugin':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-rspack-plugin-0.2.12.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-rspack-plugin-0.2.12.tgz(@rspack/core@2.3.3(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-rspack-plugin-0.2.12.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-rspack-plugin-0.2.12.tgz(@rspack/core@2.3.3(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@rslib/core':
         specifier: 1.0.7
         version: 1.0.7(@module-federation/runtime-tools@2.9.2)(core-js@3.51.0)(typescript@7.0.2)
@@ -3855,8 +3855,8 @@ importers:
         specifier: 5.5.0
         version: 5.5.0
       octane:
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/toolkit/ultramodern-sandpack-profile:
     devDependencies:
@@ -6022,17 +6022,17 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/runtime/renderer-octane
       '@octanejs/tanstack-router':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-tanstack-router-0.3.6.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-tanstack-router-0.3.6.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz)(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-tanstack-router-0.3.6.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-tanstack-router-0.3.6.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz)(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@tanstack/router-core':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz
       '@tsrx/oxc':
         specifier: 0.24.0
         version: 0.24.0
       octane:
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       seroval:
         specifier: 1.8.2
         version: 1.8.2
@@ -6044,8 +6044,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/solutions/ultramodern-app-tools
       '@octanejs/rspack-plugin':
-        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-rspack-plugin-0.2.12.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-rspack-plugin-0.2.12.tgz(@rspack/core@2.3.3(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-rspack-plugin-0.2.12.tgz
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-rspack-plugin-0.2.12.tgz(@rspack/core@2.3.3(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
@@ -6285,7 +6285,7 @@ importers:
         version: '@bleedingdev/mf-runtime@2.9.5'
       '@tanstack/react-router':
         specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 4.1.4
         version: 4.1.4
@@ -6346,7 +6346,7 @@ importers:
         version: '@bleedingdev/mf-runtime@2.9.5'
       '@tanstack/react-router':
         specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 4.1.4
         version: 4.1.4
@@ -6401,7 +6401,7 @@ importers:
         version: '@bleedingdev/mf-runtime@2.9.5'
       '@tanstack/react-router':
         specifier: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz
-        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 4.1.4
         version: 4.1.4
@@ -9948,16 +9948,16 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@octanejs/rspack-plugin@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-rspack-plugin-0.2.12.tgz':
-    resolution: {integrity: sha512-s2q3z+KYoh84wrf/Fte/LMNFU9igh8Xoze8wOUKp6PX1lwDgZEm5rao+DvYKibmUjt5VGbHxTBQUiIbKi/TTcw==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-rspack-plugin-0.2.12.tgz}
+  '@octanejs/rspack-plugin@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-rspack-plugin-0.2.12.tgz':
+    resolution: {integrity: sha512-s2q3z+KYoh84wrf/Fte/LMNFU9igh8Xoze8wOUKp6PX1lwDgZEm5rao+DvYKibmUjt5VGbHxTBQUiIbKi/TTcw==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-rspack-plugin-0.2.12.tgz}
     version: 0.2.12
     engines: {node: '>=22.22.2'}
     peerDependencies:
       '@rspack/core': ^2.0.0
       octane: ^0.20.0
 
-  '@octanejs/tanstack-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-tanstack-router-0.3.6.tgz':
-    resolution: {integrity: sha512-Ee4qGeV7KZZkB1TAgjak/vf8jC7Bokw/BrTzCtLu2Xj0p6S18N1Qf5yVVWozyhMGUu2VQ3+9iZqxbJgMgcU4yw==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-tanstack-router-0.3.6.tgz}
+  '@octanejs/tanstack-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-tanstack-router-0.3.6.tgz':
+    resolution: {integrity: sha512-Ee4qGeV7KZZkB1TAgjak/vf8jC7Bokw/BrTzCtLu2Xj0p6S18N1Qf5yVVWozyhMGUu2VQ3+9iZqxbJgMgcU4yw==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-tanstack-router-0.3.6.tgz}
     version: 0.3.6
     engines: {node: '>=22.22.2'}
     peerDependencies:
@@ -12490,8 +12490,8 @@ packages:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  '@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz':
-    resolution: {integrity: sha512-HnEYUMJ5JL6EXJtn475DByUz75fRJIL6Zkmq8yw8pbH7qFaj+5JRflm8gL3DcIpEJOY4fpxX/UUtxfDmpgPZsQ==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz}
+  '@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz':
+    resolution: {integrity: sha512-HnEYUMJ5JL6EXJtn475DByUz75fRJIL6Zkmq8yw8pbH7qFaj+5JRflm8gL3DcIpEJOY4fpxX/UUtxfDmpgPZsQ==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz}
     version: 1.171.39
     engines: {node: '>=20.19'}
 
@@ -16910,8 +16910,8 @@ packages:
     resolution: {integrity: sha512-5vvB5+W7ePv+p3uqxi+RcW1XAzLW0/hxt3/4X4Lc4qHudzOhmBiBwOY6DRob4WnanAEGvNcLjF+KNOufrUoEQw==}
     engines: {node: '>=12.20.0'}
 
-  octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz:
-    resolution: {integrity: sha512-3Erq292dst/ssGC7RNH4ppT7JKSHP0YAHgnE2Jyc65oKAIXVz+KOHFtGsBqFGXvgyF+2UprvaExMqXedhWcxGA==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz}
+  octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz:
+    resolution: {integrity: sha512-O4Fmzb07Roo8t/ChG1OMUyEqhplgxCM4aWdj70aySQrsuPIb5dZGreOdu6PvllH8Y5d8GM3ZYDtpmoJOS2GYhA==, tarball: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz}
     version: 0.20.0
     engines: {node: '>=22.22.2'}
     peerDependencies:
@@ -21903,19 +21903,19 @@ snapshots:
   '@nx/nx-win32-x64-msvc@24.0.6':
     optional: true
 
-  '@octanejs/rspack-plugin@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-rspack-plugin-0.2.12.tgz(@rspack/core@2.3.3(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@octanejs/rspack-plugin@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-rspack-plugin-0.2.12.tgz(@rspack/core@2.3.3(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
       '@jridgewell/remapping': 2.3.5
       '@rspack/core': 2.3.3(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24)
-      octane: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      octane: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
-  '@octanejs/tanstack-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-tanstack-router-0.3.6.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz)(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@octanejs/tanstack-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-tanstack-router-0.3.6.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz)(octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
       '@tanstack/history': 1.162.5
-      '@tanstack/router-core': https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz
+      '@tanstack/router-core': https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz
       '@tanstack/store': 0.11.2
       isbot: 5.2.3
-      octane: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      octane: https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@open-draft/deferred-promise@2.2.0': {}
 
@@ -24173,11 +24173,11 @@ snapshots:
 
   '@tanstack/history@1.162.5': {}
 
-  '@tanstack/react-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@tanstack/react-router@https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz(@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
       '@tanstack/history': 1.162.5
       '@tanstack/react-store': 0.11.2(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      '@tanstack/router-core': https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz
+      '@tanstack/router-core': https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz
       isbot: 5.2.3
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
@@ -24189,7 +24189,7 @@ snapshots:
       react-dom: 19.3.1(react@19.3.1)
       use-sync-external-store: 1.7.0(react@19.3.1)
 
-  '@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz':
+  '@tanstack/router-core@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz':
     dependencies:
       '@tanstack/history': 1.162.5
       cookie-es: 3.1.1
@@ -29179,7 +29179,7 @@ snapshots:
 
   obug@3.0.0: {}
 
-  octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)):
+  octane@https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz(@tsrx/oxc@0.24.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.1(supports-color@10.2.2))(sass-embedded@1.108.2)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)):
     dependencies:
       '@tsrx/core': 0.6.1
       '@types/react': 19.3.0
