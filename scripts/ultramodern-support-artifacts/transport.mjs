@@ -15,5 +15,7 @@ export const verifySource = (producer, readGithub, options) =>
   source({ ...options, protocol, producer, readGithub });
 export const verifyRelease = (value, descriptor, options) =>
   release({ ...options, protocol, release: value, descriptor });
-export const authenticateDescriptor = options =>
-  authenticate({ ...options, protocol });
+export const authenticateDescriptor = options => {
+  const { readGithub = githubReader(options) } = options;
+  return authenticate({ ...options, protocol, readGithub });
+};

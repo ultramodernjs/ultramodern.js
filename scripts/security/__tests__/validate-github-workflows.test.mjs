@@ -209,6 +209,33 @@ const assertPublishMutationRejected = (label, mutate, pattern) => {
   );
 };
 
+test('accepted-tarball publication authenticates artifact-source reads with the job token', () => {
+  const workflow = readPublishWorkflow();
+  const publish = workflow.jobs.publish.steps.find(step =>
+    step.run?.includes('--publish-existing'),
+  );
+  assert.equal(publish.env.GH_TOKEN, githubExpression('github.token'));
+});
+
+for (const token of [
+  undefined,
+  '',
+  githubExpression('secrets.UNRELATED_TOKEN'),
+])
+  test(`release validator rejects publication artifact authentication token ${String(token)}`, () => {
+    assertPublishMutationRejected(
+      `publication token ${String(token)}`,
+      workflow => {
+        const publish = workflow.jobs.publish.steps.find(step =>
+          step.run?.includes('--publish-existing'),
+        );
+        if (token === undefined) delete publish.env.GH_TOKEN;
+        else publish.env.GH_TOKEN = token;
+      },
+      /publish must authenticate artifact-source reads with the job token/,
+    );
+  });
+
 test('source-cohort reuse is rejected before compiler and integration work starts', () => {
   const workflow = readPublishWorkflow();
   const early = workflow.jobs['publish-security'].steps.find(step =>

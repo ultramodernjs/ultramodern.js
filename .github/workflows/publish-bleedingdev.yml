@@ -1410,6 +1410,7 @@ jobs:
 
       - name: Publish only the accepted tarballs
         env:
+          GH_TOKEN: ${{ github.token }}
           PUBLISH_VERSION: ${{ inputs.version }}
           PUBLISH_TAG: ${{ env.BLEEDINGDEV_PUBLISH_TAG }}
           PUBLISH_CONCURRENCY: ${{ env.BLEEDINGDEV_PUBLISH_CONCURRENCY }}
