@@ -42,7 +42,7 @@ const patches = [
   'patches/octane@0.20.0.css-properties.patch',
   'patches/@octanejs__rspack-plugin@0.2.12.patch',
 ];
-const acceptedPatches = [
+const historicalPatches = [
   'patches/octane@0.20.0.patch',
   'patches/@octanejs__rspack-plugin@0.2.12.patch',
 ];
@@ -54,6 +54,7 @@ const sourcePatchOrder = [
   inputs[3],
   inputs[1],
   inputs[2],
+  inputs.at(-1),
 ];
 const rejectedCandidates = [
   'octane-0.18.0',
@@ -150,7 +151,7 @@ function runQualifyStep(
   const pnpm = path.join(cwd, 'pnpm');
   const call = path.join(cwd, 'qualify-call.json');
   const files = Object.fromEntries(
-    [...inputs, ...acceptedPatches].map(file => [
+    [...inputs, ...patches].map(file => [
       file,
       Buffer.from(`synthetic scratch input: ${file}\n`),
     ]),
@@ -158,12 +159,12 @@ function runQualifyStep(
   const generatedOctane = Buffer.from('synthetic scratch Octane output\n');
   const generatedPlugin = pluginChanged
     ? Buffer.from('synthetic changed plugin output\n')
-    : files[acceptedPatches[1]];
+    : files[patches[1]];
   stageFiles(cwd, files);
   const runtimePair = Object.fromEntries(
     ['octane', '@octanejs/rspack-plugin'].map((name, index) => [
       name,
-      { patchPath: acceptedPatches[index], licenseSha256: 'fixture-license' },
+      { patchPath: patches[index], licenseSha256: 'fixture-license' },
     ]),
   );
   const owningInputs = {
@@ -191,8 +192,8 @@ export async function qualifyRuntimePair(options) {
     ...options, pnpm: process.env.PNPM_BINARY,
   }));
   const patches = ${JSON.stringify({
-    [acceptedPatches[0]]: generatedOctane.toString('base64'),
-    [acceptedPatches[1]]: generatedPlugin.toString('base64'),
+    [patches[0]]: generatedOctane.toString('base64'),
+    [patches[1]]: generatedPlugin.toString('base64'),
   })};
   for (const [file, bytes] of Object.entries(patches)) {
     const output = path.join(options.patchOutputDirectory, file);
@@ -224,7 +225,9 @@ export async function qualifyRuntimePair(options) {
   for (const [file, bytes] of Object.entries(files))
     assert.equal(
       sha256(fs.readFileSync(path.join(cwd, file))),
-      sha256(bytes),
+      sha256(
+        result.status === 0 && file === patches[0] ? generatedOctane : bytes,
+      ),
       file,
     );
   assert.deepEqual(
@@ -245,14 +248,11 @@ export async function qualifyRuntimePair(options) {
   };
 }
 
-test('manual qualifier adds only CSS source to current owning inputs and confines both generated patches', t => {
+test('manual qualifier uses the owning CSS source exactly once and confines both generated patches', t => {
   const { result, call, cwd, files, generatedOctane, owningInputs, pnpm } =
     runQualifyStep(t);
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(call.inputs, {
-    ...owningInputs,
-    patches: [...owningInputs.patches, path.join(cwd, inputs.at(-1))],
-  });
+  assert.deepEqual(call.inputs, owningInputs);
   assert.equal(call.writePatch, true);
   assert.equal(call.pnpm, pnpm);
   assert(path.isAbsolute(call.patchOutputDirectory));
@@ -266,35 +266,48 @@ test('manual qualifier adds only CSS source to current owning inputs and confine
     fs.readFileSync(path.join(cwd, patches[0])),
     generatedOctane,
   );
-  assert.notEqual(sha256(generatedOctane), sha256(files[acceptedPatches[0]]));
+  assert.notEqual(sha256(generatedOctane), sha256(files[patches[0]]));
   assert.deepEqual(fs.readdirSync(path.join(cwd, 'patches')).sort(), [
     '@octanejs__rspack-plugin@0.2.12.patch',
     'octane@0.20.0.css-properties.patch',
-    'octane@0.20.0.patch',
   ]);
 });
 
-test('a changed generated plugin prevents copying the new Octane patch', t => {
-  const { result, cwd, call } = runQualifyStep(t, { pluginChanged: true });
+test('a changed generated plugin preserves the current Octane patch', t => {
+  const { result, cwd, call, files } = runQualifyStep(t, {
+    pluginChanged: true,
+  });
   assert.notEqual(result.status, 0);
   assert(call, 'The owning qualifier ran before the plugin equality gate');
   assert.match(result.stderr, /must not change the Rspack plugin patch/u);
-  assert.equal(fs.existsSync(path.join(cwd, patches[0])), false);
+  assert.deepEqual(
+    fs.readFileSync(path.join(cwd, patches[0])),
+    files[patches[0]],
+  );
 });
 
-test('an unreviewed pnpm cannot start qualification or create a patch', t => {
-  const { result, cwd, call } = runQualifyStep(t, { pnpmVersion: '12.20.0' });
+test('an unreviewed pnpm cannot start qualification or replace a patch', t => {
+  const { result, cwd, call, files } = runQualifyStep(t, {
+    pnpmVersion: '12.20.0',
+  });
   assert.notEqual(result.status, 0);
   assert.equal(call, undefined);
-  assert.equal(fs.existsSync(path.join(cwd, patches[0])), false);
+  assert.deepEqual(
+    fs.readFileSync(path.join(cwd, patches[0])),
+    files[patches[0]],
+  );
 });
 
 test('manual qualifier rejects legacy, moving and injected candidates before starting', t => {
   for (const selected of rejectedCandidates) {
-    const { result, call, cwd } = runQualifyStep(t, { selected });
+    const { result, call, cwd, files } = runQualifyStep(t, { selected });
     assert.notEqual(result.status, 0, selected);
     assert.equal(call, undefined, selected);
-    assert.equal(fs.existsSync(path.join(cwd, patches[0])), false, selected);
+    assert.deepEqual(
+      fs.readFileSync(path.join(cwd, patches[0])),
+      files[patches[0]],
+      selected,
+    );
   }
 });
 
@@ -462,7 +475,7 @@ test('accepted handoff 44296887336 remains immutable data with its own original 
   );
   assert.deepEqual(
     expected.patches.map(file => file.path),
-    acceptedPatches,
+    historicalPatches,
   );
   assert.deepEqual(
     expected.inputs.map(file => file.path),

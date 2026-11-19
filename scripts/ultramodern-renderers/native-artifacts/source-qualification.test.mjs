@@ -747,7 +747,7 @@ test('adapter rejects a mixed release tuple before fetching or building', async 
 
 const corrections = 'scripts/ultramodern-renderers/octane-corrections';
 const candidateDirectory = `${corrections}/octane-0.20.0`;
-const handoffPath = `${candidateDirectory}/runtime-handoff.json`;
+const handoffPath = `${candidateDirectory}/css-properties-runtime-handoff.json`;
 const handoff = JSON.parse(
   fs.readFileSync(new URL(`../../../${handoffPath}`, import.meta.url)),
 );
@@ -809,12 +809,50 @@ test('the production recipe requires its handoff and keeps the adapter patch in 
   assert.throws(() => releaseRecipe(options), /Handoff digest/u);
 });
 
-test('production pair pins exactly runtime handoff 44296887336/1', () => {
-  assert.deepEqual(handoff.run, { id: '44296887336', attempt: '1' });
+test('production pair pins exactly CSS properties runtime handoff 44543237408/1', () => {
+  assert.deepEqual(handoff.run, { id: '44543237408', attempt: '1' });
+  assert.equal(handoff.sourceSha, 'd1a84f76efdb3768928c0a2b2d717d6ba95fb399');
+  assert.deepEqual(handoff.patches, [
+    {
+      path: 'patches/octane@0.20.0.css-properties.patch',
+      bytes: 2149812,
+      sha256:
+        'b8130841d8fbda74f63395fce4b0f7a32d6b78bee600b4e8896f8f3152718512',
+    },
+    {
+      path: 'patches/@octanejs__rspack-plugin@0.2.12.patch',
+      bytes: 26393,
+      sha256:
+        'bd448e034c50f526e9a580e4595ab73417cf19273ddf9fc1254cdfe71b51fcfb',
+    },
+  ]);
+  assert.deepEqual(
+    handoff.inputs.map(entry => entry.path),
+    [
+      `${candidateDirectory}/runtime-source.patch`,
+      `${candidateDirectory}/rspack-source.patch`,
+      `${candidateDirectory}/rspack-tests.patch`,
+      `${corrections}/runtime-tests.patch`,
+      `${corrections}/typescript-compat/typescript-source.patch`,
+      `${corrections}/typescript-compat/native-signals-source.patch`,
+      `${corrections}/typescript-compat/volar-core-source.patch`,
+      `${candidateDirectory}/provenance.json`,
+      `${candidateDirectory}/runtime-build-package.json`,
+      `${candidateDirectory}/runtime-build-pnpm-lock.yaml`,
+      `${candidateDirectory}/css-properties-source.patch`,
+    ],
+  );
   const pair = runtimeRecipes();
   assert.equal(
     pair.packages.octane.patchSha256,
-    'b81dfd366a14935b0a90f449916a8434d2c398f007dcdafcc6a0911235491493',
+    'b8130841d8fbda74f63395fce4b0f7a32d6b78bee600b4e8896f8f3152718512',
+  );
+  assert.equal(
+    pair.packages.octane.patchPath,
+    path.resolve(
+      import.meta.dirname,
+      '../../../patches/octane@0.20.0.css-properties.patch',
+    ),
   );
   assert.equal(
     pair.packages['@octanejs/rspack-plugin'].patchSha256,
@@ -887,7 +925,7 @@ test('production pair runs one owning invocation for both packages with the exac
   assert.equal(calls[0].items, pair.packages);
   assert.equal(calls[0].packedDirectory, '/unit/exact-verified-archives');
   fs.appendFileSync(
-    path.join(directory, 'patches/octane@0.20.0.patch'),
+    path.join(directory, 'patches/octane@0.20.0.css-properties.patch'),
     'post-recipe drift',
   );
   calls.length = 0;
