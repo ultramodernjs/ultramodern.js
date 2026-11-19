@@ -2156,6 +2156,14 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
       'node scripts/ultramodern-publish/prepare-bleedingdev-packages.mjs --publish-existing',
     ),
   );
+  if (
+    publishSteps[cohortUploadAt]?.env?.GH_TOKEN !==
+    actionExpression('github.token')
+  ) {
+    errors.push(
+      `${relativePath} publish must authenticate artifact-source reads with the job token`,
+    );
+  }
   const bundleAt = publishSteps.findIndex(
     step =>
       actionMatches(step, 'actions/download-artifact') &&
