@@ -3155,7 +3155,8 @@ five previously invalid advisory rows remain non-authorizing historical prose.
     {"path":"packages/solutions/app-tools/tests/serverBuild.test.ts","owner":"bleedingdev","reason":"2026-11-17: Prove lazy gated server roots, current exclusions, no-BFF compilation and ownership claims before or after setup without overlapping writers; preserve inherited test identity.","dispositions":["inline-patch"]},
     {"path":"packages/server/bff-core/src/router/utils.ts","owner":"bleedingdev","reason":"2026-11-18: Find API handlers with node:fs globSync instead of the prebundled Globby so @modern-js/utils drops fast-glob, micromatch and picomatch; keep the same file set: negated rules become exclude, only files are returned, and only the .gitignore files inside the API directory apply, with git line order, negation and directory rules.","dispositions":["inline-patch"]},
     {"path":"packages/server/bff-core/tests/getFiles.test.ts","owner":"bleedingdev","reason":"2026-11-18: Pin the handler files getFiles returns on a fixture tree with excluded rules, dotfiles, a directory named like a handler, nested API-local .gitignore negation, and a parent dist ignore that must not apply.","dispositions":["inline-patch"]},
-    {"path":"packages/toolkit/plugin/src/cli/run/config/loadConfig.ts","owner":"bleedingdev","reason":"2026-11-18: Delete clearFilesOverTime, which nothing calls or exports, instead of porting its Globby call when Globby leaves @modern-js/utils.","dispositions":["inline-patch"]}
+    {"path":"packages/toolkit/plugin/src/cli/run/config/loadConfig.ts","owner":"bleedingdev","reason":"2026-11-18: Delete clearFilesOverTime, which nothing calls or exports, instead of porting its Globby call when Globby leaves @modern-js/utils.","dispositions":["inline-patch"]},
+    {"path":"packages/cli/builder/tests/cache.test.ts","owner":"bleedingdev","reason":"2026-11-19: Identify normalized cache configurations by their environment names instead of parsing Rsbuild's opaque cache-version string; preserve actual cold/warm restoration and isolated cache-directory checks.","dispositions":["inline-patch"]}
   ]
 }
 ```
@@ -3164,6 +3165,7 @@ five previously invalid advisory rows remain non-authorizing historical prose.
 <!-- fork-evidence:table -->
 | Upstream-owned path | Owner | Reason | Disposition |
 | --- | --- | --- | --- |
+| `packages/cli/builder/tests/cache.test.ts` | bleedingdev | 2026-11-19: Identify normalized cache configurations by their environment names instead of parsing Rsbuild's opaque cache-version string; preserve actual cold/warm restoration and isolated cache-directory checks. | `inline-patch` |
 | `packages/cli/adapter-rstest/package.json` | bleedingdev | 2026-11-17 dependency cohort: update the existing registry declarations (@rsbuild/core 2.3.2 to 2.3.3) without changing package ownership or the shape of the dependency graph. | `inline-patch` + `keep-[M]` |
 | `packages/cli/builder/package.json` | bleedingdev | 2026-11-17 dependency cohort: update the existing registry declarations (@rsbuild/core 2.3.2 to 2.3.3, browserslist 4.29.5 to 4.29.6, postcss-custom-properties 15.0.4 to 15.0.5) without changing package ownership or the shape of the dependency graph. | `inline-patch` + `keep-[M]` |
 | `packages/cli/plugin-bff/package.json` | bleedingdev | 2026-11-17 dependency cohort: update the existing registry declarations (@rsbuild/core 2.3.2 to 2.3.3) without changing package ownership or the shape of the dependency graph. | `inline-patch` + `keep-[M]` |

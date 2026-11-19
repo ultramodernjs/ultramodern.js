@@ -6,7 +6,7 @@
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
   "totalFiles": 1459,
   "totalHunks": 4946,
-  "totalChangedLines": 104432,
+  "totalChangedLines": 104425,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -146,12 +146,12 @@
     {
       "file": "packages/cli/builder/tests/default.test.ts",
       "hunks": 17,
-      "changedLines": 450
+      "changedLines": 446
     },
     {
       "file": "packages/cli/builder/tests/environment.test.ts",
       "hunks": 7,
-      "changedLines": 165
+      "changedLines": 162
     },
     {
       "file": "packages/cli/builder/tests/htmlMinify.test.ts",

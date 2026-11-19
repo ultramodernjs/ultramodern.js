@@ -29,3 +29,5 @@
 ---
 
 Refresh the UltraModern dependency and Effect compiler cohort, keeping the framework, generated workspaces, and published consumers on the same verified inputs.
+
+Preserve native response metadata validation and same-origin stylesheet reuse with the pinned Solid and Rspack runtimes.

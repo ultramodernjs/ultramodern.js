@@ -18,15 +18,21 @@ import {
   runApplicationRequest,
 } from '../../src/server';
 
+const sampledTraceparent =
+  '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+
 function sessionFor(
   input: {
     status?: number;
     headers?: ResponseHeaders;
     cache?: DocumentCachePolicy;
+    requestHeaders?: HeadersInit;
   } = {},
 ) {
   const session = createRequestSession({
-    request: new Request('https://metadata.test/'),
+    request: new Request('https://metadata.test/', {
+      headers: input.requestHeaders,
+    }),
     identity: {
       renderer: 'solid',
       appId: 'metadata',
@@ -72,7 +78,10 @@ describe('native Solid response metadata before session commit', () => {
   });
 
   test('explicit native status and ordinary headers win before cleanup and commit', async () => {
-    const session = sessionFor({ headers: [['x-owner', 'prepared']] });
+    const session = sessionFor({
+      headers: [['x-owner', 'prepared']],
+      requestHeaders: { traceparent: sampledTraceparent },
+    });
     let cleanup = 0;
     let stub: ReturnType<typeof nativeStub>;
     const response = await renderApplication({
@@ -87,6 +96,10 @@ describe('native Solid response metadata before session commit', () => {
     });
     expect(response.status).toBe(422);
     expect(response.headers.get('x-owner')).toBe('native');
+    expect(response.headers.get('server-timing')).toContain(
+      'traceparent;desc="00-0123456789abcdef0123456789abcdef-',
+    );
+    expect(stub.headers.get).toBe(Headers.prototype.get);
     expect(stub.committed).toBe(true);
     expect(session.committedPolicy?.cache.mode).toBe('no-store');
     await response.text();
@@ -432,7 +445,7 @@ describe('native Solid response metadata before session commit', () => {
     expect((await session.completion).cacheEligible).toBe(false);
   });
 
-  test.each(['status', 'statusText', 'headers'])(
+  test.each(['status', 'statusText', 'headers', 'committed'])(
     'rejects a rewritten native %s accessor without invoking it',
     async field => {
       const session = sessionFor();
@@ -450,10 +463,42 @@ describe('native Solid response metadata before session commit', () => {
             return ssr('<p>public</p>');
           },
         }),
-      ).rejects.toThrow('own data fields');
+      ).rejects.toThrow(`Cannot redefine property: ${field}`);
       expect(getterCalls).toBe(0);
       expect(session.committedPolicy).toBeUndefined();
       expect((await session.completion).state).toBe('failed');
+    },
+  );
+
+  test.each(['status', 'statusText', 'headers', 'committed'])(
+    'rejects a native %s accessor substituted after an awaited shell resource without invoking it',
+    async field => {
+      const session = sessionFor();
+      let getterCalls = 0;
+      let cleanup = 0;
+      await expect(
+        renderApplication({
+          session,
+          view: () => {
+            onCleanup(() => cleanup++);
+            const value = createMemo(async () => {
+              await Promise.resolve();
+              Object.defineProperty(nativeStub(), field, {
+                get() {
+                  getterCalls++;
+                  return 'private';
+                },
+              });
+              return 'public';
+            });
+            return ssr(['<p>', '</p>'], () => value());
+          },
+        }),
+      ).rejects.toThrow(`Cannot redefine property: ${field}`);
+      expect(getterCalls).toBe(0);
+      expect(session.committedPolicy).toBeUndefined();
+      expect((await session.completion).state).toBe('failed');
+      expect(cleanup).toBe(1);
     },
   );
 
@@ -467,7 +512,7 @@ describe('native Solid response metadata before session commit', () => {
           return ssr('public');
         },
       }),
-    ).rejects.toThrow('Headers cannot be replaced');
+    ).rejects.toThrow(TypeError);
     expect((await first.completion).state).toBe('failed');
     const second = sessionFor();
     let calls = 0;
@@ -489,6 +534,82 @@ describe('native Solid response metadata before session commit', () => {
     expect(second.committedPolicy).toBeUndefined();
     expect((await second.completion).state).toBe('failed');
   });
+
+  test.each([
+    'response accessor',
+    'replacement response',
+    'replacement Headers',
+    'Headers.get accessor',
+  ])(
+    'rejects %s before native sampled-trace reads, including after an awaited shell resource',
+    async target => {
+      for (const awaited of [false, true]) {
+        const session = sessionFor({
+          requestHeaders: {
+            traceparent: sampledTraceparent,
+          },
+        });
+        let calls = 0;
+        let cleanup = 0;
+        const substitute = () => {
+          const event = getRequestEvent();
+          if (!event) throw new Error('Expected the native request event.');
+          const stub = nativeStub();
+          const getter = () => {
+            calls++;
+            return Headers.prototype.get;
+          };
+          switch (target) {
+            case 'response accessor':
+              Object.defineProperty(event, 'response', {
+                get() {
+                  calls++;
+                  return stub;
+                },
+              });
+              break;
+            case 'replacement response':
+              event.response = Object.defineProperty({ ...stub }, 'headers', {
+                get() {
+                  calls++;
+                  return stub.headers;
+                },
+              });
+              break;
+            case 'replacement Headers':
+              stub.headers = Object.defineProperty(new Headers(), 'get', {
+                get: getter,
+              });
+              break;
+            case 'Headers.get accessor':
+              Object.defineProperty(stub.headers, 'get', { get: getter });
+              break;
+            default:
+              throw new Error(`Unknown metadata substitution: ${target}`);
+          }
+          return 'public';
+        };
+        await expect(
+          renderApplication({
+            session,
+            view: () => {
+              onCleanup(() => cleanup++);
+              if (!awaited) return ssr(substitute());
+              const value = createMemo(async () => {
+                await Promise.resolve();
+                return substitute();
+              });
+              return ssr(['<p>', '</p>'], () => value());
+            },
+          }),
+        ).rejects.toThrow(TypeError);
+        expect(calls).toBe(0);
+        expect(session.committedPolicy).toBeUndefined();
+        expect((await session.completion).state).toBe('failed');
+        expect(cleanup).toBe(1);
+      }
+    },
+  );
 
   test('native statusText reaches the frozen policy and owning response', async () => {
     const session = sessionFor();
