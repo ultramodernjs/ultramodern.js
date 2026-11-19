@@ -564,6 +564,19 @@ async function packedApiProbeMain() {
   assert.equal(config.formatter.indentStyle, 'space');
   assert.equal(config.formatter.indentWidth, 2);
   assert.ok(config.files.includes.includes('!!**/node_modules'));
+  const { default: jsPlugins } = await load(
+    '@bleedingdev/ultracite/oxlint/js-plugins',
+  );
+  assert.equal(jsPlugins.rules['sonarjs/no-redundant-optional'], 'off');
+  assert.equal(jsPlugins.rules['sonarjs/no-inconsistent-returns'], 'off');
+  assert.equal(jsPlugins.rules['react-doctor/js-set-map-lookups'], 'off');
+  const { default: nativeCore } = await load(
+    '@bleedingdev/ultracite/oxlint/core',
+  );
+  assert.equal(
+    nativeCore.rules['typescript/switch-exhaustiveness-check'],
+    'error',
+  );
   const manifest = JSON.parse(
     fs.readFileSync(path.join(ultraciteDir, 'package.json'), 'utf8'),
   );
