@@ -1,0 +1,13 @@
+diff --git a/packages/octane/src/jsx-runtime.d.ts b/packages/octane/src/jsx-runtime.d.ts
+index f9b61418e2..456b42cd2a 100644
+--- a/packages/octane/src/jsx-runtime.d.ts
++++ b/packages/octane/src/jsx-runtime.d.ts
+@@ -56,7 +56,7 @@ import type { SignalHandle } from './signals/types.js';
+ export interface OctaneElement<P = any> extends ElementDescriptor<P> {}
+ 
+ /** Inline styles use Octane's numeric length coercion for both property spellings. */
+-export interface CSSProperties extends React.CSSProperties, CSS.PropertiesHyphen<string | number> {
++export interface CSSProperties extends Omit<React.CSSProperties, 'viewTransitionScope'>, Omit<CSS.PropertiesHyphen<string | number>, keyof React.CSSProperties> {
+ 	cssFloat?: React.CSSProperties['float'];
+ 	/** Element-scoped View Transition isolation, including authored `!important` values. */
+ 	viewTransitionScope?: 'none' | 'all' | (string & {}) | undefined;

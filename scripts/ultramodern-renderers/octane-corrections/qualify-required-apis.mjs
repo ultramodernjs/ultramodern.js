@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { qualifyCSSProperties } from './qualify-css-properties.mjs';
 
 // Strict public-API and genuine stable-TypeScript consumer acceptance.
 // Run inside owned-temp-dir with the consumer directory as the argument.
@@ -15,6 +16,23 @@ assert(process.argv[2], 'Pass the installed consumer root');
 const consumer = fs.realpathSync(process.argv[2]);
 const request = createRequire(path.join(consumer, 'package.json'));
 const results = [];
+try {
+  const evidence = await qualifyCSSProperties({
+    consumer,
+    work: process.env.OWNED_TEMP_DIR,
+  });
+  results.push({
+    check: 'complete CSS declaration semantics and negative controls',
+    status: 'PASS',
+    ...evidence,
+  });
+} catch (error) {
+  results.push({
+    check: 'complete CSS declaration semantics and negative controls',
+    status: 'FAIL',
+    error: error.stack,
+  });
+}
 for (const [specifier, required] of [
   [
     'octane',
