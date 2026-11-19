@@ -1168,10 +1168,20 @@ export function nativeModuleFederationPlugin(
       // A server container resolves its chunks from its own public path,
       // while server-rendered asset URLs keep the client's.
       api.modifyRspackConfig(async (config, { environment }) => {
-        const authored = await load();
-        if (!authored) return;
         if (environment.name !== 'client' && environment.name !== 'server')
           return;
+        const authored = await load();
+        const enabled =
+          authored &&
+          (environment.name === 'client' || serverRendered(authored));
+        // Restored shared dependencies require the same federation factories.
+        // CSR still has a shell compiler, but it has no server container.
+        if (
+          typeof config.cache === 'object' &&
+          config.cache.type === 'persistent'
+        )
+          config.cache.version = `${config.cache.version ?? ''}-ultramodern-mf-${enabled ? 'on' : 'off'}`;
+        if (!authored) return;
         const context = api.getAppContext();
         const address = context.builder?.context.devServer;
         if (context.command === 'dev' && address) {
