@@ -106,14 +106,23 @@ jobs:
           [[ "$PRODUCER_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]] || exit 1
           [[ "$EXPECTED_SOURCE" =~ ^[0-9a-f]{40}$ ]] || exit 1
           [[ "$EXPECTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-ultramodern\.[1-9][0-9]*$ ]] || exit 1
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PRODUCER_RUN_ID" |
-            jq -e --arg sha "$EXPECTED_SOURCE" --arg attempt "$PRODUCER_RUN_ATTEMPT" '
-              .conclusion == "success" and
-              .run_attempt >= ($attempt | tonumber) and
-              .head_sha == $sha and
-              .head_branch == "main-ultramodern" and
-              .event == "workflow_dispatch" and
-              .path == ".github/workflows/publish-bleedingdev.yml"
+          PUBLICATION_HEAD="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PRODUCER_RUN_ID" |
+            jq -er --arg attempt "$PRODUCER_RUN_ATTEMPT" '
+              select(
+                .conclusion == "success" and
+                .run_attempt >= ($attempt | tonumber) and
+                .head_branch == "main-ultramodern" and
+                .event == "workflow_dispatch" and
+                .path == ".github/workflows/publish-bleedingdev.yml"
+              ) | .head_sha | select(test("^[0-9a-f]{40}$"))
+            ')"
+          # Recovery publishes an older qualified bundle with newer publication
+          # tooling. Bind that source to the publication's immutable history;
+          # the downloaded manifest below must still name EXPECTED_SOURCE exactly.
+          gh api "repos/$GITHUB_REPOSITORY/compare/$EXPECTED_SOURCE...$PUBLICATION_HEAD" |
+            jq -e --arg sha "$EXPECTED_SOURCE" '
+              .merge_base_commit.sha == $sha and
+              (.status == "identical" or .status == "ahead")
             '
           jobs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PRODUCER_RUN_ID/jobs?filter=latest&per_page=100")"
           jq -e 'any(.jobs[]; .name == "Publish accepted @bleedingdev tarballs" and .conclusion == "success")' <<< "$jobs"
