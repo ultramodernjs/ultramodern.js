@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import http from 'node:http';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -62,6 +64,7 @@ type WorkspaceOptions = {
   distName?: string;
   effectApiSource?: string;
   appId?: string;
+  containerMinify?: unknown;
 };
 
 const createWorkspace = async ({
@@ -72,6 +75,7 @@ const createWorkspace = async ({
   distName = 'dist',
   effectApiSource = 'export const backendFederationContract = {};\n',
   appId = 'explore',
+  containerMinify,
 }: WorkspaceOptions = {}) => {
   const workspaceRoot = await createTempDir();
   const appDirectory = path.join(workspaceRoot, 'verticals/explore');
@@ -98,6 +102,9 @@ const createWorkspace = async ({
   await writeJson(path.join(appDirectory, 'package.json'), {
     name: '@tractor-store-vertical-demo/explore',
     version: '0.1.0',
+    ...(containerMinify === undefined
+      ? {}
+      : { modernjs: { backendFederation: { containerMinify } } }),
   });
   await writeJson(
     path.join(workspaceRoot, 'topology/reference-topology.json'),
@@ -220,6 +227,156 @@ afterEach(async () => {
 });
 
 describe('backend federation build artifacts', () => {
+  it.each([null, false, true, '', 'syntax', 'full', 1, {}])(
+    'rejects unsupported explicit containerMinify %j at the app manifest boundary',
+    async containerMinify => {
+      const workspace = await createWorkspace({ containerMinify });
+      await expect(
+        emitBackendFederationArtifacts(
+          workspace.appDirectory,
+          workspace.distDirectory,
+        ),
+      ).rejects.toThrow(
+        /package\.json.*modernjs\.backendFederation\.containerMinify.*"whitespace-syntax"/,
+      );
+      await expect(fs.access(workspace.distDirectory)).rejects.toThrow();
+    },
+  );
+
+  it('minifies the same Effect container only when opted in without changing names, lazy exposes or metadata', async () => {
+    const workspace = await createWorkspace();
+    const evaluationPath = path.join(workspace.workspaceRoot, 'evaluations');
+    await fs.writeFile(
+      path.join(workspace.appDirectory, 'api/effect-api.ts'),
+      `
+import { appendFileSync } from 'node:fs';
+import { Effect, Layer, ManagedRuntime } from 'effect';
+appendFileSync(${JSON.stringify(evaluationPath)}, 'loaded\\n');
+export function namedContainerMessage(descriptiveContainerPayload: string) {
+  return Effect.succeed(descriptiveContainerPayload);
+}
+export class NamedContainerMessage {
+  constructor(readonly message: string) {}
+}
+export const runtime = ManagedRuntime.make(Layer.empty);
+export const backendFederationContract = {};
+`,
+    );
+    const packagePath = path.join(workspace.appDirectory, 'package.json');
+    const packageManifest = JSON.parse(await fs.readFile(packagePath, 'utf8'));
+    const generate = async () => {
+      const result = await withSourceRevision('2'.repeat(40), () =>
+        emitBackendFederationArtifacts(
+          workspace.appDirectory,
+          workspace.distDirectory,
+        ),
+      );
+      if (!result?.deliveryUnitArtifactPath) {
+        throw new Error(
+          'Expected emitted container and delivery-unit artifact.',
+        );
+      }
+      const bytes = await fs.readFile(result.containerPath);
+      const manifest = JSON.parse(
+        await fs.readFile(result.manifestPath, 'utf8'),
+      );
+      expect(manifest.entry.byteLength).toBe(bytes.byteLength);
+      expect(manifest.entry.sha256).toBe(
+        createHash('sha256').update(bytes).digest('hex'),
+      );
+      return {
+        bytes,
+        manifest,
+        deliveryUnitArtifact: await fs.readFile(
+          result.deliveryUnitArtifactPath,
+          'utf8',
+        ),
+      };
+    };
+    const unminified = await generate();
+    await writeJson(packagePath, {
+      ...packageManifest,
+      modernjs: {
+        backendFederation: { containerMinify: 'whitespace-syntax' },
+      },
+    });
+    const minified = await generate();
+    expect(minified.bytes.byteLength).toBeLessThan(unminified.bytes.byteLength);
+    expect((await generate()).bytes).toEqual(minified.bytes);
+    await writeJson(packagePath, packageManifest);
+    expect((await generate()).bytes).toEqual(unminified.bytes);
+    expect(minified.deliveryUnitArtifact).toBe(unminified.deliveryUnitArtifact);
+    expect({ ...minified.manifest, entry: undefined }).toEqual({
+      ...unminified.manifest,
+      entry: undefined,
+    });
+    expect({
+      ...minified.manifest.entry,
+      byteLength: undefined,
+      sha256: undefined,
+    }).toEqual({
+      ...unminified.manifest.entry,
+      byteLength: undefined,
+      sha256: undefined,
+    });
+    const nodeRequire = createRequire(import.meta.url);
+    for (const [name, artifact] of [
+      ['unminified', unminified],
+      ['minified', minified],
+    ] as const) {
+      const entryPath = path.join(workspace.distDirectory, `${name}.cjs`);
+      await fs.writeFile(entryPath, artifact.bytes);
+      const container = nodeRequire(entryPath);
+      expect(container.__modernjsBackendFederation).toMatchObject({
+        name: 'verticalExploreBackend',
+        expose: './effect-api',
+        remoteType: 'commonjs-module',
+      });
+      await expect(fs.access(evaluationPath)).rejects.toThrow();
+      expect(() => container.get('./missing')).toThrow(/Unexpected.*expose/);
+      const factory = container.get('./effect-api');
+      await container.init({});
+      await expect(fs.access(evaluationPath)).rejects.toThrow();
+      const exposed = await factory();
+      try {
+        expect(await factory()).toBe(exposed);
+        expect(await fs.readFile(evaluationPath, 'utf8')).toBe('loaded\n');
+        expect(exposed.namedContainerMessage.name).toBe(
+          'namedContainerMessage',
+        );
+        expect(exposed.NamedContainerMessage.name).toBe(
+          'NamedContainerMessage',
+        );
+        expect(exposed.namedContainerMessage.toString()).toContain(
+          'descriptiveContainerPayload',
+        );
+        expect(new exposed.NamedContainerMessage('Tractor 🚜').message).toBe(
+          'Tractor 🚜',
+        );
+        await expect(
+          exposed.runtime.runPromise(
+            exposed.namedContainerMessage('Tractor 🚜'),
+          ),
+        ).resolves.toBe('Tractor 🚜');
+        expect(exposed.backendFederationContract).toMatchObject({
+          name: 'verticalExploreBackend',
+          runtimeFramework: 'effect',
+          strictEffectApproach: true,
+          compatibility: {
+            build: artifact.manifest.buildVersion,
+            packageName: '@tractor-store-vertical-demo/explore',
+          },
+        });
+      } finally {
+        await exposed.runtime.dispose();
+        await fs.rm(evaluationPath);
+      }
+    }
+    console.info(
+      `Effect container UTF-8 bytes: ${unminified.bytes.byteLength} -> ${minified.bytes.byteLength}`,
+    );
+  });
+
   it('requires and runs its finalized renderer resolver only after build', () => {
     const resolveRendererBuild = rstest.fn(async () => ({
       buildMarker: 'compiled-build',
@@ -310,71 +467,75 @@ describe('backend federation build artifacts', () => {
       fs.access(path.join(distDirectory, 'backendRemoteEntry.cjs')),
     ).rejects.toThrow();
   });
-  it('serves RPC from a separately bundled Effect runtime through the host handler', async () => {
-    let distDirectory = '';
-    let dispatchRpc: ((request: Request) => Promise<Response>) | undefined;
-    const server = http.createServer(async (request, response) => {
-      const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
-      if (pathname === '/explore-api/rpc' && dispatchRpc) {
-        const chunks: Buffer[] = [];
-        for await (const chunk of request) {
-          chunks.push(Buffer.from(chunk));
+  it.each([undefined, 'whitespace-syntax'])(
+    'serves RPC from a separately bundled Effect runtime through the host handler (containerMinify: %s)',
+    async containerMinify => {
+      let distDirectory = '';
+      let dispatchRpc: ((request: Request) => Promise<Response>) | undefined;
+      const server = http.createServer(async (request, response) => {
+        const pathname = new URL(request.url ?? '/', 'http://localhost')
+          .pathname;
+        if (pathname === '/explore-api/rpc' && dispatchRpc) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) {
+            chunks.push(Buffer.from(chunk));
+          }
+          const result = await dispatchRpc(
+            new Request(`http://localhost${pathname}`, {
+              method: request.method,
+              headers: {
+                'content-type':
+                  request.headers['content-type'] ?? 'application/json',
+              },
+              body: Buffer.concat(chunks),
+            }),
+          );
+          response.writeHead(result.status, Object.fromEntries(result.headers));
+          response.end(Buffer.from(await result.arrayBuffer()));
+          return;
         }
-        const result = await dispatchRpc(
-          new Request(`http://localhost${pathname}`, {
-            method: request.method,
-            headers: {
-              'content-type':
-                request.headers['content-type'] ?? 'application/json',
-            },
-            body: Buffer.concat(chunks),
-          }),
+        const fileName = pathname.slice(1);
+        if (
+          fileName !== 'backend-mf-manifest.json' &&
+          fileName !== 'backendRemoteEntry.cjs'
+        ) {
+          response.statusCode = 404;
+          response.end();
+          return;
+        }
+        response.setHeader(
+          'content-type',
+          fileName.endsWith('.json') ? 'application/json' : 'text/javascript',
         );
-        response.writeHead(result.status, Object.fromEntries(result.headers));
-        response.end(Buffer.from(await result.arrayBuffer()));
-        return;
-      }
-      const fileName = pathname.slice(1);
-      if (
-        fileName !== 'backend-mf-manifest.json' &&
-        fileName !== 'backendRemoteEntry.cjs'
-      ) {
-        response.statusCode = 404;
-        response.end();
-        return;
-      }
-      response.setHeader(
-        'content-type',
-        fileName.endsWith('.json') ? 'application/json' : 'text/javascript',
-      );
-      response.end(await fs.readFile(path.join(distDirectory, fileName)));
-    });
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => {
-        server.off('error', reject);
-        resolve();
+        response.end(await fs.readFile(path.join(distDirectory, fileName)));
       });
-    });
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', () => {
+          server.off('error', reject);
+          resolve();
+        });
+      });
 
-    try {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        throw new Error('Expected backend federation test server address.');
-      }
-      const effectEdgePath = path.resolve(
-        __dirname,
-        '../../../../server/bff-effect/dist/esm-node/effect/edge.mjs',
-      );
-      const effectDirectory = path.dirname(effectEdgePath);
-      const [hostEffect, hostModule] = await Promise.all([
-        import(pathToFileURL(path.join(effectDirectory, 'index.mjs')).href),
-        import(pathToFileURL(path.join(effectDirectory, 'module.mjs')).href),
-      ]);
-      const workspace = await createWorkspace({
-        apiProtocol: 'rpc',
-        backendBase: `http://127.0.0.1:${address.port}`,
-        effectApiSource: `
+      try {
+        const address = server.address();
+        if (!address || typeof address === 'string') {
+          throw new Error('Expected backend federation test server address.');
+        }
+        const effectEdgePath = path.resolve(
+          __dirname,
+          '../../../../server/bff-effect/dist/esm-node/effect/edge.mjs',
+        );
+        const effectDirectory = path.dirname(effectEdgePath);
+        const [hostEffect, hostModule] = await Promise.all([
+          import(pathToFileURL(path.join(effectDirectory, 'index.mjs')).href),
+          import(pathToFileURL(path.join(effectDirectory, 'module.mjs')).href),
+        ]);
+        const workspace = await createWorkspace({
+          containerMinify,
+          apiProtocol: 'rpc',
+          backendBase: `http://127.0.0.1:${address.port}`,
+          effectApiSource: `
 import { defineEffectBff, Effect, HttpApi, Layer, Rpc, RpcGroup, Schema, useEffectContext } from ${JSON.stringify(effectEdgePath)};
 const item = Schema.Struct({ id: Schema.String, title: Schema.String });
 const notFound = Schema.TaggedError;
@@ -423,112 +584,115 @@ export const api = group;
 export { runtime };
 export default runtime;
 `,
-      });
-      distDirectory = workspace.distDirectory;
-      await withSourceRevision('2'.repeat(40), () =>
-        emitBackendFederationArtifacts(
-          workspace.appDirectory,
-          workspace.distDirectory,
-        ),
-      );
-      const manifest = JSON.parse(
-        await fs.readFile(
-          path.join(distDirectory, 'backend-mf-manifest.json'),
-          'utf8',
-        ),
-      );
-      const loaded = await loadBackendFederatedEffectApiFromManifest({
-        hostName: `appToolsRpcHost-${Date.now()}`,
-        manifestUrl: `http://127.0.0.1:${address.port}/backend-mf-manifest.json`,
-        entryPolicy: {
-          expected: {
-            byteLength: manifest.entry.byteLength,
-            entryUrl: manifest.entry.url,
-            remoteName: manifest.backendFederation.name,
-            sha256: manifest.entry.sha256,
-          },
-        },
-        expected: {
-          buildMarker: manifest.backendFederation.deliveryUnit.buildMarker,
-          unitId: manifest.backendFederation.deliveryUnit.unitId,
-        },
-      });
-      if (!loaded.runtime || typeof loaded.runtime !== 'object') {
-        throw new Error('Expected bundled Effect runtime.');
-      }
-      const warnings: string[] = [];
-      const edge = await hostEffect.createEffectBffTestHandler({
-        module: loaded.runtime,
-        prefix: '/explore-api',
-        onWarning: message => warnings.push(message),
-      });
-      dispatchRpc = request => edge.handler(request);
-      expect(warnings).toEqual([]);
-      try {
-        const response = await fetch(
-          `http://127.0.0.1:${address.port}/explore-api/rpc`,
-          {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 'proof',
-              method: 'list',
-              params: { limit: 1 },
-            }),
-          },
+        });
+        distDirectory = workspace.distDirectory;
+        await withSourceRevision('2'.repeat(40), () =>
+          emitBackendFederationArtifacts(
+            workspace.appDirectory,
+            workspace.distDirectory,
+          ),
         );
-        expect(response.status).toBe(200);
-        await expect(response.json()).resolves.toEqual({
-          jsonrpc: '2.0',
-          id: 'proof',
-          result: {
-            items: [
-              {
-                id: 'bundled-explore',
-                title: 'Bundled Effect RPC /explore-api/rpc',
-              },
-            ],
+        const manifest = JSON.parse(
+          await fs.readFile(
+            path.join(distDirectory, 'backend-mf-manifest.json'),
+            'utf8',
+          ),
+        );
+        const loaded = await loadBackendFederatedEffectApiFromManifest({
+          hostName: `appToolsRpcHost-${Date.now()}`,
+          manifestUrl: `http://127.0.0.1:${address.port}/backend-mf-manifest.json`,
+          entryPolicy: {
+            expected: {
+              byteLength: manifest.entry.byteLength,
+              entryUrl: manifest.entry.url,
+              remoteName: manifest.backendFederation.name,
+              sha256: manifest.entry.sha256,
+            },
+          },
+          expected: {
+            buildMarker: manifest.backendFederation.deliveryUnit.buildMarker,
+            unitId: manifest.backendFederation.deliveryUnit.unitId,
           },
         });
-        expect(warnings).toEqual([]);
-        const restricted = await hostModule.resolveEffectBffModuleHandler(
-          loaded.runtime,
-          {
-            validateRequest: () => new Response('denied', { status: 403 }),
-          },
-        );
-        if (!restricted) {
-          throw new Error('Expected a validator-aware bundled Effect handler.');
+        if (!loaded.runtime || typeof loaded.runtime !== 'object') {
+          throw new Error('Expected bundled Effect runtime.');
         }
+        const warnings: string[] = [];
+        const edge = await hostEffect.createEffectBffTestHandler({
+          module: loaded.runtime,
+          prefix: '/explore-api',
+          onWarning: message => warnings.push(message),
+        });
+        dispatchRpc = request => edge.handler(request);
+        expect(warnings).toEqual([]);
         try {
-          const denied = await restricted.handler(
-            new Request('http://localhost/rpc', {
+          const response = await fetch(
+            `http://127.0.0.1:${address.port}/explore-api/rpc`,
+            {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
               body: JSON.stringify({
                 jsonrpc: '2.0',
-                id: 'blocked',
+                id: 'proof',
                 method: 'list',
                 params: { limit: 1 },
               }),
-            }),
+            },
           );
-          expect(denied.status).toBe(403);
-          await expect(denied.text()).resolves.toBe('denied');
+          expect(response.status).toBe(200);
+          await expect(response.json()).resolves.toEqual({
+            jsonrpc: '2.0',
+            id: 'proof',
+            result: {
+              items: [
+                {
+                  id: 'bundled-explore',
+                  title: 'Bundled Effect RPC /explore-api/rpc',
+                },
+              ],
+            },
+          });
+          expect(warnings).toEqual([]);
+          const restricted = await hostModule.resolveEffectBffModuleHandler(
+            loaded.runtime,
+            {
+              validateRequest: () => new Response('denied', { status: 403 }),
+            },
+          );
+          if (!restricted) {
+            throw new Error(
+              'Expected a validator-aware bundled Effect handler.',
+            );
+          }
+          try {
+            const denied = await restricted.handler(
+              new Request('http://localhost/rpc', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: 'blocked',
+                  method: 'list',
+                  params: { limit: 1 },
+                }),
+              }),
+            );
+            expect(denied.status).toBe(403);
+            await expect(denied.text()).resolves.toBe('denied');
+          } finally {
+            await restricted.dispose?.();
+          }
         } finally {
-          await restricted.dispose?.();
+          await edge.dispose();
         }
       } finally {
-        await edge.dispose();
+        server.closeAllConnections();
+        await new Promise<void>((resolve, reject) => {
+          server.close(error => (error ? reject(error) : resolve()));
+        });
       }
-    } finally {
-      server.closeAllConnections();
-      await new Promise<void>((resolve, reject) => {
-        server.close(error => (error ? reject(error) : resolve()));
-      });
-    }
-  });
+    },
+  );
 
   it('advertises the generated RPC route without REST-only endpoints', async () => {
     const workspace = await createWorkspace({ apiProtocol: 'rpc' });

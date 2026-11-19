@@ -54,6 +54,7 @@ export type BackendFederationApp = {
   backendName: string;
   manifestUrl: string;
   containerEntry: string;
+  containerMinify?: 'whitespace-syntax';
   remoteType: string;
   uiManifestUrl?: string;
   topologyDeliveryUnit?: {
@@ -131,6 +132,34 @@ const toPascalCase = (value: string) =>
 
 const stringValue = (value: unknown) =>
   typeof value === 'string' && value.length > 0 ? value : undefined;
+
+type BackendFederationPackageManifest = {
+  name?: unknown;
+  version?: unknown;
+  modernjs?: unknown;
+};
+
+const readContainerMinify = (
+  packageManifest: BackendFederationPackageManifest,
+  appDirectory: string,
+): BackendFederationApp['containerMinify'] => {
+  const modernjs = packageManifest.modernjs;
+  const backendFederation = isRecord(modernjs)
+    ? modernjs.backendFederation
+    : undefined;
+  if (
+    !isRecord(backendFederation) ||
+    !('containerMinify' in backendFederation)
+  ) {
+    return undefined;
+  }
+  if (backendFederation.containerMinify !== 'whitespace-syntax') {
+    throw new Error(
+      `[backend-federation-build] Invalid package.json modernjs.backendFederation.containerMinify in ${appDirectory}: expected "whitespace-syntax" or omit the option; received ${JSON.stringify(backendFederation.containerMinify)}.`,
+    );
+  }
+  return backendFederation.containerMinify;
+};
 
 const createBackendName = (app: TopologyApp, id: string) => {
   const configuredName =
@@ -214,7 +243,7 @@ export const createAppFromTopology = (
   appDirectory: string,
   topologyApp: TopologyApp,
   overlay: DevelopmentOverlay,
-  packageManifest: { name?: unknown; version?: unknown },
+  packageManifest: BackendFederationPackageManifest,
 ): BackendFederationApp | undefined => {
   const id = stringValue(topologyApp.id);
   const appPath = stringValue(topologyApp.path);
@@ -374,6 +403,7 @@ export const createAppFromTopology = (
     backendName,
     manifestUrl,
     containerEntry,
+    containerMinify: readContainerMinify(packageManifest, appDirectory),
     remoteType,
     uiManifestUrl,
     topologyDeliveryUnit,
@@ -398,10 +428,9 @@ export const findBackendFederationApp = async (
       `[backend-federation-build] Invalid development overlay at ${overlayPath}.`,
     );
   }
-  const packageManifest = await readJsonFile<{
-    name?: unknown;
-    version?: unknown;
-  }>(path.join(appDirectory, 'package.json'));
+  const packageManifest = await readJsonFile<BackendFederationPackageManifest>(
+    path.join(appDirectory, 'package.json'),
+  );
 
   for (const app of topology.verticals) {
     const resolved = createAppFromTopology(

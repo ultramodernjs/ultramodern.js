@@ -109,6 +109,14 @@ module.exports = { __modernjsBackendFederation, get, init };
     bundle: true,
     format: 'cjs',
     logLevel: 'silent',
+    ...(app.containerMinify === 'whitespace-syntax'
+      ? {
+          minifySyntax: true,
+          minifyWhitespace: true,
+          minifyIdentifiers: false,
+          keepNames: true,
+        }
+      : {}),
     platform: 'node',
     stdin: {
       contents: source,
