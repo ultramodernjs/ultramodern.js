@@ -24,7 +24,7 @@ export const solidProfile: RendererBuildProfile<'solid'> = {
   jsxImportSource: '@solidjs/web',
   dependencies: {
     '@tanstack/router-core':
-      'https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz',
+      'https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz',
     'solid-js': '2.0.1',
     '@solidjs/web': '2.0.1',
     '@solidjs/signals': '2.0.1',

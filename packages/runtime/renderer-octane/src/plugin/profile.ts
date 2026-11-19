@@ -28,13 +28,13 @@ export const octaneProfile: RendererBuildProfile<'octane'> = {
   dependencies: {
     '@tsrx/oxc': '0.24.0',
     octane:
-      'https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octane-0.20.0.tgz',
+      'https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octane-0.20.0.tgz',
     '@octanejs/tanstack-router':
-      'https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-tanstack-router-0.3.6.tgz',
+      'https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-tanstack-router-0.3.6.tgz',
     '@octanejs/rspack-plugin':
-      'https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/octanejs-rspack-plugin-0.2.12.tgz',
+      'https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/octanejs-rspack-plugin-0.2.12.tgz',
     '@tanstack/router-core':
-      'https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz',
+      'https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-0b3f7ad610d8acc0b939402ba9a87d094c8576ff-44553146814-1/tanstack-router-core-1.171.39.tgz',
     '@modern-js/renderer-octane': '3.8.3',
     seroval: '1.8.2',
     'seroval-plugins': '1.8.0',
