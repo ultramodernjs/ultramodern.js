@@ -16,6 +16,7 @@ import {
   useContext,
   useState,
 } from 'octane';
+import { installTestClock } from 'octane/testing';
 import { mountOctaneApplication } from '../src/client';
 import { federatedComponent } from '../src/federation';
 import { FederationContext } from '../src/federation-context';
@@ -142,6 +143,7 @@ test('the uncompiled library wrapper registers and retires each mounted publishe
   ];
   const container = document.createElement('div');
   const errors: unknown[] = [];
+  const clock = installTestClock();
   const handle = await mountOctaneApplication({
     container,
     identity,
@@ -154,25 +156,28 @@ test('the uncompiled library wrapper registers and retires each mounted publishe
     }),
   });
   try {
-    await waitFor(() => {
-      expect(errors).toEqual([]);
-      expect(container.textContent).toBe('firstsecond');
-      expect(register).toHaveBeenCalledTimes(2);
-    });
+    await clock.settle();
+    expect(errors).toEqual([]);
+    expect(container.textContent).toBe('firstsecond');
+    expect(register).toHaveBeenCalledTimes(2);
     const buttons = [...container.querySelectorAll('button')];
     expect(register.mock.calls.map(call => call.slice(0, 2))).toEqual([
       ['remote/Widget', Remote],
       ['remote/Widget', Remote],
     ]);
     handle.update({ default: App, props: { first: true, label: 'updated' } });
-    await waitFor(() => expect(container.textContent).toBe('updatedsecond'));
+    await clock.settle();
+    expect(container.textContent).toBe('updatedsecond');
     expect([...container.querySelectorAll('button')]).toEqual(buttons);
     expect(register).toHaveBeenCalledTimes(2);
     expect(registrations.map(cleanup => cleanup.mock.calls.length)).toEqual([
       0, 0,
     ]);
     handle.update({ default: App, props: { first: false, label: 'updated' } });
-    await waitFor(() => expect(container.textContent).toBe('second'));
+    await clock.advance(0);
+    expect(container.textContent).toBe('second');
+    // DOM removal commits before native passive-effect cleanup runs after paint.
+    await clock.frame();
     expect(registrations.map(cleanup => cleanup.mock.calls.length)).toEqual([
       1, 0,
     ]);
@@ -184,6 +189,8 @@ test('the uncompiled library wrapper registers and retires each mounted publishe
     expect(errors).toEqual([]);
   } finally {
     handle.dispose();
+    await clock.settle();
+    clock.uninstall();
   }
 });
 
