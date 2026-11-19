@@ -35,6 +35,21 @@ function haveSameOrigin(...values) {
   return origins.every(origin => origin === expectedOrigin);
 }
 
+function loopbackTransportUrl(value) {
+  if (!isHttpUrl(value)) {
+    return undefined;
+  }
+  const url = new URL(value);
+  return url.protocol === 'http:' &&
+    url.hostname === '127.0.0.1' &&
+    !url.username &&
+    !url.password &&
+    !url.search &&
+    !url.hash
+    ? url
+    : undefined;
+}
+
 function isPassingStatusCode(value) {
   return Number.isSafeInteger(value) && value >= 200 && value < 300;
 }
@@ -82,6 +97,8 @@ function validateLiveArtifact(failures, artifact, expected) {
   if (
     artifact.status !== 'pass' ||
     !sameUrl(artifact.url, expected.url) ||
+    loopbackTransportUrl(artifact.transportUrl)?.pathname !==
+      `/${expected.logicalPath}` ||
     artifact.logicalPath !== expected.logicalPath ||
     !isPassingStatusCode(artifact.statusCode) ||
     !Number.isSafeInteger(artifact.byteLength) ||
@@ -179,12 +196,7 @@ function validateNodeBackendFederationProofResult(result) {
 
   const boundary = result.versionBoundary;
   const liveApi = result.liveApi;
-  let liveApiUrl;
-  try {
-    liveApiUrl = isHttpUrl(liveApi?.url) ? new URL(liveApi.url) : undefined;
-  } catch {
-    liveApiUrl = undefined;
-  }
+  const liveApiUrl = loopbackTransportUrl(liveApi?.url);
   if (
     !isRecord(boundary) ||
     !isRecord(liveApi) ||
@@ -192,14 +204,9 @@ function validateNodeBackendFederationProofResult(result) {
     typeof liveApi.route !== 'string' ||
     !liveApi.route.startsWith('/') ||
     liveApiUrl?.pathname !== liveApi.route ||
-    liveApiUrl?.origin !==
-      (isHttpUrl(result.manifestUrl)
-        ? new URL(result.manifestUrl).origin
-        : undefined) ||
     !haveSameOrigin(
-      result.manifestUrl,
-      result.containerEntry,
-      result.runtimeEntry,
+      result.liveArtifacts?.manifest?.transportUrl,
+      result.liveArtifacts?.container?.transportUrl,
       liveApi.url,
     ) ||
     // This producer-result validator can only require and correlate the digest
