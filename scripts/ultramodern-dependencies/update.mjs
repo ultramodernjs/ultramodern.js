@@ -6,7 +6,6 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isDeepStrictEqual, parseArgs } from 'node:util';
 import semver from 'semver';
-import * as native from '../ultramodern-renderers/native-artifacts/protocol.mjs';
 import {
   admitArtifactDescriptors,
   admittedArtifacts,
@@ -235,15 +234,16 @@ export function planManifestUpdate({
     ]),
   );
   if (priors.nativeArtifacts) {
-    // The native producer sealed its manifest by integrity; the baseline must
-    // be exactly that protocol descriptor, not merely canonical-looking JSON.
-    const { manifest: seal, ...sealed } = native.validateDescriptor(
-      priors.nativeArtifacts,
+    const immutable = JSON.parse(
+      execFileSync('git', ['show', `${nativeBaselineRevision}:${file}`], {
+        cwd: fileURLToPath(new URL('../../', import.meta.url)),
+        encoding: 'utf8',
+      }),
     );
-    assert.equal(
-      native.descriptorFor(sealed).manifest.integrity,
-      seal.integrity,
-      `${file}: native baseline descriptor differs from its sealed manifest`,
+    assert.deepEqual(
+      priors.nativeArtifacts,
+      immutable.ultramodern.nativeArtifacts,
+      `${file}: native baseline differs from immutable source`,
     );
   }
   const priorPin = (field, name) => {
@@ -342,7 +342,9 @@ export function planManifestUpdate({
     const support = admittedPin(name);
     const retired = retiredSupport(name);
     const authorized = (value, ...accepted) =>
-      value !== undefined && accepted.includes(value);
+      value !== undefined &&
+      (accepted.includes(value) ||
+        coordinatedTransitions[name]?.via?.includes(value));
     const original =
       ['2.0.0-rc.15', version].includes(current.dependencies?.[name]) &&
       !Object.hasOwn(current.peerDependencies ?? {}, name) &&

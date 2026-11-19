@@ -14,7 +14,6 @@ export { execa, execaSync } from '../compiled/execa/index.mjs';
 export { filesize } from '../compiled/filesize/index.mjs';
 export { default as fs } from '../compiled/fs-extra';
 export { glob } from '../compiled/glob/index.mjs';
-export { globby, globbySync } from '../compiled/globby/index.mjs';
 export { gzipSize } from '../compiled/gzip-size/index.mjs';
 export * as yaml from '../compiled/js-yaml/index.mjs';
 export { default as json5 } from '../compiled/json5';
@@ -37,7 +36,6 @@ export type {
 } from '../compiled/chokidar/index.mjs';
 export type { ExecaError } from '../compiled/execa/index.mjs';
 export type { GlobOptions } from '../compiled/glob/index.mjs';
-export type { Options as GlobbyOptions } from '../compiled/globby/index.mjs';
 export type SignaleOptions = SignaleModule['SignaleOptions'];
 
 /**

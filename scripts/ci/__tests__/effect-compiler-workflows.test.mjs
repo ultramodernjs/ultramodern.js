@@ -711,6 +711,10 @@ test('recovery retains current-source integration evidence and compiler qualific
       result: 'success',
       outputs: { decision: 'run' },
     },
+    'reconcile-sidecars': {
+      result: 'success',
+      outputs: { decision: 'publish' },
+    },
   };
   assert.doesNotMatch(
     publish.jobs['select-integration-evidence'].if,

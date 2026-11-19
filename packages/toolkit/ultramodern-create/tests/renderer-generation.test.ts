@@ -212,13 +212,13 @@ for (const renderer of renderers) {
         // Stable Solid installs from the registry; support carries no Solid.
         assert.equal(supportPins.has('solid-js'), false);
         for (const name of ['solid-js', '@solidjs/web', '@solidjs/signals'])
-          assert.equal(manifest.dependencies[name], '2.0.0');
-        assert.equal(manifest.devDependencies['@solidjs/compiler'], '2.0.0');
+          assert.equal(manifest.dependencies[name], '2.0.1');
+        assert.equal(manifest.devDependencies['@solidjs/compiler'], '2.0.1');
         assert.equal(rootManifest.devDependencies['solid-js'], undefined);
       }
       if (renderer === 'octane') {
         assert.equal(manifest.dependencies['@tsrx/oxc'], '0.24.0');
-        assert.equal(manifest.dependencies.seroval, '1.8.1');
+        assert.equal(manifest.dependencies.seroval, '1.8.2');
         assert.equal(manifest.dependencies['seroval-plugins'], '1.8.0');
       }
       if (renderer !== 'react') {

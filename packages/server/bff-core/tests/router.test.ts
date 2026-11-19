@@ -1,10 +1,8 @@
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'path';
 import { Api } from '../src';
 import { Put } from '../src/operators/http';
 import { type APIHandlerInfo, ApiRouter } from '../src/router';
-import { getFiles, getPathFromFilename } from '../src/router/utils';
+import { getPathFromFilename } from '../src/router/utils';
 import { HttpMethod } from '../src/types';
 
 const PWD = path.resolve(__dirname, '../fixtures/function');
@@ -250,28 +248,4 @@ describe('test api router', () => {
       process.env.NODE_ENV = originalEnv;
     }
   });
-});
-
-test('discovers built API handlers while respecting API-local ignore files', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'modern-bff-routes-'));
-  const lambdaDir = path.join(root, 'dist', 'api', 'lambda');
-  try {
-    fs.mkdirSync(path.join(root, '.git'));
-    fs.mkdirSync(lambdaDir, { recursive: true });
-    fs.writeFileSync(path.join(root, '.gitignore'), 'dist/\n');
-    fs.writeFileSync(path.join(lambdaDir, '.gitignore'), 'ignored.js\n');
-    fs.writeFileSync(
-      path.join(lambdaDir, 'index.js'),
-      'exports.get = () => {};\n',
-    );
-    fs.writeFileSync(
-      path.join(lambdaDir, 'ignored.js'),
-      'exports.get = () => {};\n',
-    );
-    expect(getFiles(lambdaDir, '**/*.js')).toEqual([
-      path.join(lambdaDir, 'index.js'),
-    ]);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
 });

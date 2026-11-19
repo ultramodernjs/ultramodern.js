@@ -102,7 +102,7 @@ overrides:
   'body-parser@>=2.0.0 <2.4.0': 2.4.0
   'yaml@>=1.0.0 <1.10.3': 1.10.3
   # Admit the native serializer releases together.
-  'seroval@>=1.0.0 <1.8.1': 1.8.1
+  'seroval@>=1.0.0 <1.8.1': 1.8.2
   'seroval-plugins@>=1.0.0 <1.8.0': 1.8.0
   'yaml@>=2.0.0 <2.9.1': 2.9.1
   'qs@>=6.0.0 <6.16.0': 6.17.1

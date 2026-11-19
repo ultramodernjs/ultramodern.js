@@ -26,7 +26,7 @@ import { createSolidConsumerObserver } from './generated-observer.mjs';
 import { createRequestDiagnostics } from './generated-request-diagnostics.mjs';
 import { createAdmissionProcessScope } from './processes.mjs';
 
-const target = '2.0.0';
+const target = '2.0.1';
 const sourceExtensions = /\.[cm]?tsx?$/u;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -277,7 +277,7 @@ async function installedTuple(appRoot, cohort) {
         if (manifest?.name === name.split('/')[0]) {
           assert.equal(
             manifest.version,
-            name === 'seroval' ? '1.8.1' : '1.8.0',
+            name === 'seroval' ? '1.8.2' : '1.8.0',
             `Solid native serializer drift: ${name}`,
           );
           tuple[manifest.name] = manifest.version;
@@ -535,12 +535,12 @@ export async function checkGeneratedSolidBrowser({
       'Solid hydration replaced exact server nodes',
     );
     traffic.phase('action');
-    await page.locator('input[name="name"]').fill('Solid 2.0.0 acceptance');
+    await page.locator('input[name="name"]').fill('Solid 2.0.1 acceptance');
     await page.locator('[data-testid="native-submit"]').click();
     await page.waitForFunction(() =>
       document
         .querySelector('[data-testid="native-action-value"]')
-        ?.textContent.includes('Solid 2.0.0 acceptance'),
+        ?.textContent.includes('Solid 2.0.1 acceptance'),
     );
     const requests = documentRequests.length;
     traffic.phase('about navigation');

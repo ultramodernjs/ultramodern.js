@@ -3,29 +3,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  artifactPolicy,
-  bindArtifactProtocol,
-} from '../../ultramodern-artifacts/protocol.mjs';
-import {
   validateRecipe,
   verifySourceQualification,
 } from '../../ultramodern-artifacts/reconstruct.mjs';
-import {
-  packages as octaneInputs,
-  source as octaneSource,
-} from '../octane-corrections/inputs.mjs';
 import * as nativeProtocol from './protocol.mjs';
 import { exactKeys, sha256 } from './protocol.mjs';
 import {
   assertOwningLicense,
-  runtimeSourceIntegrity as octaneArchiveIntegrity,
   owningLicenses,
   qualifyAdapterSource,
   qualifyRouterSource,
   qualifyRuntimePairSource,
-  runtimeHandoffFiles,
   runtimePairNames,
-  verifyRuntimeHandoff,
 } from './source-qualification.mjs';
 
 const repo = path.resolve(
@@ -38,43 +27,15 @@ const routerProvenancePath = path.join(
 );
 const routerPatch =
   '6a2ebee5cc73df367ba768b9a950dee2a57ec0c93122ded77e5342ca8640df24';
-const adapterPatch =
-  'df6732ebcfc0af7cf274187c44596ac519abbc383ce30a796205b55c561bf688';
 const adapterName = '@octanejs/tanstack-router';
 const corrections = 'scripts/ultramodern-renderers/octane-corrections';
 const candidateDirectory = `${corrections}/octane-0.20.0`;
 
-// Only the producer selects this tuple before its archive is available.
-export const octane20ArtifactProtocol = bindArtifactProtocol({
-  ...artifactPolicy(nativeProtocol),
-  cohort: {
-    ...nativeProtocol.cohort,
-    octane: '0.20.0',
-    '@octanejs/tanstack-router': '0.3.6',
-    '@octanejs/rspack-plugin': '0.2.12',
-  },
-});
-
-function octaneRecipeInputs(root, octaneCandidate) {
-  if (octaneCandidate === 'octane-0.18.0')
-    return {
-      protocol: nativeProtocol,
-      inputs: octaneInputs,
-      commit: octaneSource.commit,
-      archiveIntegrity: octaneArchiveIntegrity,
-      adapterPath:
-        'patches/@octanejs__tanstack-router@0.3.4.shared-core-peer.patch',
-      adapterPatch,
-      runtimePaths: [
-        'patches/octane@0.18.0.patch',
-        'patches/@octanejs__rspack-plugin@0.2.10.patch',
-      ],
-    };
-  assert.equal(octaneCandidate, 'octane-0.20.0', 'Unknown Octane recipe');
+function octaneRecipeInputs(root) {
   const { upstream, candidates } = JSON.parse(
     fs.readFileSync(path.join(root, candidateDirectory, 'provenance.json')),
   );
-  const protocol = octane20ArtifactProtocol;
+  const protocol = nativeProtocol;
   const inputs = [adapterName, ...runtimePairNames].map(name => {
     const pkg = upstream.packages[name];
     assert.equal(pkg.version, protocol.cohort[name]);
@@ -87,7 +48,6 @@ function octaneRecipeInputs(root, octaneCandidate) {
     `${name.replace('/', '__')}@${version}`;
   const adapterFilename = `${patchName(adapter)}.shared-core-peer.patch`;
   return {
-    protocol,
     inputs,
     commit: upstream.commit,
     archiveIntegrity: upstream.sourceArchive.integrity,
@@ -153,11 +113,8 @@ function verifyCandidateHandoff(root, runtimePaths) {
   );
 }
 
-export function completedRecipes({
-  root = repo,
-  octaneCandidate = 'octane-0.18.0',
-} = {}) {
-  const selected = octaneRecipeInputs(root, octaneCandidate);
+export function completedRecipes({ root = repo } = {}) {
+  const selected = octaneRecipeInputs(root);
   const provenance = JSON.parse(
     fs.readFileSync(
       root === repo
@@ -169,17 +126,14 @@ export function completedRecipes({
     ),
   );
   assert.equal(provenance.package, '@tanstack/router-core');
-  assert.equal(
-    provenance.version,
-    selected.protocol.cohort[provenance.package],
-  );
+  assert.equal(provenance.version, nativeProtocol.cohort[provenance.package]);
   assert.equal(
     provenance.patchSha256,
     routerPatch,
     'Router provenance is not the reviewed owning build',
   );
   const adapter = selected.inputs.find(item => item.name === adapterName);
-  assert.equal(adapter.version, selected.protocol.cohort[adapter.name]);
+  assert.equal(adapter.version, nativeProtocol.cohort[adapter.name]);
   const packages = {
     '@tanstack/router-core': {
       patchPath: path.join(
@@ -224,7 +178,6 @@ export function composeRecipe({
   completed,
   runtime,
   root = repo,
-  octaneCandidate = 'octane-0.18.0',
   qualifyRouter = qualifyRouterSource,
   qualifyAdapter = qualifyAdapterSource,
 }) {
@@ -238,7 +191,7 @@ export function composeRecipe({
   ]);
   assert.equal(typeof runtime.qualifySource, 'function');
   assert.equal(typeof runtime.qualifyPacked, 'function');
-  const selected = octaneRecipeInputs(root, octaneCandidate);
+  const selected = octaneRecipeInputs(root);
   for (const [name, item] of Object.entries(runtime.packages)) {
     const original = selected.inputs.find(input => input.name === name);
     assert.equal(
@@ -280,7 +233,6 @@ export function composeRecipe({
     });
     const adapter = await qualifyAdapter({
       item: packages[adapterName],
-      octaneCandidate,
       workDirectory,
       packedDirectory: directory,
     });
@@ -300,7 +252,7 @@ export function composeRecipe({
       );
       const evidence = { ...(await own(options)), ...runtimeEvidence };
       verifySourceQualification({
-        protocol: selected.protocol,
+        protocol: nativeProtocol,
         recipe,
         evidence,
       });
@@ -313,26 +265,21 @@ export function composeRecipe({
       await runtime.qualifyPacked(options);
     },
   };
-  validateRecipe({ protocol: selected.protocol, recipe });
+  validateRecipe({ protocol: nativeProtocol, recipe });
   return recipe;
 }
-/** Production inputs from authenticated CI handoff 43988363275/1, not a native release receipt. */
+/** Active production inputs from authenticated runtime handoff 44296887336/1. */
 export function runtimeRecipes(
-  { root = repo, octaneCandidate = 'octane-0.18.0' } = {},
+  { root = repo } = {},
   { pairQualifier = qualifyRuntimePairSource } = {},
 ) {
-  const selected = octaneRecipeInputs(root, octaneCandidate);
-  const verify = () => {
-    if (octaneCandidate !== 'octane-0.18.0')
-      return verifyCandidateHandoff(root, selected.runtimePaths);
-    verifyRuntimeHandoff(root);
-    return runtimeHandoffFiles;
-  };
+  const selected = octaneRecipeInputs(root);
+  const verify = () => verifyCandidateHandoff(root, selected.runtimePaths);
   const patchDigests = verify();
   const packages = Object.fromEntries(
     runtimePairNames.map((name, index) => {
       const input = selected.inputs.find(item => item.name === name);
-      assert.equal(input.version, selected.protocol.cohort[name]);
+      assert.equal(input.version, nativeProtocol.cohort[name]);
       const relative = selected.runtimePaths[index];
       return [
         name,
@@ -359,22 +306,17 @@ export function runtimeRecipes(
       items: packages,
       workDirectory,
       packedDirectory: directory,
-      ...(octaneCandidate !== 'octane-0.18.0' && { octaneCandidate }),
     });
     assert.deepEqual(verify(), patchDigests);
     return evidence;
   };
   return { packages, qualifySource: qualify, qualifyPacked: qualify };
 }
-export function releaseRecipe({
-  root = repo,
-  octaneCandidate = 'octane-0.18.0',
-} = {}) {
-  const runtime = runtimeRecipes({ root, octaneCandidate });
+export function releaseRecipe({ root = repo } = {}) {
+  const runtime = runtimeRecipes({ root });
   return composeRecipe({
     root,
-    octaneCandidate,
-    completed: completedRecipes({ root, octaneCandidate }),
+    completed: completedRecipes({ root }),
     runtime,
   });
 }

@@ -112,7 +112,7 @@ test('the actual packed-consumer workspace plan includes bounded generator seria
           `file:${item.tarball}`,
         ]),
       ),
-      'seroval@>=1.0.0 <1.8.1': '1.8.1',
+      'seroval@>=1.0.0 <1.8.1': '1.8.2',
       'seroval-plugins@>=1.0.0 <1.8.0': '1.8.0',
     },
   });
@@ -201,21 +201,21 @@ test('serializer planning rejects missing, broad, stale and computed generator c
     'utf8',
   );
   const expected = {
-    'seroval@>=1.0.0 <1.8.1': '1.8.1',
+    'seroval@>=1.0.0 <1.8.1': '1.8.2',
     'seroval-plugins@>=1.0.0 <1.8.0': '1.8.0',
   };
   assert.deepEqual(admissionSerializerOverrides(source), expected);
   for (const [from, to] of [
     ["'seroval@>=1.0.0 <1.8.1'", "'seroval'"],
     ["'seroval-plugins@>=1.0.0 <1.8.0'", "'seroval-plugins'"],
-    ["'seroval@>=1.0.0 <1.8.1': '1.8.1'", "'seroval@>=1.0.0 <1.8.1': '1.7.0'"],
+    ["'seroval@>=1.0.0 <1.8.1': '1.8.2'", "'seroval@>=1.0.0 <1.8.1': '1.7.0'"],
     [
       "'seroval-plugins@>=1.0.0 <1.8.0': '1.8.0'",
       "'seroval-plugins@>=1.0.0 <1.8.0': unknownVersion",
     ],
     [
-      "'seroval@>=1.0.0 <1.8.1': '1.8.1'",
-      "'seroval@>=1.0.0 <1.8.1': '1.8.1', 'seroval@>=1.0.0 <1.8.1': '1.7.0'",
+      "'seroval@>=1.0.0 <1.8.1': '1.8.2'",
+      "'seroval@>=1.0.0 <1.8.1': '1.8.2', 'seroval@>=1.0.0 <1.8.1': '1.7.0'",
     ],
   ]) {
     assert(source.includes(from));

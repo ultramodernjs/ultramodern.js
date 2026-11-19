@@ -14,7 +14,7 @@ function currentManifest() {
   return {
     schemaVersion: 1,
     renderer: 'solid',
-    compilerVersion: '2.0.0',
+    compilerVersion: '2.0.1',
     rendererIdentity: { ...identity },
     modules: {
       _base: '/',

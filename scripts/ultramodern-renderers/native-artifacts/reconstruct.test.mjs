@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { inspectNpmTarball } from '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs';
 import { fixture } from './fixtures.test-support.mjs';
-import { cohort, sha256 } from './protocol.mjs';
+import { assetFilename, cohort, sha256 } from './protocol.mjs';
 import { applyExactPatch, packFiles, reconstruct } from './reconstruct.mjs';
 
 assert(process.env.OWNED_TEMP_DIR, 'Use owned-temp-dir');
@@ -85,13 +85,31 @@ test('reconstructs complete authenticated upstream archives using only exact can
     );
     return f.fetchArtifact(f.manifest.packages[name].request);
   };
+  const output = path.join(directory, 'out');
   const manifest = await reconstruct({
     recipe,
     producer: f.producer,
-    directory: path.join(directory, 'out'),
+    directory: output,
     fetchArtifact,
   });
-  assert.equal(Object.keys(manifest.packages).length, 4);
+  assert.deepEqual(fs.readdirSync(output).sort(), [
+    'native-artifacts.json',
+    'octane-0.20.0.tgz',
+    'octanejs-rspack-plugin-0.2.12.tgz',
+    'octanejs-tanstack-router-0.3.6.tgz',
+    'tanstack-router-core-1.171.39.tgz',
+  ]);
+  for (const [name, { version }] of Object.entries(manifest.packages)) {
+    const packed = inspectNpmTarball(
+      fs.readFileSync(path.join(output, assetFilename(name, version))),
+    );
+    assert.equal(packed.packageJson.name, name);
+    assert.equal(packed.packageJson.version, version);
+    assert.equal(
+      packed.fileContents.get('index.js').toString(),
+      'export const control = false;\n',
+    );
+  }
   for (const fail of ['patch', 'integrity', 'license']) {
     const name = 'octane';
     const item = recipe.packages[name];

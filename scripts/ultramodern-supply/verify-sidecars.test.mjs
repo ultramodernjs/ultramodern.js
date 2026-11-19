@@ -54,12 +54,6 @@ test('unpublished recipe roots require the exact consumer, dependency and upstre
       '2.9.2',
     ],
     [
-      'packages/toolkit/utils',
-      '@bleedingdev/modern-js-utils',
-      'fast-glob',
-      '3.3.3',
-    ],
-    [
       'packages/cli/builder',
       '@bleedingdev/modern-js-builder',
       '@rsbuild/plugin-source-build',

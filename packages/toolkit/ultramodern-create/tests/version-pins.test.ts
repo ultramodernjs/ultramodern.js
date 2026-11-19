@@ -94,7 +94,7 @@ test('local source generation uses native workspace requests without copied rele
       'axios@>=1.0.0 <1.21.1': '1.21.1',
       'brace-expansion@>=5.0.0 <5.0.13': '5.0.13',
       'tar@>=7.0.0 <7.5.23': '7.5.23',
-      'seroval@>=1.0.0 <1.8.1': '1.8.1',
+      'seroval@>=1.0.0 <1.8.1': '1.8.2',
       'seroval-plugins@>=1.0.0 <1.8.0': '1.8.0',
       'qs@>=6.0.0 <6.17.1': '6.17.1',
       'smol-toml@>=1.0.0 <1.9.1': '1.9.1',

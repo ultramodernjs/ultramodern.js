@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
-const solidVersion = '2.0.0';
+const solidVersion = '2.0.1';
 
 /** Resolve through each real package owner, including pnpm's nested graph. */
 export function installedPackage(ownerRoot, request) {
@@ -136,11 +136,11 @@ export function assertInstalledNavigationTuple({
   for (const name of ['seroval', 'seroval-plugins']) {
     const fromSolid = check(native['solid-js'].directory, name, {
       name,
-      version: name === 'seroval' ? '1.8.1' : '1.8.0',
+      version: name === 'seroval' ? '1.8.2' : '1.8.0',
     });
     const fromWeb = check(native['@solidjs/web'].directory, name, {
       name,
-      version: name === 'seroval' ? '1.8.1' : '1.8.0',
+      version: name === 'seroval' ? '1.8.2' : '1.8.0',
     });
     assert.equal(
       fromSolid.directory,
@@ -151,7 +151,7 @@ export function assertInstalledNavigationTuple({
   return {
     ...result,
     solid: solidVersion,
-    nativeSerializer: '1.8.1',
+    nativeSerializer: '1.8.2',
     nativeSerializerPlugins: '1.8.0',
   };
 }

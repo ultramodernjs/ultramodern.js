@@ -233,9 +233,9 @@ async function createApp(renderer) {
         i18next: '26.4.6',
         ...(renderer === 'solid'
           ? {
-              'solid-js': '2.0.0',
-              '@solidjs/web': '2.0.0',
-              '@solidjs/signals': '2.0.0',
+              'solid-js': '2.0.1',
+              '@solidjs/web': '2.0.1',
+              '@solidjs/signals': '2.0.1',
             }
           : {
               octane: 'maintained',

@@ -14,13 +14,11 @@ export const rslibPatchSha256 =
 export const supportBaselineRevision =
   '0024faeea760417227135429fe2727ae471abbe4';
 
-// The same accepted main source, carrying the shipped native activation
-// c40bbf99 (producer source ea6b64f2, run 43993884470 attempt 1). Its
-// manifests are a baseline only for native-owned metadata and the exact native
-// edges that select that descriptor; they grant no other edge or URL authority.
-// A later native run needs admission, never this baseline.
+// Immutable reviewed refresh carrying the already-qualified native 9353 cohort
+// (run 44131025154 attempt 1). This baseline grants only its exact native-owned
+// metadata and selections; the qualified 0.20 release still needs admission.
 export const nativeBaselineRevision =
-  '0024faeea760417227135429fe2727ae471abbe4';
+  '2fdfae61808ab76cd26eba98668d559cc2fa7bf1';
 
 // Owning source and actual packed runtime/type qualification establish this
 // consolidation. Corrected OTel distribution and release acceptance stay separate.
@@ -76,7 +74,11 @@ const registryAdvances = {
   antd: { from: ['^6.6.6'], via: ['^6.7.0'], to: '6.7.1' },
   browserslist: { from: ['4.29.5'], to: '4.29.6' },
   'es-module-lexer': { from: ['^3.0.4'], to: '3.0.5' },
-  filesize: { from: ['11.0.26'], via: ['11.0.32'], to: '11.0.34' },
+  filesize: {
+    from: ['11.0.26'],
+    via: ['11.0.32', '11.0.34'],
+    to: '11.0.35',
+  },
   hono: { from: ['^4.13.13'], via: ['^4.13.18'], to: '4.13.19' },
   i18next: { from: ['26.4.6'], via: ['27.1.2'], to: '27.1.5' },
   'i18next-browser-languagedetector': { from: ['^8.3.0'], to: '8.3.1' },
@@ -92,8 +94,14 @@ const registryAdvances = {
   'postcss-custom-properties': { from: ['15.0.4'], to: '15.0.5' },
   puppeteer: { from: ['^25.14.0'], via: ['^25.17.0'], to: '25.18.1' },
   'react-i18next': { from: ['17.0.18'], via: ['18.0.1'], to: '18.0.2' },
-  rollup: { from: ['^4.64.7'], via: ['^4.68.3'], to: '4.68.5' },
+  rollup: {
+    from: ['^4.64.7'],
+    via: ['^4.68.3', '^4.68.5'],
+    to: '4.68.6',
+  },
+  seroval: { from: ['1.6.9'], via: ['1.8.1'], to: '1.8.2' },
   'type-fest': { from: ['5.10.0'], to: '6.0.1' },
+  vitest: { from: ['^5.0.5'], via: ['^5.1.0'], to: '5.1.1' },
 };
 export const coordinatedTransitions = Object.freeze({
   ...registryAdvances,
@@ -114,23 +122,23 @@ export const coordinatedTransitions = Object.freeze({
   tsrs: { from: ['0.21.0-ts7.1.0-beta'], to: '0.25.0-ts7.1.0-beta' },
   '@solidjs/compiler': {
     from: ['2.0.0-rc.15'],
-    via: ['2.0.0-rc.22'],
-    to: '2.0.0',
+    via: ['2.0.0-rc.22', '2.0.0'],
+    to: '2.0.1',
   },
   '@solidjs/signals': {
     from: ['2.0.0-rc.15'],
-    via: ['2.0.0-rc.22'],
-    to: '2.0.0',
+    via: ['2.0.0-rc.22', '2.0.0'],
+    to: '2.0.1',
   },
   '@solidjs/web': {
     from: ['2.0.0-rc.15'],
-    via: ['2.0.0-rc.22'],
-    to: '2.0.0',
+    via: ['2.0.0-rc.22', '2.0.0'],
+    to: '2.0.1',
   },
   'solid-js': {
     from: ['2.0.0-rc.15'],
-    via: ['2.0.0-rc.22'],
-    to: '2.0.0',
+    via: ['2.0.0-rc.22', '2.0.0'],
+    to: '2.0.1',
   },
   miniflare: { from: ['5.20261012.0-beta'], to: '5.20261113.0-beta' },
   wrangler: { from: ['4.151.0'], to: '4.162.0' },
@@ -370,8 +378,8 @@ export const targets = Object.freeze({
   '@module-federation/runtime-tools': '2.9.3',
   '@module-federation/sdk': '2.9.3',
   '@module-federation/webpack-bundler-runtime': '2.9.3',
-  '@octanejs/rspack-plugin': '0.2.10',
-  '@octanejs/tanstack-router': '0.3.4',
+  '@octanejs/rspack-plugin': '0.2.12',
+  '@octanejs/tanstack-router': '0.3.6',
   '@opentelemetry/api': '1.10.0',
   '@opentelemetry/resources': '3.1.1',
   '@opentelemetry/sdk-logs': '3.1.1',
@@ -390,9 +398,9 @@ export const targets = Object.freeze({
   '@rstest/browser-react': '0.12.6',
   '@rstest/core': '0.12.6',
   '@shikijs/transformers': '4.6.0',
-  '@solidjs/compiler': '2.0.0',
-  '@solidjs/signals': '2.0.0',
-  '@solidjs/web': '2.0.0',
+  '@solidjs/compiler': '2.0.1',
+  '@solidjs/signals': '2.0.1',
+  '@solidjs/web': '2.0.1',
   '@storybook/addon-docs': '10.6.7',
   '@storybook/addon-onboarding': '10.6.7',
   '@storybook/react': '10.6.7',
@@ -443,7 +451,7 @@ export const targets = Object.freeze({
   mermaid: '12.3.0',
   nock: '15.0.6',
   nx: '24.0.6',
-  octane: '0.18.0',
+  octane: '0.20.0',
   ora: '10.0.0',
   'path-to-regexp': '9.0.0',
   'pkg-types': '2.4.0',
@@ -464,9 +472,9 @@ export const targets = Object.freeze({
   sass: '1.108.2',
   'sass-embedded': '1.108.2',
   semver: '7.8.6',
-  seroval: '1.8.1',
+  seroval: '1.8.2',
   'seroval-plugins': '1.8.0',
-  'solid-js': '2.0.0',
+  'solid-js': '2.0.1',
   storybook: '10.6.7',
   'storybook-addon-modernjs': '3.6.3',
   'storybook-react-rsbuild': '3.6.3',
@@ -477,7 +485,7 @@ export const targets = Object.freeze({
   ultracite: '8.2.1',
   'url-join': '6.0.0',
   vite: '8.3.8',
-  vitest: '5.1.0',
+  vitest: '5.1.1',
   vue: '3.5.45',
   webpack: '5.112.2',
   ws: '8.23.0',

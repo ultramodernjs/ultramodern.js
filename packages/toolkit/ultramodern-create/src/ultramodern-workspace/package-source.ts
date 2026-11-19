@@ -26,9 +26,9 @@ const supportVersions = {
 // The closed native renderer cohort. Its router Core is the exact peer of the
 // React and native TanStack adapters.
 const nativeVersions = {
-  octane: '0.18.0',
-  '@octanejs/tanstack-router': '0.3.4',
-  '@octanejs/rspack-plugin': '0.2.10',
+  octane: '0.20.0',
+  '@octanejs/tanstack-router': '0.3.6',
+  '@octanejs/rspack-plugin': '0.2.12',
   '@tanstack/router-core': '1.171.39',
 } as const;
 export const NATIVE_ROUTER_CORE = '@tanstack/router-core';

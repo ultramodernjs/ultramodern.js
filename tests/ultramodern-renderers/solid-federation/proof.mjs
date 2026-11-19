@@ -153,9 +153,9 @@ const packageJson = name =>
       '@module-federation/node':
         packedContext?.packageRequests['@module-federation/node'] ??
         sourceFederation.node.version,
-      'solid-js': '2.0.0',
-      '@solidjs/web': '2.0.0',
-      '@solidjs/signals': '2.0.0',
+      'solid-js': '2.0.1',
+      '@solidjs/web': '2.0.1',
+      '@solidjs/signals': '2.0.1',
     },
   });
 

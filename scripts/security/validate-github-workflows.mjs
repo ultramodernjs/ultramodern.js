@@ -1264,6 +1264,24 @@ const integrationReuseResult = Object.freeze({
   result: 'success',
   outputs: Object.freeze({ decision: 'reuse' }),
 });
+// Consumer: publish-bleedingdev.yml — reconcile-sidecars decides `publish`
+// when a staged sidecar version is not on npm yet and `reuse` when every one
+// already is. publish-sidecars runs in cohort mode only on `publish`, and
+// publish accepts a skipped publish-sidecars only on `reuse`.
+const sidecarsPublishResult = Object.freeze({
+  result: 'success',
+  outputs: Object.freeze({ decision: 'publish' }),
+});
+const sidecarsReuseResult = Object.freeze({
+  result: 'success',
+  outputs: Object.freeze({ decision: 'reuse' }),
+});
+const bleedingdevSidecarDecisionCommand =
+  'node scripts/ultramodern-publish/publish-sidecars.mjs --dry-run --out "$BLEEDINGDEV_RELEASE_DIR" --tag "$BLEEDINGDEV_PUBLISH_TAG" --github-output "$GITHUB_OUTPUT"';
+const bleedingdevSidecarRereadCommands = Object.freeze([
+  'node scripts/ultramodern-publish/publish-sidecars.mjs --dry-run --out "$BLEEDINGDEV_RELEASE_DIR" --tag "$BLEEDINGDEV_PUBLISH_TAG" --github-output "$RUNNER_TEMP/sidecar-decision"',
+  'test "$(cat "$RUNNER_TEMP/sidecar-decision")" = \'decision=reuse\'',
+]);
 
 function collectBleedingdevModeInputErrors(workflow, relativePath) {
   const errors = [];
@@ -1443,6 +1461,7 @@ function collectBleedingdevModeScheduleErrors(workflow, relativePath) {
   const successfulResults = {
     ...Object.fromEntries(Object.keys(jobs).map(jobId => [jobId, 'success'])),
     'select-integration-evidence': integrationRunResult,
+    'reconcile-sidecars': sidecarsPublishResult,
   };
   const context = {
     github: {
@@ -1546,6 +1565,12 @@ function collectBleedingdevModeScheduleErrors(workflow, relativePath) {
     );
   }
   const badResults = ['failure', 'cancelled', 'skipped', undefined];
+  // A job that failed after writing its outputs still exposes them, so an
+  // unsuccessful result is tried with the outputs a success would carry.
+  const withOutputs = (jobId, result) =>
+    typeof successfulResults[jobId] === 'object' && result !== undefined
+      ? { ...successfulResults[jobId], result }
+      : result;
   const inactiveSidecars = Object.fromEntries(
     bleedingdevSidecarJobs.map(jobId => [jobId, 'skipped']),
   );
@@ -1573,7 +1598,10 @@ function collectBleedingdevModeScheduleErrors(workflow, relativePath) {
       !schedule('publish-sidecars', mode, inactive) ||
       prerequisites.some(jobId =>
         badResults.some(result =>
-          schedule('publish-sidecars', mode, { ...inactive, [jobId]: result }),
+          schedule('publish-sidecars', mode, {
+            ...inactive,
+            [jobId]: withOutputs(jobId, result),
+          }),
         ),
       )
     ) {
@@ -1632,7 +1660,10 @@ function collectBleedingdevModeScheduleErrors(workflow, relativePath) {
       !schedule(jobId, mode, inactive) ||
       prerequisites.some(need =>
         badResults.some(result =>
-          schedule(jobId, mode, { ...inactive, [need]: result }),
+          schedule(jobId, mode, {
+            ...inactive,
+            [need]: withOutputs(need, result),
+          }),
         ),
       )
     ) {
@@ -1676,6 +1707,57 @@ function collectBleedingdevModeScheduleErrors(workflow, relativePath) {
         `${relativePath} job ${jobId} must accept skipped integration only with a successful reuse decision, and in-run integration only with a run decision`,
       );
     }
+  }
+  // reconcile-sidecars' decision gates both OIDC jobs. In cohort mode the
+  // sidecar publisher runs only on `publish`, and publish runs after it passed
+  // on `publish` or with it skipped on `reuse`, never on any other pair, so a
+  // missing or unknown decision publishes nothing.
+  const decided = (decision, result = 'success') => ({
+    result,
+    outputs: { decision },
+  });
+  const missingDecision = { result: 'success' };
+  const publisherWith = reconcile =>
+    schedule('publish-sidecars', 'cohort', {
+      ...inactiveSidecars,
+      'reconcile-sidecars': reconcile,
+    });
+  if (
+    !publisherWith(sidecarsPublishResult) ||
+    [sidecarsReuseResult, missingDecision, decided('skip')].some(publisherWith)
+  ) {
+    errors.push(
+      `${relativePath} publish-sidecars must run in cohort mode only when reconcile-sidecars decided publish`,
+    );
+  }
+  const publishWith = (sidecars, reconcile) =>
+    schedule('publish', 'cohort', {
+      ...inactiveSidecars,
+      'publish-sidecars': sidecars,
+      'reconcile-sidecars': reconcile,
+    });
+  if (
+    !publishWith('success', sidecarsPublishResult) ||
+    !publishWith('skipped', sidecarsReuseResult) ||
+    [
+      ['skipped', sidecarsPublishResult],
+      ['skipped', missingDecision],
+      ['skipped', decided('skip')],
+      ['success', sidecarsReuseResult],
+      ['success', missingDecision],
+      ...['failure', 'cancelled', undefined].flatMap(result => [
+        [result, sidecarsPublishResult],
+        [result, sidecarsReuseResult],
+      ]),
+      ...['failure', 'cancelled', 'skipped'].flatMap(result => [
+        ['skipped', decided('reuse', result)],
+        ['success', decided('publish', result)],
+      ]),
+    ].some(([sidecars, reconcile]) => publishWith(sidecars, reconcile))
+  ) {
+    errors.push(
+      `${relativePath} publish must require publish-sidecars to pass on a publish decision or to be skipped on a reuse decision, and nothing else`,
+    );
   }
   // A dry run records its own outcome; a live cohort records it in
   // accept-bleedingdev-release.yml, so the recorder never runs live.
@@ -2012,6 +2094,82 @@ function collectBleedingdevPublishStructureErrors(workflow, relativePath) {
   ) {
     errors.push(
       `${relativePath} select-integration-evidence must run only the fixed integration-evidence.mjs select command with the workflow's read-only permissions and no dispatch input`,
+    );
+  }
+  // The decision both OIDC jobs read comes from one fixed step, and the job
+  // fails unless it is publish or reuse, so a broken wiring turns the run red
+  // in every dry run instead of silently skipping both npm jobs live.
+  const normalizedStepRun = step =>
+    normalizeShellContinuations(stripShellComments(String(step?.run ?? '')))
+      .replace(/\s+/gu, ' ')
+      .trim();
+  const reconciler = jobs['reconcile-sidecars'];
+  const reconcileSteps = Array.isArray(reconciler?.steps)
+    ? reconciler.steps
+    : [];
+  const decisionStep = '${{ steps.reconcile.outputs.decision }}';
+  const decisionAt = reconcileSteps.findIndex(step => step.id === 'reconcile');
+  const decisionCheckAt = reconcileSteps.findIndex(
+    step =>
+      step.env?.SIDECAR_DECISION === decisionStep &&
+      [
+        'case "$SIDECAR_DECISION" in',
+        'publish)',
+        'reuse)',
+        '*) exit 1 ;;',
+      ].every(part => normalizedStepRun(step).includes(part)),
+  );
+  if (
+    JSON.stringify(reconciler?.outputs) !==
+      JSON.stringify({
+        decision: decisionStep,
+        attempt: actionExpression('github.run_attempt'),
+      }) ||
+    reconcileSteps.filter(step => step.id === 'reconcile').length !== 1 ||
+    reconcileSteps[decisionAt]?.if !== undefined ||
+    normalizedStepRun(reconcileSteps[decisionAt]) !==
+      bleedingdevSidecarDecisionCommand ||
+    decisionCheckAt <= decisionAt ||
+    reconcileSteps[decisionCheckAt]?.if !== undefined
+  ) {
+    errors.push(
+      `${relativePath} reconcile-sidecars must output only the decision of its fixed publish-sidecars.mjs --dry-run step and the attempt that read npm, and fail unless that decision is publish or reuse`,
+    );
+  }
+  // `gh run rerun --failed` keeps reconcile-sidecars' outputs from the attempt
+  // that ran it, so a decision from an earlier attempt is read again from npm
+  // in the publish job, right before the first cohort upload, and must still
+  // be reuse.
+  const publishSteps = Array.isArray(jobs.publish?.steps)
+    ? jobs.publish.steps
+    : [];
+  const rereads = step =>
+    JSON.stringify(
+      normalizeShellContinuations(stripShellComments(String(step?.run ?? '')))
+        .split('\n')
+        .map(line => line.replace(/\s+/gu, ' ').trim())
+        .filter(Boolean),
+    ) === JSON.stringify(bleedingdevSidecarRereadCommands);
+  const rereadAt = publishSteps.findIndex(rereads);
+  const cohortUploadAt = publishSteps.findIndex(step =>
+    normalizedStepRun(step).includes(
+      'node scripts/ultramodern-publish/prepare-bleedingdev-packages.mjs --publish-existing',
+    ),
+  );
+  const bundleAt = publishSteps.findIndex(
+    step =>
+      actionMatches(step, 'actions/download-artifact') &&
+      step.with?.path === '.modern/bleedingdev-publish' &&
+      String(step.with?.name).includes('BLEEDINGDEV_RELEASE_BUNDLE_ARTIFACT'),
+  );
+  if (
+    publishSteps.filter(rereads).length !== 1 ||
+    publishSteps[rereadAt]?.if !==
+      'needs.reconcile-sidecars.outputs.attempt != github.run_attempt' ||
+    !(bundleAt >= 0 && bundleAt < rereadAt && rereadAt === cohortUploadAt - 1)
+  ) {
+    errors.push(
+      `${relativePath} publish must read the sidecars from npm again, right before the cohort upload, whenever reconcile-sidecars' decision comes from an earlier attempt, and require reuse`,
     );
   }
   for (const jobId of bleedingdevIntegrationEvidenceJobs) {
@@ -3279,10 +3437,10 @@ function collectNativeArtifactWorkflowErrors(workflow, relativePath) {
       !sameKeys(dispatch.inputs, ['octane_candidate']) ||
       octane?.type !== 'choice' ||
       octane.required !== true ||
-      octane.default !== 'octane-0.18.0' ||
-      JSON.stringify(octane.options) !== '["octane-0.18.0","octane-0.20.0"]'
+      octane.default !== 'octane-0.20.0' ||
+      JSON.stringify(octane.options) !== '["octane-0.20.0"]'
     )
-      fail('must select one of the two exact Octane cohorts at dispatch');
+      fail('must select the exact active Octane cohort at dispatch');
   }
   const jobs = workflow.jobs ?? {};
   if (!sameKeys(jobs, ['produce', 'qualify', writer]))

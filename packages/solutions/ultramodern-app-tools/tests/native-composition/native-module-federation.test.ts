@@ -378,7 +378,7 @@ export default { name, remotes: { remote: '${manifestRemote}' } };`,
       octaneArtifacts['@tanstack/router-core'].version,
     );
     expect(installed['@tanstack/history']).toBe('1.162.5');
-    expect(installed.seroval).toBe('1.8.1');
+    expect(installed.seroval).toBe('1.8.2');
     const bindings = resolveNativeSharedBindings('octane', root, 'server');
     const selected = fs.realpathSync(
       path.resolve(

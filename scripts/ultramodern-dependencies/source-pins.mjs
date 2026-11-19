@@ -156,12 +156,6 @@ function reviewedSourcePins(read) {
       'patches/@svgr__babel-plugin-transform-svg-component@8.0.0.patch',
       `patches/@tanstack__redact@${targets['@tanstack/redact']}.patch`,
     ],
-    // Deliberately fixed compatibility controls, not generated application pins.
-    // The qualification compares classic/native APIs against stable TypeScript.
-    [`${octane}oxc-latest/qualify.mjs`]: [
-      "'typescript-classic': 'npm:typescript@5.9.3'",
-      "'typescript-native': 'npm:typescript@7.1.0-dev.20260921.1'",
-    ],
     [`${octane}typescript-compat/qualify-followup.mjs`]: [
       `@tsrx+core@${comparisonDependencies['@tsrx/core']}`,
       `esrap@${comparisonDependencies.esrap}`,
@@ -255,31 +249,24 @@ function reviewedSourcePins(read) {
       ],
     // Inputs the native run reconstructed into the admitted descriptor.
     'scripts/ultramodern-renderers/native-artifacts/recipes.mjs': [
-      patch('octane'),
-      patch('@octanejs/rspack-plugin'),
-      patch('@octanejs/tanstack-router', '.shared-core-peer'),
+      `\`\${candidateDirectory}/\${adapterFilename}\``,
       patch('@tanstack/router-core'),
       coreTarball,
     ],
+    // Active runtime inputs come from the authenticated 0.20 handoff.
     'scripts/ultramodern-renderers/native-artifacts/source-qualification.mjs': [
       `pnpm: '${owningPnpm}'`,
       pnpmManager(owningPnpm),
-      patch('@octanejs/rspack-plugin'),
     ],
-    [`${octane}qualify-runtime.mjs`]: [patch('@octanejs/rspack-plugin')],
     [`${octane}qualify.mjs`]: [
       patch('@tanstack/router-core'),
       coreTarball,
       `assetFilename('@tanstack/router-core', '${core}')`,
     ],
-    [`${octane}reconstruct.mjs`]: [
-      patch('@octanejs/tanstack-router', '.shared-core-peer'),
+    [`${octane}shared-core-peer.mjs`]: [
+      `const sharedCoreVersion = '${core}'`,
+      `@octanejs/tanstack-router@${targets['@octanejs/tanstack-router']}`,
     ],
-    [`${octane}regenerate-shared-core-peer.mjs`]: [
-      patch('@octanejs/tanstack-router'),
-      patch('@octanejs/tanstack-router', '.shared-core-peer'),
-    ],
-    [`${octane}shared-core-peer.mjs`]: [`const sharedCoreVersion = '${core}'`],
     [`${router}qualify.mjs`]: [pnpmManager(owningPnpm)],
     [`${router}reconstruct.mjs`]: [
       coreTarball,

@@ -11,12 +11,12 @@ const nativePackages = [
   '@solidjs/signals',
   '@solidjs/compiler',
 ];
-const solidVersion = '2.0.0';
+const solidVersion = '2.0.1';
 const installedTuple = Object.freeze({
   ...Object.fromEntries(nativePackages.map(name => [name, solidVersion])),
   '@babel/core': '8.1.2',
   typescript: '7.0.2',
-  seroval: '1.8.1',
+  seroval: '1.8.2',
   'seroval-plugins': '1.8.0',
 });
 
@@ -32,7 +32,7 @@ export function verifyGeneratedSolidResult(result, binding) {
   assert.deepEqual(
     result.tuple,
     installedTuple,
-    'The generated consumer must use the actual stable Solid 2.0.0 tuple',
+    'The generated consumer must use the actual stable Solid 2.0.1 tuple',
   );
   const types = result.types;
   assert(Array.isArray(types?.entries) && types.entries.length > 0);

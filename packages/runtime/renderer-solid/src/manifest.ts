@@ -5,7 +5,7 @@ import {
   readRendererIdentity,
 } from '@modern-js/renderer-core/identity';
 
-export const SOLID_COMPILER_VERSION = '2.0.0';
+export const SOLID_COMPILER_VERSION = '2.0.1';
 export function solidModuleManifestFilename(entryName: string): string {
   return nativeModuleManifestFilename('solid', entryName);
 }

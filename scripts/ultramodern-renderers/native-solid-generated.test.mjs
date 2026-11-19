@@ -15,13 +15,13 @@ const completed = () => ({
   installedCopies: 12,
   // This is the complete installedTuple() output from generated-consumer.mjs.
   tuple: {
-    'solid-js': '2.0.0',
-    '@solidjs/web': '2.0.0',
-    '@solidjs/signals': '2.0.0',
-    '@solidjs/compiler': '2.0.0',
+    'solid-js': '2.0.1',
+    '@solidjs/web': '2.0.1',
+    '@solidjs/signals': '2.0.1',
+    '@solidjs/compiler': '2.0.1',
     '@babel/core': '8.1.2',
     typescript: '7.0.2',
-    seroval: '1.8.1',
+    seroval: '1.8.2',
     'seroval-plugins': '1.8.0',
   },
   types: {
@@ -69,20 +69,20 @@ test('the actual eight-package installed tuple qualifies and every version remai
     delete missing.tuple[name];
     assert.throws(
       () => verifyGeneratedSolidResult(missing, binding),
-      /stable Solid 2\.0\.0 tuple/u,
+      /stable Solid 2\.0\.1 tuple/u,
     );
     const drifted = completed();
     drifted.tuple[name] = '0.0.0';
     assert.throws(
       () => verifyGeneratedSolidResult(drifted, binding),
-      /stable Solid 2\.0\.0 tuple/u,
+      /stable Solid 2\.0\.1 tuple/u,
     );
   }
   const unexpected = completed();
   unexpected.tuple['unexpected-native-owner'] = '1.0.0';
   assert.throws(
     () => verifyGeneratedSolidResult(unexpected, binding),
-    /stable Solid 2\.0\.0 tuple/u,
+    /stable Solid 2\.0\.1 tuple/u,
   );
 });
 

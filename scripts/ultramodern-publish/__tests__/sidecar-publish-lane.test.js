@@ -788,6 +788,71 @@ test('every published sidecar verifies its tarball against the lane deadline', a
   );
 });
 
+// reconcile-sidecars hands this decision to publish-sidecars and publish:
+// the publisher runs only on `publish`, and publish accepts a skipped
+// publisher only on `reuse`.
+test('the dry run writes exactly one publish or reuse decision for reconcile-sidecars', async t => {
+  const { parseArgs, publishSidecars, writeSidecarDecision } =
+    await importCli();
+  withTrustedPublishEnv(t);
+  const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-decision-'));
+  t.after(() => fs.rmSync(outputDir, { recursive: true, force: true }));
+  const output = path.join(outputDir, 'github-output');
+
+  assert.equal(
+    parseArgs(['--dry-run', '--github-output', output]).githubOutput,
+    output,
+  );
+  for (const argv of [
+    ['--github-output', output],
+    ['--check-staging', '--github-output', output],
+    ['--check-registry', '--github-output', output],
+  ])
+    assert.throws(() => parseArgs(argv), /--github-output requires --dry-run/u);
+
+  const first = namedSidecar('@bleedingdev/ipx-first');
+  const second = namedSidecar('@bleedingdev/ipx-second');
+  const sidecars = [first, second];
+  const byName = new Map(sidecars.map(sidecar => [sidecar.name, sidecar]));
+  const decide = async readPackument => {
+    fs.writeFileSync(output, '');
+    const published = [];
+    const result = await publishSidecars(
+      { ...publishOptions, dryRun: true },
+      sidecarLaneDependencies({
+        sidecars,
+        readPackument,
+        onPublish: name => published.push(name),
+      }),
+    );
+    assert.deepEqual(published, [], 'a dry run never publishes');
+    writeSidecarDecision(output, result);
+    return fs.readFileSync(output, 'utf8');
+  };
+
+  // Every sidecar already on npm with the accepted bytes: nothing to publish.
+  assert.equal(
+    await decide(async name => publishedPackumentFor(byName.get(name))),
+    'decision=reuse\n',
+  );
+  // One version missing: the publisher must run.
+  assert.equal(
+    await decide(async name =>
+      name === second.name
+        ? priorReleaseOnly(byName.get(name))
+        : publishedPackumentFor(byName.get(name)),
+    ),
+    'decision=publish\n',
+  );
+  // An unwritable output fails the step instead of leaving no decision.
+  assert.throws(() =>
+    writeSidecarDecision(path.join(outputDir, 'missing', 'output'), {
+      published: [],
+      reused: [],
+    }),
+  );
+});
+
 const nextMacrotask = () => new Promise(resolve => setImmediate(resolve));
 
 for (const settlesDuring of ['registry read', 'token exchange']) {

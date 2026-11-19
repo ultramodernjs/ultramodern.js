@@ -8,9 +8,9 @@ import { pathToFileURL } from 'node:url';
 const exactVersion = /^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/u;
 
 export const admissionTuple = Object.freeze({
-  octane: '0.18.0',
-  '@octanejs/tanstack-router': '0.3.4',
-  '@octanejs/rspack-plugin': '0.2.10',
+  octane: '0.20.0',
+  '@octanejs/tanstack-router': '0.3.6',
+  '@octanejs/rspack-plugin': '0.2.12',
   '@tanstack/router-core': '1.171.39',
   '@tsrx/oxc': '0.24.0',
   typescript: '7.0.2',

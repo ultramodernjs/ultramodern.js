@@ -1,21 +1,22 @@
 // Fabricated controls only. Never use these identities or bytes as a recipe.
-import {
-  assetFilename,
-  cohort,
-  descriptorFor,
-  integrity,
-  manifestBytes,
-  manifestFilename,
-  protocol,
-  releaseUrl,
-  repository,
-  repositoryId,
-  sha256,
-  workflow,
-} from './protocol.mjs';
+import { releaseBody } from '../../ultramodern-artifacts/transport.mjs';
+import * as nativeProtocol from './protocol.mjs';
 import { packFiles } from './reconstruct.mjs';
-import { releaseBody } from './transport.mjs';
-export function fixture() {
+export function fixture(artifactProtocol = nativeProtocol) {
+  const {
+    assetFilename,
+    cohort,
+    descriptorFor,
+    integrity,
+    manifestBytes,
+    manifestFilename,
+    protocol,
+    releaseUrl,
+    repository,
+    repositoryId,
+    sha256,
+    workflow,
+  } = artifactProtocol;
   const producer = {
     repository,
     repositoryId,
@@ -89,7 +90,7 @@ export function fixture() {
     draft: false,
     prerelease: false,
     html_url: `https://github.com/${repository}/releases/tag/${producer.tag}`,
-    body: releaseBody(descriptor),
+    body: releaseBody({ protocol: artifactProtocol, descriptor }),
     assets: [...payloads].map(([name, bytes], index) => ({
       id: index + 1,
       name,

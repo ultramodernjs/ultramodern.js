@@ -4,13 +4,13 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "solid-js": "2.0.0",
-    "@solidjs/web": "2.0.0",
-    "@solidjs/signals": "2.0.0",
-    "@solidjs/compiler": "2.0.0",
+    "solid-js": "2.0.1",
+    "@solidjs/web": "2.0.1",
+    "@solidjs/signals": "2.0.1",
+    "@solidjs/compiler": "2.0.1",
     "@modern-js/renderer-core": "3.8.3",
     "@modern-js/renderer-solid": "3.8.3",
-    "@tanstack/router-core": "https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-9353b0cd3dc1fb73ebd1dc66f377e3356abeb178-44131025154-1/tanstack-router-core-1.171.39.tgz"
+    "@tanstack/router-core": "https://github.com/ultramodernjs/ultramodern.js/releases/download/native-renderers-7d4e7415b69a93439451cbcfbcbb4cc15d09edde-44303834194-1/tanstack-router-core-1.171.39.tgz"
   },
   "devDependencies": {
     "@rsbuild/core": "2.3.3",

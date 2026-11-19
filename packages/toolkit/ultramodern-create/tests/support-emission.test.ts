@@ -687,7 +687,7 @@ test('Solid runtime peers stable registry Solid, never a support archive', () =>
     ),
   );
   const pins = solidProfile.dependencies;
-  assert.equal(pins['solid-js'], '2.0.0');
+  assert.equal(pins['solid-js'], '2.0.1');
   for (const name of ['@solidjs/web', '@solidjs/signals', '@solidjs/compiler'])
     assert.equal(pins[name], pins['solid-js']);
   assert.equal(manifest.dependencies['solid-js'], undefined);
