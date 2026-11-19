@@ -6,19 +6,18 @@ export const queriedAt = {
 export const rslibPatchSha256 =
   'bd0c8f1b4c4681eeb0d1ea0123c252ad41b17f01be1ca171bd8c42ca2d652e44';
 
-// Immutable reviewed merge (PR #322) of the accepted cohort's main source,
-// carrying the shipped support-v3 activation 92307d27 (producer source
-// d62b29f5, run 43934193068 attempt 2). Its manifests are a baseline only for
-// support-owned metadata and the exact support edges that select that
-// descriptor; they grant no other edge or URL authority.
+// Immutable reviewed merge (PR #342) carrying the qualified support-v4 cohort
+// (producer source bea0d22f, run 44174451205 attempt 1). Its manifests grant only
+// their exact support-owned metadata and selections, not other edges or URLs.
+// This is a reviewed manifest baseline, not full release acceptance.
 export const supportBaselineRevision =
-  '0024faeea760417227135429fe2727ae471abbe4';
+  '75e3d5f6bccaac893773e33b65eb585bf7c8e936';
 
-// Immutable reviewed refresh carrying the already-qualified native 9353 cohort
-// (run 44131025154 attempt 1). This baseline grants only its exact native-owned
-// metadata and selections; the qualified 0.20 release still needs admission.
+// The same reviewed merge carries qualified native source 7d4e7415
+// (run 44303834194 attempt 1, Octane 0.20). It grants only its exact native-owned
+// metadata and selections; a newer descriptor still needs admission.
 export const nativeBaselineRevision =
-  '2fdfae61808ab76cd26eba98668d559cc2fa7bf1';
+  '75e3d5f6bccaac893773e33b65eb585bf7c8e936';
 
 // Owning source and actual packed runtime/type qualification establish this
 // consolidation. Corrected OTel distribution and release acceptance stay separate.
