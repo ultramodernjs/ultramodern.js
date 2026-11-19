@@ -252,6 +252,46 @@ export function topologyApps(topology, localOverlay, appFilter, env = process.en
   return filteredApps;
 }
 
+// Public URLs remain manifest identity inputs; proof traffic only targets the
+// resolved local app port, including when servers are supplied in existing mode.
+function nodeProofOrigin(app) {
+  if (!Number.isInteger(app.port) || app.port < 1 || app.port > 65535) {
+    throw new Error(`${app.id} has no valid Node proof port`);
+  }
+  return `http://127.0.0.1:${app.port}`;
+}
+
+function nodeProofArtifactUrl(app, declaredUrl, logicalPath) {
+  const expectedUrl = logicalPath === 'backend-mf-manifest.json'
+    ? app.manifestUrl
+    : logicalPath === 'backendRemoteEntry.cjs'
+      ? app.containerEntry
+      : undefined;
+  const url = new URL(declaredUrl);
+  if (expectedUrl === undefined || declaredUrl !== expectedUrl ||
+      !['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
+      !url.pathname.endsWith(`/${logicalPath}`)) {
+    throw new Error(`${app.id} unsupported Node proof artifact URL ${declaredUrl}`);
+  }
+  // The owned server serves these envelope artifacts from its output root.
+  // Deployment prefixes, query and fragment stay in the declared identity;
+  // never resolve their pathname (which may start with //) as a transport URL.
+  return `${nodeProofOrigin(app)}/${logicalPath}`;
+}
+
+function nodeProofApiUrl(app, route) {
+  const origin = nodeProofOrigin(app);
+  const url = new URL(route, origin);
+  const prefix = app.apiPrefix;
+  if (typeof prefix !== 'string' || prefix === '/' ||
+      !prefix.startsWith('/') || (!route.startsWith(`${prefix}/`) && route !== prefix) ||
+      url.origin !== origin || url.pathname !== route ||
+      url.search || url.hash || route.includes('\\')) {
+    throw new Error(`${app.id} unsupported or cross-app Node proof API path ${route}`);
+  }
+  return url.href;
+}
+
 const sleep = (durationMs) =>
   new Promise((resolve) => setTimeout(resolve, durationMs));
 
@@ -303,6 +343,7 @@ async function waitForNodeRuntime(runtime, startupTimeoutMs) {
     }
     try {
       const response = await fetch(runtime.manifestUrl, {
+        redirect: 'error',
         headers: {
           accept: 'application/json',
           'cache-control': 'no-cache',
@@ -334,13 +375,8 @@ export async function startNodeRuntime(
     workspaceRoot: runtimeWorkspaceRoot = workspaceRoot,
   } = {},
 ) {
-  const parsedPort =
-    Number.isInteger(app.port) && app.port > 0
-      ? app.port
-      : Number(new URL(app.manifestUrl).port);
-  if (!Number.isInteger(parsedPort) || parsedPort <= 0) {
-    throw new Error(`${app.id} has no valid Node proof port`);
-  }
+  const manifestUrl = nodeProofArtifactUrl(app, app.manifestUrl, 'backend-mf-manifest.json');
+  const parsedPort = app.port;
   await assertPortAvailable(parsedPort, app.id);
 
   const outputDirectory = path.join(
@@ -379,7 +415,7 @@ export async function startNodeRuntime(
     exitResult: undefined,
     logPath,
     logStream,
-    manifestUrl: app.manifestUrl,
+    manifestUrl,
   };
   runtime.exited = new Promise((resolve) => {
     let spawnError;
@@ -606,7 +642,9 @@ export async function fetchBoundArtifact(
   label,
   fetchImpl = globalThis.fetch,
 ) {
-  const response = await fetchImpl(url, {
+  const transportUrl = nodeProofArtifactUrl(app, url, artifact.logicalPath);
+  const response = await fetchImpl(transportUrl, {
+    redirect: 'error',
     headers: {
       accept: '*/*',
       'cache-control': 'no-cache',
@@ -637,6 +675,7 @@ export async function fetchBoundArtifact(
     bytes,
     evidence: {
       url,
+      transportUrl,
       logicalPath: artifact.logicalPath,
       statusCode: response.status,
       byteLength: bytes.byteLength,
@@ -662,11 +701,16 @@ export async function loadBackendFromVerifiedArtifacts({
     );
   }
   const verifiedContainerBytes = Buffer.from(container.bytes);
-  const verifiedEntryUrl = new URL(app.containerEntry).href;
+  const verifiedEntryUrl = new URL(app.containerEntry);
+  // Match native backend-federation-security's HTTP resource identity. Fragments
+  // remain exact manifest inputs, but are never part of its entry fetch URL.
+  verifiedEntryUrl.hash = '';
   const fetchVerifiedEntry = async (url, init = {}) => {
+    const requestedEntryUrl = new URL(url);
+    requestedEntryUrl.hash = '';
     assertEqual(
-      new URL(url).href,
-      verifiedEntryUrl,
+      requestedEntryUrl.href,
+      verifiedEntryUrl.href,
       `${app.id} verified backend container URL`,
     );
     if (init.signal?.aborted) {
@@ -701,8 +745,9 @@ async function proveLiveApi(app, manifest, releaseBinding) {
   const route = normalizeRoutePath(
     manifest.backendFederation?.readinessPath,
   );
-  const url = new URL(route, app.manifestUrl).href;
+  const url = nodeProofApiUrl(app, route);
   const response = await fetch(url, {
+    redirect: 'error',
     headers: {
       accept: 'application/json',
       'cache-control': 'no-cache',
@@ -783,10 +828,16 @@ export async function proveLiveRpcApi(app, loaded, manifest, releaseBinding) {
     throw new Error(`${app.id} has no declared RPC list smoke check`);
   }
   const route = normalizeRoutePath(contract.path);
-  const url = new URL(route, app.manifestUrl).href;
-  const clientModule = createRequire(
+  const url = nodeProofApiUrl(app, route);
+  const appRequire = createRequire(
     path.join(workspaceRoot, app.directory, 'package.json'),
-  )(`${app.packageName}/api/rpc-client`);
+  );
+  const clientModule = appRequire(`${app.packageName}/api/rpc-client`);
+  const { FetchHttpClient } = await import(pathToFileURL(appRequire.resolve('effect/http')).href);
+  // Scope redirect policy to these native client effects, never global fetch.
+  const runRpc = (effect) => clientModule.Effect.runPromise(
+    clientModule.Effect.provideService(effect, FetchHttpClient.RequestInit, { redirect: 'error' }),
+  );
   const clientName = toPascalCase(contract.group);
   const localContract = clientModule[`${clientName}RpcContract`];
   if (localContract?.path !== contract.path ||
@@ -802,7 +853,7 @@ export async function proveLiveRpcApi(app, loaded, manifest, releaseBinding) {
   }
   const client = await clientModule.Effect.runPromise(makeClient({ url }));
   try {
-    const listed = await clientModule.Effect.runPromise(client.list({ limit: check.body.params.limit }));
+    const listed = await runRpc(client.list({ limit: check.body.params.limit }));
     const item = listed?.items?.[0];
     if (typeof item?.id !== 'string' || item.id.length === 0) {
       throw new Error(`${app.id} native RPC list returned no item id`);
@@ -820,10 +871,10 @@ export async function proveLiveRpcApi(app, loaded, manifest, releaseBinding) {
         throw new Error(`${app.id} RPC smoke check has unsupported expectation ${expectation.path}`);
       }
     }
-    const fetched = await clientModule.Effect.runPromise(client.get({ id: item.id }));
+    const fetched = await runRpc(client.get({ id: item.id }));
     assertEqual(fetched?.id, item.id, `${app.id} native RPC get item id`);
     const missingId = `__ultramodern-proof-missing-${item.id}__`;
-    const missing = await clientModule.Effect.runPromise(
+    const missing = await runRpc(
       clientModule.Effect.match(client.get({ id: missingId }), {
         onFailure: (error) => ({ error }),
         onSuccess: (value) => ({ value }),
@@ -940,7 +991,7 @@ async function runSmokeChecks(app, loaded, createEffectBffTestHandler) {
         init.body = JSON.stringify(check.body);
       }
 
-      const response = await edge.handler(new Request(new URL(route, 'http://localhost'), init));
+      const response = await edge.handler(new Request(nodeProofApiUrl(app, route), init));
       const bodyText = await response.text();
       let body;
       try {
@@ -1166,7 +1217,7 @@ function assertTopologyStableIdentityMatchesBuild(app, buildIdentity) {
   }
 }
 
-async function proveBackend(app, backendRuntime, target) {
+export async function proveBackend(app, backendRuntime, target) {
   const {
     createEffectBffTestHandler,
     loadBackendFederatedEffectApiFromManifest,

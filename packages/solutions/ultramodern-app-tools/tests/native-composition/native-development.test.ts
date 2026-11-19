@@ -1611,31 +1611,59 @@ describe('native development', () => {
       expect(
         scripts.some(script => script.source.includes('REMOTE_LAZY_CHUNK')),
       ).toBe(false);
+      // Reproduce a watcher replay between loading the runtime and editing A.
+      // One hot.check must advance only to this unchanged intermediate graph.
+      const unchangedPublication = app.nextClientPublication();
+      app.invalidateClient();
+      await unchangedPublication;
+      const lastPublishedPublicPath = (await (await fetch(manifestUrl)).json())
+        .metaData.publicPath;
       // Compile A finishes, but a later edit supersedes it before it is
-      // published. Its hot update still chains from the initial graph.
-      const superseded = Promise.withResolvers<void>();
+      // published. Its hot update chains from the last completed client graph.
+      const superseded = Promise.withResolvers<string[]>();
       app.beforeClientCompileContaining('REMOTE_LAZY_SUPERSEDED', async () => {
         await app.startInvalidatedClientRun();
-        superseded.resolve();
+        superseded.resolve(app.clientCompilationHashes());
       });
       holdPublication = true;
       app.editRemoteLazy('REMOTE_LAZY_SUPERSEDED');
-      await superseded.promise;
-      // Consume A's live delta before later compiles can clean it away. The
-      // contract under test retains applied graphs, not historical HMR deltas.
-      expect(await widget.hotUpdate()).not.toBeNull();
+      const completedHashes = await superseded.promise;
+      const supersededHash = completedHashes[completedHashes.length - 1];
+      const supersededPublicPath = new URL(
+        `../${supersededHash}/`,
+        initialPublicPath,
+      ).href;
+      // Apply the known chain exactly once per source hash, through A, before
+      // later compiles can clean away its live delta.
+      const updateSources = completedHashes.slice(
+        completedHashes.indexOf(initialManifest.compilationHash),
+        -1,
+      );
+      expect(updateSources[0]).toBe(initialManifest.compilationHash);
+      expect(updateSources.length).toBeGreaterThan(1);
+      for (const sourceHash of updateSources) {
+        const beforeUpdate = scripts.length;
+        expect(await widget.hotUpdate()).not.toBeNull();
+        expect(
+          scripts
+            .slice(beforeUpdate)
+            .some(script =>
+              script.url.endsWith(`.${sourceHash}.hot-update.js`),
+            ),
+        ).toBe(true);
+      }
       expect(
         (await (await fetch(manifestUrl)).json()).metaData.publicPath,
-      ).toBe(initialPublicPath);
+      ).toBe(lastPublishedPublicPath);
       holdPublication = false;
       resumePublication.resolve();
       app.editRemoteLazy('REMOTE_LAZY_PUBLISHED');
-      // Wait for a published compilation later than the initial one by hash,
+      // Wait for a published compilation later than the applied one by hash,
       // and name its directory, instead of waiting for "not the old path".
       const republished = await untilCompilationAfter(
         app,
         manifestUrl,
-        initialManifest.compilationHash,
+        supersededHash,
       );
       nextPublicPath = republished.manifest.metaData.publicPath;
       expect(nextPublicPath).toBe(
@@ -1651,6 +1679,11 @@ describe('native development', () => {
       const lazyScripts = scripts.slice(beforeLazy);
       expect(lazyScripts.length).toBeGreaterThan(0);
       // The applied delta addresses A's graph, never the published one.
+      expect(
+        lazyScripts.every(script =>
+          script.url.startsWith(supersededPublicPath),
+        ),
+      ).toBe(true);
       expect(
         lazyScripts.some(script => script.url.startsWith(nextPublicPath)),
       ).toBe(false);

@@ -346,74 +346,95 @@ test('Node proof verifies UI renderer identity, profile and router bindings with
   }
 });
 
-test('Node backend proof composes public runtime owners and runs a native Effect handler', () => {
-  const workspaceRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'node-backend-proof-runtime-'),
-  );
-  try {
-    fs.writeFileSync(
-      path.join(workspaceRoot, 'package.json'),
-      '{"type":"module"}',
+test.each([
+  {
+    label: 'root public artifact URLs',
+    manifestPath: '/backend-mf-manifest.json',
+    containerPath: '/backendRemoteEntry.cjs',
+  },
+  {
+    label: 'prefixed public artifact URLs with query and fragment',
+    manifestPath: '//edge/catalog/backend-mf-manifest.json?revision=1#manifest',
+    containerPath: '//edge/catalog/backendRemoteEntry.cjs?revision=1#entry',
+  },
+])(
+  'Node backend proof composes public runtime owners with $label',
+  ({ manifestPath, containerPath }) => {
+    const workspaceRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'node-backend-proof-runtime-'),
     );
-    const scope = path.join(workspaceRoot, 'node_modules/@modern-js');
-    fs.mkdirSync(scope, { recursive: true });
-    for (const [name, relativePath] of [
-      ['plugin-bff-extensions', '../../../cli/plugin-bff-extensions'],
-      ['bff-effect', '../../../server/bff-effect'],
-    ]) {
+    try {
+      fs.writeFileSync(
+        path.join(workspaceRoot, 'package.json'),
+        '{"type":"module"}',
+      );
+      const scope = path.join(workspaceRoot, 'node_modules/@modern-js');
+      fs.mkdirSync(scope, { recursive: true });
+      for (const [name, relativePath] of [
+        ['plugin-bff-extensions', '../../../cli/plugin-bff-extensions'],
+        ['bff-effect', '../../../server/bff-effect'],
+        ['app-tools-extensions', '../../../solutions/app-tools-extensions'],
+      ]) {
+        fs.symlinkSync(
+          path.resolve(__dirname, relativePath),
+          path.join(scope, name),
+          'dir',
+        );
+      }
       fs.symlinkSync(
-        path.resolve(__dirname, relativePath),
-        path.join(scope, name),
+        path.resolve(
+          __dirname,
+          '../../../server/bff-effect/node_modules/effect',
+        ),
+        path.join(workspaceRoot, 'node_modules/effect'),
         'dir',
       );
-    }
-    fs.symlinkSync(
-      path.resolve(__dirname, '../../../server/bff-effect/node_modules/effect'),
-      path.join(workspaceRoot, 'node_modules/effect'),
-      'dir',
-    );
-    const catalogDirectory = path.join(workspaceRoot, 'verticals/catalog');
-    fs.mkdirSync(path.join(catalogDirectory, 'shared'), { recursive: true });
-    fs.writeFileSync(
-      path.join(catalogDirectory, 'package.json'),
-      JSON.stringify({
-        name: '@test/catalog',
-        exports: { './api/rpc-client': './shared/catalog-rpc-client.ts' },
-      }),
-    );
-    const catalogApi = {
-      id: 'catalog',
-      api: {
-        consumedBy: [],
-        prefix: '/catalog-api',
-        protocol: 'rpc' as const,
-        stem: 'catalog',
-      },
-    };
-    fs.writeFileSync(
-      path.join(catalogDirectory, 'shared/rpc.ts'),
-      createRpcContractFile(catalogApi),
-    );
-    fs.writeFileSync(
-      path.join(catalogDirectory, 'shared/catalog-rpc-client.ts'),
-      createRpcClientFile(catalogApi, './rpc.ts'),
-    );
+      const catalogDirectory = path.join(workspaceRoot, 'verticals/catalog');
+      fs.mkdirSync(path.join(catalogDirectory, 'shared'), { recursive: true });
+      fs.writeFileSync(
+        path.join(catalogDirectory, 'package.json'),
+        JSON.stringify({
+          name: '@test/catalog',
+          version: '1.0.0',
+          exports: { './api/rpc-client': './shared/catalog-rpc-client.ts' },
+        }),
+      );
+      const catalogApi = {
+        id: 'catalog',
+        api: {
+          consumedBy: [],
+          prefix: '/catalog-api',
+          protocol: 'rpc' as const,
+          stem: 'catalog',
+        },
+      };
+      fs.writeFileSync(
+        path.join(catalogDirectory, 'shared/rpc.ts'),
+        createRpcContractFile(catalogApi),
+      );
+      fs.writeFileSync(
+        path.join(catalogDirectory, 'shared/catalog-rpc-client.ts'),
+        createRpcClientFile(catalogApi, './rpc.ts'),
+      );
 
-    const proofUrl = pathToFileURL(
-      path.resolve(
-        __dirname,
-        '../templates/workspace-scripts/proof-node-backend-federation.mjs',
-      ),
-    ).href;
-    execFileSync(
-      process.execPath,
-      [
-        '--input-type=module',
-        '--eval',
-        `
+      const proofUrl = pathToFileURL(
+        path.resolve(
+          __dirname,
+          '../templates/workspace-scripts/proof-node-backend-federation.mjs',
+        ),
+      ).href;
+      execFileSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '--eval',
+          `
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 const require = createRequire(process.cwd() + '/package.json');
 const proof = await import(${JSON.stringify(proofUrl)});
@@ -444,6 +465,172 @@ try {
   await handler.dispose();
 }
 
+// A real owned server + native federation loader, using public-addressed bytes.
+const { createMicroVerticalReleaseEnvelope } = await import('@modern-js/app-tools-extensions/release-envelope');
+const output = path.join(process.cwd(), 'verticals/catalog/.output');
+fs.mkdirSync(path.join(output, 'api'), { recursive: true });
+fs.writeFileSync(path.join(output, 'package.json'), '{"type":"commonjs"}');
+function makeRestBackend({ Effect, HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, HttpRouter, HttpServerResponse, OpenApi, Layer, Schema, defineEffectBff }) {
+  const marker = {
+    unitId: 'test/catalog', build: 'catalog-build', buildMarker: 'catalog-build',
+    packageName: '@test/catalog', version: '1.0.0', sourceRevision: 'a'.repeat(40),
+  };
+  const api = HttpApi.make('CatalogApi').add(HttpApiGroup.make('catalog').add(
+    HttpApiEndpoint.get('readiness', '/catalog/readiness', { success: Schema.Unknown }),
+    HttpApiEndpoint.get('list', '/catalog/items', { success: Schema.Unknown }),
+  ));
+  const handlers = HttpApiBuilder.group(api, 'catalog', group => group
+    .handle('readiness', () => Effect.succeed({ marker, status: 'ready' }))
+    .handle('list', () => Effect.succeed({ items: [{ id: 'starter-catalog' }] })),
+  );
+  const layer = HttpApiBuilder.layer(api).pipe(Layer.provide(handlers));
+  const runtime = defineEffectBff({ api, layer: Layer.mergeAll(layer,
+    HttpRouter.add('GET', '/openapi.json', HttpServerResponse.jsonUnsafe(OpenApi.fromApi(api)))),
+  });
+  return {
+    api, runtime, contract: { servicePrefix: '/catalog-api' },
+    backendFederationContract: {
+      name: 'verticalCatalogBackend', role: 'microvertical-server',
+      strictEffectApproach: true, runtimeFramework: 'effect',
+      compatibility: {
+        build: marker.build, unitId: marker.unitId, packageName: marker.packageName,
+        contractVersion: 'microvertical-server-effect-v1', nodeAdapterVersion: 'backend-mf-effect-v2',
+      },
+    },
+  };
+}
+const declaredOrigin = 'https://catalog.example.test';
+const declaredManifestPath = ${JSON.stringify(manifestPath)};
+const declaredContainerPath = ${JSON.stringify(containerPath)};
+const marker = { unitId: 'test/catalog', buildMarker: 'catalog-build', packageName: '@test/catalog', version: '1.0.0', sourceRevision: 'a'.repeat(40) };
+const manifest = {
+  schemaVersion: 1, id: 'verticalCatalogBackend', name: 'verticalCatalogBackend',
+  version: '1.0.0', buildVersion: marker.buildMarker,
+  metaData: {
+    name: 'verticalCatalogBackend',
+    buildInfo: { buildName: marker.packageName, buildVersion: marker.buildMarker },
+    remoteEntry: { name: 'backendRemoteEntry.cjs', type: 'commonjs-module' },
+  },
+  entry: { url: declaredOrigin + declaredContainerPath, type: 'commonjs-module' },
+  exposes: [{ name: './effect-api', path: './effect-api' }],
+  backendFederation: {
+    name: 'verticalCatalogBackend', role: 'microvertical-server', runtimeFramework: 'effect', strictEffectApproach: true,
+    contractVersion: 'microvertical-server-effect-v1', nodeAdapterVersion: 'backend-mf-effect-v2',
+    manifestUrl: declaredOrigin + declaredManifestPath, containerEntry: declaredOrigin + declaredContainerPath,
+    readinessPath: '/catalog-api/catalog/readiness', expose: './effect-api',
+    deliveryUnit: { ...marker, schemaVersion: 1, kind: 'microvertical-delivery-unit' },
+    versionBoundary: { packageName: marker.packageName, version: marker.version, buildVersion: marker.buildMarker, deliveryUnit: { unitId: marker.unitId, buildMarker: marker.buildMarker, sourceRevision: marker.sourceRevision } },
+  },
+};
+const containerSource = 'module.exports = { init() {}, async get() { const make = ' + makeRestBackend.toString() +
+  '; const loaded = make(await import(' + JSON.stringify(pathToFileURL(require.resolve('@modern-js/bff-effect/effect-edge')).href) +
+  ')); return () => loaded; } };';
+fs.writeFileSync(path.join(output, 'backendRemoteEntry.cjs'), containerSource);
+manifest.entry.sha256 = createHash('sha256').update(containerSource).digest('hex');
+manifest.entry.byteLength = Buffer.byteLength(containerSource);
+fs.writeFileSync(path.join(output, 'backend-mf-manifest.json'), JSON.stringify(manifest));
+fs.writeFileSync(path.join(output, 'api/index.js'), 'exports.api = true;');
+fs.writeFileSync(path.join(output, 'ultramodern-build.json'), JSON.stringify({ deliveryUnit: marker }));
+const envelope = await createMicroVerticalReleaseEnvelope({
+  artifactRoot: output, target: 'node',
+  identity: { unitId: marker.unitId, buildMarker: marker.buildMarker, sourceRevision: marker.sourceRevision, releaseVersion: marker.version },
+  artifacts: [
+    { logicalPath: 'api/index.js', runtime: 'nodejs' },
+    { logicalPath: 'backend-mf-manifest.json', runtime: 'module-federation-manifest' },
+    { logicalPath: 'backendRemoteEntry.cjs', runtime: 'nodejs' },
+  ],
+  surfaces: { uiClient: [], ssr: [], apiBackend: ['api/index.js'],
+    backendFederation: { manifest: 'backend-mf-manifest.json', container: 'backendRemoteEntry.cjs' } },
+});
+fs.mkdirSync(path.join(output, 'release'), { recursive: true });
+fs.writeFileSync(path.join(output, 'release/microvertical-release-envelope.json'), JSON.stringify(envelope));
+fs.writeFileSync(path.join(output, 'index.js'), [
+  "const fs = require('node:fs'); const http = require('node:http');",
+  '(async () => {',
+  'const { createEffectBffTestHandler } = await import(' + JSON.stringify(pathToFileURL(require.resolve('@modern-js/bff-effect/effect')).href) + ');',
+  "const loaded = (await require('./backendRemoteEntry.cjs').get('./effect-api'))();",
+  "const handler = await createEffectBffTestHandler({ module: loaded.runtime, prefix: '/catalog-api' });",
+  'http.createServer(async (request, response) => {',
+  "fs.appendFileSync('requests.jsonl', JSON.stringify({ host: request.headers.host, route: request.url }) + String.fromCharCode(10));",
+  "if (fs.existsSync('redirect-path') && fs.readFileSync('redirect-path', 'utf8') === request.url) {",
+  "response.writeHead(307, { location: 'http://127.0.0.1:' + process.env.PORT + '/escaped' }); response.end(); return; }",
+  "if (['/backend-mf-manifest.json', '/backendRemoteEntry.cjs'].includes(request.url)) { response.end(fs.readFileSync('.' + request.url)); return; }",
+  "const result = await handler.handler(new Request('http://127.0.0.1' + request.url));",
+  'response.writeHead(result.status, Object.fromEntries(result.headers)); response.end(Buffer.from(await result.arrayBuffer()));',
+  "}).listen(Number(process.env.PORT), '127.0.0.1');",
+  '})();',
+].join(String.fromCharCode(10)));
+const { leasePort } = await import(${JSON.stringify(pathToFileURL(path.resolve(__dirname, '../../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs')).href)});
+const restLease = await leasePort();
+const [restApp] = proof.topologyApps({ verticals: [{
+  id: 'catalog', kind: 'vertical', path: 'verticals/catalog', package: '@test/catalog',
+  surfaceProfile: 'api-only', deliveryUnit: marker, api: { bff: { prefix: '/catalog-api' } },
+  cloudflare: { publicUrlEnv: 'ULTRAMODERN_PUBLIC_URL_CATALOG', jsonSmokeChecks: [
+    { route: '/catalog-api/catalog/readiness', expect: { status: 'ready' } },
+    { route: '/catalog-api/catalog/items', expect: { 'items.0.id': 'starter-catalog' } },
+    { route: '/catalog-api/openapi.json', expect: { openapi: '3.1.0' } },
+  ] },
+}] }, { ports: { catalog: 3021 }, serverExecution: { catalog: { node: {
+  manifestUrl: 'http://localhost:3021' + declaredManifestPath,
+  containerEntry: 'http://localhost:3021' + declaredContainerPath,
+} } } }, undefined, { VERTICAL_CATALOG_PORT: String(restLease.port), ULTRAMODERN_PUBLIC_URL_CATALOG: declaredOrigin });
+await restLease.release();
+const readRequests = () => fs.readFileSync(path.join(output, 'requests.jsonl'), 'utf8').trim().split(String.fromCharCode(10)).map(line => JSON.parse(line));
+const restRuntime = await proof.startNodeRuntime(restApp, '.output', { startupTimeoutMs: 5000 });
+try {
+  const result = await proof.proveBackend(restApp, runtime, '.output');
+  assert.equal(result.status, 'pass');
+  assert.equal(result.manifestUrl, manifest.backendFederation.manifestUrl);
+  assert.equal(result.containerEntry, manifest.entry.url);
+  assert.equal(result.liveArtifacts.manifest.url, restApp.manifestUrl);
+  assert.equal(result.liveArtifacts.manifest.transportUrl, 'http://127.0.0.1:' + restApp.port + '/backend-mf-manifest.json');
+  assert.equal(result.liveArtifacts.container.url, declaredOrigin + declaredContainerPath);
+  assert.equal(result.liveArtifacts.container.transportUrl, 'http://127.0.0.1:' + restApp.port + '/backendRemoteEntry.cjs');
+  assert.equal(result.smokeChecks.length, 3);
+  assert.deepEqual(readRequests().map(request => request.route), [
+    '/backend-mf-manifest.json', '/backend-mf-manifest.json', '/backendRemoteEntry.cjs', '/catalog-api/catalog/readiness',
+  ]);
+  assert.ok(readRequests().every(request => request.host === '127.0.0.1:' + restApp.port));
+  // Existing mode invokes this same path without a separate readiness wait.
+  const existingResult = await proof.proveBackend(restApp, runtime, '.output');
+  assert.equal(existingResult.status, 'pass');
+  assert.deepEqual(readRequests().slice(-3).map(request => request.route), [
+    '/backend-mf-manifest.json', '/backendRemoteEntry.cjs', '/catalog-api/catalog/readiness',
+  ]);
+  assert.ok(readRequests().every(request => request.host === '127.0.0.1:' + restApp.port));
+  const count = readRequests().length;
+  await assert.rejects(proof.proveBackend({ ...restApp, manifestUrl: 'https://wrong.example.test' + declaredManifestPath }, runtime, '.output'), /backend manifest URL/);
+  await assert.rejects(proof.proveBackend({ ...restApp, containerEntry: 'https://wrong.example.test' + declaredContainerPath }, runtime, '.output'), /backend manifest entry URL/);
+  if (declaredContainerPath.includes('#')) {
+    await assert.rejects(proof.proveBackend({ ...restApp, containerEntry: restApp.containerEntry.replace('#entry', '#wrong') }, runtime, '.output'), /backend manifest entry URL/);
+    await assert.rejects(proof.proveBackend({ ...restApp, manifestUrl: restApp.manifestUrl.replace('revision=1', 'revision=2') }, runtime, '.output'), /backend manifest URL/);
+  }
+  assert.equal(readRequests().length, count, 'wrong declared identities must fail before fetching');
+  for (const route of ['/backend-mf-manifest.json', '/backendRemoteEntry.cjs', '/catalog-api/catalog/readiness']) {
+    fs.writeFileSync(path.join(output, 'redirect-path'), route);
+    await assert.rejects(proof.proveBackend(restApp, runtime, '.output'), /fetch failed/);
+    assert.equal(readRequests().at(-1).route, route);
+    assert.ok(!readRequests().some(request => request.route === '/escaped'));
+  }
+  fs.rmSync(path.join(output, 'redirect-path'));
+  for (const route of ['/other-api/readiness', '//catalog.example.test/catalog-api/readiness', '/catalog-api/../other-api/readiness']) {
+    await assert.rejects(proof.proveBackend({ ...restApp, smokeChecks: [{ route }] }, runtime, '.output'), /unsupported or cross-app/);
+  }
+  const misboundUrl = declaredOrigin + '/edge/backend-mf-manifest.json?revision=1#entry';
+  await assert.rejects(proof.fetchBoundArtifact({ ...restApp, containerEntry: misboundUrl }, misboundUrl, result.liveArtifacts.container, 'container'), /unsupported Node proof artifact URL/);
+  for (const url of [declaredOrigin + '/other/backendRemoteEntry.cjs', 'https://other.example.test/backendRemoteEntry.cjs']) {
+    await assert.rejects(proof.fetchBoundArtifact(restApp, url, result.liveArtifacts.container, 'container'), /unsupported Node proof artifact URL/);
+  }
+} finally {
+  await proof.stopNodeRuntime(restRuntime);
+}
+// Readiness must also reject redirects, not follow even to another local path.
+fs.writeFileSync(path.join(output, 'redirect-path'), '/backend-mf-manifest.json');
+const beforeRedirectReadiness = readRequests().length;
+await assert.rejects(proof.startNodeRuntime(restApp, '.output', { startupTimeoutMs: 750 }), /did not serve/);
+assert.ok(readRequests().length > beforeRedirectReadiness, 'readiness redirect was actually served');
+assert.ok(!readRequests().some(request => request.route === '/escaped'));
+
 const Item = Schema.Struct({ id: Schema.String, title: Schema.String });
 const taggedErrorSchema = Schema.TaggedError;
 class CatalogNotFoundRpc extends taggedErrorSchema()('CatalogNotFoundRpc', { id: Schema.String }) {}
@@ -463,7 +650,15 @@ const rpcRuntime = defineEffectBff({
   rpc: { group, layer: rpcLayer, path: '/rpc', serialization: 'json' },
 });
 const rpcHandler = await runtime.createEffectBffTestHandler({ module: rpcRuntime, prefix: '/catalog-api' });
+const requests = [];
+let redirectRpcAt = 0;
 const server = createServer(async (request, response) => {
+  requests.push({ host: request.headers.host, route: request.url, method: request.method });
+  if (requests.length === redirectRpcAt) {
+    response.writeHead(307, { location: 'http://127.0.0.1:' + server.address().port + '/escaped' });
+    response.end();
+    return;
+  }
   try {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
@@ -486,7 +681,10 @@ try {
     id: 'catalog',
     directory: 'verticals/catalog',
     packageName: '@test/catalog',
-    manifestUrl: 'http://127.0.0.1:' + port + '/backend-mf-manifest.json',
+    manifestUrl: 'https://catalog.example.test/backend-mf-manifest.json',
+    containerEntry: 'https://catalog.example.test/backendRemoteEntry.cjs',
+    port,
+    apiPrefix: '/catalog-api',
     rpcPath: '/catalog-api/rpc',
     rpcSerialization: 'json',
     smokeChecks: [{
@@ -515,27 +713,44 @@ try {
   assert.equal(proofResult.method, 'RPC');
   assert.deepEqual(proofResult.operations.map(operation => operation.method), ['list', 'get', 'get']);
   assert.equal(proofResult.operations[2].errorTag, 'CatalogNotFoundRpc');
+  assert.equal(proofResult.url, 'http://127.0.0.1:' + port + '/catalog-api/rpc');
+  assert.deepEqual(requests, Array.from({ length: 3 }, () => ({
+    host: '127.0.0.1:' + port, route: '/catalog-api/rpc/', method: 'POST',
+  })));
+  for (const operationIndex of [1, 2, 3]) {
+    redirectRpcAt = requests.length + operationIndex;
+    await assert.rejects(proof.proveLiveRpcApi(proofApp, loadedRpc, manifest, releaseBinding));
+    assert.equal(requests.length, redirectRpcAt, 'RPC redirect must not be followed');
+    assert.ok(!requests.some(request => request.route === '/escaped'));
+  }
+  const crossAppPath = '/other-api/rpc';
+  await assert.rejects(proof.proveLiveRpcApi(
+    { ...proofApp, rpcPath: crossAppPath, smokeChecks: [{ ...proofApp.smokeChecks[0], route: crossAppPath }] },
+    { ...loadedRpc, contract: { ...loadedRpc.contract, path: crossAppPath } },
+    { backendFederation: { ...manifest.backendFederation, rpcPath: crossAppPath } }, releaseBinding,
+  ), /unsupported or cross-app/);
 } finally {
   await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   await rpcHandler.dispose();
 }
 `,
-      ],
-      {
-        cwd: workspaceRoot,
-        env: {
-          ...process.env,
-          NODE_OPTIONS: '',
-          NODE_PATH: '',
-          ULTRAMODERN_WORKSPACE_ROOT: workspaceRoot,
+        ],
+        {
+          cwd: workspaceRoot,
+          env: {
+            ...process.env,
+            NODE_OPTIONS: '',
+            NODE_PATH: '',
+            ULTRAMODERN_WORKSPACE_ROOT: workspaceRoot,
+          },
+          stdio: 'pipe',
         },
-        stdio: 'pipe',
-      },
-    );
-  } finally {
-    fs.rmSync(workspaceRoot, { recursive: true, force: true });
-  }
-});
+      );
+    } finally {
+      fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  },
+);
 
 test('Node backend proof owns the runtime lifecycle for built MicroVerticals', async () => {
   const workspaceRoot = fs.mkdtempSync(
@@ -598,7 +813,7 @@ test('Node backend proof owns the runtime lifecycle for built MicroVerticals', a
       {
         id: 'catalog',
         directory: 'verticals/catalog',
-        manifestUrl: `http://127.0.0.1:${port}/backend-mf-manifest.json`,
+        manifestUrl: 'https://catalog.example.test/backend-mf-manifest.json',
         port,
         portEnv: 'VERTICAL_CATALOG_PORT',
       },
@@ -676,6 +891,7 @@ test('Node backend proof passes exact verified container bytes to the loader', a
     backendName: 'verticalCatalogBackend',
     containerEntry: 'https://example.test/backendRemoteEntry.cjs',
     id: 'catalog',
+    port: 3021,
     manifestUrl: 'https://example.test/backend-mf-manifest.json',
   };
   const manifest = await proofModule.fetchBoundArtifact!(
