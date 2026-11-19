@@ -219,18 +219,23 @@ test('retained Tractor adoption requires an accepted live publication and exact 
       },
     ],
   };
+  const comparison = {
+    status: 'identical',
+    merge_base_commit: { sha: source },
+  };
   const execute = (
     env = {},
     runOverrides = {},
     jobData = jobs,
     acceptanceData = acceptance,
+    comparisonData = comparison,
   ) =>
     spawnSync(
       'bash',
       [
         '-e',
         '-c',
-        `gh() { if [ "\${GH_FAIL:-0}" = 1 ]; then return 1; fi; case "$2" in *"/jobs?"*) printf '%s' "$JOB_DATA";; *"/accept-bleedingdev-release.yml/runs?"*) printf '%s' "$ACCEPTANCE_DATA";; *) printf '%s' "$RUN_DATA";; esac; }\n${validate.run}`,
+        `gh() { if [ "\${GH_FAIL:-0}" = 1 ]; then return 1; fi; case "$2" in *"/compare/"*) printf '%s' "$COMPARISON_DATA";; *"/jobs?"*) printf '%s' "$JOB_DATA";; *"/accept-bleedingdev-release.yml/runs?"*) printf '%s' "$ACCEPTANCE_DATA";; *) printf '%s' "$RUN_DATA";; esac; }\n${validate.run}`,
       ],
       {
         encoding: 'utf8',
@@ -244,11 +249,32 @@ test('retained Tractor adoption requires an accepted live publication and exact 
           RUN_DATA: JSON.stringify({ ...run, ...runOverrides }),
           JOB_DATA: JSON.stringify(jobData),
           ACCEPTANCE_DATA: JSON.stringify(acceptanceData),
+          COMPARISON_DATA: JSON.stringify(comparisonData),
           ...env,
         },
       },
     );
   assert.equal(execute().status, 0);
+  assert.equal(
+    execute({}, { head_sha: 'b'.repeat(40) }, jobs, acceptance, {
+      ...comparison,
+      status: 'ahead',
+    }).status,
+    0,
+    'recovery may publish the qualified source with newer descendant tooling',
+  );
+  for (const invalid of [
+    { status: 'diverged', merge_base_commit: { sha: 'c'.repeat(40) } },
+    { status: 'behind', merge_base_commit: { sha: 'b'.repeat(40) } },
+    { status: 'ahead', merge_base_commit: { sha: 'c'.repeat(40) } },
+    { status: 'identical' },
+  ])
+    assert.notEqual(
+      execute({}, { head_sha: 'b'.repeat(40) }, jobs, acceptance, invalid)
+        .status,
+      0,
+      JSON.stringify(invalid),
+    );
   for (const patch of [
     { conclusion: 'failure' },
     { display_title: 'Accept published release from run 1234' },
@@ -290,7 +316,7 @@ test('retained Tractor adoption requires an accepted live publication and exact 
     assert.notEqual(execute(env).status, 0, JSON.stringify(env));
   for (const overrides of [
     { conclusion: 'failure' },
-    { head_sha: 'b'.repeat(40) },
+    { head_sha: 'not-a-commit' },
     { event: 'pull_request' },
     { path: '.github/workflows/other.yml' },
     { head_branch: 'other' },
