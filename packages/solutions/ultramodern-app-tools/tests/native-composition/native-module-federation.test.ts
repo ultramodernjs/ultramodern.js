@@ -969,6 +969,9 @@ describe('native Module Federation plugin', () => {
       'bootstrap.js': `import { value } from 'shared-value'; globalThis.result = value;`,
       'shared.js': 'export const value = 42;',
     });
+    // Exercise the canonical resource paths Rspack also uses for macOS /var.
+    const linkedRoot = path.join(app({}), 'application');
+    fs.symlinkSync(root, linkedRoot, 'junction');
     const core = createRequire(import.meta.url).resolve('@rsbuild/core');
     const entryBuilt: boolean[] = [];
     for (const ssr of [true, true, false, false, true, true]) {
@@ -995,6 +998,7 @@ describe('native Module Federation plugin', () => {
           [
             '-e',
             `
+const fs = require('node:fs');
 const path = require('node:path');
 const { rspack } = require(process.argv[1]);
 const root = process.argv[2];
@@ -1019,12 +1023,12 @@ compiler.run((error, stats) => compiler.close(closeError => {
     return;
   }
   const entry = stats.toJson({ all: false, modules: true, cachedModules: true })
-    .modules.find(module => module.nameForCondition === path.join(root, 'entry.js'));
+    .modules.find(module => module.nameForCondition === fs.realpathSync(path.join(root, 'entry.js')));
   process.stdout.write(JSON.stringify({ built: entry.built }));
 }));
 `,
             core,
-            root,
+            linkedRoot,
             JSON.stringify(config),
             String(ssr),
           ],
