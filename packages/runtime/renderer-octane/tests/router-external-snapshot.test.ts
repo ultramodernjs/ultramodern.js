@@ -7,6 +7,7 @@ import {
   type NativeLocationRewrite,
   type NativeRoutedApplication,
 } from '@modern-js/renderer-core/router';
+import * as nativeRouter from '@octanejs/tanstack-router';
 import {
   type AnyRoute,
   type AnyRouter,
@@ -48,8 +49,11 @@ import {
   OCTANE_FILE_ROUTE_SNAPSHOT_PROFILE,
   registerOctaneRouterWorkerContexts,
 } from '../src/router-external-snapshot';
+import { hasUnchangedOctaneFileRouteHead } from '../src/routes';
 import {
+  getOctaneWorkerRouterRewrite,
   OCTANE_WORKER_CONTEXT_KEYS,
+  registerOctaneWorkerContext,
   useOctaneWorkerContextKeys,
 } from '../src/worker-federation-contexts';
 
@@ -242,6 +246,49 @@ function nativeI18n() {
 }
 
 describe('generated Octane router Worker snapshots', () => {
+  test('ordinary SSR generations do not install a Worker snapshot profile', async () => {
+    const source = stripTypeScriptTypes(
+      readFileSync(
+        path.join(__dirname, '../src/router-external-snapshot.ts'),
+        'utf8',
+      ),
+    )
+      .replace(
+        /import\s*\{([^}]*)\}\s*from\s*['"]@octanejs\/tanstack-router['"];?/u,
+        'const {$1} = nativeRouter;',
+      )
+      .replace(/^import[\s\S]*?;\r?$/gmu, '')
+      .replace(/^export /gmu, '');
+    // A rebuilt SSR module gets fresh local state while its native router
+    // singleton survives. Evaluate the actual source twice against that owner.
+    for (let generation = 0; generation < 2; generation++) {
+      const associate: unknown = new Function(
+        'nativeRouter',
+        'hasUnchangedOctaneFileRouteHead',
+        'getOctaneWorkerRouterRewrite',
+        'OCTANE_WORKER_CONTEXT_KEYS',
+        'registerOctaneWorkerContext',
+        `${source}\nreturn associateOctaneFileRouteSnapshot;`,
+      )(
+        nativeRouter,
+        hasUnchangedOctaneFileRouteHead,
+        getOctaneWorkerRouterRewrite,
+        OCTANE_WORKER_CONTEXT_KEYS,
+        registerOctaneWorkerContext,
+      );
+      if (typeof associate !== 'function')
+        throw new Error('The actual router source exports no association');
+      const host = fixture();
+      expect(() => associate(host.router)).not.toThrow();
+      await host.router.load();
+      expect(getRouterRenderProfile(host.router)).toBeUndefined();
+      const rendered = renderToStaticMarkup(() =>
+        provideRouter(host.router, createElement(IdentityConsumer)),
+      ).html;
+      expect(rendered).toContain('catalog-host:main:host-logical-build');
+    }
+  });
+
   test('captures generated route heads without replaying their callbacks in the Worker', async () => {
     const head = rs.fn(() => ({ meta: [{ title: 'Host product' }] }));
     const host = fixture({ head });
@@ -877,3 +924,7 @@ describe('optional owning native i18n rewrite bridge', () => {
     );
   });
 });
+
+import { readFileSync } from 'node:fs';
+import { stripTypeScriptTypes } from 'node:module';
+import path from 'node:path';

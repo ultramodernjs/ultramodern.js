@@ -265,15 +265,10 @@ function ensureDefaultProfile(): void {
 
 /** Associate the genuine router produced by the generated file-route factory. */
 export function associateOctaneFileRouteSnapshot(router: AnyRouter): void {
-  ensureDefaultProfile();
   const context = publicContext(router.options.context);
   origins.set(router, {
     publicContext: context,
     rewrite: router.options.rewrite,
-  });
-  associateRouterRenderProfile(router, {
-    id: OCTANE_FILE_ROUTE_SNAPSHOT_PROFILE,
-    publicContext: context,
   });
 }
 
@@ -284,9 +279,12 @@ export function captureOctaneRouterSnapshot(
   const declared = getRouterRenderProfile(router);
   if (
     origin &&
-    declared?.key === OCTANE_FILE_ROUTE_SNAPSHOT_PROFILE.key &&
-    declared.version === OCTANE_FILE_ROUTE_SNAPSHOT_PROFILE.version
+    (!declared ||
+      (declared.key === OCTANE_FILE_ROUTE_SNAPSHOT_PROFILE.key &&
+        declared.version === OCTANE_FILE_ROUTE_SNAPSHOT_PROFILE.version))
   ) {
+    // Ordinary SSR generations do not own Worker snapshot registrations.
+    ensureDefaultProfile();
     const i18n = nativeRewriteDescriptor(router);
     associateRouterRenderProfile(router, {
       id: OCTANE_FILE_ROUTE_SNAPSHOT_PROFILE,
