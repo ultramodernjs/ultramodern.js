@@ -7,8 +7,7 @@ import { formatGeneratedWorkspaceFiles } from '../src/ultramodern-workspace/fs-i
 import { createWorkspace } from './helpers/workspace-kit';
 
 const packageRoot = path.resolve(__dirname, '..');
-// `ultracite` is an npm alias of a scoped package, so the Oxfmt it pairs with
-// is resolved through its own dependency graph rather than as a sibling.
+// Resolve Oxfmt through Ultracite's installed peer dependency graph.
 const oxfmtPackageJsonPath = createRequire(
   path.join(
     fs.realpathSync(path.join(packageRoot, 'node_modules/ultracite')),

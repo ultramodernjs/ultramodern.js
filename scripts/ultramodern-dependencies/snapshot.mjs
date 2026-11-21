@@ -114,8 +114,16 @@ export const coordinatedTransitions = Object.freeze({
     to: 'npm:@bleedingdev/tanstack-redact@0.3.2',
   },
   ultracite: {
-    from: ['8.0.1'],
-    to: 'npm:@bleedingdev/ultracite@8.2.2',
+    from: [
+      '8.0.1',
+      'npm:@bleedingdev/ultracite@8.2.2',
+      'npm:@bleedingdev/ultracite@8.2.3',
+    ],
+    via: [
+      'npm:@bleedingdev/ultracite@8.2.2',
+      'npm:@bleedingdev/ultracite@8.2.3',
+    ],
+    to: '8.2.1',
   },
   '@effect/tsgo': { from: ['0.67.0'], via: ['0.69.0'], to: '0.70.0' },
   tsrs: { from: ['0.21.0-ts7.1.0-beta'], to: '0.25.0-ts7.1.0-beta' },
@@ -514,7 +522,6 @@ export const holds = Object.freeze({
   '@rsbuild-image/core': 'no stable release beyond existing next.36',
   '@rsbuild-image/react': 'no stable release beyond existing next.36',
   miniflare: 'Wrangler v5 beta contract; latest tag is v4',
-  ultracite: 'upstream MIT notice correction and exact sidecar identity',
 });
 
 // These declaration names were current in the same registry snapshot. Their

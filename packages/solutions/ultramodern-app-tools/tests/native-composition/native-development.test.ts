@@ -1611,13 +1611,37 @@ describe('native development', () => {
       expect(
         scripts.some(script => script.source.includes('REMOTE_LAZY_CHUNK')),
       ).toBe(false);
-      // Reproduce a watcher replay between loading the runtime and editing A.
-      // One hot.check must advance only to this unchanged intermediate graph.
-      const unchangedPublication = app.nextClientPublication();
-      app.invalidateClient();
-      await unchangedPublication;
-      const lastPublishedPublicPath = (await (await fetch(manifestUrl)).json())
-        .metaData.publicPath;
+      let appliedHash: string = initialManifest.compilationHash;
+      const applyHotUpdatesThrough = async (targetHash: string) => {
+        const hashes = app.clientCompilationHashes();
+        const first = hashes.indexOf(appliedHash);
+        const last = hashes.indexOf(targetHash);
+        expect(first).toBeGreaterThanOrEqual(0);
+        expect(last).toBeGreaterThan(first);
+        for (const sourceHash of hashes.slice(first, last)) {
+          const beforeUpdate = scripts.length;
+          expect(await widget.hotUpdate()).not.toBeNull();
+          expect(
+            scripts
+              .slice(beforeUpdate)
+              .some(script =>
+                script.url.endsWith(`.${sourceHash}.hot-update.js`),
+              ),
+          ).toBe(true);
+        }
+        appliedHash = targetHash;
+      };
+      // Apply each watcher replay before another compile can expire its live
+      // delta. Two replays expose deferred consumption deterministically.
+      let lastPublishedPublicPath = initialPublicPath;
+      for (let replay = 0; replay < 2; replay++) {
+        const unchangedPublication = app.nextClientPublication();
+        app.invalidateClient();
+        await unchangedPublication;
+        const replayManifest = await (await fetch(manifestUrl)).json();
+        await applyHotUpdatesThrough(replayManifest.compilationHash);
+        lastPublishedPublicPath = replayManifest.metaData.publicPath;
+      }
       // Compile A finishes, but a later edit supersedes it before it is
       // published. Its hot update chains from the last completed client graph.
       const superseded = Promise.withResolvers<string[]>();
@@ -1633,25 +1657,9 @@ describe('native development', () => {
         `../${supersededHash}/`,
         initialPublicPath,
       ).href;
-      // Apply the known chain exactly once per source hash, through A, before
-      // later compiles can clean away its live delta.
-      const updateSources = completedHashes.slice(
-        completedHashes.indexOf(initialManifest.compilationHash),
-        -1,
-      );
-      expect(updateSources[0]).toBe(initialManifest.compilationHash);
-      expect(updateSources.length).toBeGreaterThan(1);
-      for (const sourceHash of updateSources) {
-        const beforeUpdate = scripts.length;
-        expect(await widget.hotUpdate()).not.toBeNull();
-        expect(
-          scripts
-            .slice(beforeUpdate)
-            .some(script =>
-              script.url.endsWith(`.${sourceHash}.hot-update.js`),
-            ),
-        ).toBe(true);
-      }
+      // Consume A before later compiles can expire its live delta. Retaining
+      // an applied graph does not retain historical hot-update manifests.
+      await applyHotUpdatesThrough(supersededHash);
       expect(
         (await (await fetch(manifestUrl)).json()).metaData.publicPath,
       ).toBe(lastPublishedPublicPath);

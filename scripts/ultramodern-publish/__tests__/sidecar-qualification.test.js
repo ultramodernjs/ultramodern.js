@@ -7,7 +7,10 @@ const path = require('node:path');
 const test = require('node:test');
 const load = () => import('../qualify-sidecar-bundle.mjs');
 
-async function fixture(t, { sdk = false, redact = false } = {}) {
+async function fixture(
+  t,
+  { sdk = false, redact = false, aliasConsumer = false } = {},
+) {
   const root = fs.realpathSync(
     fs.mkdtempSync(
       path.join(
@@ -29,11 +32,15 @@ async function fixture(t, { sdk = false, redact = false } = {}) {
       ? [{ name: '@bleedingdev/tanstack-redact', version: '0.3.2' }]
       : [
           { name: '@bleedingdev/braces', version: '3.0.4' },
-          {
-            name: '@bleedingdev/micromatch',
-            version: '4.0.8',
-            dependencies: { braces: 'npm:@bleedingdev/braces@3.0.4' },
-          },
+          ...(aliasConsumer
+            ? [
+                {
+                  name: '@bleedingdev/fixture-parent',
+                  version: '1.0.0',
+                  dependencies: { braces: 'npm:@bleedingdev/braces@3.0.4' },
+                },
+              ]
+            : []),
         ];
   const staged = definitions.map(definition => {
     const id = definition.name.split('/')[1];
@@ -151,7 +158,7 @@ test('read-only loopback registry serves only accepted metadata and snapshotted 
 });
 
 test('packed installation checks real roots, all corrected alias edges, and payload bytes', async t => {
-  const f = await fixture(t);
+  const f = await fixture(t, { aliasConsumer: true });
   const { assertPackedSidecarInstall } = await load();
   assert.doesNotThrow(() =>
     assertPackedSidecarInstall(
@@ -221,7 +228,7 @@ test('lockfile cannot substitute npm history, a different version, or an unserve
 });
 
 test('a corrected dependency must resolve the installed fork identity', async t => {
-  const f = await fixture(t);
+  const f = await fixture(t, { aliasConsumer: true });
   const { assertPackedSidecarInstall } = await load();
   const manifest = path.join(f.workspace, 'node_modules/braces/package.json');
   const value = JSON.parse(fs.readFileSync(manifest, 'utf8'));
@@ -341,6 +348,49 @@ test('install failure stops the registry and removes the partial consumer', asyn
       .readdirSync(f.root)
       .filter(name => name.startsWith('sidecar-qualification-')),
     [],
+  );
+});
+
+test('parser npm installation protects stock transitive Braces with the generator override', async t => {
+  const f = await fixture(t);
+  const { qualifyPackedSidecars } = await load();
+  const inspected = new Error('manifest inspected before installation');
+  await assert.rejects(
+    () =>
+      qualifyPackedSidecars(
+        { manifest: { profile: 'parser' }, sidecars: f.sidecars },
+        {
+          scratchRoot: f.root,
+          startRegistry: async () => ({
+            registryUrl: f.registryUrl,
+            servedTarballs: f.served,
+            stop: async () => {},
+          }),
+          run: async (command, args, options) => {
+            assert.equal(command, 'npm');
+            assert.equal(args[0], 'install');
+            const manifest = JSON.parse(
+              fs.readFileSync(path.join(options.cwd, 'package.json')),
+            );
+            assert.deepEqual(manifest.overrides, {
+              'braces@>=3.0.0 <3.0.4': 'npm:@bleedingdev/braces@3.0.4',
+            });
+            assert.deepEqual(manifest.dependencies, {
+              '@bleedingdev/braces': '3.0.4',
+              micromatch: '4.0.8',
+              'fast-glob': '3.3.3',
+              'find-workspaces': '0.3.1',
+              '@rsbuild/plugin-source-build': '1.0.7',
+              ultracite: '8.2.1',
+              oxlint: '1.94.0',
+              oxfmt: '0.79.0',
+              typescript: '7.0.2',
+            });
+            throw inspected;
+          },
+        },
+      ),
+    error => error === inspected,
   );
 });
 

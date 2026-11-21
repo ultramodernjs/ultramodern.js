@@ -76,9 +76,7 @@ export const TYPESCRIPT_STABLE_VERSION = '7.0.2';
 export const TYPESCRIPT_VERSION = TYPESCRIPT_STABLE_VERSION;
 export const OXLINT_VERSION = '1.94.0';
 export const OXFMT_VERSION = '0.79.0';
-// Upstream artifact identity and independently versioned MIT-notice correction.
 export const ULTRACITE_VERSION = '8.2.1';
-export const ULTRACITE_FORK_VERSION = '8.2.2';
 export const LEFTHOOK_VERSION = '2.2.2';
 export const I18NEXT_VERSION = '27.1.5';
 export const MODULE_FEDERATION_NODE_VERSION = '2.7.53';
@@ -162,7 +160,7 @@ export const ULTRAMODERN_PACKAGE_PINS = {
     oxlint: OXLINT_VERSION,
     oxfmt: OXFMT_VERSION,
     tsrs: TSRS_VERSION,
-    ultracite: `npm:@bleedingdev/ultracite@${ULTRACITE_FORK_VERSION}`,
+    ultracite: ULTRACITE_VERSION,
     wrangler: WRANGLER_VERSION,
     'zephyr-agent': ZEPHYR_AGENT_VERSION,
   },

@@ -7,6 +7,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { ULTRAMODERN_SIDECAR_OVERRIDES } from '../../packages/toolkit/ultramodern-create/src/ultramodern-workspace/versions.ts';
 import cliKit from '../lib/cli-kit.js';
 import processKit from '../lib/process-kit.js';
 import { isDirectRun } from './lib/direct-run.mjs';
@@ -459,12 +460,38 @@ async function packedApiProbeMain() {
   fs.mkdirSync(path.join(fixture, 'src'), { recursive: true });
   for (const file of ['a.js', 'b.ts', 'ignored.js', 'c.txt'])
     fs.writeFileSync(path.join(fixture, 'src', file), '');
-  const match = requireInstalledPackage('@bleedingdev/micromatch');
+  // The generator's resolver policy keeps the corrected leaf while every
+  // ancestor uses its original upstream implementation.
+  for (const [owner, dependencies] of [
+    ['micromatch', []],
+    ['fast-glob', ['micromatch']],
+    ['find-workspaces', ['fast-glob', 'micromatch']],
+    ['@rsbuild/plugin-source-build', ['fast-glob', 'micromatch']],
+    ['ultracite', ['fast-glob', 'micromatch']],
+    ['ultracite', ['find-workspaces', 'fast-glob', 'micromatch']],
+  ]) {
+    let ownerRequire = createRequire(
+      path.join(root, 'node_modules', owner, 'package.json'),
+    );
+    for (const dependency of dependencies)
+      ownerRequire = createRequire(ownerRequire.resolve(dependency));
+    const leaf = ownerRequire('braces');
+    assert.equal(
+      ownerRequire('braces/package.json').name,
+      '@bleedingdev/braces',
+      `${owner} must reach the corrected parser`,
+    );
+    assert.throws(() => leaf.parse(`${'('.repeat(101)}x${')'.repeat(101)}`), {
+      name: 'SyntaxError',
+      message: /nesting depth exceeds/u,
+    });
+  }
+  const match = requireInstalledPackage('micromatch');
   assert.deepEqual(
     match(['src/a.js', 'src/b.ts', 'src/c.txt'], 'src/*.{js,ts}'),
     ['src/a.js', 'src/b.ts'],
   );
-  const glob = requireInstalledPackage('@bleedingdev/fast-glob');
+  const glob = requireInstalledPackage('fast-glob');
   assert.deepEqual(
     (
       await glob('src/*.{js,ts}', { cwd: fixture, ignore: ['**/ignored.js'] })
@@ -487,7 +514,7 @@ async function packedApiProbeMain() {
       JSON.stringify(manifest),
     );
   }
-  const find = await load('@bleedingdev/find-workspaces');
+  const find = await load('find-workspaces');
   const options = { stopDir: fixture, cache: find.createWorkspacesCache() };
   assert.deepEqual(
     find.findWorkspacesRoot(path.join(workspace, 'packages/a'), options),
@@ -511,7 +538,7 @@ async function packedApiProbeMain() {
       package: manifest,
     })),
   );
-  const source = await load('@bleedingdev/rsbuild-plugin-source-build');
+  const source = await load('@rsbuild/plugin-source-build');
   const sourcePlugin = source.pluginSourceBuild();
   assert.equal(sourcePlugin.name, 'rsbuild:source-build');
   assert.equal(typeof sourcePlugin.setup, 'function');
@@ -545,14 +572,14 @@ async function packedApiProbeMain() {
     ['b'],
   );
 
-  const ultraciteDir = path.join(root, 'node_modules/@bleedingdev/ultracite');
+  const ultraciteDir = path.join(root, 'node_modules/ultracite');
   const ultraciteRequire = createRequire(
     path.join(ultraciteDir, 'package.json'),
   );
   const errors = [];
   const config = ultraciteRequire('jsonc-parser').parse(
     fs.readFileSync(
-      requireInstalledPackage.resolve('@bleedingdev/ultracite/biome/core'),
+      requireInstalledPackage.resolve('ultracite/biome/core'),
       'utf8',
     ),
     errors,
@@ -564,19 +591,17 @@ async function packedApiProbeMain() {
   assert.equal(config.formatter.indentStyle, 'space');
   assert.equal(config.formatter.indentWidth, 2);
   assert.ok(config.files.includes.includes('!!**/node_modules'));
-  const { default: jsPlugins } = await load(
-    '@bleedingdev/ultracite/oxlint/js-plugins',
-  );
-  assert.equal(jsPlugins.rules['sonarjs/no-redundant-optional'], 'off');
-  assert.equal(jsPlugins.rules['sonarjs/no-inconsistent-returns'], 'off');
-  assert.equal(jsPlugins.rules['react-doctor/js-set-map-lookups'], 'off');
-  const { default: nativeCore } = await load(
-    '@bleedingdev/ultracite/oxlint/core',
-  );
+  const { default: nativeCore } = await load('ultracite/oxlint/core');
   assert.equal(
     nativeCore.rules['typescript/switch-exhaustiveness-check'],
     'error',
   );
+  const { default: nativeReact } = await load('ultracite/oxlint/react');
+  assert.equal(nativeReact.rules['react/button-has-type'], 'error');
+  const { default: formatter } = await load('ultracite/oxfmt');
+  assert.equal(formatter.tabWidth, 2);
+  assert.equal(formatter.useTabs, false);
+  assert.equal(formatter.semi, true);
   const manifest = JSON.parse(
     fs.readFileSync(path.join(ultraciteDir, 'package.json'), 'utf8'),
   );
@@ -629,6 +654,9 @@ export async function qualifyPackedSidecars(
           ...(profile === 'parser' ? { typescript: '7.0.2' } : {}),
           ...selected.qualificationDependencies,
         },
+        ...(profile === 'parser'
+          ? { overrides: ULTRAMODERN_SIDECAR_OVERRIDES }
+          : {}),
       }),
     );
     const userConfig = path.join(workspace, 'user.npmrc');

@@ -2,14 +2,7 @@ import fs from 'node:fs';
 // Closed inputs shared by the standalone producer, installer and consumer graph.
 // This label records dependency ordering only; it is no cohort/version qualification.
 export const sidecarPublishBefore = '@bleedingdev/modern-js-utils';
-export const sidecarRecipeIds = Object.freeze([
-  'braces',
-  'fast-glob',
-  'find-workspaces',
-  'micromatch',
-  'rsbuild-plugin-source-build',
-  'ultracite',
-]);
+export const sidecarRecipeIds = Object.freeze(['braces']);
 export const sidecarQualificationProbeKeys = Object.freeze([
   'packed-install',
   'braces-api',
@@ -19,7 +12,15 @@ export const sidecarQualificationProbeKeys = Object.freeze([
 ]);
 export const sidecarProfiles = Object.freeze({
   parser: Object.freeze({
-    qualificationDependencies: Object.freeze({ oxlint: '1.94.0' }),
+    qualificationDependencies: Object.freeze({
+      '@rsbuild/plugin-source-build': '1.0.7',
+      'fast-glob': '3.3.3',
+      'find-workspaces': '0.3.1',
+      micromatch: '4.0.8',
+      oxfmt: '0.79.0',
+      oxlint: '1.94.0',
+      ultracite: '8.2.1',
+    }),
     recipeIds: sidecarRecipeIds,
     probeKeys: sidecarQualificationProbeKeys,
     publishBefore: sidecarPublishBefore,
@@ -181,11 +182,11 @@ export function sidecarProfileRecipes(name) {
     ),
   );
   if (
-    recipes.length !== 21 ||
-    new Set(recipes.map(recipe => recipe.id)).size !== 21
+    recipes.length !== active.length ||
+    new Set(recipes.map(recipe => recipe.id)).size !== active.length
   )
     throw new Error(
-      'Candidate recipe set must contain the reviewed 21 identities',
+      'Candidate recipe set must contain exactly the active recipe identities',
     );
   for (const recipe of recipes) {
     const original = active.find(item => item.id === recipe.id);

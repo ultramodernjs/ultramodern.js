@@ -54,22 +54,16 @@ test('unpublished recipe roots require the exact consumer, dependency and upstre
       '2.9.2',
     ],
     [
-      'packages/cli/builder',
-      '@bleedingdev/modern-js-builder',
-      '@rsbuild/plugin-source-build',
-      '1.0.7',
-    ],
-    [
-      'packages/cli/builder',
-      '@bleedingdev/modern-js-builder',
-      '@rsbuild/plugin-type-check',
-      '1.6.0',
+      'packages/cli/plugin-bff-extensions',
+      '@bleedingdev/modern-js-plugin-bff-extensions',
+      '@module-federation/runtime',
+      '2.9.3',
     ],
     [
       'packages/toolkit/ultramodern-create',
       '@bleedingdev/modern-js-ultramodern-create',
-      'ultracite',
-      '7.12.2',
+      '@module-federation/modern-js-v3',
+      '2.9.3',
     ],
   ];
   for (const [importer, published, dependency, version] of roots) {
@@ -127,6 +121,54 @@ test('unpublished recipe roots require the exact consumer, dependency and upstre
     assert.throws(
       () => assertRecipeConsumers([recipe], consumers),
       /has no runtime consumer/u,
+    );
+  }
+});
+
+test('stock source-build, type-check and Ultracite consumers cannot claim unpublished fork exemptions', () => {
+  for (const [importer, published, dependency, version] of [
+    [
+      'packages/cli/builder',
+      '@bleedingdev/modern-js-builder',
+      '@rsbuild/plugin-source-build',
+      '1.0.7',
+    ],
+    [
+      'packages/cli/builder',
+      '@bleedingdev/modern-js-builder',
+      '@rsbuild/plugin-type-check',
+      '1.6.0',
+    ],
+    [
+      'packages/toolkit/ultramodern-create',
+      '@bleedingdev/modern-js-ultramodern-create',
+      'ultracite',
+      '7.12.2',
+    ],
+  ]) {
+    const recipe = {
+      id: dependency,
+      upstream: { name: dependency, version },
+      fork: { name: `@bleedingdev/${dependency.split('/').pop()}`, version },
+      manifestChanges: {},
+    };
+    for (const consumer of [importer, published]) {
+      for (const specifier of [version, `${version}(peer@1.0.0)`])
+        assert.equal(
+          isUnpublishedForkEdge(consumer, dependency, specifier, recipe),
+          false,
+          `${consumer}: ${dependency}`,
+        );
+    }
+    assert.throws(
+      () =>
+        assertRecipeConsumers([recipe], {
+          generatorPins: [],
+          publishedManifests: [
+            { name: published, dependencies: { [dependency]: version } },
+          ],
+        }),
+      /declare npm:/u,
     );
   }
 });
