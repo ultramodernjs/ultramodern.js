@@ -5,8 +5,8 @@
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
   "totalFiles": 1460,
-  "totalHunks": 4961,
-  "totalChangedLines": 104817,
+  "totalHunks": 4958,
+  "totalChangedLines": 104834,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -3830,8 +3830,8 @@
     },
     {
       "file": "packages/server/core/src/adapters/node/plugins/resource.ts",
-      "hunks": 29,
-      "changedLines": 188
+      "hunks": 26,
+      "changedLines": 205
     },
     {
       "file": "packages/server/core/src/adapters/node/plugins/static.ts",
