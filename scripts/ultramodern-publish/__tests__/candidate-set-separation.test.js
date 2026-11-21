@@ -42,8 +42,8 @@ test('candidate bundle inputs are independent of the current published consumer 
   const candidates = ['mf-cohort', 'tanstack-redact', 'parser'].flatMap(
     sidecarProfileRecipes,
   );
-  assert.equal(candidates.length, 21);
-  assert.equal(new Set(candidates.map(recipe => recipe.id)).size, 21);
+  assert.equal(candidates.length, 16);
+  assert.equal(new Set(candidates.map(recipe => recipe.id)).size, 16);
   assertRecipeGraph(candidates);
   // Live HEAD manifests are not a candidate oracle: they may already declare
   // candidate aliases. Each negative/positive case uses an explicit fixture.

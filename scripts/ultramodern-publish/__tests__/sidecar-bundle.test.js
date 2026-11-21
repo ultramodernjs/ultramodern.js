@@ -95,7 +95,7 @@ async function fixture(t, profile = 'parser', metadata = {}) {
 
 test('independent bundle accepts only its unchanged v2 artifact and exact same-run qualification', async t => {
   const f = await fixture(t);
-  assert.equal(f.accepted.sidecars.packages.length, 6);
+  assert.equal(f.accepted.sidecars.packages.length, 1);
   assert.equal(f.accepted.sidecars.manifest.schemaVersion, 2);
   assert.equal(
     f.accepted.sidecars.manifest.publishBefore,

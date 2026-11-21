@@ -80,6 +80,7 @@
     "template",
     "template-workspace",
     "templates",
+    "third-party-licenses",
     "dist",
     "bin"
   ],
@@ -103,7 +104,7 @@
     "miniflare": "5.20261113.0-beta",
     "oxfmt": "0.79.0",
     "tsx": "^4.23.15",
-    "ultracite": "npm:@bleedingdev/ultracite@8.2.2",
+    "ultracite": "8.2.1",
     "@modern-js/renderer-core": "workspace:*",
     "@modern-js/renderer-octane": "workspace:*",
     "@modern-js/renderer-solid": "workspace:*",

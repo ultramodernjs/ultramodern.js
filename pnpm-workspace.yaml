@@ -250,7 +250,6 @@ minimumReleaseAgeExclude:
   - '@bleedingdev/mf-runtime@2.9.5'
   - '@bleedingdev/mf-sdk@2.9.5'
   - '@bleedingdev/mf-webpack-bundler-runtime@2.9.5'
-  - '@bleedingdev/ultracite@8.2.2'
   - check-dependency-version-consistency@6.0.1
   - http-proxy-middleware@4.2.2
   - i18next-http-middleware@3.10.2

@@ -37,7 +37,7 @@ before(async () => {
 after(() => fs.rmSync(directory, { recursive: true, force: true }));
 
 test('latest recipes preserve complete identities, notices and exact correction edges', () => {
-  assert.equal(collectSidecarPackages().length, 21);
+  assert.equal(collectSidecarPackages().length, 16);
   for (const recipe of recipes) {
     const root = packageDirectory(recipe.id);
     const manifest = JSON.parse(

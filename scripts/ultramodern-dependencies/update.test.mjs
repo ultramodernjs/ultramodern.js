@@ -1230,7 +1230,7 @@ test('uses exact reviewed supply identities for upstream and existing fork decla
         'npm:@bleedingdev/mf-modern-js-v3@2.9.5',
       '@module-federation/node': 'npm:@bleedingdev/mf-node@2.7.54',
       '@tanstack/redact': 'npm:@bleedingdev/tanstack-redact@0.3.2',
-      ultracite: 'npm:@bleedingdev/ultracite@8.2.2',
+      ultracite: '8.2.1',
     },
     peerDependencies: {
       '@module-federation/enhanced': 'npm:@bleedingdev/mf-enhanced@2.9.5',
@@ -1246,6 +1246,49 @@ test('uses exact reviewed supply identities for upstream and existing fork decla
       }),
     /unreviewed coordinated old edge/,
   );
+});
+
+test('retires only reviewed Ultracite forks to the exact stock generator pin', () => {
+  const historical = { dependencies: { ultracite: '8.0.1' } };
+  const stock = { dependencies: { ultracite: '8.2.1' } };
+  const file = 'packages/toolkit/ultramodern-create/package.json';
+  for (const version of ['8.2.2', '8.2.3']) {
+    const fork = {
+      dependencies: { ultracite: `npm:@bleedingdev/ultracite@${version}` },
+    };
+    for (const expected of [historical, fork]) {
+      const result = plan(expected, fork, file);
+      assert.deepEqual(result.manifest, stock);
+      assert.deepEqual(result.changes, [
+        {
+          field: 'dependencies',
+          name: 'ultracite',
+          from: fork.dependencies.ultracite,
+          to: '8.2.1',
+        },
+      ]);
+      assert.equal(plan(expected, result.manifest, file).changes.length, 0);
+    }
+  }
+  assert.equal(plan(historical, stock, file).changes.length, 0);
+  for (const value of [
+    'npm:@bleedingdev/ultracite@8.2.4',
+    'npm:@someone-else/ultracite@8.2.2',
+    'npm:ultracite@8.2.1',
+    '^8.2.1',
+    'https://registry.npmjs.org/ultracite/-/ultracite-8.2.1.tgz',
+  ]) {
+    const unreviewed = { dependencies: { ultracite: value } };
+    assert.throws(
+      () => plan(historical, unreviewed, file),
+      /unexpected old edge dependencies\.ultracite/u,
+    );
+    if (!value.startsWith('https:'))
+      assert.throws(
+        () => plan(unreviewed, unreviewed, file),
+        /unreviewed coordinated old edge dependencies\.ultracite/u,
+      );
+  }
 });
 
 test('keeps admitting broad peers even for explicitly coordinated packages', () => {

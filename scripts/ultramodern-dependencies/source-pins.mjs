@@ -106,7 +106,6 @@ function reviewedSourcePins(read) {
     OXLINT_VERSION: targets.oxlint,
     OXFMT_VERSION: targets.oxfmt,
     ULTRACITE_VERSION: targets.ultracite,
-    ULTRACITE_FORK_VERSION: forkVersion('ultracite'),
     LEFTHOOK_VERSION: supplementalSourcePins.lefthook,
     I18NEXT_VERSION: targets.i18next,
     MINIFLARE_VERSION: coordinatedTransitions.miniflare.to,

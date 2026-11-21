@@ -48,24 +48,6 @@ export const unpublishedForkEdges = [
     published: '@bleedingdev/modern-js-federation-runtime',
     dependency: '@module-federation/sdk',
   },
-  // These exact source consumers declare the parser-correction recipes until
-  // their new fork names are published. This validates recipe reachability;
-  // it does not correct the current installation.
-  {
-    importer: 'packages/cli/builder',
-    published: '@bleedingdev/modern-js-builder',
-    dependency: '@rsbuild/plugin-source-build',
-  },
-  {
-    importer: 'packages/cli/builder',
-    published: '@bleedingdev/modern-js-builder',
-    dependency: '@rsbuild/plugin-type-check',
-  },
-  {
-    importer: 'packages/toolkit/ultramodern-create',
-    published: '@bleedingdev/modern-js-ultramodern-create',
-    dependency: 'ultracite',
-  },
   {
     importer: 'packages/cli/plugin-bff-extensions',
     published: '@bleedingdev/modern-js-plugin-bff-extensions',

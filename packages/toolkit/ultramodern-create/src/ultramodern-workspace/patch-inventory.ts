@@ -80,16 +80,6 @@ export default [
       'Derive tpl from template.smart.ast on the declared Babel core peer, exactly as SVGR constructs it at runtime, instead of importing an undeclared private Babel template type. Repository qualification covers Babel 8 coexistence; published consumers require the corrected authenticated sidecar closure, not this repository-only patch. Generated workspaces remain patch-free.',
   },
   {
-    packageName: 'ultracite',
-    version: '8.2.1',
-    path: 'patches/ultracite@8.2.1.patch',
-    sha256: '5d81abe0bb21b38a7c6dd92a8770f1be6446ef07a291b4091b91fd137f690a2c',
-    repository: false,
-    workspace: null,
-    reason:
-      'Include the upstream MIT notice omitted from the npm artifact, preserving the exact license.md bytes at registry source commit 943db54bde8bd34afd029f8f84ceddd1bb42ecdb.',
-  },
-  {
     packageName: 'braces',
     version: '3.0.3',
     path: 'patches/braces@3.0.3.patch',

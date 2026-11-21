@@ -229,29 +229,16 @@ test('recipe-only sidecar closure records exact publication identities and alias
   assert.equal(byName.get('@bleedingdev/mf-cli').recipeOnly, true);
   assert.equal(byName.get('@bleedingdev/mf-enhanced').recipeOnly, true);
 
-  const parserClosure = [
-    ['braces', '3.0.4', {}],
-    ['micromatch', '4.0.8', { braces: 'npm:@bleedingdev/braces@3.0.4' }],
-    ['fast-glob', '3.3.3', { micromatch: 'npm:@bleedingdev/micromatch@4.0.8' }],
-    [
-      'rsbuild-plugin-source-build',
-      '1.0.7',
-      { 'fast-glob': 'npm:@bleedingdev/fast-glob@3.3.3' },
-    ],
-    [
-      'find-workspaces',
-      '0.3.1',
-      { 'fast-glob': 'npm:@bleedingdev/fast-glob@3.3.3' },
-    ],
-    [
-      'ultracite',
-      '8.2.2',
-      {
-        'fast-glob': 'npm:@bleedingdev/fast-glob@3.3.3',
-        'find-workspaces': 'npm:@bleedingdev/find-workspaces@0.3.1',
-      },
-    ],
-  ];
+  const parserClosure = [['braces', '3.0.4', {}]];
+  assert.equal(sidecars.length, 16);
+  for (const name of [
+    'micromatch',
+    'fast-glob',
+    'find-workspaces',
+    'rsbuild-plugin-source-build',
+    'ultracite',
+  ])
+    assert.equal(byName.has(`@bleedingdev/${name}`), false, name);
   for (const [name, version, dependencies] of parserClosure) {
     const sidecar = byName.get(`@bleedingdev/${name}`);
     assert.equal(sidecar.version, version);
@@ -268,14 +255,14 @@ test('recipe-only sidecar closure records exact publication identities and alias
     byName.get(`@bleedingdev/${name}`),
   );
   const closureOrder = sidecarsModule.sidecarPublishOrder(closure);
-  assert.equal(closureOrder.length, 6);
+  assert.equal(closureOrder.length, 1);
   sidecarsModule.validateAliasConsistency([], closureOrder);
   publication.assertSidecarPublishOrder(closureOrder);
   assert.throws(
     () =>
       sidecarsModule.validateAliasConsistency(
         [],
-        closure.filter(item => item.name !== '@bleedingdev/braces'),
+        sidecars.filter(item => item.name !== '@bleedingdev/mf-runtime-core'),
       ),
     /neither a staged sidecar nor a cohort package/u,
   );

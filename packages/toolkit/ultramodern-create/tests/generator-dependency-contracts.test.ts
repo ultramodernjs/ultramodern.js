@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -59,10 +60,7 @@ test('workspace manifest producers emit the reviewed toolchain and dependency co
     assert.equal(workspace.devDependencies.miniflare, '5.20261113.0-beta');
     assert.equal(workspace.devDependencies.oxlint, '1.94.0');
     assert.equal(workspace.devDependencies.oxfmt, '0.79.0');
-    assert.equal(
-      workspace.devDependencies.ultracite,
-      'npm:@bleedingdev/ultracite@8.2.2',
-    );
+    assert.equal(workspace.devDependencies.ultracite, '8.2.1');
     assert.equal(app.dependencies['@tanstack/react-router'], '1.170.46');
     assert.equal(app.dependencies.i18next, '27.1.5');
     assert.equal(app.dependencies.react, '19.3.1');
@@ -75,6 +73,26 @@ test('workspace manifest producers emit the reviewed toolchain and dependency co
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('stock Ultracite presets retain the shipped seven-line MIT notice', () => {
+  const packageRoot = path.resolve(__dirname, '..');
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'),
+  );
+  const workspace = createRootPackageJson('ultracite-notice', source);
+  assert.equal(manifest.dependencies.ultracite, '8.2.1');
+  assert.equal(workspace.devDependencies.ultracite, '8.2.1');
+  assert.ok(manifest.files.includes('third-party-licenses'));
+  const notice = fs.readFileSync(
+    path.join(packageRoot, 'third-party-licenses/ultracite-MIT.txt'),
+    'utf8',
+  );
+  assert.equal(notice.trimEnd().split('\n').length, 7);
+  assert.equal(
+    createHash('sha256').update(notice).digest('hex'),
+    '1489f7f3f3a315714a5499c0edd932102db31228dfc17eebf4c89a620988a813',
+  );
 });
 
 test.each(

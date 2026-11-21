@@ -18,6 +18,29 @@ const supportInputs = JSON.parse(
   read('scripts/ultramodern-support-artifacts/inputs.json'),
 );
 
+test('stock Ultracite has no retired fork recipe or local suppression patch', () => {
+  assert.equal(
+    recipes.some(recipe => recipe.upstream.name === 'ultracite'),
+    false,
+  );
+  assert.equal(
+    inventory.some(patch => patch.packageName === 'ultracite'),
+    false,
+  );
+  assert.deepEqual(
+    Object.keys(workspace.patchedDependencies).filter(selector =>
+      selector.startsWith('ultracite@'),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    fs
+      .readdirSync(new URL('patches/', root))
+      .filter(file => file.startsWith('ultracite@')),
+    [],
+  );
+});
+
 test('repository SVGR declarations derive the actual template type from their declared peer', () => {
   const patch = inventory.find(
     item =>

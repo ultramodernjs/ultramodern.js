@@ -18,8 +18,7 @@ interface OxlintReport {
 }
 
 const packageRoot = path.resolve(__dirname, '..');
-// `ultracite` is an npm alias of a scoped package, so its Oxc tools are
-// resolved through its own dependency graph rather than as siblings.
+// Resolve Oxc tools through Ultracite's installed peer dependency graph.
 const ultracitePackageDir = fs.realpathSync(
   path.join(packageRoot, 'node_modules/ultracite'),
 );

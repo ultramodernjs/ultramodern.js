@@ -1040,14 +1040,7 @@ test('--check-registry fails on a missing sidecar name before any bundle exists'
 
 test('bundle-free sidecar registry checks read only their closed profile', async () => {
   const { checkSidecarRegistry, parseArgs } = await importCli();
-  const parserNames = [
-    '@bleedingdev/braces',
-    '@bleedingdev/fast-glob',
-    '@bleedingdev/find-workspaces',
-    '@bleedingdev/micromatch',
-    '@bleedingdev/rsbuild-plugin-source-build',
-    '@bleedingdev/ultracite',
-  ];
+  const parserNames = ['@bleedingdev/braces'];
   for (const [profile, expected] of [
     ['mf-sdk', ['@bleedingdev/mf-sdk']],
     ['tanstack-redact', ['@bleedingdev/tanstack-redact']],
