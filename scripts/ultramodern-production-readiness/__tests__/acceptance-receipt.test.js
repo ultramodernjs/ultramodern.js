@@ -153,22 +153,18 @@ async function createReceiptFixture(root, mode = 'source') {
     receipt,
     receiptApi,
   });
-  if (mode === 'source') {
-    const runtimeModuleFederation =
-      receipt.binding.artifacts.moduleFederation.filter(
-        item => item.packageName === '@module-federation/runtime',
-      );
-    for (const platform of ['node', 'workerd']) {
-      for (const app of receipt.binding.runtimeIdentity[platform]) {
-        app.moduleFederation = structuredClone(runtimeModuleFederation);
-        app.buildMarker = digest(`${platform}:${app.appId}`);
-      }
-      receipt.results.find(
-        result => result.id === `${platform}-release-identity`,
-      ).details.apps = structuredClone(
-        receipt.binding.runtimeIdentity[platform],
-      );
+  const runtimeModuleFederation =
+    receipt.binding.artifacts.moduleFederation.filter(
+      item => item.packageName === '@module-federation/runtime',
+    );
+  for (const platform of ['node', 'workerd']) {
+    for (const app of receipt.binding.runtimeIdentity[platform]) {
+      app.moduleFederation = structuredClone(runtimeModuleFederation);
+      app.buildMarker = digest(`${platform}:${app.appId}`);
     }
+    receipt.results.find(
+      result => result.id === `${platform}-release-identity`,
+    ).details.apps = structuredClone(receipt.binding.runtimeIdentity[platform]);
   }
   fs.writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
   return {
@@ -442,6 +438,122 @@ test('receipt validates the recorded source trust exemptions and keeps published
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('published receipt accepts its own closure only with complete runtime and identity proof', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'published-receipt-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const fixture = await createReceiptFixture(root);
+  const source = JSON.parse(fixture.receiptSource);
+  const published = structuredClone(source);
+  published.mode = 'published';
+  published.registry.sourceCandidateTrustPolicyExclude = [];
+  for (const result of published.results) {
+    if ('artifactMode' in result.details) {
+      result.details.artifactMode = 'published';
+    }
+  }
+  const closure = published.results.find(
+    result => result.id === 'dependency-closure-audit',
+  ).details.closureIdentities;
+  closure[0].version = '1.0.1';
+  const { canonicalJson, sha256 } = await import(
+    '../published-create-proof/release-age-audit.mjs'
+  );
+  published.binding.supplyChain.closureSha256 = sha256(canonicalJson(closure));
+  assert.notEqual(
+    source.binding.supplyChain.closureSha256,
+    published.binding.supplyChain.closureSha256,
+  );
+  const {
+    assertAcceptanceReceipt,
+    verifyAcceptanceReceiptOperationalEvidence,
+  } = fixture.receiptApi;
+  const verify = receipt =>
+    assertAcceptanceReceipt(receipt, {
+      expectedMode: 'published',
+      release: fixture.release,
+      runIdentity: fixture.runIdentity,
+    });
+  verify(published);
+  verifyAcceptanceReceiptOperationalEvidence(published, fixture.receiptPath);
+  for (const id of published.profile.requiredResults) {
+    const missing = structuredClone(published);
+    missing.results = missing.results.filter(result => result.id !== id);
+    assert.throws(() => verify(missing), /every required result/u, id);
+    for (const status of ['not-run', 'fail', 'skipped']) {
+      const bad = structuredClone(published);
+      bad.results.find(result => result.id === id).status = status;
+      assert.throws(() => verify(bad), undefined, `${id}: ${status}`);
+    }
+  }
+  for (const [mutate, message] of [
+    [
+      receipt => {
+        receipt.binding.runtimeIdentity = null;
+      },
+      /runtimeIdentity/u,
+    ],
+    [
+      receipt => {
+        receipt.results.find(
+          result => result.id === 'node-ssr',
+        ).details.assertionCount = 0;
+      },
+      /assertion count/u,
+    ],
+    [
+      receipt => {
+        receipt.results.find(
+          result => result.id === 'workerd-api',
+        ).details.artifactMode = 'source';
+      },
+      /wrong artifact mode/u,
+    ],
+    [
+      receipt => {
+        receipt.binding.runtimeIdentity.node[0].moduleFederation[0].version =
+          '0.0.0';
+      },
+      /stale or mixed/u,
+    ],
+    [
+      receipt => {
+        receipt.binding.artifacts.packages[0].integrity = 'sha512-Zm9yZ2Vk';
+      },
+      /strict release manifest/u,
+    ],
+    [
+      receipt => {
+        receipt.binding.artifacts.packages[0].version = '0.0.0';
+      },
+      /strict release manifest/u,
+    ],
+  ]) {
+    const bad = structuredClone(published);
+    mutate(bad);
+    assert.throws(() => verify(bad), message);
+  }
+  const parityOnly = structuredClone(published);
+  const parityIds = [
+    'registry-cohort-integrity',
+    'native-create',
+    'vertical-additions',
+    'generate-lockfile',
+    'dependency-closure-audit',
+    'resolution-parity',
+  ];
+  parityOnly.binding.runtimeIdentity = null;
+  parityOnly.profile.requiredResults = parityIds;
+  parityOnly.results = parityIds.map(
+    id =>
+      parityOnly.results.find(result => result.id === id) ?? {
+        id,
+        status: 'pass',
+        details: { closureSha256: published.binding.supplyChain.closureSha256 },
+      },
+  );
+  assert.throws(() => verify(parityOnly), /required result contract/u);
 });
 
 test('runtime projection retains the complete authenticated artifact cohort', async () => {

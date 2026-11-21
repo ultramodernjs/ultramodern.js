@@ -355,29 +355,21 @@ async function createOperationalAcceptanceReceiptFixture({
             ? {
                 closureIdentities: structuredClone(fixtureClosureIdentities),
               }
-            : id === 'resolution-parity'
+            : runtime
               ? {
-                  closureSha256: fixtureClosureSha256,
-                  packageCount: fixtureClosureIdentities.length,
-                  workspaceSha256: fixtureWorkspaceSha256,
+                  artifactMode: receipt.mode,
+                  assertionCount: 1,
+                  dimension: runtime.dimension,
+                  durationMs: 0,
+                  platform: runtime.platform,
+                  ...(runtime.dimension === 'release-identity'
+                    ? { apps: runtimeIdentity[runtime.platform] }
+                    : {}),
                 }
-              : runtime
-                ? {
-                    artifactMode: receipt.mode,
-                    assertionCount: 1,
-                    dimension: runtime.dimension,
-                    durationMs: 0,
-                    platform: runtime.platform,
-                    ...(runtime.dimension === 'release-identity'
-                      ? { apps: runtimeIdentity[runtime.platform] }
-                      : {}),
-                  }
-                : { id },
+              : { id },
     );
   }
-  if (receipt.mode === 'source') {
-    receiptApi.bindRuntimeIdentityEvidence(receipt, runtimeIdentity);
-  }
+  receiptApi.bindRuntimeIdentityEvidence(receipt, runtimeIdentity);
   receiptApi.finalizeAcceptanceReceipt(receipt);
 
   const operationalResult = receipt.results.find(

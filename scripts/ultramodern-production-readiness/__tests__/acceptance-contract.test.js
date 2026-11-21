@@ -21,6 +21,42 @@ function writeEmptyReleaseAgePolicy(root) {
   return policyPath;
 }
 
+test('source and published ERP-10 require the same complete runtime acceptance', async () => {
+  const { requiredAcceptanceResultIdsForMode } = await import(
+    '../published-create-proof/acceptance-contract.mjs'
+  );
+  const required = [
+    'registry-cohort-integrity',
+    'native-create',
+    'vertical-additions',
+    'generate-lockfile',
+    'dependency-closure-audit',
+    'install',
+    'pnpm-check',
+    'build',
+    'cloudflare-build',
+    'topology',
+    'module-federation',
+    'api',
+    'backend',
+    ...['node', 'workerd'].flatMap(platform =>
+      [
+        'ssr',
+        'browser-mf',
+        'api',
+        'backend',
+        'backend-driven-ui',
+        'failure-isolation',
+        'release-identity',
+      ].map(dimension => `${platform}-${dimension}`),
+    ),
+    'operational-independence',
+  ];
+  for (const mode of ['source', 'published']) {
+    assert.deepEqual(requiredAcceptanceResultIdsForMode(mode), required);
+  }
+});
+
 test('pinned YAML file parsing keeps lockfile document merging by default', async () => {
   const { parseYamlFile, YAML_SPECIFIER } = await import(
     '../published-create-proof/release-age-audit.mjs'
@@ -641,7 +677,13 @@ test('cohort resolution provenance rejects stale revisions and foreign tarball o
   const parseJsonLock = filePath =>
     JSON.parse(fs.readFileSync(filePath, 'utf8'));
   const provenance = () =>
-    assertCohortResolutionProvenance(root, release, registryUrl, parseJsonLock);
+    assertCohortResolutionProvenance(
+      root,
+      release,
+      registryUrl,
+      'source',
+      parseJsonLock,
+    );
   try {
     writeLock({
       '@bleedingdev/modern-js-runtime@3.5.0-ultramodern.49': {
@@ -693,6 +735,48 @@ test('cohort resolution provenance rejects stale revisions and foreign tarball o
   } finally {
     fs.rmSync(root, { force: true, recursive: true });
   }
+});
+
+test('published consumer provenance permits third-party tarballs from npm without relaxing cohort integrity', async t => {
+  const { assertCohortResolutionProvenance } = await import(
+    '../published-create-proof/acceptance-profile.mjs'
+  );
+  const root = tempRoot('published-cohort-provenance-');
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const release = {
+    targetScope: 'bleedingdev',
+    release: { version: '3.11.3-ultramodern.10' },
+    packages: [
+      {
+        targetName: '@bleedingdev/modern-js-runtime',
+        integrity: 'sha512-Y2FuZGlkYXRl',
+      },
+    ],
+  };
+  const cohortKey = '@bleedingdev/modern-js-runtime@3.11.3-ultramodern.10';
+  const lock = {
+    packages: {
+      [cohortKey]: { resolution: { integrity: release.packages[0].integrity } },
+      'external@1.0.0': {
+        resolution: {
+          integrity: 'sha512-ZXh0ZXJuYWw=',
+          tarball: 'https://registry.npmjs.org/external/-/external-1.0.0.tgz',
+        },
+      },
+    },
+  };
+  const check = mode =>
+    assertCohortResolutionProvenance(
+      root,
+      release,
+      'https://registry.npmjs.org/',
+      mode,
+      () => lock,
+    );
+  assert.equal(check('published').cohortPackageCount, 1);
+  assert.throws(() => check('source'), /Non-cohort package/u);
+  lock.packages[cohortKey].resolution.integrity = 'sha512-Zm9yZ2Vk';
+  assert.throws(() => check('published'), /authenticated manifest/u);
 });
 
 // Guards shipping a dependency younger than the release-age gate with no live

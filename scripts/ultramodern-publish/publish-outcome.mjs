@@ -6,7 +6,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import validationKit from '../lib/validation-kit.js';
-import { assertOperationalIndependenceEvidenceMatchesReceipt } from '../ultramodern-production-readiness/published-create-proof/acceptance-contract.mjs';
+import {
+  assertOperationalIndependenceEvidenceMatchesReceipt,
+  operationalIndependenceEvidencePath,
+} from '../ultramodern-production-readiness/published-create-proof/acceptance-contract.mjs';
 import { assertAcceptanceReceipt } from '../ultramodern-production-readiness/published-create-proof/acceptance-receipt.mjs';
 import {
   assertTractorAcceptanceReport,
@@ -195,15 +198,6 @@ function readReleaseEvidence({
       release: manifest,
       runIdentity,
     });
-    // ACC-1: operational-independence evidence exists only in the source
-    // lane; the published receipt contract excludes that result id.
-    if (expectedMode !== 'source') {
-      return {
-        closureSha256: receipt.binding.supplyChain.closureSha256,
-        evidencePath: null,
-        receiptPath: path.basename(receiptFile),
-      };
-    }
     const operationalEvidence = readJson(
       operationalFile,
       `${expectedMode} operational evidence`,
@@ -243,17 +237,11 @@ function readReleaseEvidence({
   const publishedAcceptance =
     publishedReceiptPath === undefined
       ? null
-      : acceptanceEvidence(publishedReceiptPath, undefined, 'published');
-  // The published receipt proves only that npm resolves the closure the
-  // source receipt built and ran; both receipts must name that one closure.
-  if (
-    publishedAcceptance !== null &&
-    publishedAcceptance.closureSha256 !== prepublishAcceptance.closureSha256
-  ) {
-    throw new Error(
-      'Published acceptance resolved a different dependency closure than the source acceptance built and ran',
-    );
-  }
+      : acceptanceEvidence(
+          publishedReceiptPath,
+          operationalIndependenceEvidencePath(publishedReceiptPath),
+          'published',
+        );
   const tractorAcceptance = readTractorAcceptanceEvidence({
     baselineRevision: tractorBaselineRevision,
     manifest,

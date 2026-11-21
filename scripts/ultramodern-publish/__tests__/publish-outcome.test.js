@@ -55,6 +55,9 @@ async function createEvidenceFixture({
     'acceptance-receipt.operational-independence.json',
   );
   const publishedReceiptPath = at('published-acceptance-receipt.json');
+  const publishedOperationalEvidencePath = at(
+    'published-acceptance-receipt.operational-independence.json',
+  );
   const tractorReportPath = at('tractor-downstream-acceptance.json');
   const [releaseArtifactsApi, releaseManifestApi, receiptApi, constants] =
     await Promise.all([
@@ -211,7 +214,11 @@ async function createEvidenceFixture({
     fs.writeFileSync(targetPath, `${JSON.stringify(receipt)}\n`);
   };
   await createReceipt('source', receiptPath, operationalEvidencePath);
-  await createReceipt('published', publishedReceiptPath, undefined);
+  await createReceipt(
+    'published',
+    publishedReceiptPath,
+    publishedOperationalEvidencePath,
+  );
 
   if (receiptsOnly) {
     return {
@@ -219,6 +226,7 @@ async function createEvidenceFixture({
       manifestPath,
       receiptPath,
       publishedReceiptPath,
+      publishedOperationalEvidencePath,
       acceptanceRelease,
     };
   }
@@ -235,6 +243,7 @@ async function createEvidenceFixture({
     operationalEvidencePath,
     outPath: at('publish-outcome.json'),
     publishedReceiptPath,
+    publishedOperationalEvidencePath,
     receiptPath,
     root,
     tractorBaselineRevision,
@@ -435,8 +444,7 @@ test('non-dry outcome fails closed without passing published acceptance evidence
     /Acceptance receipt mode must be published/u,
   );
 
-  // ACC-1: a published receipt cannot smuggle the source-only
-  // operational-independence result back into the contract.
+  // A full published receipt must not duplicate a required result.
   const smuggled = JSON.parse(publishedSource);
   const sourceReceipt = JSON.parse(
     fs.readFileSync(fixture.receiptPath, 'utf8'),
@@ -456,10 +464,7 @@ test('non-dry outcome fails closed without passing published acceptance evidence
   );
 });
 
-// The published receipt builds nothing; it only proves npm resolves the
-// closure the source receipt built and ran. A published receipt that is
-// internally consistent but names another closure must not be promoted.
-test('publish outcome refuses a published closure the source lane never accepted', async t => {
+test('publish outcome accepts a different closure only with full published runtime proof', async t => {
   const api = await outcomeApi();
   const fixture = await createEvidenceFixture();
   t.after(() => fs.rmSync(fixture.root, { force: true, recursive: true }));
@@ -474,7 +479,27 @@ test('publish outcome refuses a published closure the source lane never accepted
   const result = id => published.results.find(item => item.id === id);
   result('dependency-closure-audit').details.closureIdentities =
     closureIdentities;
-  result('resolution-parity').details.closureSha256 = closureSha256;
+  fs.writeFileSync(
+    fixture.publishedReceiptPath,
+    `${JSON.stringify(published)}\n`,
+  );
+  const outcome = api.createPublishOutcome(
+    createOptions(fixture, outcomeArtifactName(api), false),
+  );
+  assert.equal(
+    outcome.evidence.publishedAcceptance.closureSha256,
+    closureSha256,
+  );
+  assert.notEqual(
+    outcome.evidence.prepublishAcceptance.closureSha256,
+    outcome.evidence.publishedAcceptance.closureSha256,
+  );
+  assert.equal(
+    outcome.evidence.publishedAcceptance.evidencePath,
+    'published-acceptance-receipt.operational-independence.json',
+  );
+
+  published.results = published.results.filter(item => item.id !== 'build');
   fs.writeFileSync(
     fixture.publishedReceiptPath,
     `${JSON.stringify(published)}\n`,
@@ -484,7 +509,7 @@ test('publish outcome refuses a published closure the source lane never accepted
       api.createPublishOutcome(
         createOptions(fixture, outcomeArtifactName(api), false),
       ),
-    /resolved a different dependency closure than the source acceptance built and ran/u,
+    /every required result exactly once/u,
   );
 });
 
@@ -513,6 +538,14 @@ test('publish outcome rejects tampered receipt, operational evidence, and Tracto
       label: 'tampered operational evidence',
       mutate: fixture =>
         rewrite(fixture.operationalEvidencePath, evidence => {
+          evidence.result = 'fail';
+        }),
+      pattern: /missing, skipped, or not passing/u,
+    },
+    {
+      label: 'tampered published operational evidence',
+      mutate: fixture =>
+        rewrite(fixture.publishedOperationalEvidencePath, evidence => {
           evidence.result = 'fail';
         }),
       pattern: /missing, skipped, or not passing/u,

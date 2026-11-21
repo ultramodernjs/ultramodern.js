@@ -11,7 +11,6 @@ import {
 } from '../ultramodern-production-readiness/published-create-proof/acceptance-continuation.mjs';
 import { assertReleaseAcceptanceProfile } from '../ultramodern-production-readiness/published-create-proof/acceptance-contract.mjs';
 import {
-  acceptedResolution,
   assertAcceptanceReceipt,
   readAcceptanceReceipt,
   verifyAcceptanceReceiptOperationalEvidence,
@@ -118,7 +117,7 @@ function parseArgs(argv) {
   const sourceReceipt = values.get('--source-receipt');
   if ((mode === 'published') !== (sourceReceipt !== undefined)) {
     throw new Error(
-      '--source-receipt names the passed source receipt whose resolution published acceptance must reproduce; it is required with --mode published and valid only there',
+      '--source-receipt authenticates the complete passed source acceptance; it is required with --mode published and valid only there',
     );
   }
   const scaleProfile = values.get('--scale-profile') ?? 'erp-10';
@@ -307,10 +306,7 @@ function verifyReceipt({
     runIdentity,
     expectedMode,
   });
-  // ACC-1: only source receipts carry operational-independence evidence.
-  if (receipt.mode === 'source') {
-    verifyAcceptanceReceiptOperationalEvidence(receipt, options.receiptPath);
-  }
+  verifyAcceptanceReceiptOperationalEvidence(receipt, options.receiptPath);
   return verified;
 }
 
@@ -442,13 +438,12 @@ async function runPublished({
   });
   if (sourceReceipt.schema === acceptanceContinuationSchema) {
     throw new Error(
-      '--source-receipt must be a complete source acceptance receipt; a source continuation carries no accepted resolution',
+      '--source-receipt must be a complete source acceptance receipt; a source continuation is not complete acceptance',
     );
   }
   return executeAcceptanceProfile({
     supportGithubToken,
     mode: 'published',
-    acceptedResolution: acceptedResolution(sourceReceipt),
     release,
     registryUrl,
     registryEnv: {
