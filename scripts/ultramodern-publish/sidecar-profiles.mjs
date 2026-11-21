@@ -19,7 +19,7 @@ export const sidecarProfiles = Object.freeze({
       micromatch: '4.0.8',
       oxfmt: '0.79.0',
       oxlint: '1.94.0',
-      ultracite: '8.2.1',
+      ultracite: '8.3.1',
     }),
     recipeIds: sidecarRecipeIds,
     probeKeys: sidecarQualificationProbeKeys,

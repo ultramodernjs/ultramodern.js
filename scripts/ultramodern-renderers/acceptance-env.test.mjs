@@ -12,7 +12,7 @@ import { createRegistryEnv } from '../ultramodern-publish/lib/source-create-proo
 import { createRendererAcceptanceEnv } from './acceptance-env.mjs';
 
 // The generator's reviewed compiler; only this release has a trust exception.
-const compilerVersion = '0.25.0-ts7.1.0-beta';
+const compilerVersion = '7.1.0-beta.tsrs3';
 const compiler = `tsrs@${compilerVersion}`;
 const version = '3.9.3-ultramodern.42';
 const targetName = '@bleedingdev/modern-js-ultramodern-create';

@@ -279,8 +279,8 @@
     "@loadable/component": "5.16.7",
     "@modern-js/runtime-renderer-extensions": "workspace:^3.8.3",
     "react": "^19.3.1",
-    "@effect/tsgo": "0.70.0",
-    "tsrs": "0.25.0-ts7.1.0-beta",
+    "@effect/tsgo": "0.73.2",
+    "tsrs": "7.1.0-beta.tsrs3",
     "rsbuild-plugin-dts": "1.0.7"
   },
   "peerDependenciesMeta": {
@@ -323,8 +323,8 @@
     "prettier": "~3.10.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "@effect/tsgo": "0.70.0",
-    "tsrs": "0.25.0-ts7.1.0-beta",
+    "@effect/tsgo": "0.73.2",
+    "tsrs": "7.1.0-beta.tsrs3",
     "rsbuild-plugin-dts": "1.0.7"
   },
   "sideEffects": false,

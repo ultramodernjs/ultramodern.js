@@ -17,8 +17,8 @@ import {
 
 rs.mock('node:child_process', () => ({ execFileSync: rs.fn() }));
 
-const tsrsVersion = '0.25.0-ts7.1.0-beta';
-const effectVersion = '0.70.0';
+const tsrsVersion = '7.1.0-beta.tsrs3';
+const effectVersion = '0.73.2';
 const tsrsCommit = '3e9236361fa97a9e6c685f4833ac457ae2d8c50a';
 const nativeCommit = '2bd066d87f5bafd315be9f40889d0a60b9e58e0b';
 const nativeName = `@typescript/typescript-${process.platform}-${process.arch}`;
@@ -76,7 +76,7 @@ function fixture(target: string) {
       },
       tsrs: {
         [tsrsVersion]: {
-          gitHead: '0f82b670e4ff861840b1315f8610816229e73e3a',
+          gitHead: 'eba9b2b796ef5e4a80b793e0b94b72bc7d4a9c05',
           typescript: { version: '7.1.0-beta', gitHead: tsrsCommit },
         },
       },
@@ -225,7 +225,7 @@ test('the previous provider cannot reuse the newly reviewed capability contract'
   current = fixture('@tsrs/win32-x64');
   writeJson(join(current.provider, 'package.json'), {
     name: '@effect/tsgo',
-    version: '0.69.0',
+    version: '0.70.0',
     bin: { 'effect-tsgo': 'dist/effect-tsgo.cjs' },
   });
   assert.throws(
@@ -234,9 +234,29 @@ test('the previous provider cannot reuse the newly reviewed capability contract'
   );
 });
 
+test.each([
+  '0.25.0-ts7.1.0-beta',
+  '7.1.0-beta-tsrs3',
+  '7.1.0-beta.tsrs0',
+  '7.1.0-beta.tsrs',
+  '7.1.0.tsrs3',
+])(
+  'rejects tsrs version %s outside the embedded TypeScript build scheme',
+  version => {
+    current = fixture('@tsrs/darwin-arm64');
+    current.tsrsManifest.version = version;
+    current.tsrsManifest.optionalDependencies['@tsrs/darwin-arm64'] = version;
+    writeJson(join(current.owner, 'package.json'), current.tsrsManifest);
+    assert.throws(
+      () => resolveInstalledEffectCompiler(current!.from),
+      /Invalid native tsrs metadata/u,
+    );
+  },
+);
+
 test('unsupported automatic replacement hosts still validate explicit compilers', () => {
   current = fixture('@tsrs/linux-x64-musl');
-  rs.mocked(execFileSync).mockReturnValue('Version 7.0.2+effect-tsgo.0.70.0');
+  rs.mocked(execFileSync).mockReturnValue('Version 7.0.2+effect-tsgo.0.73.2');
   validateConfiguredEffectCompiler(current.effectGo, current.from);
   rs.mocked(execFileSync).mockReturnValue('Version 7.0.2');
   assert.throws(

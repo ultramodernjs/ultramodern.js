@@ -573,8 +573,8 @@ function assertBootstrapReleaseAgePolicy(createPackage) {
 // An age approval alone is not a trust approval. Only this reviewed release
 // needs the bootstrap-approver workaround, and only when the producer pins it.
 function reviewedCompilerTrustExclusions(bootstrapSelectors) {
-  return bootstrapSelectors.includes('tsrs@0.25.0-ts7.1.0-beta')
-    ? ['tsrs@0.25.0-ts7.1.0-beta']
+  return bootstrapSelectors.includes('tsrs@7.1.0-beta.tsrs3')
+    ? ['tsrs@7.1.0-beta.tsrs3']
     : [];
 }
 

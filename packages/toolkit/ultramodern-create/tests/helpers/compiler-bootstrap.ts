@@ -9,9 +9,9 @@ export function compilerBootstrapFixture(
     compilerLog?: string;
   } = {},
 ) {
-  // Reviewed tsrs 0.25 registry manifest: isolate host-selection behavior
+  // Reviewed tsrs 7.1.0-beta.tsrs3 registry manifest: isolate host-selection behavior
   // from the shared checkout's (possibly not yet reinstalled) dependency tree.
-  const version = '0.25.0-ts7.1.0-beta';
+  const version = '7.1.0-beta.tsrs3';
   const manifest = {
     name: 'tsrs',
     type: 'module',
@@ -48,7 +48,7 @@ export function compilerBootstrapFixture(
     path.join(effectRoot, 'package.json'),
     JSON.stringify({
       name: '@effect/tsgo',
-      version: '0.70.0',
+      version: '0.73.2',
       bin: { 'effect-tsgo': 'dist/effect-tsgo.cjs' },
     }),
   );

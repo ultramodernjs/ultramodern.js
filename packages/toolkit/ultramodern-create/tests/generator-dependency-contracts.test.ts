@@ -42,8 +42,8 @@ test('workspace manifest producers emit the reviewed toolchain and dependency co
     assert.equal(workspace.packageManager, 'pnpm@12.21.0');
     assert.equal(app.engines.node, '>=26.13.1');
     for (const manifest of [workspace, app]) {
-      assert.equal(manifest.devDependencies['@effect/tsgo'], '0.70.0');
-      assert.equal(manifest.devDependencies.tsrs, '0.25.0-ts7.1.0-beta');
+      assert.equal(manifest.devDependencies['@effect/tsgo'], '0.73.2');
+      assert.equal(manifest.devDependencies.tsrs, '7.1.0-beta.tsrs3');
       assert.equal(manifest.devDependencies.typescript, '7.0.2');
       assert.equal(manifest.devDependencies['@types/node'], '26.6.6');
       assert.equal(manifest.devDependencies.wrangler, '4.162.0');
@@ -60,7 +60,7 @@ test('workspace manifest producers emit the reviewed toolchain and dependency co
     assert.equal(workspace.devDependencies.miniflare, '5.20261113.0-beta');
     assert.equal(workspace.devDependencies.oxlint, '1.94.0');
     assert.equal(workspace.devDependencies.oxfmt, '0.79.0');
-    assert.equal(workspace.devDependencies.ultracite, '8.2.1');
+    assert.equal(workspace.devDependencies.ultracite, '8.3.1');
     assert.equal(app.dependencies['@tanstack/react-router'], '1.170.46');
     assert.equal(app.dependencies.i18next, '27.1.5');
     assert.equal(app.dependencies.react, '19.3.1');
@@ -81,8 +81,8 @@ test('stock Ultracite presets retain the shipped seven-line MIT notice', () => {
     fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'),
   );
   const workspace = createRootPackageJson('ultracite-notice', source);
-  assert.equal(manifest.dependencies.ultracite, '8.2.1');
-  assert.equal(workspace.devDependencies.ultracite, '8.2.1');
+  assert.equal(manifest.dependencies.ultracite, '8.3.1');
+  assert.equal(workspace.devDependencies.ultracite, '8.3.1');
   assert.ok(manifest.files.includes('third-party-licenses'));
   const notice = fs
     .readFileSync(
@@ -207,12 +207,12 @@ test('compiler bootstrap exemptions include Windows ARM64 without broadening rel
   assert.equal(BOOTSTRAP_RELEASE_AGE_EXCEPTIONS.length, 19);
   assert(
     BOOTSTRAP_RELEASE_AGE_EXCEPTIONS.includes(
-      '@tsrs/win32-arm64@0.25.0-ts7.1.0-beta',
+      '@tsrs/win32-arm64@7.1.0-beta.tsrs3',
     ),
   );
   assert(
     BOOTSTRAP_RELEASE_AGE_EXCEPTIONS.includes(
-      '@effect/tsgo-win32-arm64@0.70.0',
+      '@effect/tsgo-win32-arm64@0.73.2',
     ),
   );
   assert(BOOTSTRAP_RELEASE_AGE_EXCEPTIONS.includes('effect@4.1.4'));

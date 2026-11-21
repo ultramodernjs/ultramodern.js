@@ -1518,7 +1518,7 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
       );
       fs.writeFileSync(
         path.join(workspace, 'pnpm-workspace.yaml'),
-        `minimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\nminimumReleaseAgeIgnoreMissingTime: false\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\ntrustPolicyExclude:\n  - tsrs@0.25.0-ts7.1.0-beta\nminimumReleaseAgeExclude:\n${bootstrapExclude.map(selector => `  - ${JSON.stringify(selector)}`).join('\n')}\noverrides:\n  'braces@>=3.0.0 <3.0.4': npm:@bleedingdev/braces@3.0.4\n  'sharp@>=0.35.0 <0.35.5': 0.35.5\npackageExtensions:\n  '@rslib/core@1.0.7':\n    peerDependencies:\n      rsbuild-plugin-dts: 1.0.7\n`,
+        `minimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\nminimumReleaseAgeIgnoreMissingTime: false\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\ntrustPolicyExclude:\n  - tsrs@7.1.0-beta.tsrs3\nminimumReleaseAgeExclude:\n${bootstrapExclude.map(selector => `  - ${JSON.stringify(selector)}`).join('\n')}\noverrides:\n  'braces@>=3.0.0 <3.0.4': npm:@bleedingdev/braces@3.0.4\n  'sharp@>=0.35.0 <0.35.5': 0.35.5\npackageExtensions:\n  '@rslib/core@1.0.7':\n    peerDependencies:\n      rsbuild-plugin-dts: 1.0.7\n`,
       );
     },
   });
@@ -1537,7 +1537,7 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
     minimumReleaseAgeExclude: bootstrapExclude,
     trustPolicy: 'no-downgrade',
     trustPolicyIgnoreAfter: 1440,
-    trustPolicyExclude: ['tsrs@0.25.0-ts7.1.0-beta'],
+    trustPolicyExclude: ['tsrs@7.1.0-beta.tsrs3'],
   });
   assert.deepEqual(fs.readdirSync(root), []);
   const { stringify: stringifyYaml } = await import('yaml');
@@ -1550,10 +1550,7 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
     { trustPolicyExclude: ['*'] },
     { trustPolicyExclude: ['tsrs@^0.21.0'] },
     {
-      trustPolicyExclude: [
-        'tsrs@0.25.0-ts7.1.0-beta',
-        'tsrs@0.25.0-ts7.1.0-beta',
-      ],
+      trustPolicyExclude: ['tsrs@7.1.0-beta.tsrs3', 'tsrs@7.1.0-beta.tsrs3'],
     },
     { minimumReleaseAgeExclude: ['@bleedingdev/*'] },
     { minimumReleaseAgeExclude: [] },
@@ -2324,7 +2321,7 @@ for (const needsCompilerTrust of [true, false]) {
       next.publishOrder = Object.values(next.aliases);
       await writeCandidateCreatePackage(root, next, {
         '@effect/tsgo': '0.69.0',
-        ...(needsCompilerTrust ? { tsrs: '0.25.0-ts7.1.0-beta' } : {}),
+        ...(needsCompilerTrust ? { tsrs: '7.1.0-beta.tsrs3' } : {}),
       });
       const manifestFile = path.join(root, 'package.json');
       const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
@@ -2337,18 +2334,13 @@ for (const needsCompilerTrust of [true, false]) {
         'unrelated-compiler@9.9.9',
       ];
       const oldCompiler = 'tsrs@0.18.0-ts7.1.0-dev.20260929';
-      const managedExclusions = [
-        oldCompiler,
-        'tsrs@0.25.0-ts7.1.0-beta',
-      ].sort();
+      const managedExclusions = [oldCompiler, 'tsrs@7.1.0-beta.tsrs3'].sort();
       // Native pnpm permits unsorted input; the upgraded policy is canonical.
       policy.trustPolicyExclude = [...managedExclusions, ...appExclusions];
       writeCompilerTrustOwnership(root, managedExclusions);
       policy.preferWorkspacePackages = true;
       fs.writeFileSync(policyFile, stringify(policy));
-      const producerTrust = needsCompilerTrust
-        ? ['tsrs@0.25.0-ts7.1.0-beta']
-        : [];
+      const producerTrust = needsCompilerTrust ? ['tsrs@7.1.0-beta.tsrs3'] : [];
       const options = {
         producerEffectDependencies,
         producerReactDependencies,
@@ -2502,7 +2494,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
     );
     await writeCandidateCreatePackage(root, next, {
       '@effect/tsgo': '0.69.0',
-      tsrs: '0.25.0-ts7.1.0-beta',
+      tsrs: '7.1.0-beta.tsrs3',
       'unrelated-compiler': '9.9.9',
     });
     const artifactPath = next.createPackage.artifactPath;
@@ -2647,7 +2639,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       ].sort(),
       trustPolicy: 'no-downgrade',
       trustPolicyIgnoreAfter: 1440,
-      trustPolicyExclude: ['tsrs@0.25.0-ts7.1.0-beta'],
+      trustPolicyExclude: ['tsrs@7.1.0-beta.tsrs3'],
     };
     const beforeShell = fs.readFileSync(shellManifestFile, 'utf8');
     const workspaceFile = path.join(root, 'pnpm-workspace.yaml');
@@ -2743,7 +2735,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       next.createPackage.packageJson,
     );
     assert.equal(compilerExclusions.length, 17);
-    assert(compilerExclusions.includes('tsrs@0.25.0-ts7.1.0-beta'));
+    assert(compilerExclusions.includes('tsrs@7.1.0-beta.tsrs3'));
     assert(compilerExclusions.includes('@effect/tsgo-win32-x64@0.69.0'));
     assert(
       !parseYaml(policyText).minimumReleaseAgeExclude.includes(
@@ -2968,13 +2960,13 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
         selector => !selector.startsWith('@bleedingdev/mf-sdk@'),
       ),
       producerOptions.minimumReleaseAgeExclude.filter(
-        selector => selector !== 'tsrs@0.25.0-ts7.1.0-beta',
+        selector => selector !== 'tsrs@7.1.0-beta.tsrs3',
       ),
       producerOptions.minimumReleaseAgeExclude.filter(
         selector => selector !== '@effect/tsgo-win32-x64@0.69.0',
       ),
       producerOptions.minimumReleaseAgeExclude.map(selector =>
-        selector === 'tsrs@0.25.0-ts7.1.0-beta'
+        selector === 'tsrs@7.1.0-beta.tsrs3'
           ? 'tsrs@0.18.0-ts7.1.0-dev.20260929'
           : selector,
       ),
@@ -3008,10 +3000,10 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       ['tsrs@^0.21.0'],
       ['tsrs@0.18.0-ts7.1.0-dev.20260929'],
       ['unrelated-compiler@9.9.9'],
-      ['@tsrs/linux-x64-gnu@0.25.0-ts7.1.0-beta'],
+      ['@tsrs/linux-x64-gnu@7.1.0-beta.tsrs3'],
       ['@effect/tsgo@0.69.0'],
       ['effect@4.1.4'],
-      ['tsrs@0.25.0-ts7.1.0-beta', 'tsrs@0.25.0-ts7.1.0-beta'],
+      ['tsrs@7.1.0-beta.tsrs3', 'tsrs@7.1.0-beta.tsrs3'],
     ]) {
       assert.throws(
         () =>
@@ -3079,7 +3071,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       next,
       {
         '@effect/tsgo': '0.69.0',
-        tsrs: '0.25.0-ts7.1.0-beta',
+        tsrs: '7.1.0-beta.tsrs3',
         'unrelated-compiler': '9.9.9',
       },
       { supportArtifacts: false },

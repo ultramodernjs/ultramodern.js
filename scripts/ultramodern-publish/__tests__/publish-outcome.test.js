@@ -745,14 +745,14 @@ test('workflow identity commands bind immutable bytes and distinct producer/publ
 
 test('packed compiler trust flows from workspace environment through receipt and standalone verification', async t => {
   const fixture = await createEvidenceFixture({
-    compilerVersion: '0.25.0-ts7.1.0-beta',
+    compilerVersion: '7.1.0-beta.tsrs3',
     receiptsOnly: true,
   });
   t.after(() => fs.rmSync(fixture.root, { force: true, recursive: true }));
   const { assertAcceptanceReceipt } = await import(
     '../../ultramodern-production-readiness/published-create-proof/acceptance-receipt.mjs'
   );
-  const compiler = 'tsrs@0.25.0-ts7.1.0-beta';
+  const compiler = 'tsrs@7.1.0-beta.tsrs3';
   const verify = () =>
     spawnSync(
       process.execPath,

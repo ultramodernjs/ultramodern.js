@@ -240,12 +240,12 @@ test('compiler matrix uses four Depot builds without Intel Mac or Ubuntu 22.04',
   const checkout = steps.find(
     step => step.with?.repository === 'Effect-TS/tsgo',
   );
-  assert.equal(checkout.with.ref, '0e722d359c969bdf1b1316f08e8637022cde3cce');
+  assert.equal(checkout.with.ref, 'ec0221e2bf7a3fe867b1157ca598816314ee2ca1');
   const setup = steps.find(
     step => step.uses === './.github/actions/setup-repo',
   );
   assert.equal(setup.with.component, 'tsrs');
-  assert.equal(setup.with.version, '0.25.0-ts7.1.0-beta');
+  assert.equal(setup.with.version, '7.1.0-beta.tsrs3');
   const correction = steps.find(step =>
     step.name.startsWith('Verify source contract'),
   );
@@ -257,7 +257,7 @@ test('compiler matrix uses four Depot builds without Intel Mac or Ubuntu 22.04',
   assert.match(build.run, /repoctl build artifact --component tsrs/);
   assert.match(
     build.run,
-    /--version 0\.25\.0-ts7\.1\.0-beta --target "\$TARGET" --optimize none/,
+    /--version 7\.1\.0-beta\.tsrs3 --target "\$TARGET" --optimize none/,
   );
   const smoke = steps.find(step =>
     step.name.startsWith('Smoke the actual release'),

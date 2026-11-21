@@ -33,9 +33,9 @@ export type EffectCompilerSelection =
 const EFFECT_TSGO_PACKAGE = '@effect/tsgo';
 const EFFECT_TSGO_BIN = 'effect-tsgo';
 const NATIVE_TYPESCRIPT_PACKAGES = ['typescript', '@typescript/native'];
-// @effect/tsgo@0.70.0 exports no tsrs capability API. Keep this exact contract
+// @effect/tsgo@0.73.2 exports no tsrs capability API. Keep this exact contract
 // aligned with its CLI's tsrsReplacementTargets / resolveTsrs, not tsrs's list.
-const EFFECT_TSRS_PROVIDER_VERSION = '0.70.0';
+const EFFECT_TSRS_PROVIDER_VERSION = '0.73.2';
 const EFFECT_TSRS_TARGETS = new Set([
   '@tsrs/darwin-arm64',
   '@tsrs/darwin-x64',
@@ -243,10 +243,11 @@ function tsrsPlatform(manifestPath: string): {
     typeof manifest.name !== 'string' ||
     !manifest.name ||
     typeof manifest.version !== 'string' ||
-    !/^\d+\.\d+\.\d+-ts[\w.-]+$/u.test(manifest.version) ||
     typeof embedded?.typescriptVersion !== 'string' ||
     !/^7\.\d+\.\d+(?:[-+][\w.-]+)?$/u.test(embedded.typescriptVersion) ||
-    !manifest.version.endsWith(`-ts${embedded.typescriptVersion}`) ||
+    // tsrs releases are `<embedded TypeScript version>.tsrs<build>`.
+    /^(.+)\.tsrs[1-9]\d*$/u.exec(manifest.version)?.[1] !==
+      embedded.typescriptVersion ||
     typeof embedded.typescriptCommit !== 'string' ||
     !/^[a-f\d]{40}$/u.test(embedded.typescriptCommit)
   ) {

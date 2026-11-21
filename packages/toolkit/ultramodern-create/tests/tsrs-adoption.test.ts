@@ -40,8 +40,8 @@ test.each(['workspace', 'install'] as const)(
       strategy,
       modernPackageVersion: '3.8.3',
     } satisfies ResolvedPackageSource;
-    assert.equal(TSRS_VERSION, '0.25.0-ts7.1.0-beta');
-    assert.equal(EFFECT_TSGO_VERSION, '0.70.0');
+    assert.equal(TSRS_VERSION, '7.1.0-beta.tsrs3');
+    assert.equal(EFFECT_TSGO_VERSION, '0.73.2');
     assert.equal(EFFECT_VERSION, '4.1.4');
     assert.equal(TYPESCRIPT_VERSION, '7.0.2');
     for (const renderer of ['react', 'solid', 'octane', 'none'] as const) {

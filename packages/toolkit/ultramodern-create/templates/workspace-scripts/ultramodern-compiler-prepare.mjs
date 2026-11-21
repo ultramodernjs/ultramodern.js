@@ -53,7 +53,7 @@ const effectBin =
 if (effect.name !== '@effect/tsgo' || typeof effectBin !== 'string') {
   throw new Error(`Invalid Effect compiler CLI metadata: ${effectManifestPath}`);
 }
-// @effect/tsgo@0.70.0 exports no tsrs capability API. Its CLI's
+// @effect/tsgo@0.73.2 exports no tsrs capability API. Its CLI's
 // tsrsReplacementTargets / resolveTsrs contract is narrower than tsrs itself.
 const effectTsrsTargets = new Set([
   '@tsrs/darwin-arm64',
@@ -63,7 +63,7 @@ const effectTsrsTargets = new Set([
   '@tsrs/linux-x64-gnu',
   '@tsrs/linux-arm64-gnu',
 ]);
-if (effect.version !== '0.70.0') {
+if (effect.version !== '0.73.2') {
   throw new Error(`Unreviewed Effect tsrs capability contract: ${effect.version}`);
 }
 const supportsTsrs = declaresTsrs && effectTsrsTargets.has(platformPackage);

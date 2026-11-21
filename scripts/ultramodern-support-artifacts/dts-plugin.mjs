@@ -27,8 +27,8 @@ const identity = JSON.parse(
 const fixtureDependencies = Object.freeze({
   '@rslib/core': '1.0.7',
   '@rsbuild/core': '2.3.3',
-  tsrs: '0.25.0-ts7.1.0-beta',
-  '@effect/tsgo': '0.70.0',
+  tsrs: '7.1.0-beta.tsrs3',
+  '@effect/tsgo': '0.73.2',
 });
 const declaration =
   "export const greet = (name: string): string => 'hi ' + name;\n";

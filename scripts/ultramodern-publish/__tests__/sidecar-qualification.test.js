@@ -381,7 +381,7 @@ test('parser npm installation protects stock transitive Braces with the generato
               'fast-glob': '3.3.3',
               'find-workspaces': '0.3.1',
               '@rsbuild/plugin-source-build': '1.0.7',
-              ultracite: '8.2.1',
+              ultracite: '8.3.1',
               oxlint: '1.94.0',
               oxfmt: '0.79.0',
               typescript: '7.0.2',
