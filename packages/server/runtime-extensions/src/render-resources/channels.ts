@@ -1,9 +1,10 @@
 import diagnosticsChannel from 'node:diagnostics_channel';
+import type { ServerContext } from '@modern-js/server-core';
 
 /** One server bundle import, published after it settles. */
 export interface RenderBundleLoadEvent {
-  /** The serving application's output directory. */
-  readonly distDirectory: string;
+  /** The serving application's output directory, when configured. */
+  readonly distDirectory: ServerContext['distDirectory'];
   readonly filepath: string;
   readonly durationMs: number;
   readonly outcome: 'loaded' | 'failed';
@@ -13,8 +14,8 @@ export interface RenderBundleLoadEvent {
 
 /** One request through the server middlewares, traced from start to settle. */
 export interface ServerRequestTrace {
-  /** The serving application's output directory. */
-  readonly distDirectory: string;
+  /** The serving application's output directory, when configured. */
+  readonly distDirectory: ServerContext['distDirectory'];
   /** The request path, without its query. */
   readonly path: string;
 }

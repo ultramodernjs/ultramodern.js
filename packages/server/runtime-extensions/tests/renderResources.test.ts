@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { applyPlugins, type ProdServerOptions } from '@modern-js/prod-server';
 import {
+  type Context,
   createDefaultPlugins,
   createServerBase,
   renderPlugin,
@@ -68,11 +69,11 @@ async function createServer() {
         middlewares.push({
           name: 'fixture-api',
           path: '/api/*',
-          handler: async c => c.text('api'),
+          handler: async (c: Context) => c.text('api'),
         });
         renderMiddlewares.push({
           name: 'fixture-document',
-          handler: async c =>
+          handler: async (c: Context) =>
             c.text(c.get('serverManifest').renderBundles?.main?.owner),
         });
       });
@@ -106,6 +107,46 @@ afterEach(async () => {
 });
 
 describe('render resource policy', () => {
+  it('traces a server without a configured output directory', async () => {
+    pwd = await mkdtemp(path.join(os.tmpdir(), 'modern-outputless-server-'));
+    const server = createServerBase({
+      config: getDefaultConfig(),
+      appContext: getDefaultAppContext(),
+    });
+    server.addPlugins([
+      ...createDefaultPlugins({ logger: false }),
+      injectRenderResourcesPlugin(),
+      {
+        name: 'fixture-outputless-api',
+        setup(api) {
+          api.onPrepare(() => {
+            api.getServerContext().middlewares.push({
+              name: 'fixture-api',
+              handler: async (c: Context) => c.text('api'),
+            });
+          });
+        },
+      },
+    ]);
+    try {
+      await server.init();
+      expect(await (await server.request('/api/ping')).text()).toBe('api');
+      expect(requests.map(({ phase, seen }) => [phase, seen])).toEqual([
+        ['start', { distDirectory: undefined, path: '/api/ping' }],
+        [
+          'end',
+          expect.objectContaining({
+            distDirectory: undefined,
+            path: '/api/ping',
+          }),
+        ],
+      ]);
+      expect(bundles).toEqual([]);
+    } finally {
+      await server.dispose();
+    }
+  });
+
   it.each(['eager', 'lazy'])(
     'provides resources and remote CSS to configured page middleware in %s mode',
     async loading => {
@@ -144,13 +185,13 @@ describe('render resource policy', () => {
             {
               name: 'fixture-api',
               path: '/api/*',
-              handler: async c => c.text('api'),
+              handler: async (c: Context) => c.text('api'),
             },
           ],
           renderMiddlewares: [
             {
               name: 'configured-page-consumer',
-              handler: async c => {
+              handler: async (c: Context) => {
                 const manifest = c.get('serverManifest');
                 return c.json({
                   owner: manifest?.renderBundles?.main?.owner ?? null,

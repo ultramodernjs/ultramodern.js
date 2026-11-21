@@ -1,5 +1,9 @@
 import { performance } from 'node:perf_hooks';
-import type { ServerPlugin } from '@modern-js/server-core';
+import type {
+  Middleware,
+  ServerEnv,
+  ServerPlugin,
+} from '@modern-js/server-core';
 import { parseServerRuntimeExtensionsEnv } from '../env';
 import {
   type RenderBundleLoadEvent,
@@ -34,14 +38,15 @@ export function injectRenderResourcesPlugin(): ServerPlugin {
         },
       });
       api.onPrepare(() => {
+        // Node returns next() directly while nothing subscribes.
+        const handler: Middleware<ServerEnv> = (c, next) =>
+          serverRequestChannel.tracePromise(next, {
+            distDirectory,
+            path: c.req.path,
+          } satisfies ServerRequestTrace);
         api.getServerContext().middlewares.unshift({
           name: 'trace-server-request',
-          // Node returns next() directly while nothing subscribes.
-          handler: (c, next) =>
-            serverRequestChannel.tracePromise(next, {
-              distDirectory,
-              path: c.req.path,
-            } satisfies ServerRequestTrace),
+          handler,
         });
       });
     },
