@@ -132,6 +132,63 @@ describe('static middleware', () => {
     }
   });
 
+  it('looks up matched static files through the extension stat, after containment', async () => {
+    const looked: string[] = [];
+    const hidden = path.join(pwd, 'static/js/main.js');
+    const app = new Hono();
+    app.use(
+      createStaticMiddleware({
+        pwd,
+        routes: createRoutes(),
+        output: {},
+        html: {},
+        server: {},
+        stat: async filename => {
+          looked.push(filename);
+          return filename === hidden ? null : fs.stat(filename);
+        },
+      }) as any,
+    );
+    app.all('*', c => c.text('fallback', 404));
+    await fs.outputFile(path.join(pwd, 'static/js/other.js'), jsContent);
+
+    expect(await (await app.request('/static/js/main.js')).text()).toBe(
+      'fallback',
+    );
+    const traversal = await app.request('/static/%2e%2e/%2e%2e/secret.js');
+    expect(traversal.status).toBe(404);
+    expect(looked).toEqual([hidden]);
+    // The lookup only answers existence; native headers and body remain.
+    const res = await app.request('/static/js/other.js');
+    expect(res.headers.get('content-type')).toMatch('text/javascript');
+    expect(res.headers.get('content-length')).toBe(
+      String(Buffer.byteLength(jsContent)),
+    );
+    expect(await res.text()).toBe(jsContent);
+    expect(looked).toEqual([hidden, path.join(pwd, 'static/js/other.js')]);
+  });
+
+  it('gates extension responders on the extension stat', async () => {
+    const respondAsset = rstest.fn(() => undefined);
+    const app = new Hono();
+    app.use(
+      createStaticMiddleware({
+        pwd,
+        routes: createRoutes(),
+        output: {},
+        html: {},
+        server: {},
+        stat: async () => null,
+        respondAsset,
+      }) as any,
+    );
+    app.all('*', c => c.text('fallback', 404));
+    expect(await (await app.request('/static/js/main.js')).text()).toBe(
+      'fallback',
+    );
+    expect(respondAsset).not.toHaveBeenCalled();
+  });
+
   it('should only stat a cached static file once per request', async () => {
     const app = createApp(createRoutes());
     await app.request('/static/js/main.js');

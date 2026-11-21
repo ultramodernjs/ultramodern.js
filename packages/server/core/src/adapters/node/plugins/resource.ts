@@ -20,6 +20,35 @@ import type {
 } from '../../../types';
 import { uniqueKeyByRoute } from '../../../utils';
 
+/** A server bundle import that is about to start. */
+export type RenderBundleLoad = {
+  filepath: string;
+  /** The request that triggered the import; absent during production warmup. */
+  requestPath?: string;
+};
+
+/** Render resource loading, configured by trusted server plugins during setup. */
+export type ServerRenderResourceOptions = {
+  /**
+   * Production only. `eager` (default) imports server bundles while preparing
+   * and injects them before every middleware. `lazy` injects them with the
+   * render middlewares and imports them once, on the first render request.
+   */
+  loading?: 'eager' | 'lazy';
+  /**
+   * Called before each bundle import. The returned callback receives its
+   * outcome; it is not called when an optional bundle turns out to be absent.
+   */
+  onBundleLoad?: (
+    bundle: RenderBundleLoad,
+  ) => ((outcome: 'loaded' | 'failed') => void) | undefined;
+};
+
+type ResourceInjection = Pick<ServerRenderResourceOptions, 'onBundleLoad'> & {
+  /** Share the first request's load with every later request. */
+  lazy?: boolean;
+};
+
 export async function getHtmlTemplates(pwd: string, routes: ServerRoute[]) {
   // Only process routes with entryName, which are HTML template routes.
   // Public static file routes don't have entryName and shouldn't be processed here.
@@ -47,9 +76,13 @@ export function injectTemplates(
   pwd: string,
   routes?: ServerRoute[],
   htmlTemplatePromise?: ReturnType<typeof getHtmlTemplates>,
+  { lazy = false }: ResourceInjection = {},
 ): Middleware<ServerEnv> {
   return async (c, next) => {
     if (routes && !c.get('templates')) {
+      if (lazy) {
+        htmlTemplatePromise ||= getHtmlTemplates(pwd, routes);
+      }
       const templates = await (htmlTemplatePromise ||
         getHtmlTemplates(pwd, routes));
       c.set('templates', templates);
@@ -76,6 +109,7 @@ const loadBundle = async (
   filepath: string,
   monitors?: Monitors,
   { required = false, failOnError = false } = {},
+  onLoad?: () => ((outcome: 'loaded' | 'failed') => void) | undefined,
 ) => {
   // Required bundles go through the module loader even when absent, preserving
   // its original error code, message and stack. Optional bundles may be absent.
@@ -83,7 +117,10 @@ const loadBundle = async (
     return undefined;
   }
 
+  let done: ((outcome: 'loaded' | 'failed') => void) | undefined;
+  let module: any;
   try {
+    done = onLoad?.();
     if (!required && failOnError) {
       try {
         await fs.access(filepath);
@@ -97,22 +134,31 @@ const loadBundle = async (
         throw e;
       }
     }
-    const module = await compatibleRequire(filepath, false);
-    return module;
+    module = await compatibleRequire(filepath, false);
   } catch (e) {
+    done?.('failed');
     reportBundleError(filepath, e, monitors);
     if (failOnError) {
       throw e;
     }
     return undefined;
   }
+  done?.('loaded');
+  return module;
 };
 
 export async function getServerManifest(
   pwd: string,
   routes: ServerRoute[],
   monitors?: Monitors,
-  { failOnError = false } = {},
+  {
+    failOnError = false,
+    onBundleLoad,
+    requestPath,
+  }: {
+    failOnError?: boolean;
+    requestPath?: string;
+  } & Pick<ServerRenderResourceOptions, 'onBundleLoad'> = {},
 ): Promise<ServerManifest> {
   const loaderBundles: Record<string, any> = {};
   const renderBundles: Record<string, any> = {};
@@ -132,13 +178,20 @@ export async function getServerManifest(
           `${entryName}-server-loaders.js`,
         );
 
-        const renderBundle = await loadBundle(renderBundlePath, monitors, {
-          required: failOnBundleError,
-          failOnError: failOnBundleError,
-        });
-        const loaderBundle = await loadBundle(loaderBundlePath, monitors, {
-          failOnError: failOnBundleError,
-        });
+        const renderBundle = await loadBundle(
+          renderBundlePath,
+          monitors,
+          { required: failOnBundleError, failOnError: failOnBundleError },
+          onBundleLoad &&
+            (() => onBundleLoad({ filepath: renderBundlePath, requestPath })),
+        );
+        const loaderBundle = await loadBundle(
+          loaderBundlePath,
+          monitors,
+          { failOnError: failOnBundleError },
+          onBundleLoad &&
+            (() => onBundleLoad({ filepath: loaderBundlePath, requestPath })),
+        );
 
         renderBundle && (renderBundles[entryName] = renderBundle);
         if (loaderBundle) {
@@ -185,12 +238,20 @@ export function injectServerManifest(
   pwd: string,
   routes?: ServerRoute[],
   manifestPromise?: Promise<ServerManifest>,
+  { lazy = false, onBundleLoad }: ResourceInjection = {},
 ): Middleware<ServerEnv> {
   return async (c, next) => {
     if (routes && !c.get('serverManifest')) {
       const monitors = c.get('monitors');
-      const serverManifest = await (manifestPromise ||
-        getServerManifest(pwd, routes, monitors));
+      const load = () =>
+        getServerManifest(pwd, routes, monitors, {
+          onBundleLoad,
+          requestPath: c.req.path,
+        });
+      if (lazy) {
+        manifestPromise ||= load();
+      }
+      const serverManifest = await (manifestPromise || load());
 
       c.set('serverManifest', serverManifest);
     }
@@ -263,15 +324,18 @@ export const injectResourcePlugin = (): ServerPlugin => ({
     api.onPrepare(async () => {
       const {
         middlewares,
+        renderMiddlewares,
         routes,
         distDirectory: pwd,
+        renderResources: { loading, onBundleLoad } = {},
       } = api.getServerContext();
+      const lazy = isProd() && loading === 'lazy';
 
       // In Production, should warmup server bundles on prepare.
       let htmlTemplatePromise: ReturnType<typeof getHtmlTemplates> | undefined;
       let manifestPromise: Promise<ServerManifest> | undefined;
 
-      if (isProd()) {
+      if (isProd() && !lazy) {
         const warmupRoutes = routes || [];
         // Keep CSR-only and RSC startup behavior unchanged. Only await the
         // existing classic SSR warmup; do not eagerly import lazy route modules.
@@ -280,6 +344,7 @@ export const injectResourcePlugin = (): ServerPlugin => ({
           !warmupRoutes.some(route => route.isRSC);
         manifestPromise = getServerManifest(pwd!, warmupRoutes, undefined, {
           failOnError,
+          onBundleLoad,
         });
         htmlTemplatePromise = getHtmlTemplates(pwd!, routes || []);
         if (failOnError) {
@@ -287,16 +352,21 @@ export const injectResourcePlugin = (): ServerPlugin => ({
         }
       }
 
-      middlewares.push({
+      // Render middlewares are mounted only on page routes, after BFF and static.
+      const resourceMiddlewares = lazy ? renderMiddlewares : middlewares;
+      resourceMiddlewares.push({
         name: 'inject-server-manifest',
 
-        handler: injectServerManifest(pwd!, routes, manifestPromise),
+        handler: injectServerManifest(pwd!, routes, manifestPromise, {
+          lazy,
+          onBundleLoad,
+        }),
       });
 
-      middlewares.push({
+      resourceMiddlewares.push({
         name: 'inject-html',
 
-        handler: injectTemplates(pwd!, routes, htmlTemplatePromise),
+        handler: injectTemplates(pwd!, routes, htmlTemplatePromise, { lazy }),
       });
     });
   },

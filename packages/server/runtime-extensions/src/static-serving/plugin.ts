@@ -1,4 +1,5 @@
 import type { ServerPlugin } from '@modern-js/server-core';
+import { parseServerRuntimeExtensionsEnv } from '../env';
 import { createStaticExtensionResponders } from './responders';
 
 export function injectStaticServingPlugin(): ServerPlugin {
@@ -7,7 +8,9 @@ export function injectStaticServingPlugin(): ServerPlugin {
     post: ['@modern-js/plugin-server-static'],
     setup(api) {
       api.updateServerContext({
-        staticAssetResponders: createStaticExtensionResponders(),
+        staticAssetResponders: createStaticExtensionResponders(
+          parseServerRuntimeExtensionsEnv(),
+        ),
       });
     },
   };

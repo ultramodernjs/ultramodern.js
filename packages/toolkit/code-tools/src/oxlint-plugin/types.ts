@@ -24,6 +24,10 @@ export type AstNode = {
   readonly object?: AstNode;
   readonly property?: AstNode;
   readonly computed?: boolean;
+  readonly left?: AstNode;
+  readonly right?: AstNode;
+  readonly moduleReference?: AstNode;
+  readonly importKind?: string;
 };
 
 export type RuleContext = {

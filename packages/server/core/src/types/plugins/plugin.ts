@@ -12,6 +12,7 @@ import type {
   AfterStreamingRenderContext,
 } from '@modern-js/types';
 import type { Context, MiddlewareHandler } from 'hono';
+import type { ServerRenderResourceOptions } from '../../adapters/node/plugins/resource';
 import type { ServerStaticPluginOptions } from '../../adapters/node/plugins/static';
 import type {
   APIServerStartInput,
@@ -53,6 +54,8 @@ export interface ServerPluginExtends extends BaseServerPluginExtends {
   extendContext: {
     /** Node static response extensions registered during plugin setup. */
     staticAssetResponders?: ServerStaticPluginOptions;
+    /** Node render resource loading registered during plugin setup. */
+    renderResources?: ServerRenderResourceOptions;
     middlewares: MiddlewareObj[];
     renderMiddlewares: MiddlewareObj[];
     [key: string]: any;

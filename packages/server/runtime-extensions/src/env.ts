@@ -32,6 +32,21 @@ export interface ServerRuntimeExtensionsEnv {
    * (absolute, or relative to the app directory). Undefined when unset.
    */
   contractGatesFile?: string;
+  /**
+   * `MODERN_SERVER_RENDER_RESOURCES` — `lazy` defers production server bundle
+   * imports to the first render request; anything else keeps eager warmup.
+   */
+  renderResources: 'eager' | 'lazy';
+  /**
+   * Production with `MODERN_SERVER_IMMUTABLE_ASSETS=true`: release files never
+   * change while serving, so found files and the federation inventory are kept.
+   */
+  immutableAssets: boolean;
+  /**
+   * False only in production with `MODERN_SERVER_PRECOMPRESSED_ASSETS=false`:
+   * no `.br`/`.gz` variants are probed or served.
+   */
+  precompressedAssets: boolean;
 }
 
 const readString = (value: string | undefined): string | undefined => {
@@ -53,11 +68,21 @@ export const parseServerRuntimeExtensionsEnv = (
 ): ServerRuntimeExtensionsEnv => {
   const modernEnv = readString(env.MODERN_ENV);
   const nodeEnv = readString(env.NODE_ENV);
+  const production = nodeEnv === 'production';
 
   return {
     modernEnv,
     nodeEnv,
     environmentName: modernEnv || nodeEnv || DEFAULT_ENVIRONMENT_NAME,
     contractGatesFile: readString(env.MODERN_CONTRACT_GATES_FILE),
+    renderResources:
+      readString(env.MODERN_SERVER_RENDER_RESOURCES) === 'lazy'
+        ? 'lazy'
+        : 'eager',
+    immutableAssets:
+      production && readString(env.MODERN_SERVER_IMMUTABLE_ASSETS) === 'true',
+    precompressedAssets:
+      !production ||
+      readString(env.MODERN_SERVER_PRECOMPRESSED_ASSETS) !== 'false',
   };
 };

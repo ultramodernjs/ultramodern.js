@@ -120,6 +120,20 @@
       },
       "types": "./dist/types/static-serving/plugin.d.ts"
     },
+    "./render-resources": {
+      "node": {
+        "modern:source": "./src/render-resources/index.ts",
+        "import": {
+          "types": "./dist/types-esm/render-resources/index.d.mts",
+          "default": "./dist/esm-node/render-resources/index.mjs"
+        },
+        "require": {
+          "types": "./dist/types/render-resources/index.d.ts",
+          "default": "./dist/cjs/render-resources/index.js"
+        }
+      },
+      "types": "./dist/types/render-resources/index.d.ts"
+    },
     "./server-plugin": {
       "node": {
         "modern:source": "./src/serverPlugin.ts",
@@ -205,6 +219,10 @@
       "static-serving/node": [
         "./dist/types/static-serving/plugin.d.ts",
         "./src/static-serving/plugin.ts"
+      ],
+      "render-resources": [
+        "./dist/types/render-resources/index.d.ts",
+        "./src/render-resources/index.ts"
       ],
       "server-plugin": [
         "./dist/types/serverPlugin.d.ts",

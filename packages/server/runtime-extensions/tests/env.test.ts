@@ -6,6 +6,44 @@ import {
 describe('parseServerRuntimeExtensionsEnv', () => {
   test.each([
     {
+      env: {},
+      expected: {
+        renderResources: 'eager',
+        immutableAssets: false,
+        precompressedAssets: true,
+      },
+    },
+    {
+      env: {
+        NODE_ENV: 'production',
+        MODERN_SERVER_RENDER_RESOURCES: ' lazy ',
+        MODERN_SERVER_IMMUTABLE_ASSETS: 'true',
+        MODERN_SERVER_PRECOMPRESSED_ASSETS: 'false',
+      },
+      expected: {
+        renderResources: 'lazy',
+        immutableAssets: true,
+        precompressedAssets: false,
+      },
+    },
+    {
+      env: {
+        NODE_ENV: 'development',
+        MODERN_SERVER_IMMUTABLE_ASSETS: 'true',
+        MODERN_SERVER_PRECOMPRESSED_ASSETS: 'false',
+      },
+      expected: {
+        renderResources: 'eager',
+        immutableAssets: false,
+        precompressedAssets: true,
+      },
+    },
+  ])('parses resource and asset policy for $env', ({ env, expected }) => {
+    expect(parseServerRuntimeExtensionsEnv(env)).toMatchObject(expected);
+  });
+
+  test.each([
+    {
       name: 'uses the documented default when values are blank',
       env: {
         MODERN_ENV: '  ',

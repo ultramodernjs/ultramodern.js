@@ -6,6 +6,7 @@ import {
   type StaticAsset,
   serveStaticAsset,
 } from '@modern-js/server-core/node';
+import { createImmutableAssetStat } from './immutableAssetStat';
 import {
   applyModuleFederationAssetHeaders,
   getModuleFederationAssetList,
@@ -23,12 +24,24 @@ import {
 
 type Context = Parameters<Middleware>[0];
 
+export type StaticExtensionPolicy = {
+  /** Release files never change while serving: keep found files and the federation inventory. */
+  immutableAssets: boolean;
+  /** Probe and serve `.br`/`.gz` variants. */
+  precompressedAssets: boolean;
+};
+
 async function respondPrecompressedAsset(
   context: Context,
   asset: StaticAsset,
   serve: ServeStaticAsset,
+  precompressedAssets: boolean,
 ) {
-  const selected = await resolvePreCompressedAsset(context, asset.filename);
+  const selected = await resolvePreCompressedAsset(
+    context,
+    asset.filename,
+    precompressedAssets,
+  );
   const response = selected.acceptable
     ? await serve({
         filename: selected.selected?.filepath,
@@ -48,7 +61,16 @@ async function respondPrecompressedAsset(
 
 // Native core owns readers, containment and response conversion.
 // This extension owns federation and compressed/generated asset selection.
-export function createStaticExtensionResponders(): ServerStaticPluginOptions {
+export function createStaticExtensionResponders({
+  immutableAssets,
+  precompressedAssets,
+}: StaticExtensionPolicy): ServerStaticPluginOptions {
+  const stat = immutableAssets ? createImmutableAssetStat() : undefined;
+  const respondPrecompressed = (
+    context: Context,
+    asset: StaticAsset,
+    serve: ServeStaticAsset,
+  ) => respondPrecompressedAsset(context, asset, serve, precompressedAssets);
   const caches = new Map<
     string,
     {
@@ -73,7 +95,7 @@ export function createStaticExtensionResponders(): ServerStaticPluginOptions {
     const pending = getModuleFederationAssetList(root)
       .then(assets => {
         current.assets = assets;
-        current.expires = Date.now() + 1_000;
+        current.expires = immutableAssets ? Infinity : Date.now() + 1_000;
         return assets;
       })
       .finally(() => {
@@ -96,7 +118,7 @@ export function createStaticExtensionResponders(): ServerStaticPluginOptions {
       isModuleFederationManifestRequest(requestPath) &&
       !isBackendModuleFederationManifestRequest(requestPath);
     if (!patchManifest && !remoteEntry) {
-      return respondPrecompressedAsset(context, asset, serve);
+      return respondPrecompressed(context, asset, serve);
     }
     const response = await serve({ contentLength: true, revalidate: false });
     if (!response) {
@@ -141,7 +163,7 @@ export function createStaticExtensionResponders(): ServerStaticPluginOptions {
         root: publicRoot,
         realpath: true,
       },
-      (asset, serve) => respondPrecompressedAsset(context, asset, serve),
+      (asset, serve) => respondPrecompressed(context, asset, serve),
     );
     if (response && context.req.raw.method.toUpperCase() === 'HEAD') {
       return new Response(null, {
@@ -153,6 +175,7 @@ export function createStaticExtensionResponders(): ServerStaticPluginOptions {
   }
 
   return {
+    stat,
     async respondAsset(context, asset, serve, { root, pathPrefix }) {
       const requestPath = getModuleFederationRequestPath(
         context.req.path,
@@ -172,7 +195,7 @@ export function createStaticExtensionResponders(): ServerStaticPluginOptions {
           assets.remoteEntries.has(requestPath),
         );
       }
-      return respondPrecompressedAsset(context, asset, serve);
+      return respondPrecompressed(context, asset, serve);
     },
     async respondPublicFallback(context, respondPublic, { root, pathPrefix }) {
       const requestPath = getModuleFederationRequestPath(
@@ -190,6 +213,7 @@ export function createStaticExtensionResponders(): ServerStaticPluginOptions {
             filename: path.join(root, requestPath),
             kind: 'static',
             root,
+            stat,
           },
           (asset, serve) =>
             serveFederated(

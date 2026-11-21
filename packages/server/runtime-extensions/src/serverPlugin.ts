@@ -4,6 +4,7 @@ import { injectErrorResponsePlugin } from './errorResponsePlugin';
 import { injectLocalisedLoaderPlugin } from './localisedLoaderPlugin';
 import { injectMfAssetCacheHeadersPlugin } from './mfCache';
 import { injectModuleFederationCssPlugin } from './module-federation-css/plugin';
+import { injectRenderResourcesPlugin } from './render-resources/plugin';
 import { disposeServerRuntime } from './runtimeLifecycle';
 import { injectStaticServingPlugin } from './static-serving/plugin';
 import { injectTelemetryPlugin } from './telemetry/plugin';
@@ -18,6 +19,7 @@ export const ultramodernServerPlugin = (): ServerPlugin => ({
     injectModuleFederationCssPlugin(),
     injectMfAssetCacheHeadersPlugin(),
     injectStaticServingPlugin(),
+    injectRenderResourcesPlugin(),
     {
       name: '@modern-js/server-runtime-lifecycle',
       // Native disposal reverses registration: Effect resources close before

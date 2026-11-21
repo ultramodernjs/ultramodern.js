@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Binding, NodePath } from '@babel/traverse';
+import type { Binding, NodePath, Scope } from '@babel/traverse';
 import * as t from '@babel/types';
 import {
   parseSource,
@@ -74,6 +74,65 @@ export function createEffectApiImportResolver(
 
 type ApiModule = EffectApiSource & { file: t.File };
 
+/**
+ * Identifiers whose value `node` may evaluate to or contain: TS-wrapped,
+ * member, conditional, logical, sequence, assignment and literal-container
+ * positions all reach their operands, so writes through them fail closed.
+ */
+const valueRoots = (node: t.Node | null | undefined): t.Identifier[] => {
+  if (!node) return [];
+  node = unwrapExpression(node, true);
+  if (t.isIdentifier(node)) return [node];
+  if (t.isMemberExpression(node) || t.isOptionalMemberExpression(node))
+    return valueRoots(node.object);
+  if (t.isConditionalExpression(node))
+    return [...valueRoots(node.consequent), ...valueRoots(node.alternate)];
+  if (t.isLogicalExpression(node))
+    return [...valueRoots(node.left), ...valueRoots(node.right)];
+  if (t.isSequenceExpression(node)) return valueRoots(node.expressions.at(-1));
+  if (t.isAssignmentExpression(node)) return valueRoots(node.right);
+  if (t.isObjectExpression(node))
+    return node.properties.flatMap(property =>
+      t.isObjectProperty(property)
+        ? valueRoots(property.value)
+        : t.isSpreadElement(property)
+          ? valueRoots(property.argument)
+          : [],
+    );
+  if (t.isArrayExpression(node))
+    return node.elements.flatMap(element =>
+      t.isSpreadElement(element)
+        ? valueRoots(element.argument)
+        : valueRoots(element),
+    );
+  return [];
+};
+
+/**
+ * Receivers a write to `target` mutates: the value roots of every member
+ * target, including member targets nested in destructuring patterns. A bare
+ * identifier target rebinds it, which Babel already reports as non-constant.
+ */
+const writtenReceivers = (
+  target: t.Node | null | undefined,
+): t.Identifier[] => {
+  if (!target) return [];
+  target = unwrapExpression(target, true);
+  if (t.isMemberExpression(target) || t.isOptionalMemberExpression(target))
+    return valueRoots(target.object);
+  if (t.isObjectPattern(target))
+    return target.properties.flatMap(property =>
+      writtenReceivers(
+        t.isRestElement(property) ? property.argument : property.value,
+      ),
+    );
+  if (t.isArrayPattern(target))
+    return target.elements.flatMap(writtenReceivers);
+  if (t.isRestElement(target)) return writtenReceivers(target.argument);
+  if (t.isAssignmentPattern(target)) return writtenReceivers(target.left);
+  return [];
+};
+
 /** Proves binding identity and an exported composition, not the occurrence of names. */
 export function strictEffectRuntimeTopologyViolation(
   source: string,
@@ -86,6 +145,31 @@ export function strictEffectRuntimeTopologyViolation(
   const owners = new Map<t.Node, ApiModule>();
   const paths = new Map<t.Node, NodePath>();
   const mutated = new Set<Binding>();
+  /**
+   * Mark each receiver's binding mutated, and every binding whose value an
+   * alias may hold: its initializer and each value later assigned to it.
+   */
+  const markMutated = (receivers: readonly t.Identifier[], scope: Scope) => {
+    const pending = receivers.map(receiver => ({ receiver, scope }));
+    for (let next = pending.pop(); next; next = pending.pop()) {
+      const binding = next.scope.getBinding(next.receiver.name);
+      if (!binding || mutated.has(binding)) continue;
+      mutated.add(binding);
+      const declarator = binding.path.node;
+      if (t.isVariableDeclarator(declarator))
+        for (const receiver of valueRoots(declarator.init))
+          pending.push({ receiver, scope: binding.path.scope });
+      for (const violation of binding.constantViolations) {
+        const value = violation.isAssignmentExpression()
+          ? violation.node.right
+          : violation.isForXStatement()
+            ? violation.node.right
+            : undefined;
+        for (const receiver of valueRoots(value))
+          pending.push({ receiver, scope: violation.scope });
+      }
+    }
+  };
   const load = (input: EffectApiSource): ApiModule => {
     const existing = modules.get(input.id);
     if (existing) return existing;
@@ -102,34 +186,17 @@ export function strictEffectRuntimeTopologyViolation(
         paths.set(nodePath.node, nodePath);
         owners.set(nodePath.node, module);
         // Babel bindings track rebinding (including destructuring). Also reject
-        // writes through a trusted namespace, and TS value namespace merges.
-        if (
-          nodePath.isAssignmentExpression() ||
-          nodePath.isUpdateExpression() ||
-          nodePath.isUnaryExpression({ operator: 'delete' })
-        ) {
-          let target: t.Node = nodePath.isAssignmentExpression()
-            ? nodePath.node.left
-            : nodePath.node.argument;
-          while (t.isMemberExpression(target)) target = target.object;
-          // A write through `const alias = value` mutates `value` as well.
-          let binding = t.isIdentifier(target)
-            ? nodePath.scope.getBinding(target.name)
-            : undefined;
-          while (binding && !mutated.has(binding)) {
-            mutated.add(binding);
-            const declarator = binding.path.node;
-            const alias =
-              binding.kind === 'const' &&
-              t.isVariableDeclarator(declarator) &&
-              declarator.init
-                ? unwrapExpression(declarator.init, true)
-                : undefined;
-            binding = t.isIdentifier(alias)
-              ? binding.path.scope.getBinding(alias.name)
+        // member writes through a trusted namespace or any alias of it, and TS
+        // value namespace merges.
+        const target = nodePath.isAssignmentExpression()
+          ? nodePath.node.left
+          : nodePath.isUpdateExpression() ||
+              nodePath.isUnaryExpression({ operator: 'delete' })
+            ? nodePath.node.argument
+            : nodePath.isForXStatement()
+              ? nodePath.node.left
               : undefined;
-          }
-        }
+        markMutated(writtenReceivers(target), nodePath.scope);
         if (
           nodePath.isTSModuleDeclaration() &&
           t.isIdentifier(nodePath.node.id)
@@ -385,8 +452,64 @@ export function strictEffectRuntimeTopologyViolation(
         );
       });
     const effectSources = [edge, 'effect', 'effect/Effect'];
-    /** The handler of a literal `HttpRouter.add(method, path, handler)` route. */
-    const routeHandler = (node: t.Node): t.Function | undefined => {
+    type RouteFunction = t.ArrowFunctionExpression | t.FunctionExpression;
+    const routeFunctionNode = (node: t.Node): node is RouteFunction =>
+      t.isArrowFunctionExpression(node) || t.isFunctionExpression(node);
+    /** The value an immutable owner-local alias names, without evaluating application code. */
+    const routeValue = (node: t.Node, seen = new Set<t.Node>()): t.Node => {
+      node = unwrap(node);
+      if (seen.has(node) || seen.size >= 128) return node;
+      seen.add(node);
+      const init = initialized(node) ?? externalValue(node);
+      return init ? routeValue(init, seen) : node;
+    };
+    /** The recovery callback of `Effect.catchTag('Tag', recover)`. */
+    const routeRecovery = (node: t.Node): RouteFunction | undefined => {
+      const value = routeValue(node);
+      if (
+        !t.isCallExpression(value) ||
+        !method(value.callee, 'Effect', 'catchTag', effectSources) ||
+        value.arguments.length !== 2 ||
+        !t.isStringLiteral(routeValue(value.arguments[0]))
+      )
+        return undefined;
+      const recovery = routeValue(value.arguments[1]);
+      return routeFunctionNode(recovery) ? recovery : undefined;
+    };
+    /**
+     * A route handler function, or an `Effect.fn(body, ...recoveries)` /
+     * `Effect.fn(name)(body, ...recoveries)` one: the body first, then each
+     * catchTag recovery, so lexical captures stay attributable to them.
+     */
+    const routeFunctions = (
+      node: t.Node,
+    ): readonly RouteFunction[] | undefined => {
+      const value = routeValue(node);
+      if (routeFunctionNode(value)) return [value];
+      if (!t.isCallExpression(value) || value.arguments.length === 0)
+        return undefined;
+      const factory = unwrap(value.callee);
+      const traced =
+        method(factory, 'Effect', 'fn', effectSources) ||
+        (t.isCallExpression(factory) &&
+          method(factory.callee, 'Effect', 'fn', effectSources) &&
+          factory.arguments.length === 1 &&
+          t.isStringLiteral(routeValue(factory.arguments[0])));
+      if (!traced) return undefined;
+      const [body, ...transforms] = value.arguments;
+      const bodyValue = routeValue(body);
+      const recoveries = transforms.map(routeRecovery);
+      return routeFunctionNode(bodyValue) &&
+        recoveries.every(
+          (recovery): recovery is RouteFunction => recovery !== undefined,
+        )
+        ? [bodyValue, ...recoveries]
+        : undefined;
+    };
+    /** The handler functions of a static `HttpRouter.add(method, path, handler)` route. */
+    const routeHandler = (
+      node: t.Node,
+    ): readonly RouteFunction[] | undefined => {
       node = unwrap(node);
       if (
         !t.isCallExpression(node) ||
@@ -394,14 +517,13 @@ export function strictEffectRuntimeTopologyViolation(
         node.arguments.length !== 3
       )
         return undefined;
-      const [verb, route, handler] = node.arguments;
+      const verb = routeValue(node.arguments[0]);
+      const route = routeValue(node.arguments[1]);
       return t.isStringLiteral(verb) &&
         httpRouteMethods.has(verb.value) &&
         t.isStringLiteral(route) &&
-        (route.value.startsWith('/') || route.value === '*') &&
-        (t.isArrowFunctionExpression(handler) ||
-          t.isFunctionExpression(handler))
-        ? handler
+        (route.value.startsWith('/') || route.value === '*')
+        ? routeFunctions(node.arguments[2])
         : undefined;
     };
     /** A named, non-namespace import: a service tag or Effect value. */
@@ -425,13 +547,16 @@ export function strictEffectRuntimeTopologyViolation(
           t.isBlockStatement(node.body)
         )
           return false;
-        const handler = routeHandler(node.body);
+        const functions = routeHandler(node.body);
         const parameter = binding(node.params[0]);
         return (
-          !!handler &&
+          !!functions &&
           !!parameter &&
           parameter.referencePaths.some(
-            reference => !!reference.findParent(path => path.node === handler),
+            reference =>
+              !!reference.findParent(path =>
+                functions.some(handler => path.node === handler),
+              ),
           )
         );
       });

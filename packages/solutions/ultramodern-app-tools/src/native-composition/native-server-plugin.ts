@@ -35,6 +35,7 @@ import type {
   ServerPlugin,
 } from '@modern-js/server-core';
 import { injectMfAssetCacheHeadersPlugin } from '@modern-js/server-runtime-extensions';
+import { injectRenderResourcesPlugin } from '@modern-js/server-runtime-extensions/render-resources';
 import { injectStaticServingPlugin } from '@modern-js/server-runtime-extensions/static-serving/node';
 import type { ServerRoute } from '@modern-js/types/server';
 import { getEntryOptions } from '@modern-js/utils';
@@ -578,6 +579,7 @@ export function nativeServerPlugin(
   return {
     name: '@modern-js/native-node-server',
     usePlugins: [
+      injectRenderResourcesPlugin(),
       // Production publishes the emitted federation containers, manifests and
       // chunks with the React host's CORS and cache policy. Development
       // answers them from the live compiler instead.
