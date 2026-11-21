@@ -124,10 +124,9 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
-  # The exact tarballs npm now serves were already built and run before
-  # publication. ERP resolution must reproduce the source receipt closure, then
-  # the renderer feature proofs run again on registry-resolved installed bytes.
-  # The tooling is the original publish run's own commit.
+  # Accept the actual registry-resolved consumer workspace, including third-party
+  # releases that matured after the source lane ran. Both ERP and renderer
+  # features build and run with the reviewed tooling at this dispatch's commit.
   accept-published:
     name: Accept the exact published registry cohort
     needs: verify-publication
@@ -139,10 +138,9 @@ jobs:
     env:
       PRODUCER_RUN_IDENTITY: ${{ needs.verify-publication.outputs.producer_run_identity }}
     steps:
-      - name: Checkout the original publication's acceptance runner
+      - name: Checkout reviewed published acceptance tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.verify-publication.outputs.run_head_sha }}
           fetch-depth: 1
           persist-credentials: false
 
@@ -195,6 +193,15 @@ jobs:
           mise exec -- pnpm install --frozen-lockfile --ignore-scripts \
             --filter @scripts/ultramodern-production-readiness --filter modern-js-monorepo --filter tests
 
+      - name: Resolve acceptance browser runtime
+        id: acceptance-browser-runtime
+        run: node scripts/ultramodern-production-readiness/provision-acceptance-browsers.mjs --resolve
+
+      - name: Install acceptance browser runtime
+        run: >-
+          node scripts/ultramodern-production-readiness/provision-acceptance-browsers.mjs --install
+          --version ${{ steps.acceptance-browser-runtime.outputs.version }}
+
       - name: Run published ERP-10 acceptance
         env:
           SUPPORT_ARTIFACT_GITHUB_TOKEN: ${{ github.token }}
@@ -211,6 +218,15 @@ jobs:
             --source-receipt "$BLEEDINGDEV_RELEASE_ACCEPTANCE_RECEIPT" \
             --receipt "$BLEEDINGDEV_PUBLISHED_ACCEPTANCE_RECEIPT" \
             --run-identity "$PRODUCER_RUN_IDENTITY"
+
+      - name: Preserve published ERP runtime evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: published-erp-runtime-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .modern/production-readiness/browser-smoke/published-*
+          if-no-files-found: warn
+          include-hidden-files: true
 
       - name: Resolve installed-renderer browser runtime
         id: renderer-browser-runtime
@@ -277,6 +293,7 @@ jobs:
           name: bleedingdev-published-acceptance-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: |
             .modern/bleedingdev-publish/published-acceptance-receipt.json
+            .modern/bleedingdev-publish/published-acceptance-receipt.operational-independence.json
             .modern/bleedingdev-publish/published-acceptance-receipt.renderer-features.json
           if-no-files-found: error
           include-hidden-files: true
@@ -362,6 +379,7 @@ jobs:
             .modern/bleedingdev-publish/acceptance-receipt.operational-independence.json
             .modern/bleedingdev-publish/acceptance-receipt.renderer-features.json
             .modern/bleedingdev-publish/published-acceptance-receipt.json
+            .modern/bleedingdev-publish/published-acceptance-receipt.operational-independence.json
             .modern/bleedingdev-publish/published-acceptance-receipt.renderer-features.json
             .modern/bleedingdev-publish/tractor-downstream-acceptance.json
             .modern/bleedingdev-publish/publish-outcome.json

@@ -30,7 +30,6 @@ import {
   operationalIndependenceEvidencePath,
   operationalIndependenceResultId,
   projectRuntimeArtifactBinding,
-  resolutionParityResultId,
   runtimeAcceptanceDimensions,
   runtimeAcceptanceInvocation,
   runtimeAcceptancePlatforms,
@@ -74,11 +73,7 @@ import {
   YAML_NAME,
   YAML_VERSION,
 } from './release-age-audit.mjs';
-import {
-  assertResolutionParity,
-  assertScaffoldParity,
-  scaffoldFiles,
-} from './resolution-parity.mjs';
+import { scaffoldFiles } from './resolution-parity.mjs';
 import { addVertical, createWorkspace } from './workspace.mjs';
 
 const requiredPnpmCommands = Object.freeze({
@@ -630,7 +625,7 @@ function registryReceiptMetadata({ mode, registryUrl }) {
   };
 }
 
-// Source-mode install proof: with the scoped .npmrc (only @<targetScope> routed
+// With the source lane's scoped .npmrc (only @<targetScope> routed
 // to the ephemeral registry, everything else direct npmjs), pnpm derives the
 // cohort tarball URLs from the scope mapping and therefore omits
 // resolution.tarball for cohort entries — an explicit tarball only appears for
@@ -638,13 +633,18 @@ function registryReceiptMetadata({ mode, registryUrl }) {
 // proof is: every cohort entry is pinned to the exact release revision (which
 // exists only on the ephemeral registry before publish) with a pinned
 // integrity hash, any explicit cohort tarball is on the release registry
-// origin, and no non-cohort package carries a tarball from that origin.
+// origin. Only source mode forbids external tarballs from that isolated
+// origin; the published registry legitimately serves external packages too.
 function assertCohortResolutionProvenance(
   projectDir,
   release,
   registryUrl,
+  mode = 'source',
   parseYamlFileImpl = parseYamlFile,
 ) {
+  if (!['source', 'published'].includes(mode)) {
+    throw new Error(`Unknown acceptance mode: ${mode}`);
+  }
   const lockPath = path.join(projectDir, 'pnpm-lock.yaml');
   const lock = parseYamlFileImpl(lockPath);
   const lockPackages =
@@ -712,7 +712,11 @@ function assertCohortResolutionProvenance(
         }
       }
       if (cohort) cohortPackageCount += 1;
-    } else if (typeof tarball === 'string' && tarball.length > 0) {
+    } else if (
+      mode === 'source' &&
+      typeof tarball === 'string' &&
+      tarball.length > 0
+    ) {
       if (new URL(tarball).origin === registryOrigin) {
         throw new Error(
           `Non-cohort package ${packageKey} was served by the ephemeral release registry: ${tarball}`,
@@ -1092,11 +1096,12 @@ function receiptFailure(receipt, error) {
   receipt.error = error instanceof Error ? error.message : String(error);
 }
 
-// The source lane builds the scaffolded workspace and runs it on Node and
-// workerd. The published lane never gets here: npm serves the tarballs built
-// and run below, so it proves resolution parity instead.
+// Both lanes prove the generated consumer workspace against their actual
+// registry closure. Fresh semver resolution may legitimately differ after
+// publication, so each closure must pass the same complete runtime checks.
 async function acceptBuiltWorkspace({
   audit,
+  mode,
   browserSmokeImpl,
   now,
   options,
@@ -1144,6 +1149,7 @@ async function acceptBuiltWorkspace({
           projectDir,
           release,
           registryUrl,
+          mode,
         ),
       };
     }),
@@ -1203,7 +1209,7 @@ async function acceptBuiltWorkspace({
   // exist; the receipt loop below consumes this exact report in its normal
   // platform/dimension order.
   const nodeRuntimeReport = await browserSmokeImpl(projectDir, {
-    ...runtimeAcceptanceInvocation('source', 'node'),
+    ...runtimeAcceptanceInvocation(mode, 'node'),
     packageManagerEnv: deploymentEnv,
   });
   if (!nodeRuntimeReport || typeof nodeRuntimeReport !== 'object') {
@@ -1272,7 +1278,7 @@ async function acceptBuiltWorkspace({
           let report = runtimeReports.get(platform);
           if (!report) {
             report = await browserSmokeImpl(projectDir, {
-              ...runtimeAcceptanceInvocation('source', platform),
+              ...runtimeAcceptanceInvocation(mode, platform),
               packageManagerEnv: deploymentEnv,
             });
             runtimeReports.set(platform, report);
@@ -1281,7 +1287,7 @@ async function acceptBuiltWorkspace({
             applicationSourceRevision,
             artifactBinding: runtimeArtifactBinding,
             dimension,
-            mode: 'source',
+            mode,
             platform,
             release,
             verticals: options.verticals,
@@ -1304,7 +1310,7 @@ async function acceptBuiltWorkspace({
     completeOperationalIndependence({
       applicationSourceRevision,
       baseline: operationalBaselines.cloudflare,
-      mode: 'source',
+      mode,
       node: operationalNode,
       packageManagerEnv: deploymentEnv,
       proveOperationalTargetImpl,
@@ -1314,7 +1320,6 @@ async function acceptBuiltWorkspace({
 
 async function runAcceptanceProfile({
   mode,
-  acceptedResolution,
   release,
   registryUrl,
   registryEnv = {},
@@ -1336,11 +1341,6 @@ async function runAcceptanceProfile({
       `Acceptance mode must be source or published, found ${mode}`,
     );
   }
-  if ((mode === 'published') !== (acceptedResolution !== undefined)) {
-    throw new Error(
-      'Published acceptance compares against the resolution a passed source receipt accepted; pass acceptedResolution in published mode and only there.',
-    );
-  }
   assertReleaseAcceptanceProfile(options);
 
   const createPackage = resolveCreatePackage(release, options.createPackage);
@@ -1359,10 +1359,9 @@ async function runAcceptanceProfile({
     const projectDir = path.join(workDir, options.projectName);
     const runtime = runtimeVersions(runImpl, registryTool);
     // ERP subprocesses take their whole runtime context from the shared owner.
-    // The source lane inherits the browsers the runner provisioned; the
-    // published lane runs no browser, so it gets an unused isolated path.
+    // Both ERP lanes inherit the browsers the runner provisioned.
     const { env: runtimeEnv } = createAcceptanceRuntimeContext({
-      browsers: mode === 'source' ? 'inherited' : 'isolated',
+      browsers: 'inherited',
       expectedPnpmVersion: release.tools?.pnpm ?? runtime.pnpm,
       registryEnv,
       storeDir,
@@ -1509,43 +1508,23 @@ async function runAcceptanceProfile({
         }),
       );
 
-      if (mode === 'published') {
-        const scaffold = receipt.results.find(
-          result => result.id === 'vertical-additions',
-        ).details;
-        await recordAcceptanceResult(receipt, resolutionParityResultId, () =>
-          withDuration(() => ({
-            ...assertScaffoldParity(acceptedResolution, scaffold, {
-              lane: 'Published ERP-10',
-            }),
-            ...assertResolutionParity(
-              acceptedResolution,
-              {
-                closureIdentities: audit.closureIdentities,
-                closureSha256: audit.digests.closureSha256,
-              },
-              { lane: 'Published ERP-10' },
-            ),
-          })),
-        );
-      } else {
-        await acceptBuiltWorkspace({
-          audit,
-          browserSmokeImpl,
-          now,
-          options,
-          outPath,
-          ownedWorkDir: ownsWorkDir ? workDir : undefined,
-          packageManagerEnv,
-          projectDir,
-          proveOperationalTargetImpl,
-          receipt,
-          registryUrl,
-          release,
-          runImpl,
-          runtimeArtifactBinding,
-        });
-      }
+      await acceptBuiltWorkspace({
+        audit,
+        mode,
+        browserSmokeImpl,
+        now,
+        options,
+        outPath,
+        ownedWorkDir: ownsWorkDir ? workDir : undefined,
+        packageManagerEnv,
+        projectDir,
+        proveOperationalTargetImpl,
+        receipt,
+        registryUrl,
+        release,
+        runImpl,
+        runtimeArtifactBinding,
+      });
     } catch (error) {
       failure = error;
     }

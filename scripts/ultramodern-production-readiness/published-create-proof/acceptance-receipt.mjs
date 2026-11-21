@@ -11,7 +11,6 @@ import {
   projectRuntimeArtifactBinding,
   requiredAcceptanceResultIds,
   requiredAcceptanceResultIdsForMode,
-  resolutionParityResultId,
   runtimeIdentityBinding,
 } from './acceptance-contract.mjs';
 import { authenticatedCompilerTrustExclusions } from './package-cohort.mjs';
@@ -340,9 +339,7 @@ function expectedBinding(
   };
 }
 
-// Node and workerd identities exist only where the source lane built and ran
-// the workspace.
-function assertSourceRuntimeIdentity(receipt, runtimeModuleFederation) {
+function assertRuntimeIdentity(receipt, runtimeModuleFederation) {
   assertExactKeys(
     receipt.binding.runtimeIdentity,
     ['node', 'workerd'],
@@ -724,16 +721,6 @@ function assertAcceptanceReceipt(
           'Acceptance receipt scaffold files do not match its workspaceSha256',
         );
       }
-      if (result.id === resolutionParityResultId) {
-        assertCondition(
-          result.details.closureSha256 ===
-            receipt.binding.supplyChain.closureSha256 &&
-            result.details.workspaceSha256 ===
-              receipt.results.find(item => item.id === 'vertical-additions')
-                ?.details?.workspaceSha256,
-          'Acceptance receipt resolution parity is not bound to its own closure and scaffold',
-        );
-      }
       if (result.id === operationalIndependenceResultId) {
         assertOperationalIndependenceResultDetails(
           result.details,
@@ -742,15 +729,7 @@ function assertAcceptanceReceipt(
       }
     }
   }
-  if (receipt.mode === 'source') {
-    assertSourceRuntimeIdentity(receipt, runtimeModuleFederation);
-  } else {
-    // The published lane runs nothing, so it has no runtime identity to bind.
-    assertCondition(
-      receipt.binding.runtimeIdentity === null,
-      'Published acceptance receipt must not bind a runtime identity; the published lane proves resolution only',
-    );
-  }
+  assertRuntimeIdentity(receipt, runtimeModuleFederation);
   assertCondition(
     Array.isArray(receipt.optionalResults) &&
       receipt.optionalResults.length === 0,
@@ -791,25 +770,6 @@ function assertAcceptanceReceipt(
     );
   }
   return receipt;
-}
-
-// The scaffold and closure a source receipt accepted, as the published lane
-// compares against them. Only meaningful on a receipt assertAcceptanceReceipt
-// verified as a passed source receipt.
-function acceptedResolution(receipt) {
-  assertCondition(
-    receipt.mode === 'source' && receipt.passed === true,
-    'Only a passed source acceptance receipt carries an accepted resolution',
-  );
-  const details = id =>
-    receipt.results.find(result => result.id === id).details;
-  const { workspaceFiles, workspaceSha256 } = details('vertical-additions');
-  return {
-    closureIdentities: details('dependency-closure-audit').closureIdentities,
-    closureSha256: receipt.binding.supplyChain.closureSha256,
-    workspaceFiles,
-    workspaceSha256,
-  };
 }
 
 function readAcceptanceReceipt(receiptPath) {
@@ -945,7 +905,6 @@ if (
 }
 
 export {
-  acceptedResolution,
   assertAcceptanceReceipt,
   bindRuntimeIdentityEvidence,
   bindSupplyChainEvidence,

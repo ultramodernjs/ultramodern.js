@@ -160,11 +160,18 @@ nothing more. Its last job, `start-release-acceptance`, dispatches
 `.github/workflows/accept-bleedingdev-release.yml` for that run. That run reads
 the cohort back from npm (exact bytes at `latest` with provenance from this
 workflow on `main-ultramodern`, first at npm's origin, then in the CDN copy
-pnpm installs from), runs published ERP-10 and renderer features and
+pnpm installs from), installs and builds the current consumer dependency closure,
+runs ERP-10 on Node and workerd, renderer features and
 published Tractor, records the authenticated publish outcome and only then
 writes the GitHub release `ultramodern-v<version>`. The cohort is accepted
 only when that release exists; the publish run's summary links the run.
 
+- Third-party versions may mature between source and published acceptance.
+  Published acceptance tests the resolved workspace directly; it does not require
+  its dependency closure to equal the source lane's closure.
+- **The acceptance tooling needs a repair:** merge the reviewed repair, then
+  dispatch acceptance from `main-ultramodern` for the same publication as below.
+  The published tarballs and original source receipt remain unchanged.
 - **The acceptance run failed on a transient cause, or only the release record
   failed:** `gh run rerun <acceptance-run-id> --failed`. It converges on an
   existing release.

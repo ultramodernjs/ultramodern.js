@@ -14,6 +14,49 @@ const readWorkflow = name =>
     ),
   );
 
+test('published ERP runs with reviewed tooling and provisioned browsers', () => {
+  const job = readWorkflow('accept-bleedingdev-release').jobs[
+    'accept-published'
+  ];
+  const checkout = job.steps.find(step =>
+    step.uses?.startsWith('actions/checkout@'),
+  );
+  assert.equal(checkout.with.ref, undefined);
+  const resolve = job.steps.findIndex(
+    step => step.id === 'acceptance-browser-runtime',
+  );
+  const browser = job.steps.findIndex(
+    step => step.name === 'Install acceptance browser runtime',
+  );
+  const erp = job.steps.findIndex(
+    step => step.name === 'Run published ERP-10 acceptance',
+  );
+  assert.ok(resolve >= 0 && resolve < browser && browser < erp);
+  assert.equal(
+    job.steps[resolve].run,
+    'node scripts/ultramodern-production-readiness/provision-acceptance-browsers.mjs --resolve',
+  );
+  assert.match(
+    job.steps[browser].run,
+    /provision-acceptance-browsers\.mjs --install/u,
+  );
+  assert.match(job.steps[erp].run, /--mode published/u);
+  const upload = job.steps.find(
+    step => step.name === 'Upload published acceptance evidence',
+  );
+  assert.match(
+    upload.with.path,
+    /published-acceptance-receipt\.operational-independence\.json/u,
+  );
+  const runtimeEvidence = job.steps.find(
+    step => step.name === 'Preserve published ERP runtime evidence',
+  );
+  assert.equal(
+    runtimeEvidence.with.path,
+    '.modern/production-readiness/browser-smoke/published-*',
+  );
+});
+
 test('failed Tractor acceptance preserves bounded compiler inputs without claiming acceptance', () => {
   const steps = readWorkflow('ultramodern-tractor-downstream').jobs[
     'tractor-downstream'
