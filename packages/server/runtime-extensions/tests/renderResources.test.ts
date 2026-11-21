@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { applyPlugins, type ProdServerOptions } from '@modern-js/prod-server';
 import {
   createDefaultPlugins,
   createServerBase,
@@ -17,6 +18,7 @@ import {
   serverRequestChannel,
 } from '../src/render-resources';
 import { injectRenderResourcesPlugin } from '../src/render-resources/plugin';
+import { ultramodernServerPlugin } from '../src/serverPlugin';
 import { getDefaultAppContext, getDefaultConfig } from './helpers';
 
 const route: ServerRoute = {
@@ -98,11 +100,91 @@ afterEach(async () => {
   serverRequestChannel.unsubscribe(requestObserver);
   bundles.length = 0;
   requests.length = 0;
+  rstest.unstubAllGlobals();
   rstest.unstubAllEnvs();
   await rm(pwd, { recursive: true, force: true });
 });
 
 describe('render resource policy', () => {
+  it.each(['eager', 'lazy'])(
+    'provides resources and remote CSS to configured page middleware in %s mode',
+    async loading => {
+      rstest.stubEnv('MODERN_SERVER_RENDER_RESOURCES', loading);
+      pwd = await mkdtemp(path.join(os.tmpdir(), 'modern-resource-assembly-'));
+      await fs.outputFile(
+        path.join(pwd, route.bundle!),
+        "exports.owner = 'fixture';",
+      );
+      await fs.outputFile(
+        path.join(pwd, route.entryPath),
+        '<html>owner</html>',
+      );
+      await fs.outputFile(path.join(pwd, 'static/client.js'), 'client');
+      await fs.outputJson(path.join(pwd, 'mf-manifest.json'), {
+        remotes: [{ entry: 'https://remote.example.com/mf-manifest.json' }],
+      });
+      rstest.stubGlobal('fetch', async () =>
+        Response.json({
+          metaData: { publicPath: 'https://remote.example.com/' },
+          exposes: [{ assets: { css: { sync: ['static/remote.css'] } } }],
+        }),
+      );
+      const options: ProdServerOptions = {
+        pwd,
+        serverConfigPath: path.join(pwd, 'modern.server.js'),
+        routes: [route],
+        appContext: { ...getDefaultAppContext(), appDirectory: pwd },
+        config: {
+          ...getDefaultConfig(),
+          server: { logger: false, ssr: true },
+        },
+        plugins: [ultramodernServerPlugin()],
+        serverConfig: {
+          middlewares: [
+            {
+              name: 'fixture-api',
+              path: '/api/*',
+              handler: async c => c.text('api'),
+            },
+          ],
+          renderMiddlewares: [
+            {
+              name: 'configured-page-consumer',
+              handler: async c => {
+                const manifest = c.get('serverManifest');
+                return c.json({
+                  owner: manifest?.renderBundles?.main?.owner ?? null,
+                  templates: Object.values(c.get('templates') ?? {}),
+                  css: manifest?.moduleFederationCssAssets ?? [],
+                });
+              },
+            },
+          ],
+        },
+      };
+      const server = createServerBase(options);
+      try {
+        await applyPlugins(server, options);
+        await server.init();
+        expect(await (await server.request('/api/ping')).text()).toBe('api');
+        expect(await (await server.request('/static/client.js')).text()).toBe(
+          'client',
+        );
+        if (loading === 'lazy') expect(bundles).toEqual([]);
+
+        const response = await server.request('/document');
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({
+          owner: 'fixture',
+          templates: ['<html>owner</html>'],
+          css: ['https://remote.example.com/static/remote.css'],
+        });
+      } finally {
+        await server.dispose();
+      }
+    },
+  );
+
   it('defers production bundle imports to the first render when lazy', async () => {
     rstest.stubEnv('MODERN_SERVER_RENDER_RESOURCES', 'lazy');
     const server = await createServer();

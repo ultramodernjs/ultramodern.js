@@ -353,21 +353,24 @@ export const injectResourcePlugin = (): ServerPlugin => ({
       }
 
       // Render middlewares are mounted only on page routes, after BFF and static.
-      const resourceMiddlewares = lazy ? renderMiddlewares : middlewares;
-      resourceMiddlewares.push({
-        name: 'inject-server-manifest',
-
-        handler: injectServerManifest(pwd!, routes, manifestPromise, {
-          lazy,
-          onBundleLoad,
-        }),
-      });
-
-      resourceMiddlewares.push({
-        name: 'inject-html',
-
-        handler: injectTemplates(pwd!, routes, htmlTemplatePromise, { lazy }),
-      });
+      const resourceMiddlewares = [
+        {
+          name: 'inject-server-manifest',
+          handler: injectServerManifest(pwd!, routes, manifestPromise, {
+            lazy,
+            onBundleLoad,
+          }),
+        },
+        {
+          name: 'inject-html',
+          handler: injectTemplates(pwd!, routes, htmlTemplatePromise, { lazy }),
+        },
+      ];
+      if (lazy) {
+        renderMiddlewares.unshift(...resourceMiddlewares);
+      } else {
+        middlewares.push(...resourceMiddlewares);
+      }
     });
   },
 });
