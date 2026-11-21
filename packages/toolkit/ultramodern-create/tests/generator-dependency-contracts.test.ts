@@ -84,10 +84,12 @@ test('stock Ultracite presets retain the shipped seven-line MIT notice', () => {
   assert.equal(manifest.dependencies.ultracite, '8.2.1');
   assert.equal(workspace.devDependencies.ultracite, '8.2.1');
   assert.ok(manifest.files.includes('third-party-licenses'));
-  const notice = fs.readFileSync(
-    path.join(packageRoot, 'third-party-licenses/ultracite-MIT.txt'),
-    'utf8',
-  );
+  const notice = fs
+    .readFileSync(
+      path.join(packageRoot, 'third-party-licenses/ultracite-MIT.txt'),
+      'utf8',
+    )
+    .replaceAll('\r\n', '\n');
   assert.equal(notice.trimEnd().split('\n').length, 7);
   assert.equal(
     createHash('sha256').update(notice).digest('hex'),
