@@ -253,8 +253,8 @@ importers:
         specifier: ^21.2.4
         version: 21.2.4
       '@effect/tsgo':
-        specifier: 0.70.0
-        version: 0.70.0
+        specifier: 0.73.2
+        version: 0.73.2
       '@modern-js/app-tools':
         specifier: workspace:*
         version: link:packages/solutions/app-tools
@@ -298,8 +298,8 @@ importers:
         specifier: ^6.1.4
         version: 6.1.4
       tsrs:
-        specifier: 0.25.0-ts7.1.0-beta
-        version: 0.25.0-ts7.1.0-beta
+        specifier: 7.1.0-beta.tsrs3
+        version: 7.1.0-beta.tsrs3
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -2314,8 +2314,8 @@ importers:
   packages/runtime/renderer-octane:
     dependencies:
       '@effect/tsgo':
-        specifier: 0.70.0
-        version: 0.70.0
+        specifier: 0.73.2
+        version: 0.73.2
       '@modern-js/app-tools-extensions':
         specifier: workspace:*
         version: link:../../solutions/app-tools-extensions
@@ -2335,8 +2335,8 @@ importers:
         specifier: 1.8.0
         version: 1.8.0(seroval@1.8.2)
       tsrs:
-        specifier: 0.25.0-ts7.1.0-beta
-        version: 0.25.0-ts7.1.0-beta
+        specifier: 7.1.0-beta.tsrs3
+        version: 7.1.0-beta.tsrs3
     devDependencies:
       '@modern-js/i18n-runtime-extensions':
         specifier: workspace:*
@@ -3188,8 +3188,8 @@ importers:
         version: 7.0.2
     devDependencies:
       '@effect/tsgo':
-        specifier: 0.70.0
-        version: 0.70.0
+        specifier: 0.73.2
+        version: 0.73.2
       '@loadable/component':
         specifier: 5.16.7
         version: 5.16.7(react@19.3.1)
@@ -3260,8 +3260,8 @@ importers:
         specifier: 1.0.7
         version: 1.0.7(patch_hash=bd0c8f1b4c4681eeb0d1ea0123c252ad41b17f01be1ca171bd8c42ca2d652e44)(@rsbuild/core@2.3.3(@bleedingdev/mf-runtime-tools@2.9.5)(core-js@3.51.0))(typescript@7.0.2)
       tsrs:
-        specifier: 0.25.0-ts7.1.0-beta
-        version: 0.25.0-ts7.1.0-beta
+        specifier: 7.1.0-beta.tsrs3
+        version: 7.1.0-beta.tsrs3
 
   packages/solutions/ultramodern-app-tools:
     dependencies:
@@ -3731,8 +3731,8 @@ importers:
         specifier: ^8.1.2
         version: 8.1.2
       '@effect/tsgo':
-        specifier: 0.70.0
-        version: 0.70.0
+        specifier: 0.73.2
+        version: 0.73.2
       '@modern-js/app-tools':
         specifier: workspace:*
         version: link:../../solutions/app-tools
@@ -3812,8 +3812,8 @@ importers:
         specifier: 4.3.5
         version: 4.3.5
       tsrs:
-        specifier: 0.25.0-ts7.1.0-beta
-        version: 0.25.0-ts7.1.0-beta
+        specifier: 7.1.0-beta.tsrs3
+        version: 7.1.0-beta.tsrs3
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -3821,8 +3821,8 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
       ultracite:
-        specifier: 8.2.1
-        version: 8.2.1(@biomejs/biome@2.6.8)(oxfmt@0.79.0)(oxlint@1.94.0)(prettier@3.10.1)
+        specifier: 8.3.1
+        version: 8.3.1(@biomejs/biome@2.6.8)(oxfmt@0.79.0)(oxlint@1.94.0)(prettier@3.10.1)
       zephyr-rspack-plugin:
         specifier: 1.8.0
         version: 1.8.0(@rspack/core@2.3.3(@module-federation/runtime-tools@2.9.2)(@swc/helpers@0.5.24))(supports-color@10.2.2)
@@ -7869,8 +7869,8 @@ importers:
   tests/integration/ultramodern-sandpack-profile-smoke:
     devDependencies:
       '@effect/tsgo':
-        specifier: 0.70.0
-        version: 0.70.0
+        specifier: 0.73.2
+        version: 0.73.2
       '@modern-js/app-tools':
         specifier: workspace:*
         version: link:../../../packages/solutions/app-tools
@@ -7929,8 +7929,8 @@ importers:
         specifier: 4.3.5
         version: 4.3.5
       tsrs:
-        specifier: 0.25.0-ts7.1.0-beta
-        version: 0.25.0-ts7.1.0-beta
+        specifier: 7.1.0-beta.tsrs3
+        version: 7.1.0-beta.tsrs3
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -8863,43 +8863,43 @@ packages:
       '@opentelemetry/sdk-trace':
         optional: true
 
-  '@effect/tsgo-darwin-arm64@0.70.0':
-    resolution: {integrity: sha512-U4mT3LGxxFy6pgypLn8Syv7KKdFpbm5+RMNRimgPZkRyiuQRlk5K2REqKcHti3WtVmTLzdUrqWvd0X8xLIyC9A==}
+  '@effect/tsgo-darwin-arm64@0.73.2':
+    resolution: {integrity: sha512-+6xuv33cSp44tNWc9erzLKmS7qRB/QdPJYUCJrEY+4lfRhFdAsCvRDw6uw2aqzePuZDHfM3gDqfYEl5g/mWBfQ==}
     cpu: [arm64]
     os: [darwin]
 
-  '@effect/tsgo-darwin-x64@0.70.0':
-    resolution: {integrity: sha512-XUg35L9e1j1pw8dTV1gc18KVXoPUuhLUAxHCGE6XJrLLKjcQR1WnVJEd50kWgsrA79X0EQl0c9E7cS1jssMpmQ==}
+  '@effect/tsgo-darwin-x64@0.73.2':
+    resolution: {integrity: sha512-Oqwft3rP05CWImD1GGPuWB3esJrxz7iSOXGpfku1KIK1eElW0aE9E1vdpgiFJ3lykJruyOOZ4UB+E4US5K/alA==}
     cpu: [x64]
     os: [darwin]
 
-  '@effect/tsgo-linux-arm64@0.70.0':
-    resolution: {integrity: sha512-uFb26cfAS565wSN3oJidcmFkEcCremn0OP3emctu1JwLSeEMPWNipIX2ne5d2LfXShnIxF9ZAYguS8L0tyoJ1w==}
+  '@effect/tsgo-linux-arm64@0.73.2':
+    resolution: {integrity: sha512-/EuCPqoqZb+kkcdCnypwd/stmSvAO5k/NKS+sQJSv6F2wXQAIgWB4VSNmftt1b/s7dBB0QysLFohscV8OxzCgA==}
     cpu: [arm64]
     os: [linux]
 
-  '@effect/tsgo-linux-arm@0.70.0':
-    resolution: {integrity: sha512-gfirkmxqBCLcWBad3FbRetVIsL/1Zk4rb4mip3bPov+HtZHYCV6/XSmoIR7iRXPrj6j9D8Ee6XfiwcjvJRE5og==}
+  '@effect/tsgo-linux-arm@0.73.2':
+    resolution: {integrity: sha512-JdAFBCv0Q0UyMe4Et7xTjqLoM6jDvci6qsaqWwGCRR8ZZhvc+j9kLw7dN3GJnYlHMr0HUGWnSCxUBISODpX/kA==}
     cpu: [arm]
     os: [linux]
 
-  '@effect/tsgo-linux-x64@0.70.0':
-    resolution: {integrity: sha512-UweXaMA6BX/5EceCnJuOtmqRBuul8IiD3d6Mf7qAVnNVcFAyVTqx1sdm/ofI+Xy7acDPBCFXJAltRrycCPWa0w==}
+  '@effect/tsgo-linux-x64@0.73.2':
+    resolution: {integrity: sha512-1g5UQ8nwpqJVwrXvHLstEc7N7jRuqZm2axukryerGV6/e6hD2vc70tHdb1ZVg8zIUR40TWem1MCoFNNIXKOlZg==}
     cpu: [x64]
     os: [linux]
 
-  '@effect/tsgo-win32-arm64@0.70.0':
-    resolution: {integrity: sha512-68rjEm8YXg1kE6Qfue+hilRix2sFAI2kbJMP8DwUTtYEcIJlzy2VswOYvEykvZtjFxPjNZEjuIFTKLwaKwRdig==}
+  '@effect/tsgo-win32-arm64@0.73.2':
+    resolution: {integrity: sha512-J4kyLNk0Fi6WwIWQV6omCu1OkHcNNY6KMcs5K2AqUV8l+QUMEetko5NkcmEi1Keedh6bNRqOGwvB9dg+Duvypw==}
     cpu: [arm64]
     os: [win32]
 
-  '@effect/tsgo-win32-x64@0.70.0':
-    resolution: {integrity: sha512-ijk45EZNKAsDIzGYeZAEH1jOTy6WamP5mSJj4zujOY3qUYJLHrKQTZ9MOBUvekGZextSd9s8Gpwbi5FExNwiFA==}
+  '@effect/tsgo-win32-x64@0.73.2':
+    resolution: {integrity: sha512-N5V9GaTZseqGN38+XhGypLpweX2XiM2DO1V9DUppp26deZIJe0j3QRiRCSUAQoJrR0Lji/k5wo3jki6P38sCPA==}
     cpu: [x64]
     os: [win32]
 
-  '@effect/tsgo@0.70.0':
-    resolution: {integrity: sha512-kZwLZaAT4of8wu1sTRnk2IZpbjHGQSBKGvfw+nYw2iuvJlkIS0BNYcwA0ohoLPRffUKUP6PY7iBW5Ag4DUxh+Q==}
+  '@effect/tsgo@0.73.2':
+    resolution: {integrity: sha512-eM5ayjlp0fD2l+aL+4O/y9d1LwF1m5in5EdNkOYwLFcXI3kcee8CWP4wr2xTc4L/+KJmS/uaYUGWdOj4G46BDA==}
     hasBin: true
 
   '@emnapi/core@1.11.0':
@@ -12515,54 +12515,54 @@ packages:
   '@tsconfig/strictest@2.0.9':
     resolution: {integrity: sha512-CbwIySRXoGapLZYXqQHF15cg0wQImJa25Ynmubb7816vnHqTdQrmQlSbZxkJrrBusHLbF1kFbNVn8XtxmQ3EpQ==}
 
-  '@tsrs/darwin-arm64@0.25.0-ts7.1.0-beta':
-    resolution: {integrity: sha512-+pYoQ+AqpdUolO4kJBQlQmwxJOoc5INuusw/2AZnR4frfnyVGza+gEn0br8Z0LOk7nklQuILuMKH93BU3hpHvA==}
+  '@tsrs/darwin-arm64@7.1.0-beta.tsrs3':
+    resolution: {integrity: sha512-R1Rh692Gy7XxuDS6Ds+BexqiuHawqH4KVftLu4Ty0vh7cjIPHm4MdWtlU/0MdrbdlJpnGo6Ul1W5BpHIiP+Zgw==}
     engines: {node: '>=16.20.0'}
     cpu: [arm64]
     os: [darwin]
 
-  '@tsrs/darwin-x64@0.25.0-ts7.1.0-beta':
-    resolution: {integrity: sha512-MnD5Bv48TdIcTpNavsg7PV6RUuwAKhozJ29CZDlKq6oZwGjGulcQLI3Sok6MvvCG7U6v4l9RONKO8BhNXCytvQ==}
+  '@tsrs/darwin-x64@7.1.0-beta.tsrs3':
+    resolution: {integrity: sha512-F2IHae89mxUuSTGTbC9WfGdDKeZ12/TQo0tMYRc55llUKmxC7gJ3+1C1uwKXiZG7c6sTg07EYct9pnxEql/85Q==}
     engines: {node: '>=16.20.0'}
     cpu: [x64]
     os: [darwin]
 
-  '@tsrs/linux-arm64-gnu@0.25.0-ts7.1.0-beta':
-    resolution: {integrity: sha512-Mc/YuFQa7APDuX39UMr8NMQHKkCOmEx8SfUXVnew7eljJHKnUkpLHpoQFQA0aKnzIqDAxnNudXhIWB0DjZEX2A==}
+  '@tsrs/linux-arm64-gnu@7.1.0-beta.tsrs3':
+    resolution: {integrity: sha512-13V8kMb0iTEv/IY4DUZF4RKO2QycTlty3U3TSLOHLmvyLY+MOcmvg2ixzKm71uCHG0YVZgyUiCjiw8ZdqevT1A==}
     engines: {node: '>=16.20.0'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@tsrs/linux-arm64-musl@0.25.0-ts7.1.0-beta':
-    resolution: {integrity: sha512-ZTZxIv/W4qiqDBCXcDlr8ma76JCO0DQHbUukuhpSpKHz3E2m5FCwLcra/NTqAVniyLU6/RjIOCIcDRpVQvq6cQ==}
+  '@tsrs/linux-arm64-musl@7.1.0-beta.tsrs3':
+    resolution: {integrity: sha512-k9P/n40siZyt1kUUlxfefWDVj/189AsVQIPN3uoIpALx2Y59Ow+7i49fanxDexmGcZTKEfNB2gF2FeWET6o4TQ==}
     engines: {node: '>=16.20.0'}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@tsrs/linux-x64-gnu@0.25.0-ts7.1.0-beta':
-    resolution: {integrity: sha512-dGRvubxWQXNP3aow+RLgFAbW3pR4oQ+UPfwrSgdggKCKKL9sAPr8nFGYM50JWAiqGQYSwRJl48AzIC7bHuQ2cQ==}
+  '@tsrs/linux-x64-gnu@7.1.0-beta.tsrs3':
+    resolution: {integrity: sha512-erepwUH0NoRDjLeHEEEruh0Gd2/t0n2PHfJwXNlgSNbGM94+nNNZop0sYmjAtx63MadiC9YQXO6blTEQDVpDOg==}
     engines: {node: '>=16.20.0'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@tsrs/linux-x64-musl@0.25.0-ts7.1.0-beta':
-    resolution: {integrity: sha512-zm89HYpXAv36XuXrEsfxAEmGTehY5K0L27+tFmJzxX2CqLwki0AX4FGA78Fy97x8Yk8kOR8FJO2xTvSW9vXBIg==}
+  '@tsrs/linux-x64-musl@7.1.0-beta.tsrs3':
+    resolution: {integrity: sha512-/qGDUjkuRWNUaTJ8ChRnhJPnmALgCZN6TSVwj3uyGp5Nj8OZ/rulEwciHCsynBaX7KgoWP0SvmvPuPycSJq56g==}
     engines: {node: '>=16.20.0'}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@tsrs/win32-arm64@0.25.0-ts7.1.0-beta':
-    resolution: {integrity: sha512-fVqAnHvFD2vxIHxVJEeQq9W63QZUW6WLy1+qFVuMUdM5ViURhjzcuLgOx8EIGqp6qOqFDpuAlNPQmjUpTXYg2g==}
+  '@tsrs/win32-arm64@7.1.0-beta.tsrs3':
+    resolution: {integrity: sha512-Q6QtafSuUL3Ram8X/6n0gtUyC/qOmQ1bFsqkCkbwYGMIU/P7l7fsJgMQ0BBKSJBkvfwfZvZ8JpgR9+yrsRumWw==}
     engines: {node: '>=16.20.0'}
     cpu: [arm64]
     os: [win32]
 
-  '@tsrs/win32-x64@0.25.0-ts7.1.0-beta':
-    resolution: {integrity: sha512-BfRCSI5E0LQ3kim43dBqX3Dq3dmRUI2aMWLGcgUxbTEkyvsESX01tM7u31flzRRajw3zVZwVB95kh5xvUeIOkA==}
+  '@tsrs/win32-x64@7.1.0-beta.tsrs3':
+    resolution: {integrity: sha512-mITdFPru52C0Ws7D7DyLd+pISSwd3GIzM+v4elsXhW5o1n0FJpEr57WDcN8humkhxQinprzOELGIn4qiEXj2jw==}
     engines: {node: '>=16.20.0'}
     cpu: [x64]
     os: [win32]
@@ -18961,8 +18961,8 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
-  tsrs@0.25.0-ts7.1.0-beta:
-    resolution: {integrity: sha512-J7eAkkriIwHExX2TzwTW6flJ/fmg3U+FDQwmTUkvaYmo02iva69YPmxFaCXGYIlsED3l1Aa62hSsEDJewBrIKA==}
+  tsrs@7.1.0-beta.tsrs3:
+    resolution: {integrity: sha512-iDcoaNkX4j3ZCtO3F40R7gVB2/9oyVQwJ12hb0iWBo3egT13oYpG9wQSPFCiGN7d+uq9FGTwlG0WsQNMBTEGzA==}
     engines: {node: '>=16.20.0'}
     hasBin: true
 
@@ -19051,17 +19051,17 @@ packages:
   uglify-to-browserify@1.0.2:
     resolution: {integrity: sha512-vb2s1lYx2xBtUgy+ta+b2J/GLVUR+wmpINwHePmPRhOsIVCG2wDzKJ0n14GslH1BifsqVzSOwQhRaCAsZ/nI4Q==}
 
-  ultracite@8.2.1:
-    resolution: {integrity: sha512-+HAwOkdpdNaf6Fr+JEh0YkikJU4vjRO977kMAvtOsk8YWk+VG3rdy7gyFLgbO1Edv+k5hhL/3CKAiEmUlvt3ow==}
+  ultracite@8.3.1:
+    resolution: {integrity: sha512-+jssQlohRRovLzbTl2MPpHIM8L4n4duIdiclrK5XZI7ljtrVgMzaOmrLzkQnu2v8n/He7FwV+St/FCdWjnLbCw==}
     engines: {node: ^22.22.2 || >=24.15.0}
     hasBin: true
     peerDependencies:
-      '@biomejs/biome': ^2.6.2
+      '@biomejs/biome': ^2.6.7
       eslint: ^10.9.0
       oxfmt: '>=0.71.0 <1'
-      oxlint: ^1.90.0
+      oxlint: ^1.94.0
       prettier: ^3.5.3
-      stylelint: ^17.0.0
+      stylelint: ^18.0.0
     peerDependenciesMeta:
       '@biomejs/biome':
         optional: true
@@ -20760,36 +20760,36 @@ snapshots:
       '@opentelemetry/sdk-metrics': 3.1.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/sdk-trace': 3.1.1(@opentelemetry/api@1.10.0)
 
-  '@effect/tsgo-darwin-arm64@0.70.0':
+  '@effect/tsgo-darwin-arm64@0.73.2':
     optional: true
 
-  '@effect/tsgo-darwin-x64@0.70.0':
+  '@effect/tsgo-darwin-x64@0.73.2':
     optional: true
 
-  '@effect/tsgo-linux-arm64@0.70.0':
+  '@effect/tsgo-linux-arm64@0.73.2':
     optional: true
 
-  '@effect/tsgo-linux-arm@0.70.0':
+  '@effect/tsgo-linux-arm@0.73.2':
     optional: true
 
-  '@effect/tsgo-linux-x64@0.70.0':
+  '@effect/tsgo-linux-x64@0.73.2':
     optional: true
 
-  '@effect/tsgo-win32-arm64@0.70.0':
+  '@effect/tsgo-win32-arm64@0.73.2':
     optional: true
 
-  '@effect/tsgo-win32-x64@0.70.0':
+  '@effect/tsgo-win32-x64@0.73.2':
     optional: true
 
-  '@effect/tsgo@0.70.0':
+  '@effect/tsgo@0.73.2':
     optionalDependencies:
-      '@effect/tsgo-darwin-arm64': 0.70.0
-      '@effect/tsgo-darwin-x64': 0.70.0
-      '@effect/tsgo-linux-arm': 0.70.0
-      '@effect/tsgo-linux-arm64': 0.70.0
-      '@effect/tsgo-linux-x64': 0.70.0
-      '@effect/tsgo-win32-arm64': 0.70.0
-      '@effect/tsgo-win32-x64': 0.70.0
+      '@effect/tsgo-darwin-arm64': 0.73.2
+      '@effect/tsgo-darwin-x64': 0.73.2
+      '@effect/tsgo-linux-arm': 0.73.2
+      '@effect/tsgo-linux-arm64': 0.73.2
+      '@effect/tsgo-linux-x64': 0.73.2
+      '@effect/tsgo-win32-arm64': 0.73.2
+      '@effect/tsgo-win32-x64': 0.73.2
 
   '@emnapi/core@1.11.0':
     dependencies:
@@ -24190,28 +24190,28 @@ snapshots:
 
   '@tsconfig/strictest@2.0.9': {}
 
-  '@tsrs/darwin-arm64@0.25.0-ts7.1.0-beta':
+  '@tsrs/darwin-arm64@7.1.0-beta.tsrs3':
     optional: true
 
-  '@tsrs/darwin-x64@0.25.0-ts7.1.0-beta':
+  '@tsrs/darwin-x64@7.1.0-beta.tsrs3':
     optional: true
 
-  '@tsrs/linux-arm64-gnu@0.25.0-ts7.1.0-beta':
+  '@tsrs/linux-arm64-gnu@7.1.0-beta.tsrs3':
     optional: true
 
-  '@tsrs/linux-arm64-musl@0.25.0-ts7.1.0-beta':
+  '@tsrs/linux-arm64-musl@7.1.0-beta.tsrs3':
     optional: true
 
-  '@tsrs/linux-x64-gnu@0.25.0-ts7.1.0-beta':
+  '@tsrs/linux-x64-gnu@7.1.0-beta.tsrs3':
     optional: true
 
-  '@tsrs/linux-x64-musl@0.25.0-ts7.1.0-beta':
+  '@tsrs/linux-x64-musl@7.1.0-beta.tsrs3':
     optional: true
 
-  '@tsrs/win32-arm64@0.25.0-ts7.1.0-beta':
+  '@tsrs/win32-arm64@7.1.0-beta.tsrs3':
     optional: true
 
-  '@tsrs/win32-x64@0.25.0-ts7.1.0-beta':
+  '@tsrs/win32-x64@7.1.0-beta.tsrs3':
     optional: true
 
   '@tsrx/core@0.6.1':
@@ -31476,16 +31476,16 @@ snapshots:
 
   tslib@2.8.1: {}
 
-  tsrs@0.25.0-ts7.1.0-beta:
+  tsrs@7.1.0-beta.tsrs3:
     optionalDependencies:
-      '@tsrs/darwin-arm64': 0.25.0-ts7.1.0-beta
-      '@tsrs/darwin-x64': 0.25.0-ts7.1.0-beta
-      '@tsrs/linux-arm64-gnu': 0.25.0-ts7.1.0-beta
-      '@tsrs/linux-arm64-musl': 0.25.0-ts7.1.0-beta
-      '@tsrs/linux-x64-gnu': 0.25.0-ts7.1.0-beta
-      '@tsrs/linux-x64-musl': 0.25.0-ts7.1.0-beta
-      '@tsrs/win32-arm64': 0.25.0-ts7.1.0-beta
-      '@tsrs/win32-x64': 0.25.0-ts7.1.0-beta
+      '@tsrs/darwin-arm64': 7.1.0-beta.tsrs3
+      '@tsrs/darwin-x64': 7.1.0-beta.tsrs3
+      '@tsrs/linux-arm64-gnu': 7.1.0-beta.tsrs3
+      '@tsrs/linux-arm64-musl': 7.1.0-beta.tsrs3
+      '@tsrs/linux-x64-gnu': 7.1.0-beta.tsrs3
+      '@tsrs/linux-x64-musl': 7.1.0-beta.tsrs3
+      '@tsrs/win32-arm64': 7.1.0-beta.tsrs3
+      '@tsrs/win32-x64': 7.1.0-beta.tsrs3
 
   tsscmp@1.0.6: {}
 
@@ -31588,7 +31588,7 @@ snapshots:
   uglify-to-browserify@1.0.2:
     optional: true
 
-  ultracite@8.2.1(@biomejs/biome@2.6.8)(oxfmt@0.79.0)(oxlint@1.94.0)(prettier@3.10.1):
+  ultracite@8.3.1(@biomejs/biome@2.6.8)(oxfmt@0.79.0)(oxlint@1.94.0)(prettier@3.10.1):
     dependencies:
       '@clack/prompts': 1.8.1
       cli-truncate: 6.1.1

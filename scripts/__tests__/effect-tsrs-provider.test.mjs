@@ -8,9 +8,9 @@ const source = readFileSync(
   new URL('../tsrs-dts/compiler.cjs', import.meta.url),
   'utf8',
 );
-const tsrsVersion = '0.25.0-ts7.1.0-beta';
+const tsrsVersion = '7.1.0-beta.tsrs3';
 const typescriptCommit = '3e9236361fa97a9e6c685f4833ac457ae2d8c50a';
-const effectVersion = '0.70.0';
+const effectVersion = '0.73.2';
 const tsrsPath = '/fixture/node_modules/tsrs/package.json';
 const effectPath = '/fixture/node_modules/@effect/tsgo/package.json';
 const nativeRoot = '/fixture/node_modules/@effect/tsgo-darwin-arm64';
@@ -46,7 +46,7 @@ function loadProvider(
       components: {
         tsrs: {
           [tsrsVersion]: {
-            gitHead: '0f82b670e4ff861840b1315f8610816229e73e3a',
+            gitHead: 'eba9b2b796ef5e4a80b793e0b94b72bc7d4a9c05',
             typescript: { version: '7.1.0-beta', gitHead: typescriptCommit },
           },
         },
@@ -177,7 +177,7 @@ test('the previous provider cannot reuse the newly reviewed capability contract'
   assert.throws(
     () =>
       loadProvider(documents => {
-        documents[effectPath].version = '0.69.0';
+        documents[effectPath].version = '0.70.0';
       }),
     /Unreviewed Effect tsrs capability contract/,
   );
@@ -234,6 +234,12 @@ test('root provider rejects corrupt capability and embedded TypeScript metadata'
     },
     documents => {
       documents[tsrsPath].tsrs.typescriptVersion = '7.0.2';
+    },
+    documents => {
+      documents[tsrsPath].version = '0.25.0-ts7.1.0-beta';
+    },
+    documents => {
+      documents[tsrsPath].version = '7.1.0-beta-tsrs3';
     },
   ]) {
     assert.throws(() => loadProvider(change), /Invalid tsrs platform metadata/);
@@ -322,8 +328,8 @@ test('launcher keeps exact Effect/tsrs/TypeScript stamp validation for owned sel
   const good = `Version 7.1.0-beta+effect-tsgo.${effectVersion} (tsrs ${tsrsVersion}, microsoft/TypeScript@${typescriptCommit.slice(0, 12)})`;
   for (const [stamp, expectedStatus] of [
     [good, 0],
-    [good.replace(effectVersion, '0.66.0'), 1],
-    [good.replace(tsrsVersion, '0.20.0-ts7.1.0-beta'), 1],
+    [good.replace(effectVersion, '0.70.0'), 1],
+    [good.replace(tsrsVersion, '7.1.0-beta.tsrs2'), 1],
     [good.replace(typescriptCommit.slice(0, 12), '0'.repeat(12)), 1],
     ['Version 7.1.0-beta', 1],
   ]) {

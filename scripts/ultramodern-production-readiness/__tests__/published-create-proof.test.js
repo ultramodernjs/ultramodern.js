@@ -645,9 +645,9 @@ test('bootstrap admits exact compiler and native pins from the authenticated pac
       .minimumReleaseAgeExclude;
   Object.assign(release.createPackage.packageJson.dependencies, {
     '@effect/tsgo': '0.69.0',
-    tsrs: '0.25.0-ts7.1.0-beta',
+    tsrs: '7.1.0-beta.tsrs3',
     'unrelated-compiler': '9.9.9',
-    '@tsrs/unreviewed-host': '0.25.0-ts7.1.0-beta',
+    '@tsrs/unreviewed-host': '7.1.0-beta.tsrs3',
   });
   const compilerSelectors = [
     '@effect/tsgo@0.69.0',
@@ -658,15 +658,15 @@ test('bootstrap admits exact compiler and native pins from the authenticated pac
     '@effect/tsgo-linux-x64@0.69.0',
     '@effect/tsgo-win32-arm64@0.69.0',
     '@effect/tsgo-win32-x64@0.69.0',
-    'tsrs@0.25.0-ts7.1.0-beta',
-    '@tsrs/darwin-arm64@0.25.0-ts7.1.0-beta',
-    '@tsrs/darwin-x64@0.25.0-ts7.1.0-beta',
-    '@tsrs/linux-arm64-gnu@0.25.0-ts7.1.0-beta',
-    '@tsrs/linux-arm64-musl@0.25.0-ts7.1.0-beta',
-    '@tsrs/linux-x64-gnu@0.25.0-ts7.1.0-beta',
-    '@tsrs/linux-x64-musl@0.25.0-ts7.1.0-beta',
-    '@tsrs/win32-arm64@0.25.0-ts7.1.0-beta',
-    '@tsrs/win32-x64@0.25.0-ts7.1.0-beta',
+    'tsrs@7.1.0-beta.tsrs3',
+    '@tsrs/darwin-arm64@7.1.0-beta.tsrs3',
+    '@tsrs/darwin-x64@7.1.0-beta.tsrs3',
+    '@tsrs/linux-arm64-gnu@7.1.0-beta.tsrs3',
+    '@tsrs/linux-arm64-musl@7.1.0-beta.tsrs3',
+    '@tsrs/linux-x64-gnu@7.1.0-beta.tsrs3',
+    '@tsrs/linux-x64-musl@7.1.0-beta.tsrs3',
+    '@tsrs/win32-arm64@7.1.0-beta.tsrs3',
+    '@tsrs/win32-x64@7.1.0-beta.tsrs3',
   ];
   const createPackage = resolveCreatePackage(release);
   const policy = createPackage.bootstrapReleaseAgePolicy;
@@ -728,13 +728,13 @@ test('bootstrap authenticates only reviewed exact Effect runtime releases and th
   assert.doesNotThrow(() => createPnpmDlxArgs(packedProducer, []));
   release.createPackage.packageJson.ultramodern.bootstrapReleaseAgeExclude =
     runtimeSelectors;
-  release.createPackage.packageJson.dependencies.tsrs = '0.25.0-ts7.1.0-beta';
+  release.createPackage.packageJson.dependencies.tsrs = '7.1.0-beta.tsrs3';
   const args = createPnpmDlxArgs(resolveCreatePackage(release), []);
   assert(args.includes('--config.trust-policy=no-downgrade'));
   assert(args.includes('--config.trust-policy-ignore-after=1440'));
   assert.deepEqual(
     args.filter(arg => arg.startsWith('--config.trust-policy-exclude=')),
-    ['--config.trust-policy-exclude=tsrs@0.25.0-ts7.1.0-beta'],
+    ['--config.trust-policy-exclude=tsrs@7.1.0-beta.tsrs3'],
   );
 });
 
@@ -753,9 +753,9 @@ test('authenticated compiler trust survives source bootstrap and published or so
   );
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const release = makeBootstrapRelease();
-  release.createPackage.packageJson.dependencies.tsrs = '0.25.0-ts7.1.0-beta';
+  release.createPackage.packageJson.dependencies.tsrs = '7.1.0-beta.tsrs3';
   const createPackage = resolveCreatePackage(release);
-  const compiler = 'tsrs@0.25.0-ts7.1.0-beta';
+  const compiler = 'tsrs@7.1.0-beta.tsrs3';
   const cohort = release.packages
     .map(item => `${item.targetName}@${item.version}`)
     .sort();
@@ -863,18 +863,18 @@ test('bootstrap compiler exceptions ignore development, other packages and unaut
       .minimumReleaseAgeExclude;
   release.createPackage.packageJson.devDependencies = {
     '@effect/tsgo': '0.69.0',
-    tsrs: '0.25.0-ts7.1.0-beta',
+    tsrs: '7.1.0-beta.tsrs3',
   };
   release.packages.find(
     item => item.sourceName === '@modern-js/utils',
-  ).packageJson.dependencies = { tsrs: '0.25.0-ts7.1.0-beta' };
+  ).packageJson.dependencies = { tsrs: '7.1.0-beta.tsrs3' };
   release.createPackage = {
     ...release.createPackage,
     packageJson: {
       ...release.createPackage.packageJson,
       dependencies: {
         ...release.createPackage.packageJson.dependencies,
-        tsrs: '0.25.0-ts7.1.0-beta',
+        tsrs: '7.1.0-beta.tsrs3',
       },
     },
   };
@@ -927,7 +927,7 @@ test('bootstrap compiler exemptions cannot be forged or broadened by cloning pol
   const release = makeBootstrapRelease();
   Object.assign(release.createPackage.packageJson.dependencies, {
     '@effect/tsgo': '0.69.0',
-    tsrs: '0.25.0-ts7.1.0-beta',
+    tsrs: '7.1.0-beta.tsrs3',
   });
   const actual = resolveCreatePackage(release);
   assert.doesNotThrow(() => createPnpmDlxArgs(actual, []));
@@ -935,7 +935,7 @@ test('bootstrap compiler exemptions cannot be forged or broadened by cloning pol
     undefined,
     'tsrs@*',
     'tsrs@0.19.0-ts7.1.0-beta',
-    '@tsrs/unreviewed-host@0.25.0-ts7.1.0-beta',
+    '@tsrs/unreviewed-host@7.1.0-beta.tsrs3',
     '@effect/other@0.69.0',
     'unrelated@0.69.0',
   ]) {
@@ -1033,13 +1033,13 @@ test('release acceptance shares authenticated compiler selectors across bootstra
   const release = makeBootstrapRelease();
   Object.assign(release.createPackage.packageJson.dependencies, {
     '@effect/tsgo': '0.69.0',
-    tsrs: '0.25.0-ts7.1.0-beta',
+    tsrs: '7.1.0-beta.tsrs3',
     'unrelated-compiler': '9.9.9',
   });
   const createPackage = resolveCreatePackage(release);
   const exclusions = releaseAgeExemptions(release, { policyPath });
   assert.equal(exclusions.length, release.packages.length + 17);
-  assert(exclusions.includes('tsrs@0.25.0-ts7.1.0-beta'));
+  assert(exclusions.includes('tsrs@7.1.0-beta.tsrs3'));
   assert(exclusions.includes('@effect/tsgo-win32-x64@0.69.0'));
   assert(!exclusions.includes('unrelated-compiler@9.9.9'));
   assert(
@@ -1100,7 +1100,7 @@ test('release acceptance shares authenticated compiler selectors across bootstra
   const audit = await auditReleaseAgePolicy(auditOptions);
   assert.deepEqual(audit.exactExclusions, exclusions);
   for (const badExclusions of [
-    exclusions.filter(value => value !== 'tsrs@0.25.0-ts7.1.0-beta'),
+    exclusions.filter(value => value !== 'tsrs@7.1.0-beta.tsrs3'),
     [...exclusions, 'unrelated-compiler@9.9.9'].sort(),
   ]) {
     writeJson(root, 'pnpm-workspace.yaml', {
@@ -1134,7 +1134,7 @@ test('release-age audit honors only authenticated compiler pins with verified re
   const release = makeNormalAcceptanceRelease();
   Object.assign(release.createPackage.packageJson.dependencies, {
     '@effect/tsgo': '0.69.0',
-    tsrs: '0.25.0-ts7.1.0-beta',
+    tsrs: '7.1.0-beta.tsrs3',
     'unrelated-compiler': '9.9.9',
   });
   release.createPackage.packageJson.devDependencies = {
@@ -1248,7 +1248,7 @@ test('release-age audit honors only authenticated compiler pins with verified re
   for (const [name, version] of [
     ['unrelated-compiler', '9.9.9'],
     ['@effect/tsgo-dev-only', '0.69.0'],
-    ['@tsrs/unreviewed-host', '0.25.0-ts7.1.0-beta'],
+    ['@tsrs/unreviewed-host', '7.1.0-beta.tsrs3'],
     ['tsrs', '0.19.0-ts7.1.0-beta'],
     ['@effect/tsgo', '0.58.0'],
   ]) {

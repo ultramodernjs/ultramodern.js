@@ -32,7 +32,7 @@ test.each([
         platformPackage,
         compilerStatus: status,
       });
-      assert.equal(fixture.manifest.version, '0.25.0-ts7.1.0-beta');
+      assert.equal(fixture.manifest.version, '7.1.0-beta.tsrs3');
       assert.equal(
         Object.hasOwn(fixture.manifest.optionalDependencies, platformPackage),
         platformPackage !== '@tsrs/linux-arm-gnu',

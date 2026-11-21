@@ -31,7 +31,7 @@ const packageJson = `${JSON.stringify(
       'react-dom': '19.3.1',
     },
     devDependencies: {
-      '@effect/tsgo': '0.70.0',
+      '@effect/tsgo': '0.73.2',
       '@modern-js/ultramodern-app-tools':
         'npm:@bleedingdev/modern-js-ultramodern-app-tools@latest',
       '@modern-js/app-tools': 'npm:@bleedingdev/modern-js-app-tools@latest',
@@ -42,7 +42,7 @@ const packageJson = `${JSON.stringify(
       '@types/react-dom': '^19.3.0',
       tailwindcss: '4.3.5',
       typescript: '7.0.2',
-      tsrs: '0.25.0-ts7.1.0-beta',
+      tsrs: '7.1.0-beta.tsrs3',
     },
   },
   null,

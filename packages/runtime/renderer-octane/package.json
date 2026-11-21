@@ -203,14 +203,14 @@
     "node": ">=26.13.1"
   },
   "dependencies": {
-    "@effect/tsgo": "0.70.0",
+    "@effect/tsgo": "0.73.2",
     "@modern-js/app-tools-extensions": "workspace:*",
     "@modern-js/renderer-core": "workspace:*",
     "@volar/language-core": "2.4.31",
     "jsonc-parser": "3.3.1",
     "seroval": "1.8.2",
     "seroval-plugins": "1.8.0",
-    "tsrs": "0.25.0-ts7.1.0-beta"
+    "tsrs": "7.1.0-beta.tsrs3"
   },
   "peerDependencies": {
     "@modern-js/i18n-runtime-extensions": "workspace:^3.8.3",

@@ -18,7 +18,8 @@ if (
   typeof tsrs.version !== 'string' ||
   typeof tsrs.tsrs?.typescriptVersion !== 'string' ||
   !/^7\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(tsrs.tsrs.typescriptVersion) ||
-  !tsrs.version.endsWith(`-ts${tsrs.tsrs.typescriptVersion}`) ||
+  /^(.+)\.tsrs[1-9]\d*$/.exec(tsrs.version)?.[1] !==
+    tsrs.tsrs.typescriptVersion ||
   !/^[a-f\d]{40}$/.test(tsrs.tsrs?.typescriptCommit ?? '') ||
   !tsrs.optionalDependencies ||
   typeof tsrs.optionalDependencies !== 'object' ||
@@ -30,7 +31,7 @@ if (
 if (effect.name !== '@effect/tsgo' || typeof effect.version !== 'string') {
   throw new Error(`Invalid Effect compiler metadata: ${effectManifestPath}`);
 }
-// @effect/tsgo@0.70.0 exports no tsrs capability API. These are its CLI's
+// @effect/tsgo@0.73.2 exports no tsrs capability API. These are its CLI's
 // tsrsReplacementTargets / resolveTsrs targets, not all upstream tsrs targets.
 const effectTsrsTargets = new Set([
   '@tsrs/darwin-arm64',
@@ -43,7 +44,7 @@ const effectTsrsTargets = new Set([
 const reportedUnsupportedTargets = new Set();
 
 function getCompilerPolicy(platform = process.platform, arch = process.arch) {
-  if (effect.version !== '0.70.0') {
+  if (effect.version !== '0.73.2') {
     throw new Error(
       `Unreviewed Effect tsrs capability contract: ${effect.version}`,
     );

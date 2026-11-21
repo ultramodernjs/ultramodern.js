@@ -253,7 +253,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Effect-TS/tsgo
-          ref: 0e722d359c969bdf1b1316f08e8637022cde3cce
+          ref: ec0221e2bf7a3fe867b1157ca598816314ee2ca1
           persist-credentials: false
 
       - name: Checkout the production correction and staging CLI
@@ -270,8 +270,8 @@ jobs:
           import { createHash } from 'node:crypto';
           const root = 'harness/packages/solutions/app-tools-extensions/compiler';
           const source = JSON.parse(fs.readFileSync(`${root}/source.json`));
-          assert.equal(source.effect.baseCommit, '0e722d359c969bdf1b1316f08e8637022cde3cce');
-          assert.equal(source.tsrs.sourceCommit, '0f82b670e4ff861840b1315f8610816229e73e3a');
+          assert.equal(source.effect.baseCommit, 'ec0221e2bf7a3fe867b1157ca598816314ee2ca1');
+          assert.equal(source.tsrs.sourceCommit, 'eba9b2b796ef5e4a80b793e0b94b72bc7d4a9c05');
           assert.equal(source.typescript.sourceCommit, '3e9236361fa97a9e6c685f4833ac457ae2d8c50a');
           assert.equal(source.optimization, 'none');
           const patch = fs.readFileSync(`${root}/constraint.patch`);
@@ -283,15 +283,15 @@ jobs:
         uses: ./.github/actions/setup-repo
         with:
           component: tsrs
-          version: 0.25.0-ts7.1.0-beta
+          version: 7.1.0-beta.tsrs3
           target: ${{ matrix.target }}
 
       - name: Verify materialized source identities
         env:
           RUST_TARGET: ${{ matrix.rust_target }}
         run: |
-          test "$(git rev-parse HEAD)" = 0e722d359c969bdf1b1316f08e8637022cde3cce
-          test "$(git -C tsrs rev-parse HEAD)" = 0f82b670e4ff861840b1315f8610816229e73e3a
+          test "$(git rev-parse HEAD)" = ec0221e2bf7a3fe867b1157ca598816314ee2ca1
+          test "$(git -C tsrs rev-parse HEAD)" = eba9b2b796ef5e4a80b793e0b94b72bc7d4a9c05
           test "$(git -C typescript rev-parse HEAD)" = 3e9236361fa97a9e6c685f4833ac457ae2d8c50a
           rustup target add "$RUST_TARGET"
           pnpm exec repoctl tsrs port-check
@@ -302,7 +302,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: >-
           pnpm exec repoctl build artifact --component tsrs
-          --version 0.25.0-ts7.1.0-beta --target "$TARGET" --optimize none
+          --version 7.1.0-beta.tsrs3 --target "$TARGET" --optimize none
 
       - name: Setup Node.js 26.13.1 for release smoke and staging
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
