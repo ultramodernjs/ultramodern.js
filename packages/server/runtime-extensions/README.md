@@ -53,6 +53,16 @@ single typed pass by `parseServerRuntimeExtensionsEnv()` in `src/env.ts`:
 | `MODERN_ENV` | _unset_ | Deployment environment name (also drives `.env.{MODERN_ENV}` loading in the server bootstrap). First candidate for the telemetry `environment` label. |
 | `NODE_ENV` | _unset_ | Standard Node.js environment name. Second candidate for the telemetry `environment` label; the final fallback is `development`. |
 | `MODERN_CONTRACT_GATES_FILE` | `.modern/contract-gates.json` (resolved against the app directory) | Path of the contract-gate snapshot file used by the health observer and the runtime fallback signal endpoint when `server.telemetry.health.snapshotObservation.gateSnapshotPath` is not configured. |
+| `MODERN_SERVER_RENDER_RESOURCES` | `eager` | In production, `lazy` defers render bundles and templates until the first page request and shares that load across concurrent requests. API and static requests do not load render resources. |
+| `MODERN_SERVER_IMMUTABLE_ASSETS` | `false` | In production, `true` caches metadata for up to 8192 found static files per server and retains its federation asset inventory. Use only when release files do not change while the server runs. Missing files are not cached. |
+| `MODERN_SERVER_PRECOMPRESSED_ASSETS` | `true` | In production, `false` disables `.br` and `.gz` file probes and serves identity responses. Requests that reject identity still receive 406. |
+
+The Node-only `@modern-js/server-runtime-extensions/render-resources` entry
+exports `renderBundleLoadChannel` and `serverRequestChannel` from
+`node:diagnostics_channel`. The first publishes bundle paths, load durations,
+outcomes, and triggering request paths. The second traces request start and
+completion. Subscribers must handle their own errors; Node reports subscriber
+exceptions as uncaught exceptions.
 
 Exporter endpoints and the module federation remote manifest timeout are
 configured through `server.telemetry.exporters.*.endpoint` and plugin options

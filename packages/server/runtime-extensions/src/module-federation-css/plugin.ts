@@ -29,8 +29,9 @@ export type ModuleFederationCssPluginOptions = {
  * being pinned at boot: remote manifests change on every remote redeploy, and
  * fetch failures must not pin an empty/partial list for the process lifetime.
  *
- * Existing plugin ordering places this after the native resource plugin
- * (which sets `serverManifest`) and before the native RSC manifest plugin.
+ * Existing plugin ordering places this after the native resource plugin.
+ * Lazy loading keeps enrichment in the page-only resource prefix, before
+ * configured render middleware.
  */
 export const injectModuleFederationCssPlugin = (
   options: ModuleFederationCssPluginOptions = {},
@@ -41,7 +42,12 @@ export const injectModuleFederationCssPlugin = (
 
   setup(api) {
     api.onPrepare(() => {
-      const { middlewares, distDirectory: pwd } = api.getServerContext();
+      const {
+        middlewares,
+        renderMiddlewares,
+        renderResources,
+        distDirectory: pwd,
+      } = api.getServerContext();
 
       if (!pwd) {
         return;
@@ -78,10 +84,20 @@ export const injectModuleFederationCssPlugin = (
         await next();
       };
 
-      middlewares.push({
+      const middleware = {
         name: 'inject-module-federation-css',
         handler,
-      });
+      };
+      if (isProd() && renderResources?.loading === 'lazy') {
+        // Native resource injection runs first and prepends this template
+        // handler. Enrich immediately after it, before application consumers.
+        const templates = renderMiddlewares.findIndex(
+          middleware => middleware.name === 'inject-html',
+        );
+        renderMiddlewares.splice(templates + 1, 0, middleware);
+      } else {
+        middlewares.push(middleware);
+      }
     });
   },
 });

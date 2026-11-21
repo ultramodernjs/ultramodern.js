@@ -1522,7 +1522,7 @@ test('still rejects an unbounded endpoint reached through an import', () => {
     path.join(root, 'verticals/catalog/shared/apis/catalog-search.ts'),
     // A computed route path is not a bounded endpoint identity, and importing
     // the declaration must not launder that.
-    `const searchRoute = '/catalog/search';\n${subApi(
+    `const searchRoute = ['/catalog', 'search'].join('/');\n${subApi(
       'catalogSearchApi',
       'catalogSearch',
       '/catalog/search',
@@ -1538,6 +1538,92 @@ test('still rejects an unbounded endpoint reached through an import', () => {
     `export { catalogCommandsApi } from './catalog-commands.ts';`,
   );
   expect(validate(composed)).toContain('bounded native endpoint declarations');
+});
+
+test('resolves immutable top-level const route paths in the endpoint module only', () => {
+  const searchModule = path.join(
+    root,
+    'verticals/catalog/shared/apis/catalog-search.ts',
+  );
+  const searchApi = (declaration: string) =>
+    `${declaration}\n${subApi('catalogSearchApi', 'catalogSearch', '/catalog/search', 'CATALOG_SEARCH_PATH')}`;
+  write(
+    path.join(root, 'verticals/catalog/shared/commands/index.ts'),
+    subApi('catalogCommandsApi', 'catalogCommands', '/catalog/commands'),
+  );
+  // `searchPath` only matches the route the alias actually names.
+  const withSearchPath = composed.replace(
+    `readinessPath: '/catalog-api/catalog/readiness' } as const;`,
+    `readinessPath: '/catalog-api/catalog/readiness', searchPath: '/catalog-api/catalog/search' } as const;`,
+  );
+  const check = (declaration: string, source = withSearchPath) => {
+    write(searchModule, searchApi(declaration));
+    return validate(source);
+  };
+  for (const valid of [
+    "const CATALOG_SEARCH_PATH = '/catalog/search';",
+    "export const CATALOG_SEARCH_PATH = '/catalog/search' as const;",
+    "const SEARCH = '/catalog/search';\nconst CATALOG_SEARCH_PATH = SEARCH;",
+  ])
+    expect(check(valid), valid).toBeUndefined();
+  expect(check("const CATALOG_SEARCH_PATH = '/catalog/other';")).toBeDefined();
+  for (const invalid of [
+    '',
+    "let CATALOG_SEARCH_PATH = '/catalog/search';",
+    'const CATALOG_SEARCH_PATH = catalogSearchPath();',
+    'const CATALOG_SEARCH_PATH = `/catalog/search`;',
+    'const CATALOG_SEARCH_PATH = catalogRoutes.search;',
+    'const CATALOG_SEARCH_PATH = SEARCH;\nconst SEARCH = CATALOG_SEARCH_PATH;',
+    // Another module's constant is not the endpoint module's own declaration.
+    "import { CATALOG_SEARCH_PATH } from '../routes.ts';",
+  ]) {
+    write(
+      path.join(root, 'verticals/catalog/shared/routes.ts'),
+      "export const CATALOG_SEARCH_PATH = '/catalog/search';",
+    );
+    expect(check(invalid), invalid).toContain(
+      'bounded native endpoint declarations',
+    );
+  }
+});
+
+test('rejects runtime Schema.Unknown-family access but not type-only references', () => {
+  const schemaMessage = 'must use concrete request, response and error schemas';
+  const modules = 'verticals/catalog/api/modules';
+  const violations = () =>
+    checkMicroVerticalApiBoundaries({ workspaceRoot: root })
+      .diagnostics.filter(diagnostic => diagnostic.includes(schemaMessage))
+      .sort();
+  write(
+    path.join(root, modules, 'type-only.ts'),
+    `import { Schema } from 'effect';
+type Unparsed = typeof Schema.Unknown.Type;
+type Loose = typeof Schema.Any;
+export const keep = (value: Unparsed, loose: Loose) => [value, loose];
+// Schema.Unknown in a comment, and 'Schema.Any' in a string, are not access.
+export const label = 'Schema.Any';`,
+  );
+  expect(violations()).toEqual([]);
+  const runtime: Record<string, string> = {
+    'any.ts': 'export const schema = Schema.Any;',
+    'computed.ts': "export const schema = Schema['Unknown'];",
+    'template.ts': 'export const schema = Schema[`Any`];',
+    'json.ts': 'export const schema = Schema.UnknownFromJsonString;',
+    'optional.ts': 'export const schema = Schema?.Unknown;',
+    'typeof-value.ts': 'export const kind = typeof Schema.Unknown;',
+    'unknown.ts':
+      "import { Schema } from 'effect';\nexport const schema = Schema.Unknown.pipe(Schema.brand('x'));",
+    'jsx.tsx': 'export const view = <Schema.Unknown />;',
+    'import-equals.ts':
+      "import { Schema } from 'effect';\nimport Loose = Schema.Any;\nexport const schema = Loose;",
+  };
+  for (const [name, source] of Object.entries(runtime))
+    write(path.join(root, modules, name), source);
+  expect(violations()).toEqual(
+    Object.keys(runtime)
+      .map(name => `${modules}/${name}: ${schemaMessage}`)
+      .sort(),
+  );
 });
 
 test('accepts Effect combinators that add no endpoints, and applies prefix', () => {

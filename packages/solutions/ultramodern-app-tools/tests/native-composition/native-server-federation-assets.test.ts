@@ -57,7 +57,7 @@ async function writeRemoteOutput(pwd: string) {
     }),
     'bundles/remoteEntry.js': 'module.exports = { container: true };',
     'bundles/__federation_expose_Widget.js': 'module.exports = {};',
-    'bundles/main.js': 'module.exports = { secret: "server-only" };',
+    'bundles/main.js': `require('node:fs').writeFileSync(${JSON.stringify(path.join(pwd, 'render-imported'))}, 'loaded'); module.exports = { secret: "server-only" };`,
   };
   for (const [name, source] of Object.entries(files)) {
     await fs.mkdir(path.dirname(path.join(pwd, name)), { recursive: true });
@@ -104,12 +104,29 @@ async function serveNativeRemote() {
   servers.push(server);
   await applyPlugins(server, options);
   await server.init();
-  return server;
+  return { server, pwd };
 }
 
 describe('native production federation assets', () => {
+  it('keeps render bundles unloaded while serving assets in lazy mode', async () => {
+    rstest.stubEnv('NODE_ENV', 'production');
+    rstest.stubEnv('MODERN_SERVER_RENDER_RESOURCES', 'lazy');
+    try {
+      const { server, pwd } = await serveNativeRemote();
+      const imported = path.join(pwd, 'render-imported');
+      await expect(fs.access(imported)).rejects.toThrow();
+
+      const response = await server.request('/remoteEntry.js');
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe('var verticalOctane = {};');
+      await expect(fs.access(imported)).rejects.toThrow();
+    } finally {
+      rstest.unstubAllEnvs();
+    }
+  });
+
   it('serves the browser container, its manifest and chunks with federation CORS', async () => {
-    const server = await serveNativeRemote();
+    const { server } = await serveNativeRemote();
 
     const manifest = await server.request('/mf-manifest.json');
     expect(manifest.status).toBe(200);
@@ -133,7 +150,7 @@ describe('native production federation assets', () => {
   });
 
   it('serves the Node container a server-rendering host loads, not the app server bundle', async () => {
-    const server = await serveNativeRemote();
+    const { server } = await serveNativeRemote();
 
     for (const pathname of [
       '/bundles/remoteEntry.js',

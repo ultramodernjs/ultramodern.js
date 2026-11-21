@@ -126,14 +126,15 @@ const appendVaryHeader = (
 export const resolvePreCompressedAsset = async (
   c: Parameters<Middleware>[0],
   filepath: string,
+  probeVariants: boolean,
 ): Promise<ResolvePreCompressedAssetResult> => {
   const brPath = `${filepath}${PRE_COMPRESSED_ASSET_EXTENSIONS.br}`;
   const gzipPath = `${filepath}${PRE_COMPRESSED_ASSET_EXTENSIONS.gzip}`;
 
-  const [hasBr, hasGzip] = await Promise.all([
-    fs.pathExists(brPath),
-    fs.pathExists(gzipPath),
-  ]);
+  // Without variants only identity negotiation remains, including its 406.
+  const [hasBr, hasGzip] = probeVariants
+    ? await Promise.all([fs.pathExists(brPath), fs.pathExists(gzipPath)])
+    : [false, false];
 
   const hasVariant = hasBr || hasGzip;
   const acceptedRepresentations = getAcceptedRepresentations(

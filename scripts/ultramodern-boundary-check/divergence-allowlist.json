@@ -4,9 +4,9 @@
   "upstreamRef": "2f4d9c4559e26209a0d77f02c6757f29fe3699a2",
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
-  "totalFiles": 1459,
-  "totalHunks": 4946,
-  "totalChangedLines": 104425,
+  "totalFiles": 1460,
+  "totalHunks": 4958,
+  "totalChangedLines": 104834,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -3816,7 +3816,7 @@
     {
       "file": "packages/server/core/src/adapters/node/index.ts",
       "hunks": 10,
-      "changedLines": 36
+      "changedLines": 41
     },
     {
       "file": "packages/server/core/src/adapters/node/node.ts",
@@ -3830,13 +3830,13 @@
     },
     {
       "file": "packages/server/core/src/adapters/node/plugins/resource.ts",
-      "hunks": 15,
-      "changedLines": 100
+      "hunks": 26,
+      "changedLines": 205
     },
     {
       "file": "packages/server/core/src/adapters/node/plugins/static.ts",
       "hunks": 21,
-      "changedLines": 342
+      "changedLines": 355
     },
     {
       "file": "packages/server/core/src/adapters/node/plugins/staticCache.ts",
@@ -3961,7 +3961,7 @@
     {
       "file": "packages/server/core/src/types/plugins/plugin.ts",
       "hunks": 6,
-      "changedLines": 23
+      "changedLines": 26
     },
     {
       "file": "packages/server/core/src/types/render.ts",
@@ -4019,6 +4019,11 @@
       "changedLines": 82
     },
     {
+      "file": "packages/server/core/tests/adapters/resourceLoading.test.ts",
+      "hunks": 1,
+      "changedLines": 231
+    },
+    {
       "file": "packages/server/core/tests/adapters/resourceWarmup.test.ts",
       "hunks": 1,
       "changedLines": 345
@@ -4031,7 +4036,7 @@
     {
       "file": "packages/server/core/tests/adapters/static.test.ts",
       "hunks": 1,
-      "changedLines": 154
+      "changedLines": 211
     },
     {
       "file": "packages/server/core/tests/adapters/staticCache.test.ts",
@@ -6436,7 +6441,7 @@
     {
       "file": "packages/toolkit/utils/compiled/import-lazy/license",
       "hunks": 1,
-      "changedLines": 9
+      "changedLines": 4
     },
     {
       "file": "packages/toolkit/utils/compiled/import-lazy/package.json",

@@ -262,3 +262,200 @@ describe('canonical Effect package provenance', () => {
     expect(violation(source)).toBeDefined();
   });
 });
+
+describe('native HttpRouter route declarations', () => {
+  const plainBody = 'return yield* Effect.void; });';
+  const recoveredBody =
+    "return yield* Effect.void; }, Effect.catchTag('Unavailable', () => Effect.void));";
+  const native = `
+import { assembleEffectBffRuntime } from '@modern-js/bff-effect/assembly';
+import { HttpApiBuilder, Layer } from '@modern-js/bff-effect/effect-edge';
+import { Effect } from 'effect';
+import { HttpRouter } from 'effect/http';
+import { fixtureApi } from '../shared/api.ts';
+const handlers = HttpApiBuilder.group(fixtureApi, 'fixture', h => h.handle('get', () => Effect.void));
+const routePath = '/live-changes';
+const serveRoute = Effect.fn('LiveChanges.serve')(function* serve() { ${plainBody}
+const transport = HttpRouter.add('GET', routePath, serveRoute);
+export default assembleEffectBffRuntime({ api: fixtureApi, handlers, transport });
+`;
+  const recovered = native.replace(plainBody, recoveredBody);
+
+  test('accepts immutable route paths and named Effect.fn handlers with catchTag recovery', () => {
+    for (const source of [
+      native,
+      recovered,
+      native.replace("Effect.fn('LiveChanges.serve')(", 'Effect.fn('),
+      native.replace(
+        "const routePath = '/live-changes';",
+        "const livePath = '/live-changes'; const routePath = livePath;",
+      ),
+      native.replace(
+        'routePath, serveRoute',
+        "'/live-changes', () => Effect.void",
+      ),
+    ])
+      expect(violation(source)).toBeUndefined();
+  });
+
+  test('proves the production shape: a route module exporting a path constant and a recovered handler', () => {
+    const routeModule = `import { Effect } from 'effect';
+import { HttpRouter } from 'effect/http';
+export const LIVE_CHANGES_PATH = '/live-changes';
+const serveLiveChanges = Effect.fn('LiveChanges.serve')(
+  function* serveLiveChanges(request) { return yield* Effect.succeed(request); },
+  Effect.catchTag('LiveScopeUnavailable', ({ status }) => Effect.succeed(status)),
+);
+export const LiveChangesRouteLive = HttpRouter.add('GET', LIVE_CHANGES_PATH, serveLiveChanges);`;
+    const entrySource = native
+      .replace(
+        "import { fixtureApi } from '../shared/api.ts';",
+        "import { fixtureApi } from '../shared/api.ts';\nimport { LiveChangesRouteLive } from './live-changes/transport.ts';",
+      )
+      .replace(
+        'handlers, transport }',
+        'handlers, transport: LiveChangesRouteLive }',
+      );
+    const resolveWith = (source: string) => (specifier: string) =>
+      specifier === './live-changes/transport.ts'
+        ? { id: '/fixture/api/live-changes/transport.ts', source }
+        : specifier === '../shared/api.ts'
+          ? {
+              id: '/fixture/shared/api.ts',
+              source: 'export const fixtureApi = {};',
+            }
+          : undefined;
+    expect(violation(entrySource, resolveWith(routeModule))).toBeUndefined();
+    for (const invalid of [
+      routeModule.replace(
+        'export const LIVE_CHANGES_PATH',
+        'export let LIVE_CHANGES_PATH',
+      ),
+      routeModule.replace("'/live-changes'", "'live-changes'"),
+      routeModule.replace(
+        "Effect.catchTag('LiveScopeUnavailable',",
+        'Effect.tap(',
+      ),
+      `${routeModule}\nEffect.catchTag = () => undefined;`,
+    ])
+      expect(violation(entrySource, resolveWith(invalid))).toBeDefined();
+  });
+
+  test('rejects malformed, mutable, shadowed and cyclic route declarations', () => {
+    for (const invalid of [
+      native.replace("'/live-changes'", "'live-changes'"),
+      native.replace("'GET', routePath", "'INVALID', routePath"),
+      native.replace('routePath, serveRoute', 'routePath, {}'),
+      native.replace(
+        "const routePath = '/live-changes';",
+        "let routePath = '/live-changes';",
+      ),
+      native.replace(
+        'const transport =',
+        "routePath = '/other'; const transport =",
+      ),
+      native.replace(
+        'const transport =',
+        'serveRoute = () => Effect.void; const transport =',
+      ),
+      native.replace(
+        "import { Effect } from 'effect';",
+        "import { fake as Effect } from 'effect';",
+      ),
+      native.replace('function* serve()', 'undefined, function* serve()'),
+      native.replace(plainBody, 'return yield* Effect.void; }, () => ({}));'),
+      native.replace(
+        plainBody,
+        'return yield* Effect.void; }, Effect.catchTag(tag, () => Effect.void));',
+      ),
+      native.replace(
+        "const routePath = '/live-changes';",
+        'const routePath = alias; const alias = routePath;',
+      ),
+      native.replace(
+        'export default assembleEffectBffRuntime',
+        'assembleEffectBffRuntime',
+      ),
+    ])
+      expect(violation(invalid)).toBeDefined();
+  });
+
+  test('retains recovery callback captures with their original lexical binding', () => {
+    const captured = recovered
+      .replace(
+        "import { Effect } from 'effect';",
+        "import { Effect } from 'effect'; import { service } from './service.ts';",
+      )
+      .replace(
+        "const transport = HttpRouter.add('GET', routePath, serveRoute);",
+        `const transport = Layer.unwrap(
+  Effect.map(service, value => HttpRouter.add(
+    'GET', routePath,
+    Effect.fn('serve')(
+      function* () { return yield* Effect.fail({ _tag: 'Unavailable' }); },
+      Effect.catchTag('Unavailable', () => value.serve),
+    ),
+  )),
+).pipe(Layer.provide(Layer.empty));`,
+      );
+    expect(violation(captured)).toBeUndefined();
+    for (const replacement of ['() => Effect.void', '(value) => value.serve'])
+      expect(
+        violation(captured.replace('() => value.serve', replacement)),
+        replacement,
+      ).toBeDefined();
+  });
+
+  test('rejects native method writes through direct, aliased, reassigned and type-wrapped receivers', () => {
+    // A literal route the previous analyzer already accepted, so every write
+    // below must be what rejects it.
+    const literal = native.replace(
+      "HttpRouter.add('GET', routePath, serveRoute)",
+      "HttpRouter.add('GET', '/health', () => Effect.void)",
+    );
+    const withStatement = (source: string, statement: string) =>
+      source.replace('const routePath', `${statement}\nconst routePath`);
+    expect(violation(literal)).toBeUndefined();
+    // Rebinding an alias leaves the native namespace itself untouched.
+    expect(
+      violation(
+        withStatement(literal, 'let alias = HttpRouter; alias = undefined;'),
+      ),
+    ).toBeUndefined();
+    for (const mutation of [
+      'HttpRouter.add = () => 123;',
+      '(HttpRouter as any).add = () => 123;',
+      '(<any>HttpRouter).add = () => 123;',
+      'HttpRouter!.add = () => 123;',
+      'delete (HttpRouter as any).add;',
+      'const alias = HttpRouter; alias.add = () => 123;',
+      'let alias = HttpRouter; alias.add = () => 123;',
+      'var alias = HttpRouter; alias.add = () => 123;',
+      'let alias = HttpRouter; (alias as any).add = () => 123;',
+      'let alias = HttpRouter; alias.add = () => 123; alias = undefined;',
+      'let alias; alias = HttpRouter; alias.add = () => 123;',
+      'const alias = true ? HttpRouter : undefined; alias.add = () => 123;',
+      'const holder = { router: HttpRouter }; holder.router.add = () => 123;',
+      '({ add: HttpRouter.add } = { add: () => 123 });',
+      '[(HttpRouter as any).add] = [() => 123];',
+      'for (HttpRouter.add of [() => 123]);',
+    ])
+      expect(
+        violation(withStatement(literal, mutation)),
+        mutation,
+      ).toBeDefined();
+    for (const method of ['fn', 'catchTag'])
+      for (const mutation of [
+        `Effect.${method} = () => 123;`,
+        `const alias = Effect; alias.${method} = () => 123;`,
+        `let alias = Effect; alias.${method} = () => 123;`,
+        `var alias = Effect; alias.${method} = () => 123;`,
+        `(Effect as any).${method} = () => 123;`,
+        `let alias = Effect; (alias as any).${method} = () => 123;`,
+      ])
+        expect(
+          violation(withStatement(recovered, mutation)),
+          mutation,
+        ).toBeDefined();
+  });
+});

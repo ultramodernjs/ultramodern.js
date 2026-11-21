@@ -25,11 +25,16 @@ export {
   serverStaticPlugin,
 } from './plugins';
 export type {
+  RenderBundleLoad,
+  ServerRenderResourceOptions,
+} from './plugins/resource';
+export type {
   ServerStaticPluginOptions,
   ServeStaticAsset,
   StaticAsset,
   StaticAssetRequest,
   StaticAssetResponder,
+  StaticAssetStat,
   StaticPublicFallbackResponder,
 } from './plugins/static';
 export { serveStaticAsset } from './plugins/static';

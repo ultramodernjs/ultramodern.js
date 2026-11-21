@@ -108,6 +108,54 @@ const normalize = (file: string) =>
   file.split(path.sep).join('/').replace(/^\.\//u, '');
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
+const unconstrainedSchemaMembers = new Set([
+  'Any',
+  'Unknown',
+  'UnknownFromJsonString',
+]);
+/**
+ * The unconstrained `Schema` member a value-space node reads. Type positions
+ * (`typeof Schema.Unknown.Type`) parse as `TSQualifiedName`, never as these.
+ */
+const runtimeSchemaMember = (node: t.Node): string | undefined => {
+  let member: string | undefined;
+  if (
+    (t.isMemberExpression(node) || t.isOptionalMemberExpression(node)) &&
+    t.isIdentifier(node.object, { name: 'Schema' })
+  ) {
+    const { property } = node;
+    member = !node.computed
+      ? t.isIdentifier(property)
+        ? property.name
+        : undefined
+      : t.isStringLiteral(property)
+        ? property.value
+        : t.isTemplateLiteral(property) && property.expressions.length === 0
+          ? (property.quasis[0]?.value.cooked ?? undefined)
+          : undefined;
+  } else if (
+    t.isJSXMemberExpression(node) &&
+    t.isJSXIdentifier(node.object, { name: 'Schema' })
+  ) {
+    member = node.property.name;
+  } else if (
+    t.isTSImportEqualsDeclaration(node) &&
+    node.importKind !== 'type'
+  ) {
+    // `import Loose = Schema.Any` is a value alias of the member.
+    let reference: t.Node = node.moduleReference;
+    while (t.isTSQualifiedName(reference) && !t.isIdentifier(reference.left))
+      reference = reference.left;
+    member =
+      t.isTSQualifiedName(reference) &&
+      t.isIdentifier(reference.left, { name: 'Schema' })
+        ? reference.right.name
+        : undefined;
+  }
+  return member !== undefined && unconstrainedSchemaMembers.has(member)
+    ? member
+    : undefined;
+};
 const apiApp = (app: MicroVerticalConfiguredApp) =>
   app.kind === 'vertical' &&
   app.surfaceProfile !== 'ui-only' &&
@@ -949,13 +997,21 @@ function check(
               /\bcreateHandler\s*[:=]\s*(?!defineEffectBff\b)/u,
               'must use defineEffectBff instead of unbranded handler factories',
             ],
-            [
-              /\bSchema\.(?:UnknownFromJsonString|Unknown|Any)\b/u,
-              'must use concrete request, response and error schemas',
-            ],
           );
         for (const [pattern, reason] of patterns)
           assert(!pattern.test(source), `${file}: ${reason}`);
+        if (/\/api\//u.test(file) && /\.[cm]?[jt]sx?$/u.test(file)) {
+          const ast = parseFile(file);
+          let unconstrained = false;
+          if (ast)
+            t.traverseFast(ast, node => {
+              unconstrained ||= runtimeSchemaMember(node) !== undefined;
+            });
+          assert(
+            !unconstrained,
+            `${file}: must use concrete request, response and error schemas`,
+          );
+        }
         if (topology && /\/api\/index\.ts$/u.test(file)) {
           topologyFilesAnalyzed += 1;
           const violation = strictEffectRuntimeTopologyViolation(

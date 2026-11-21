@@ -17,6 +17,7 @@ export default defineConfig({
               index: [
                 RSLIB_CODE_ENTRY_GLOB,
                 '!./src/static-serving/**',
+                '!./src/render-resources/**',
                 '!./src/bff-policy/node.ts',
                 '!./src/bff-policy/operationContracts.ts',
                 '!./src/bff-policy/resolveCrossProjectPolicy.ts',

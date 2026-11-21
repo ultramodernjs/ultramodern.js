@@ -20,6 +20,14 @@ import {
   setStaticFileHeaders,
 } from './staticCache';
 
+/** File metadata for a contained path; null when it cannot be read. */
+export type StaticAssetStat = (
+  filename: string,
+) => Promise<{ isFile(): boolean } | null>;
+
+const statFile: StaticAssetStat = filename =>
+  fs.stat(filename).catch(() => null);
+
 /** A selected file and the native response conventions to use for it. */
 export type StaticAsset = {
   filename: string;
@@ -36,6 +44,8 @@ export type StaticAsset = {
   root?: string;
   /** Resolve symlinks before checking root. Implies a regular file is required. */
   realpath?: boolean;
+  /** Metadata lookup for unresolved static files, after containment checks. */
+  stat?: StaticAssetStat;
 };
 
 export type StaticAssetRequest = { root: string; pathPrefix: string };
@@ -114,7 +124,7 @@ export async function serveStaticAsset(
     }
   }
   if (kind === 'static' && !asset.realpath) {
-    const stat = await fs.stat(filename).catch(() => null);
+    const stat = await (asset.stat ?? statFile)(filename);
     if (!stat?.isFile()) {
       return null;
     }
@@ -162,6 +172,8 @@ export async function serveStaticAsset(
 export type ServerStaticPluginOptions = {
   respondAsset?: StaticAssetResponder;
   respondPublicFallback?: StaticPublicFallbackResponder;
+  /** Metadata lookup for matched static files, after containment checks. */
+  stat?: StaticAssetStat;
 };
 
 export const serverStaticPlugin = (
@@ -368,7 +380,7 @@ export function createStaticMiddleware(
       }
       // Responders only select representations of an existing native asset.
       if (options.respondAsset) {
-        const stat = await fs.stat(filepath).catch(() => null);
+        const stat = await (options.stat ?? statFile)(filepath);
         if (!stat?.isFile()) {
           return next();
         }
@@ -376,6 +388,7 @@ export function createStaticMiddleware(
       const asset: StaticAsset = {
         filename: filepath,
         kind: 'static',
+        stat: options.stat,
         cacheControl:
           cacheControl &&
           (isHashedAsset(relativePath)

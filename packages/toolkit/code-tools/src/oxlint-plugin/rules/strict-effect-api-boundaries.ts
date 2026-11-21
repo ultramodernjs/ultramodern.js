@@ -3,7 +3,9 @@ import {
   strictEffectRuntimeTopologyViolation,
 } from '../../strict-effect-runtime.ts';
 import {
+  getNodeName,
   getSourceText,
+  getStringLiteralValue,
   isApiEntryFile,
   isApiSourceFile,
   isForbiddenGeneratedEffectPath,
@@ -12,7 +14,29 @@ import {
   reportMissingProgramPattern,
   reportProgramPattern,
 } from '../ast.ts';
-import type { Rule } from '../types.ts';
+import type { AstNode, Rule } from '../types.ts';
+
+const unconstrainedSchemaMembers = new Set([
+  'Any',
+  'Unknown',
+  'UnknownFromJsonString',
+]);
+const unconstrainedSchemaMessage =
+  'API modules must use concrete request, response and error schemas; Schema.UnknownFromJsonString, Schema.Unknown and Schema.Any are forbidden in UltraModern API code.';
+
+/**
+ * Whether `object.member` reads an unconstrained schema in value space. Type
+ * positions (`typeof Schema.Unknown.Type`) parse as `TSQualifiedName` and
+ * never reach the member visitors.
+ */
+const unconstrainedSchemaMember = (
+  object: AstNode | undefined,
+  member: string | undefined,
+): boolean =>
+  (object?.type === 'Identifier' || object?.type === 'JSXIdentifier') &&
+  object.name === 'Schema' &&
+  member !== undefined &&
+  unconstrainedSchemaMembers.has(member);
 
 export const createStrictEffectApiBoundariesRule = (): Rule => ({
   meta: {
@@ -24,11 +48,19 @@ export const createStrictEffectApiBoundariesRule = (): Rule => ({
     schema: [],
   },
   create(context) {
+    const filename = normalizeFilename(context.filename);
+    const apiFile = isApiSourceFile(filename);
+    const reportUnconstrained = (
+      node: AstNode,
+      object: AstNode | undefined,
+      member: string | undefined,
+    ) => {
+      if (apiFile && unconstrainedSchemaMember(object, member))
+        context.report({ node, message: unconstrainedSchemaMessage });
+    };
     return {
       Program(node) {
         const source = getSourceText(context, node);
-        const filename = normalizeFilename(context.filename);
-        const apiFile = isApiSourceFile(filename);
 
         if (isForbiddenGeneratedEffectPath(filename)) {
           context.report({
@@ -138,13 +170,36 @@ export const createStrictEffectApiBoundariesRule = (): Rule => ({
           /\bcreateHandler\s*[:=]\s*(?!defineEffectBff\b)/u,
           'API modules must not define unbranded handler factories; use defineEffectBff(...).',
         );
-        reportProgramPattern(
-          context,
+      },
+      MemberExpression(node) {
+        reportUnconstrained(
           node,
-          source,
-          /\bSchema\.(?:UnknownFromJsonString|Unknown|Any)\b/u,
-          'API modules must use concrete request, response and error schemas; Schema.UnknownFromJsonString, Schema.Unknown and Schema.Any are forbidden in UltraModern API code.',
+          node.object,
+          node.computed
+            ? getStringLiteralValue(node.property)
+            : node.property?.type === 'Identifier'
+              ? getNodeName(node.property)
+              : undefined,
         );
+      },
+      JSXMemberExpression(node) {
+        reportUnconstrained(node, node.object, getNodeName(node.property));
+      },
+      TSImportEqualsDeclaration(node) {
+        // `import Loose = Schema.Any` is a value alias of the member.
+        if (node.importKind === 'type') return;
+        let reference = node.moduleReference;
+        while (
+          reference?.type === 'TSQualifiedName' &&
+          reference.left?.type !== 'Identifier'
+        )
+          reference = reference.left;
+        if (reference?.type === 'TSQualifiedName')
+          reportUnconstrained(
+            node,
+            reference.left,
+            getNodeName(reference.right),
+          );
       },
     };
   },

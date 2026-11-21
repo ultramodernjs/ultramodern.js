@@ -427,6 +427,32 @@ interface ReachableEndpoint {
   readonly routePath: string;
 }
 
+/**
+ * An endpoint route path: a string literal, or an unmutated `const` string
+ * the endpoint's own module declares, possibly through further such aliases.
+ * Imports, calls, member lookups and templates stay unresolved.
+ */
+const routePathValue = (
+  graph: ContractGraph,
+  module: SourceModule,
+  expression: Expression | null | undefined,
+): string | undefined => {
+  const seen = new Set<Node>();
+  let node = expression == null ? undefined : unwrapExpression(expression);
+  while (node !== undefined && !seen.has(node) && seen.size < 16) {
+    if (t.isStringLiteral(node)) return node.value;
+    seen.add(node);
+    const resolved = t.isIdentifier(node)
+      ? graph.resolveReference(module, node)
+      : undefined;
+    node =
+      resolved?.kind === 'declaration' && resolved.module.path === module.path
+        ? unwrapExpression(resolved.expression)
+        : undefined;
+  }
+  return undefined;
+};
+
 /** Read only endpoint declarations connected to the exported API, never decoy calls elsewhere. */
 const reachableEndpoints = (
   graph: ContractGraph,
@@ -477,7 +503,7 @@ const reachableEndpoints = (
             ? verbs[callee[1]]
             : undefined;
         const name = stringLiteral(node.arguments[0]);
-        const routePath = stringLiteral(node.arguments[1]);
+        const routePath = routePathValue(graph, module, node.arguments[1]);
         if (!method || !name || !routePath) return false;
         const identity = `${group}:${name}`;
         if (identities.has(identity)) return false;
