@@ -1,4 +1,4 @@
-import { getTokenAtPosition } from 'tsrs/ast';
+import { getTokenAtPosition, ScriptKind } from 'tsrs/ast';
 import type { SemanticContext } from './context';
 
 const returnDiagnosticCodes = new Set([7030, 2366, 2355]);
@@ -13,6 +13,15 @@ export function checkReturnValues(context: SemanticContext): void {
   if (program.getCompilerOptions().noImplicitReturns !== true) {
     throw new Error(
       `Semantic lint requires noImplicitReturns: true in the configured project for ${sourceFile.fileName}`,
+    );
+  }
+  if (
+    (sourceFile.scriptKind === ScriptKind.JS ||
+      sourceFile.scriptKind === ScriptKind.JSX) &&
+    program.getCompilerOptions().checkJs !== true
+  ) {
+    throw new Error(
+      `Semantic lint requires checkJs: true in the configured project for ${sourceFile.fileName}`,
     );
   }
 

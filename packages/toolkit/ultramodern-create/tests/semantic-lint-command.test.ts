@@ -105,6 +105,38 @@ test('semantic runner rejects noCheck instead of silently skipping return checki
   });
 });
 
+test('semantic runner requires checked JavaScript before transferring return enforcement', () => {
+  fixture((root, write) => {
+    write('input.mjs', 'export function missing(flag) { if (flag) return 1; }');
+    for (const checkJs of [false, true]) {
+      write(
+        'tsconfig.json',
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            noImplicitReturns: true,
+            allowJs: true,
+            checkJs,
+            noEmit: true,
+            types: [],
+          },
+          files: ['input.mjs'],
+        }),
+      );
+      if (checkJs) {
+        const result = lintSemanticWorkspace(root, ['input.mjs']);
+        assert.equal(result.diagnostics.length, 1);
+        assert.equal(result.diagnostics[0].rule, 'missing-return-value');
+      } else {
+        assert.throws(
+          () => lintSemanticWorkspace(root, ['input.mjs']),
+          /Semantic lint requires checkJs: true/u,
+        );
+      }
+    }
+  });
+});
+
 test('semantic runner rejects invalid compiler-option combinations', () => {
   fixture((root, write) => {
     write(
