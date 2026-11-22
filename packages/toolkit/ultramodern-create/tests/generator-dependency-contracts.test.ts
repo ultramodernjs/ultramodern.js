@@ -4,12 +4,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createProject } from '../../create/src/template';
-import { shellApp } from '../src/ultramodern-workspace/descriptors';
+import {
+  createVerticalDescriptor,
+  shellApp,
+} from '../src/ultramodern-workspace/descriptors';
 import {
   createAppPackage,
   createRootPackageJson,
 } from '../src/ultramodern-workspace/package-json';
 import { ULTRAMODERN_WORKSPACE_POLICY } from '../src/ultramodern-workspace/policy';
+import { createAppTsConfig } from '../src/ultramodern-workspace/tsconfigs';
 import type { ResolvedPackageSource } from '../src/ultramodern-workspace/types';
 import {
   BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
@@ -22,6 +26,15 @@ const source: ResolvedPackageSource = {
   strategy: 'workspace',
   modernPackageVersion: '3.8.3',
 };
+
+test('generated application projects own their emitted build configuration inputs', () => {
+  const config = JSON.parse(JSON.stringify(createAppTsConfig(shellApp)));
+  assert.ok(config.include.includes('*.config.ts'));
+  const apiConfig = JSON.parse(
+    JSON.stringify(createAppTsConfig(createVerticalDescriptor('catalog'))),
+  );
+  assert.ok(apiConfig.include.includes('*.config.ts'));
+});
 
 test('workspace manifest producers emit the reviewed toolchain and dependency cohort', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'um-pin-contract-'));
@@ -61,6 +74,18 @@ test('workspace manifest producers emit the reviewed toolchain and dependency co
     assert.equal(workspace.devDependencies.oxlint, '1.94.0');
     assert.equal(workspace.devDependencies.oxfmt, '0.79.0');
     assert.equal(workspace.devDependencies.ultracite, '8.3.1');
+    assert.equal(
+      workspace.scripts.lint,
+      'oxlint apps verticals packages && pnpm lint:semantic',
+    );
+    assert.equal(
+      workspace.scripts['lint:fix'],
+      'oxlint apps verticals packages --fix && pnpm lint:semantic',
+    );
+    assert.equal(
+      workspace.scripts['lint:semantic'],
+      'ultramodern-create ultramodern semantic-lint "apps/*" "verticals/*" "packages/*"',
+    );
     assert.equal(app.dependencies['@tanstack/react-router'], '1.170.46');
     assert.equal(app.dependencies.i18next, '27.1.5');
     assert.equal(app.dependencies.react, '19.3.1');

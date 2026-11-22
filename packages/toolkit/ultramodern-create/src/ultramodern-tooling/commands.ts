@@ -9,6 +9,7 @@ import {
 } from './commands/context';
 import { runMfTypes } from './commands/mf-types';
 import { runRoutesGenerate } from './commands/routes-generate';
+import { runSemanticLint } from './commands/semantic-lint';
 import { runSkills } from './commands/skills';
 import { runSyncDeliveryUnit } from './commands/sync-delivery-unit';
 import { runValidate } from './commands/validate';
@@ -56,6 +57,8 @@ export async function runUltramodernToolingCli(
         return runSyncDeliveryUnit(rest, context);
       case AD_HOC_TOOLING_COMMANDS.skills:
         return runSkills(rest, context);
+      case AD_HOC_TOOLING_COMMANDS.semanticLint:
+        return runSemanticLint(rest, context);
       default:
         {
           const templateBackedStatus = runTemplateBackedToolingCommand(

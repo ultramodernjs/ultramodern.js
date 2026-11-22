@@ -42,6 +42,9 @@
       ],
       "ultramodern-workspace/codesmith": [
         "./dist/types/ultramodern-workspace/codesmith.d.ts"
+      ],
+      "semantic-lint": [
+        "./dist/types/ultramodern-tooling/semantic-lint/index.d.ts"
       ]
     }
   },
@@ -72,6 +75,15 @@
         "require": "./dist/cjs/ultramodern-workspace/codesmith.cjs"
       },
       "default": "./dist/esm-node/ultramodern-workspace/codesmith.js"
+    },
+    "./semantic-lint": {
+      "types": "./dist/types/ultramodern-tooling/semantic-lint/index.d.ts",
+      "node": {
+        "modern:source": "./src/ultramodern-tooling/semantic-lint/index.ts",
+        "import": "./dist/esm-node/ultramodern-tooling/semantic-lint/index.js",
+        "require": "./dist/cjs/ultramodern-tooling/semantic-lint/index.cjs"
+      },
+      "default": "./dist/esm-node/ultramodern-tooling/semantic-lint/index.js"
     },
     "./tsconfig": "./templates/tsconfig.base.json"
   },
@@ -169,6 +181,14 @@
           "require": "./dist/cjs/ultramodern-workspace/codesmith.cjs"
         },
         "default": "./dist/esm-node/ultramodern-workspace/codesmith.js"
+      },
+      "./semantic-lint": {
+        "types": "./dist/types/ultramodern-tooling/semantic-lint/index.d.ts",
+        "node": {
+          "import": "./dist/esm-node/ultramodern-tooling/semantic-lint/index.js",
+          "require": "./dist/cjs/ultramodern-tooling/semantic-lint/index.cjs"
+        },
+        "default": "./dist/esm-node/ultramodern-tooling/semantic-lint/index.js"
       },
       "./tsconfig": "./templates/tsconfig.base.json"
     }
