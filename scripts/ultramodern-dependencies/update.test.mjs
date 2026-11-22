@@ -1227,7 +1227,7 @@ test('uses exact reviewed supply identities for upstream and existing fork decla
     dependencies: {
       '@module-federation/runtime': 'npm:@bleedingdev/mf-runtime@2.9.5',
       '@module-federation/modern-js-v3':
-        'npm:@bleedingdev/mf-modern-js-v3@2.9.5',
+        'npm:@bleedingdev/mf-modern-js-v3@2.9.6',
       '@module-federation/node': 'npm:@bleedingdev/mf-node@2.7.54',
       '@tanstack/redact': 'npm:@bleedingdev/tanstack-redact@0.3.2',
       ultracite: '8.2.1',
@@ -1245,6 +1245,26 @@ test('uses exact reviewed supply identities for upstream and existing fork decla
         },
       }),
     /unreviewed coordinated old edge/,
+  );
+});
+
+test('advances the shipped Modern.js adapter from the immutable upstream baseline', () => {
+  const name = '@module-federation/modern-js-v3';
+  const expected = { dependencies: { [name]: '2.9.2' } };
+  const current = {
+    dependencies: { [name]: 'npm:@bleedingdev/mf-modern-js-v3@2.9.5' },
+  };
+  const result = plan(expected, current);
+  assert.deepEqual(result.manifest, {
+    dependencies: { [name]: 'npm:@bleedingdev/mf-modern-js-v3@2.9.6' },
+  });
+  assert.equal(plan(expected, result.manifest).changes.length, 0);
+  assert.throws(
+    () =>
+      plan(expected, {
+        dependencies: { [name]: 'npm:@bleedingdev/mf-modern-js-v3@2.9.7' },
+      }),
+    /unexpected old edge/u,
   );
 });
 

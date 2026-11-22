@@ -41,7 +41,10 @@ type CreatePackageTsConfigOptions = {
   skipLibCheck?: boolean;
 };
 
-type PackageTsConfig = JsonObject & { compilerOptions: JsonObject };
+type PackageTsConfig = JsonObject & {
+  compilerOptions: JsonObject;
+  include: string[];
+};
 
 export function createPackageTsConfig(
   packageDir: string,
@@ -107,6 +110,7 @@ export function createAppTsConfig(
     // checker traverses framework declaration dependencies outside app source.
     skipLibCheck: remoteRefs.length > 0,
   });
+  config.include.push('*.config.ts');
   const profile = resolveAppGenerationProfile(app);
   if (profile) {
     const compilerOptions = config.compilerOptions;

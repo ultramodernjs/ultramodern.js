@@ -318,8 +318,11 @@ export function createRootPackageJson(
           'pnpm format:check && pnpm lint && pnpm typecheck && pnpm contract:check',
         format: 'oxfmt .',
         'format:check': 'oxfmt --check .',
-        lint: 'oxlint apps verticals packages',
-        'lint:fix': 'oxlint apps verticals packages --fix',
+        lint: 'oxlint apps verticals packages && pnpm lint:semantic',
+        'lint:fix':
+          'oxlint apps verticals packages --fix && pnpm lint:semantic',
+        'lint:semantic':
+          'ultramodern-create ultramodern semantic-lint "apps/*" "verticals/*" "packages/*"',
         'skills:install': 'ultramodern-create ultramodern skills install',
         'skills:check': 'ultramodern-create ultramodern skills check',
         postinstall: GENERATED_POSTINSTALL_SCRIPT,
@@ -396,8 +399,10 @@ export function createRootPackageJson(
       ...rootPackageScripts,
       format: 'oxfmt .',
       'format:check': 'oxfmt --check .',
-      lint: 'oxlint apps verticals packages',
-      'lint:fix': 'oxlint apps verticals packages --fix',
+      lint: 'oxlint apps verticals packages && pnpm lint:semantic',
+      'lint:fix': 'oxlint apps verticals packages --fix && pnpm lint:semantic',
+      'lint:semantic':
+        'ultramodern-create ultramodern semantic-lint "apps/*" "verticals/*" "packages/*"',
       'skills:install': 'ultramodern-create ultramodern skills install',
       'skills:check': 'ultramodern-create ultramodern skills check',
       'agents:refs:install': 'node ./scripts/setup-agent-reference-repos.mts',

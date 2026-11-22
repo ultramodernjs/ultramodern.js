@@ -113,7 +113,7 @@ test('pnpm preserves the corrected generator dependency identity', () => {
   );
   const alias =
     ULTRAMODERN_PACKAGE_PINS.appDependencies['@module-federation/modern-js-v3'];
-  assert.equal(alias, 'npm:@bleedingdev/mf-modern-js-v3@2.9.5');
+  assert.equal(alias, 'npm:@bleedingdev/mf-modern-js-v3@2.9.6');
   for (const name of ['@modern-js/ultramodern-create', '@fixture/consumer']) {
     const resolved = hooks.readPackage({
       name,

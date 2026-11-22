@@ -13,10 +13,6 @@ import {
   linkInstalledEffectCompiler,
 } from './helpers/workspace-kit';
 
-interface OxlintReport {
-  diagnostics: unknown[];
-}
-
 const packageRoot = path.resolve(__dirname, '..');
 // Resolve Oxc tools through Ultracite's installed peer dependency graph.
 const ultracitePackageDir = fs.realpathSync(
@@ -26,6 +22,10 @@ const ultraciteRequire = createRequire(
   path.join(ultracitePackageDir, 'package.json'),
 );
 const lintDependencyPackageDirs = {
+  '@modern-js/ultramodern-create': packageRoot,
+  '@types/node': path.dirname(
+    createRequire(import.meta.url).resolve('@types/node/package.json'),
+  ),
   oxfmt: path.dirname(ultraciteRequire.resolve('oxfmt/package.json')),
   oxlint: path.dirname(ultraciteRequire.resolve('oxlint/package.json')),
   ultracite: ultracitePackageDir,
@@ -72,6 +72,9 @@ function provisionGeneratedLintDependencies(workspaceDir: string) {
   for (const [packageName, packageDir] of Object.entries(
     lintDependencyPackageDirs,
   )) {
+    fs.mkdirSync(path.dirname(path.join(nodeModulesDir, packageName)), {
+      recursive: true,
+    });
     fs.symlinkSync(
       packageDir,
       path.join(nodeModulesDir, packageName),
@@ -80,31 +83,11 @@ function provisionGeneratedLintDependencies(workspaceDir: string) {
   }
   linkInstalledEffectCompiler(workspaceDir);
   provisionPackageBinary(nodeModulesDir, 'oxlint', 'oxlint');
-}
-
-function parseOxlintReport(
-  stdout: string,
-  commandOutput: string,
-): OxlintReport {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch (error) {
-    assert.fail(
-      `Oxlint did not return JSON: ${String(error)}\n${commandOutput}`,
-    );
-  }
-
-  assert.ok(
-    parsed !== null && typeof parsed === 'object',
-    `Oxlint returned an invalid report.\n${commandOutput}`,
+  provisionPackageBinary(
+    nodeModulesDir,
+    '@modern-js/ultramodern-create',
+    'ultramodern-create',
   );
-  const diagnostics = Reflect.get(parsed, 'diagnostics');
-  assert.ok(
-    Array.isArray(diagnostics),
-    `Oxlint report omitted diagnostics.\n${commandOutput}`,
-  );
-  return { diagnostics };
 }
 
 function provisionApiDependencies(workspaceDir: string, scope: string) {
@@ -134,10 +117,7 @@ function provisionApiDependencies(workspaceDir: string, scope: string) {
   }
 }
 
-function assertGeneratedWorkspaceLintClean(
-  workspaceDir: string,
-  generatedState: string,
-) {
+function runGeneratedWorkspaceLint(workspaceDir: string) {
   const externalPath = (process.env.PATH ?? process.env.Path ?? '')
     .split(path.delimiter)
     .filter(entry => !/[\\/]node_modules[\\/]\.bin$/u.test(entry))
@@ -146,27 +126,29 @@ function assertGeneratedWorkspaceLintClean(
   if (process.platform === 'win32') {
     env.Path = externalPath;
   }
-  const result = execaSync(
-    'pnpm',
-    ['--config.verify-deps-before-run=false', 'lint', '--format', 'json'],
-    {
-      cwd: workspaceDir,
-      encoding: 'utf8',
-      env,
-      reject: false,
-    },
-  );
+  return execaSync('pnpm', ['--config.verify-deps-before-run=false', 'lint'], {
+    cwd: workspaceDir,
+    encoding: 'utf8',
+    env,
+    reject: false,
+  });
+}
+
+function assertGeneratedWorkspaceLintClean(
+  workspaceDir: string,
+  generatedState: string,
+) {
+  const result = runGeneratedWorkspaceLint(workspaceDir);
   const commandOutput = `${result.stdout}\n${result.stderr}`;
   assert.equal(
     result.failed,
     false,
     `${generatedState} lint failed to execute.\n${commandOutput}`,
   );
-  const report = parseOxlintReport(result.stdout, commandOutput);
-  assert.deepEqual(
-    report.diagnostics,
-    [],
-    `${generatedState} produced lint diagnostics.\n${commandOutput}`,
+  assert.match(
+    commandOutput,
+    /Semantic lint checked \d+ files in \d+ configured projects; 0 findings\./u,
+    `${generatedState} must complete the semantic pass as well as Oxlint.\n${commandOutput}`,
   );
   assert.equal(
     result.exitCode,
@@ -230,6 +212,35 @@ describe.each([
     assertGeneratedWorkspaceLintClean(workspaceDir, state);
     assertGeneratedWorkspaceContractClean(workspaceDir, state);
   });
+});
+
+test('a semantic-only violation makes the generated lint command fail', async () => {
+  const { tempRoot, workspaceDir } = await createWorkspace('semantic-pipeline');
+  try {
+    provisionGeneratedLintDependencies(workspaceDir);
+    fs.writeFileSync(
+      path.join(
+        workspaceDir,
+        'apps/shell-super-app/src/semantic-lint-control.ts',
+      ),
+      `interface OptionalValue { readonly value?: string }
+export interface RedundantValue {
+  readonly value?: OptionalValue['value'] | undefined;
+}
+`,
+    );
+    const result = runGeneratedWorkspaceLint(workspaceDir);
+    const output = `${result.stdout}\n${result.stderr}`;
+    assert.equal(result.failed, true, output);
+    assert.equal(result.exitCode, 1, output);
+    assert.match(output, /\[ultramodern\/redundant-optional-undefined\]/u);
+    assert.match(
+      output,
+      /Semantic lint checked \d+ files in \d+ configured projects; 1 findings\./u,
+    );
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test('generated APIs pass real Oxlint after Oxfmt with the current preset and native boundaries', async () => {

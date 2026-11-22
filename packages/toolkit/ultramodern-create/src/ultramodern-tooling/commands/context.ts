@@ -21,6 +21,7 @@ export type CommandContext = {
 export const AD_HOC_TOOLING_COMMANDS = {
   syncDeliveryUnit: 'sync-delivery-unit',
   skills: 'skills',
+  semanticLint: 'semantic-lint',
 } as const;
 
 export function printHelp() {
@@ -29,6 +30,7 @@ export function printHelp() {
     `  ${AD_HOC_TOOLING_COMMANDS.syncDeliveryUnit}`,
     `  ${AD_HOC_TOOLING_COMMANDS.skills} install`,
     `  ${AD_HOC_TOOLING_COMMANDS.skills} check`,
+    `  ${AD_HOC_TOOLING_COMMANDS.semanticLint} [--json] <source paths...>`,
   ].join('\n');
 
   process.stdout.write(`Usage:

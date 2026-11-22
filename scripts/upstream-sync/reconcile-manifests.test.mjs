@@ -28,7 +28,7 @@ test('reconciliation does not restore the retired Rslib 1.0.3 hold across fifty 
             '@rslib/core': '1.0.3',
             '@module-federation/enhanced': 'npm:@bleedingdev/mf-enhanced@2.9.5',
             '@module-federation/modern-js-v3':
-              'npm:@bleedingdev/mf-modern-js-v3@2.9.5',
+              'npm:@bleedingdev/mf-modern-js-v3@2.9.6',
             '@swc/core': '1.16.22',
             '@types/node': '^26.6.6',
           },
@@ -75,7 +75,7 @@ test('reconciliation does not restore the retired Rslib 1.0.3 hold across fifty 
       );
       assert.equal(
         manifest.devDependencies['@module-federation/modern-js-v3'],
-        'npm:@bleedingdev/mf-modern-js-v3@2.9.5',
+        'npm:@bleedingdev/mf-modern-js-v3@2.9.6',
         file,
       );
       assert.equal(manifest.devDependencies['@swc/core'], '1.16.22', file);

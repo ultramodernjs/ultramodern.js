@@ -12,7 +12,7 @@ export const MODULE_FEDERATION_BRIDGE_REACT_FORK_VERSION = '2.9.5';
 export const MODULE_FEDERATION_RUNTIME_FORK_VERSION = '2.9.5';
 // All three aliases share the corrected upstream 2.9.3 sidecar graph. Fork
 // versions advance independently because earlier published bytes are immutable.
-export const MODULE_FEDERATION_MODERN_JS_V3_FORK_VERSION = '2.9.5';
+export const MODULE_FEDERATION_MODERN_JS_V3_FORK_VERSION = '2.9.6';
 export const ZEPHYR_RSPACK_PLUGIN_VERSION = '1.8.0';
 export const ZEPHYR_AGENT_VERSION = '1.8.0';
 export const WRANGLER_VERSION = '4.162.0';

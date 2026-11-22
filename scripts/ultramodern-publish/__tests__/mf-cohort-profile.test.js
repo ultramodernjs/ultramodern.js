@@ -79,7 +79,7 @@ test('closed MF cohort covers all 14 exact corrected identities and singleton pr
   );
 });
 
-test('Modern.js config types advance only the candidate and preserve every canonical correction', async () => {
+test('Modern.js config types activate the qualified recipe and preserve every canonical correction', async () => {
   const { sidecarProfileRecipes } = await import('../sidecar-profiles.mjs');
   const active = JSON.parse(
     fs.readFileSync(
@@ -97,11 +97,8 @@ test('Modern.js config types advance only the candidate and preserve every canon
   }
   const recipe = selected.find(item => item.id === 'mf-modern-js-v3');
   const original = active.find(item => item.id === recipe.id);
-  assert.equal(original.fork.version, '2.9.5');
-  assert.deepEqual(
-    { ...recipe, fork: original.fork, patch: original.patch },
-    original,
-  );
+  assert.equal(original.fork.version, '2.9.6');
+  assert.deepEqual(recipe, original);
   const readPatch = name =>
     fs.readFileSync(
       new URL(`../../../${name}`, `file://${__filename}`),

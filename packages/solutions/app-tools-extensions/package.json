@@ -305,7 +305,7 @@
     "@modern-js/plugin-bff-extensions": "workspace:*",
     "@modern-js/plugin-data-loader": "workspace:*",
     "@modern-js/rslib": "workspace:*",
-    "@module-federation/modern-js-v3": "npm:@bleedingdev/mf-modern-js-v3@2.9.5",
+    "@module-federation/modern-js-v3": "npm:@bleedingdev/mf-modern-js-v3@2.9.6",
     "@module-federation/runtime-tools": "npm:@bleedingdev/mf-runtime-tools@2.9.5",
     "@rsbuild/core": "2.3.3",
     "@rsbuild/plugin-svgr": "2.0.5",
