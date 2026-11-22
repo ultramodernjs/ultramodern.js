@@ -125,23 +125,29 @@ export default {
   try {
     const requestUrl = `http://worker.example/?target=${encodeURIComponent(manifestUrl)}`;
 
+    async function readManifest() {
+      const response = await worker.dispatchFetch(requestUrl);
+      assert.equal(response.status, 200);
+      // Miniflare requires immediate body consumption. Waiting for another
+      // response first lets Undici collect and cancel the unread body.
+      return response.json();
+    }
+
     // Dispatch two requests to the *same* worker instance (one isolate, one
     // shared module scope) and confirm both of their remote fetches are
     // genuinely in flight at once before releasing either — the overlap
     // that triggers "Cannot perform I/O on behalf of a different request"
     // against the old implementation's shared, cross-request fetch Promise.
-    const first = worker.dispatchFetch(requestUrl);
+    const first = readManifest();
     await entered[0]!.promise;
-    const second = worker.dispatchFetch(requestUrl);
+    const second = readManifest();
     await entered[1]!.promise;
     release[0]!.resolve();
     release[1]!.resolve();
 
-    const [firstResponse, secondResponse] = await Promise.all([first, second]);
-    assert.equal(firstResponse.status, 200);
-    assert.equal(secondResponse.status, 200);
-    assert.deepEqual(await firstResponse.json(), { ok: true, from: 'remote' });
-    assert.deepEqual(await secondResponse.json(), { ok: true, from: 'remote' });
+    const [firstManifest, secondManifest] = await Promise.all([first, second]);
+    assert.deepEqual(firstManifest, { ok: true, from: 'remote' });
+    assert.deepEqual(secondManifest, { ok: true, from: 'remote' });
     assert.equal(
       outboundCount,
       2,
@@ -150,9 +156,8 @@ export default {
 
     // A later request reuses the settled module-level cache instead of
     // issuing another remote fetch.
-    const third = await worker.dispatchFetch(requestUrl);
-    assert.equal(third.status, 200);
-    assert.deepEqual(await third.json(), { ok: true, from: 'remote' });
+    const third = await readManifest();
+    assert.deepEqual(third, { ok: true, from: 'remote' });
     assert.equal(
       outboundCount,
       2,
