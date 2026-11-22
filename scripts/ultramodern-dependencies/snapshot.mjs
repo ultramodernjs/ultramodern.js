@@ -56,7 +56,10 @@ const mfTransitions = Object.fromEntries(
         '2.9.2',
         `npm:@bleedingdev/mf-${name}@${name === 'modern-js-v3' ? '2.9.4' : name === 'sdk' ? '2.9.2' : '2.9.3'}`,
       ],
-      to: `npm:@bleedingdev/mf-${name}@2.9.5`,
+      ...(name === 'modern-js-v3'
+        ? { via: ['npm:@bleedingdev/mf-modern-js-v3@2.9.5'] }
+        : {}),
+      to: `npm:@bleedingdev/mf-${name}@${name === 'modern-js-v3' ? '2.9.6' : '2.9.5'}`,
     },
   ]),
 );

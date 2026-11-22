@@ -15,7 +15,7 @@
     "@modern-js/plugin-tanstack": "workspace:*",
     "@modern-js/runtime": "workspace:*",
     "@modern-js/runtime-extensions": "workspace:*",
-    "@module-federation/modern-js-v3": "npm:@bleedingdev/mf-modern-js-v3@2.9.5",
+    "@module-federation/modern-js-v3": "npm:@bleedingdev/mf-modern-js-v3@2.9.6",
     "@module-federation/runtime": "npm:@bleedingdev/mf-runtime@2.9.5",
     "@tanstack/react-router": "https://github.com/ultramodernjs/ultramodern.js/releases/download/support-artifacts-bea0d22f405070b9beccba0cf6f1a7b3d5767784-44174451205-1/tanstack-react-router-1.170.46.tgz",
     "effect": "4.1.4",

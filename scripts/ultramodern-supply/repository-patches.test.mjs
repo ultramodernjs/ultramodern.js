@@ -250,7 +250,18 @@ test('published MF aliases retain their canonical corrections without unused ups
       false,
       packageName,
     );
-    assert.equal(recipe.patch.inventory, `${packageName}@${patch.version}`);
+    if (name === 'modern-js-v3') {
+      const replacement = read(recipe.patch.path);
+      assert.equal(sha256(replacement), recipe.patch.sha256, packageName);
+      const canonical = read(patch.path);
+      assert.deepEqual(
+        replacement.subarray(0, canonical.length),
+        canonical,
+        `${packageName} replacement preserves every canonical correction`,
+      );
+    } else {
+      assert.equal(recipe.patch.inventory, `${packageName}@${patch.version}`);
+    }
     assert.equal(recipe.fork.name, `@bleedingdev/mf-${name}`);
     assert.equal(sha256(read(patch.path)), patch.sha256, packageName);
   }
