@@ -146,15 +146,20 @@ test('referenced remote declaration prebuild emits declarations from a clean cac
     );
 
     // The generated remote's real sources import the whole framework, which a
-    // hermetic fixture cannot install. Reduce the referenced remote to one
-    // dependency-free module so the installed TypeScript 7 compiler runs
-    // offline. The two things this proof is about, the generated tsconfig and
-    // the generated prebuild command, stay untouched.
+    // hermetic fixture cannot install. Reduce its application and tooling
+    // sources to one dependency-free module so the installed TypeScript 7
+    // compiler runs offline. The two things this proof is about, the generated
+    // tsconfig and the generated prebuild command, stay untouched.
     for (const sourceDirectory of ['api', 'server', 'shared', 'src']) {
       fs.rmSync(path.join(workspaceDir, 'verticals/catalog', sourceDirectory), {
         force: true,
         recursive: true,
       });
+    }
+    for (const configFile of fs.globSync('*.config.ts', {
+      cwd: path.join(workspaceDir, 'verticals/catalog'),
+    })) {
+      fs.rmSync(path.join(workspaceDir, 'verticals/catalog', configFile));
     }
     fs.mkdirSync(path.join(workspaceDir, 'verticals/catalog/src'), {
       recursive: true,
