@@ -49,7 +49,7 @@ export const sidecarProfiles = Object.freeze({
       '@bleedingdev/mf-dts-plugin': '2.9.5',
       '@bleedingdev/mf-enhanced': '2.9.5',
       '@bleedingdev/mf-manifest': '2.9.5',
-      '@bleedingdev/mf-modern-js-v3': '2.9.5',
+      '@bleedingdev/mf-modern-js-v3': '2.9.6',
       '@bleedingdev/mf-node': '2.7.54',
       '@bleedingdev/mf-rsbuild-plugin': '2.9.5',
       '@bleedingdev/mf-rspack': '2.9.5',

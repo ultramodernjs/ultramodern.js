@@ -1,0 +1,1271 @@
+diff --git a/dist/cjs/cli/configPlugin.js b/dist/cjs/cli/configPlugin.js
+--- a/dist/cjs/cli/configPlugin.js
++++ b/dist/cjs/cli/configPlugin.js
+@@ -1,4 +1,7 @@
+ "use strict";
++const __rslib_import_meta_url__ = /*#__PURE__*/ function() {
++    return "u" < typeof document ? new (require('url'.replace('', ''))).URL('file:' + __filename).href : document.currentScript && document.currentScript.src || new URL('main.js', document.baseURI).href;
++}();
+ var __webpack_modules__ = {
+     jiti (module) {
+         module.exports = require("jiti");
+@@ -65,6 +68,7 @@
+     });
+     const external_fs_namespaceObject = require("fs");
+     var external_fs_default = /*#__PURE__*/ __webpack_require__.n(external_fs_namespaceObject);
++    const external_module_namespaceObject = require("module");
+     const external_path_namespaceObject = require("path");
+     var external_path_default = /*#__PURE__*/ __webpack_require__.n(external_path_namespaceObject);
+     const external_utils_js_namespaceObject = require("./utils.js");
+@@ -73,16 +77,17 @@
+     const utils_namespaceObject = require("@module-federation/rsbuild-plugin/utils");
+     const external_logger_js_namespaceObject = require("../logger.js");
+     var external_logger_js_default = /*#__PURE__*/ __webpack_require__.n(external_logger_js_namespaceObject);
++    const requireFromPlugin = (0, external_module_namespaceObject.createRequire)(__rslib_import_meta_url__);
+     const defaultPath = external_path_default().resolve(process.cwd(), 'module-federation.config.ts');
+     const resolvePackageFile = (packageName, esmRelativePath, cjsRelativePath)=>{
+-        const packageEntry = require.resolve(packageName);
++        const packageEntry = requireFromPlugin.resolve(packageName);
+         let packageRoot = external_path_default().dirname(packageEntry);
+         while(!external_fs_default().existsSync(external_path_default().join(packageRoot, 'package.json'))){
+             const parentDir = external_path_default().dirname(packageRoot);
+             if (parentDir === packageRoot) throw new Error(`Unable to resolve package root for ${packageName} from ${packageEntry}`);
+             packageRoot = parentDir;
+         }
+-        return require.resolve(external_path_default().join(packageRoot, 'true' === process.env['IS_ESM_BUILD'] ? esmRelativePath : cjsRelativePath));
++        return requireFromPlugin.resolve(external_path_default().join(packageRoot, 'true' === process.env['IS_ESM_BUILD'] ? esmRelativePath : cjsRelativePath));
+     };
+     const resolveSharedStrategyPlugin = ()=>resolvePackageFile('@module-federation/modern-js-v3', 'dist/esm/cli/mfRuntimePlugins/shared-strategy.mjs', 'dist/cjs/cli/mfRuntimePlugins/shared-strategy.js');
+     const resolveInjectNodeFetchPlugin = ()=>resolvePackageFile('@module-federation/modern-js-v3', 'dist/esm/cli/mfRuntimePlugins/inject-node-fetch.mjs', 'dist/cjs/cli/mfRuntimePlugins/inject-node-fetch.js');
+@@ -224,10 +229,36 @@
+         if (!chain.output.get('uniqueName')) chain.output.uniqueName(mfConfig.name);
+         const splitChunkConfig = chain.optimization.splitChunks.entries();
+         if (!isServer) (0, utils_namespaceObject.autoDeleteSplitChunkCacheGroups)(mfConfig, splitChunkConfig);
+-        if (!isServer && enableSSR && splitChunkConfig && 'object' == typeof splitChunkConfig && splitChunkConfig.cacheGroups) {
+-            const previousChunks = splitChunkConfig.chunks;
+-            splitChunkConfig.chunks = 'async';
+-            if (previousChunks && 'async' !== previousChunks) external_logger_js_default().warn(`splitChunks.chunks = "${previousChunks}" is not allowed with stream SSR mode; forcing "async"`);
++        if (!isServer && enableSSR && splitChunkConfig && 'object' == typeof splitChunkConfig) {
++            const splitChunksValue = splitChunkConfig.chunks;
++            let shouldWarn = void 0 !== splitChunksValue && 'async' !== splitChunksValue;
++            if ('function' == typeof splitChunksValue) splitChunkConfig.chunks = (chunk)=>!chunk.canBeInitial() && splitChunksValue(chunk);
++            else splitChunkConfig.chunks = 'async';
++            if (splitChunkConfig.cacheGroups && 'object' == typeof splitChunkConfig.cacheGroups) {
++                for (const cacheGroup of Object.values(splitChunkConfig.cacheGroups))if (cacheGroup && 'object' == typeof cacheGroup) {
++                    const { chunks } = cacheGroup;
++                    if ('function' == typeof chunks) {
++                        cacheGroup.chunks = (chunk)=>!chunk.canBeInitial() && chunks(chunk);
++                        shouldWarn = true;
++                    } else if ('string' == typeof chunks && 'async' !== chunks) {
++                        cacheGroup.chunks = 'async';
++                        shouldWarn = true;
++                    }
++                }
++            }
++            const { fallbackCacheGroup } = splitChunkConfig;
++            if (fallbackCacheGroup && 'object' == typeof fallbackCacheGroup) {
++                const { chunks } = fallbackCacheGroup;
++                if ('function' == typeof chunks) {
++                    fallbackCacheGroup.chunks = (chunk)=>!chunk.canBeInitial() && chunks(chunk);
++                    shouldWarn = true;
++                } else if ('string' == typeof chunks && 'async' !== chunks) {
++                    fallbackCacheGroup.chunks = 'async';
++                    shouldWarn = true;
++                }
++            }
++            chain.optimization.splitChunks(splitChunkConfig);
++            if (shouldWarn) external_logger_js_default().warn('Stream SSR requires async-only splitChunks; constraining chunk filters to async chunks');
+         }
+         if ((0, external_utils_js_namespaceObject.isDev)() && 'auto' === chain.output.get('publicPath')) {
+             var _modernjsConfig_server;
+@@ -323,7 +354,7 @@
+                         },
+                         resolve: {
+                             alias: {
+-                                '@modern-js/runtime/mf': require.resolve('@module-federation/modern-js-v3/runtime')
++                                '@modern-js/runtime/mf': requireFromPlugin.resolve('@module-federation/modern-js-v3/runtime')
+                             }
+                         },
+                         source: {
+diff --git a/dist/cjs/cli/ssrDevReload.js b/dist/cjs/cli/ssrDevReload.js
+new file mode 100644
+--- /dev/null
++++ b/dist/cjs/cli/ssrDevReload.js
+@@ -0,0 +1,95 @@
++"use strict";
++var __webpack_require__ = {};
++(()=>{
++    __webpack_require__.n = (module)=>{
++        var getter = module && module.__esModule ? ()=>module['default'] : ()=>module;
++        __webpack_require__.d(getter, {
++            a: getter
++        });
++        return getter;
++    };
++})();
++(()=>{
++    __webpack_require__.d = (exports1, getters, values)=>{
++        var define = (defs, kind)=>{
++            for(var key in defs)if (__webpack_require__.o(defs, key) && !__webpack_require__.o(exports1, key)) Object.defineProperty(exports1, key, {
++                enumerable: true,
++                [kind]: defs[key]
++            });
++        };
++        define(getters, "get");
++        define(values, "value");
++    };
++})();
++(()=>{
++    __webpack_require__.o = (obj, prop)=>Object.prototype.hasOwnProperty.call(obj, prop);
++})();
++(()=>{
++    __webpack_require__.r = (exports1)=>{
++        if ("u" > typeof Symbol && Symbol.toStringTag) Object.defineProperty(exports1, Symbol.toStringTag, {
++            value: 'Module'
++        });
++        Object.defineProperty(exports1, '__esModule', {
++            value: true
++        });
++    };
++})();
++var __webpack_exports__ = {};
++__webpack_require__.r(__webpack_exports__);
++__webpack_require__.d(__webpack_exports__, {
++    createRemoteRevalidateMiddleware: ()=>createRemoteRevalidateMiddleware,
++    mfSSRDevReloadPlugin: ()=>mfSSRDevReloadPlugin
++});
++const external_logger_js_namespaceObject = require("../logger.js");
++var external_logger_js_default = /*#__PURE__*/ __webpack_require__.n(external_logger_js_namespaceObject);
++const isPageRequest = (req)=>{
++    var _req_headers_accept;
++    return 'GET' === req.method && Boolean(null == (_req_headers_accept = req.headers.accept) ? void 0 : _req_headers_accept.includes('text/html'));
++};
++const revalidateRemotes = async ()=>{
++    const { revalidate } = await import("@module-federation/node/utils");
++    return revalidate();
++};
++const flushRemoteState = async ()=>{
++    const [{ flushChunks }, { flushDataFetch }] = await Promise.all([
++        import("@module-federation/node/utils"),
++        import("@module-federation/bridge-react/data-fetch")
++    ]);
++    await flushChunks();
++    flushDataFetch();
++};
++const createRemoteRevalidateMiddleware = (sockWrite, revalidate = revalidateRemotes, flush = flushRemoteState)=>{
++    let pending;
++    const check = async ()=>{
++        if (!await revalidate()) return;
++        await flush();
++        sockWrite('full-reload');
++    };
++    return (req, _res, next)=>{
++        if (!isPageRequest(req)) return void next();
++        pending || (pending = check().finally(()=>{
++            pending = void 0;
++        }));
++        pending.then(()=>next(), (err)=>{
++            external_logger_js_default().error('Failed to check remotes for changes; the page may render a stale remote. Restart the dev server if it persists.', err);
++            next();
++        });
++    };
++};
++const mfSSRDevReloadPlugin = ()=>({
++        name: '@module-federation/modern-js-v3/ssr-dev-reload',
++        setup (api) {
++            api.onBeforeStartDevServer(({ server })=>{
++                server.middlewares.use(createRemoteRevalidateMiddleware(server.sockWrite));
++            });
++        }
++    });
++exports.createRemoteRevalidateMiddleware = __webpack_exports__.createRemoteRevalidateMiddleware;
++exports.mfSSRDevReloadPlugin = __webpack_exports__.mfSSRDevReloadPlugin;
++for(var __rspack_i in __webpack_exports__)if (-1 === [
++    "createRemoteRevalidateMiddleware",
++    "mfSSRDevReloadPlugin"
++].indexOf(__rspack_i)) exports[__rspack_i] = __webpack_exports__[__rspack_i];
++Object.defineProperty(exports, '__esModule', {
++    value: true
++});
+diff --git a/dist/cjs/cli/ssrPlugin.js b/dist/cjs/cli/ssrPlugin.js
+--- a/dist/cjs/cli/ssrPlugin.js
++++ b/dist/cjs/cli/ssrPlugin.js
+@@ -52,6 +52,7 @@
+ const external_logger_js_namespaceObject = require("../logger.js");
+ var external_logger_js_default = /*#__PURE__*/ __webpack_require__.n(external_logger_js_namespaceObject);
+ const external_utils_js_namespaceObject = require("./utils.js");
++const external_ssrDevReload_js_namespaceObject = require("./ssrDevReload.js");
+ const utils_namespaceObject = require("@module-federation/rsbuild-plugin/utils");
+ const sdk_namespaceObject = require("@module-federation/sdk");
+ function setEnv() {
+@@ -198,15 +199,6 @@
+                         fetchServerQuery
+                     }
+                 });
+-                if (!(0, external_utils_js_namespaceObject.isDev)()) return {
+-                    entrypoint,
+-                    plugins
+-                };
+-                plugins.push({
+-                    name: 'mfSSRDev',
+-                    path: '@module-federation/modern-js-v3/ssr-dev-plugin',
+-                    config: {}
+-                });
+                 return {
+                     entrypoint,
+                     plugins
+@@ -243,13 +235,13 @@
+                     chain.target('async-node');
+                     if ((0, external_utils_js_namespaceObject.isDev)()) chain.plugin('UniverseEntryChunkTrackerPlugin').use(universe_entry_chunk_tracker_plugin_default());
+                 }
+-                if ((0, external_utils_js_namespaceObject.isDev)() && isWeb) chain.externals({
+-                    '@module-federation/node/utils': 'NOT_USED_IN_BROWSER'
+-                });
+             });
+             api.config(()=>({
+                     builderPlugins: [
+-                        mfSSRRsbuildPlugin(pluginOptions)
++                        mfSSRRsbuildPlugin(pluginOptions),
++                        ...(0, external_utils_js_namespaceObject.isDev)() ? [
++                            (0, external_ssrDevReload_js_namespaceObject.mfSSRDevReloadPlugin)()
++                        ] : []
+                     ],
+                     dev: {
+                         setupMiddlewares: [
+diff --git a/dist/cjs/react/index.js b/dist/cjs/react/index.js
+--- a/dist/cjs/react/index.js
++++ b/dist/cjs/react/index.js
+@@ -1,7 +1,7 @@
+ "use strict";
+ var __webpack_modules__ = {
+-    "@module-federation/bridge-react" (module) {
+-        module.exports = require("@module-federation/bridge-react");
++    "@module-federation/bridge-react/base" (module) {
++        module.exports = require("@module-federation/bridge-react/base");
+     }
+ };
+ var __webpack_module_cache__ = {};
+@@ -51,7 +51,7 @@
+ var __webpack_exports__ = {};
+ (()=>{
+     __webpack_require__.r(__webpack_exports__);
+-    var _module_federation_bridge_react__rspack_import_0 = __webpack_require__("@module-federation/bridge-react");
++    var _module_federation_bridge_react__rspack_import_0 = __webpack_require__("@module-federation/bridge-react/base");
+     var __rspack_reexport = {};
+     for(const __rspack_import_key in _module_federation_bridge_react__rspack_import_0)if ("default" !== __rspack_import_key) __rspack_reexport[__rspack_import_key] = ()=>_module_federation_bridge_react__rspack_import_0[__rspack_import_key];
+     __webpack_require__.d(__webpack_exports__, __rspack_reexport);
+diff --git a/dist/cjs/server/index.js b/dist/cjs/server/index.js
+--- a/dist/cjs/server/index.js
++++ b/dist/cjs/server/index.js
+@@ -1,5 +1,14 @@
+ "use strict";
+ var __webpack_require__ = {};
++(()=>{
++    __webpack_require__.n = (module)=>{
++        var getter = module && module.__esModule ? ()=>module['default'] : ()=>module;
++        __webpack_require__.d(getter, {
++            a: getter
++        });
++        return getter;
++    };
++})();
+ (()=>{
+     __webpack_require__.d = (exports1, getters, values)=>{
+         var define = (defs, kind)=>{
+@@ -31,10 +40,15 @@
+     default: ()=>server,
+     staticServePlugin: ()=>staticServePlugin
+ });
++const helpers_namespaceObject = require("@module-federation/runtime/helpers");
++var helpers_default = /*#__PURE__*/ __webpack_require__.n(helpers_namespaceObject);
+ const external_staticMiddleware_js_namespaceObject = require("./staticMiddleware.js");
+ const staticServePlugin = ()=>({
+         name: '@modern-js/module-federation/server',
+         setup: (api)=>{
++            api.onReset(({ event })=>{
++                if ('repack' === event.type) helpers_default().global.resetFederationRuntime();
++            });
+             api.onPrepare(()=>{
+                 var _config_output, _config_server;
+                 if ('development' === process.env.NODE_ENV) return;
+diff --git a/dist/cjs/server/staticMiddleware.js b/dist/cjs/server/staticMiddleware.js
+--- a/dist/cjs/server/staticMiddleware.js
++++ b/dist/cjs/server/staticMiddleware.js
+@@ -77,7 +77,7 @@
+         const fileResult = await external_fileCache_js_namespaceObject.fileCache.getFile(filepath);
+         if (!fileResult) return next();
+         c.header('Content-Type', "application/javascript");
+-        c.header('Content-Length', String(fileResult.content.length));
++        c.header('Content-Length', String(Buffer.byteLength(fileResult.content, 'utf8')));
+         return c.body(fileResult.content, 200);
+     };
+ };
+diff --git a/dist/cjs/ssr-runtime/SSRLiveReload.js b/dist/cjs/ssr-runtime/SSRLiveReload.js
+deleted file mode 100644
+--- a/dist/cjs/ssr-runtime/SSRLiveReload.js
++++ /dev/null
+@@ -1,54 +0,0 @@
+-"use strict";
+-var __webpack_require__ = {};
+-(()=>{
+-    __webpack_require__.d = (exports1, getters, values)=>{
+-        var define = (defs, kind)=>{
+-            for(var key in defs)if (__webpack_require__.o(defs, key) && !__webpack_require__.o(exports1, key)) Object.defineProperty(exports1, key, {
+-                enumerable: true,
+-                [kind]: defs[key]
+-            });
+-        };
+-        define(getters, "get");
+-        define(values, "value");
+-    };
+-})();
+-(()=>{
+-    __webpack_require__.o = (obj, prop)=>Object.prototype.hasOwnProperty.call(obj, prop);
+-})();
+-(()=>{
+-    __webpack_require__.r = (exports1)=>{
+-        if ("u" > typeof Symbol && Symbol.toStringTag) Object.defineProperty(exports1, Symbol.toStringTag, {
+-            value: 'Module'
+-        });
+-        Object.defineProperty(exports1, '__esModule', {
+-            value: true
+-        });
+-    };
+-})();
+-var __webpack_exports__ = {};
+-__webpack_require__.r(__webpack_exports__);
+-__webpack_require__.d(__webpack_exports__, {
+-    SSRLiveReload: ()=>SSRLiveReload
+-});
+-const jsx_runtime_namespaceObject = require("react/jsx-runtime");
+-require("react");
+-function SSRLiveReload() {
+-    if ('development' !== process.env.NODE_ENV) return null;
+-    return /*#__PURE__*/ (0, jsx_runtime_namespaceObject.jsx)("script", {
+-        suppressHydrationWarning: true,
+-        dangerouslySetInnerHTML: {
+-            __html: String.raw`
+-      if(${globalThis.shouldUpdate}){
+-        location.reload();
+-      }
+-   `
+-        }
+-    });
+-}
+-exports.SSRLiveReload = __webpack_exports__.SSRLiveReload;
+-for(var __rspack_i in __webpack_exports__)if (-1 === [
+-    "SSRLiveReload"
+-].indexOf(__rspack_i)) exports[__rspack_i] = __webpack_exports__[__rspack_i];
+-Object.defineProperty(exports, '__esModule', {
+-    value: true
+-});
+diff --git a/dist/cjs/ssr-runtime/devPlugin.js b/dist/cjs/ssr-runtime/devPlugin.js
+deleted file mode 100644
+--- a/dist/cjs/ssr-runtime/devPlugin.js
++++ /dev/null
+@@ -1,71 +0,0 @@
+-"use strict";
+-var __webpack_require__ = {};
+-(()=>{
+-    __webpack_require__.d = (exports1, getters, values)=>{
+-        var define = (defs, kind)=>{
+-            for(var key in defs)if (__webpack_require__.o(defs, key) && !__webpack_require__.o(exports1, key)) Object.defineProperty(exports1, key, {
+-                enumerable: true,
+-                [kind]: defs[key]
+-            });
+-        };
+-        define(getters, "get");
+-        define(values, "value");
+-    };
+-})();
+-(()=>{
+-    __webpack_require__.o = (obj, prop)=>Object.prototype.hasOwnProperty.call(obj, prop);
+-})();
+-(()=>{
+-    __webpack_require__.r = (exports1)=>{
+-        if ("u" > typeof Symbol && Symbol.toStringTag) Object.defineProperty(exports1, Symbol.toStringTag, {
+-            value: 'Module'
+-        });
+-        Object.defineProperty(exports1, '__esModule', {
+-            value: true
+-        });
+-    };
+-})();
+-var __webpack_exports__ = {};
+-__webpack_require__.r(__webpack_exports__);
+-__webpack_require__.d(__webpack_exports__, {
+-    mfSSRDevPlugin: ()=>mfSSRDevPlugin
+-});
+-const jsx_runtime_namespaceObject = require("react/jsx-runtime");
+-const external_SSRLiveReload_js_namespaceObject = require("./SSRLiveReload.js");
+-const data_fetch_namespaceObject = require("@module-federation/bridge-react/data-fetch");
+-const mfSSRDevPlugin = ()=>({
+-        name: '@module-federation/modern-js-v3',
+-        setup: (api)=>{
+-            api.onBeforeRender(async ()=>{
+-                if ("u" > typeof window) return;
+-                globalThis.shouldUpdate = false;
+-                const nodeUtils = await import("@module-federation/node/utils");
+-                const shouldUpdate = await nodeUtils.revalidate();
+-                console.log('shouldUpdate: ', shouldUpdate);
+-                if (shouldUpdate) {
+-                    console.log('should RELOAD', shouldUpdate);
+-                    await nodeUtils.flushChunks();
+-                    (0, data_fetch_namespaceObject.flushDataFetch)();
+-                    globalThis.shouldUpdate = true;
+-                }
+-            });
+-            api.wrapRoot((App)=>{
+-                const AppWrapper = (props)=>/*#__PURE__*/ (0, jsx_runtime_namespaceObject.jsxs)(jsx_runtime_namespaceObject.Fragment, {
+-                        children: [
+-                            /*#__PURE__*/ (0, jsx_runtime_namespaceObject.jsx)(external_SSRLiveReload_js_namespaceObject.SSRLiveReload, {}),
+-                            /*#__PURE__*/ (0, jsx_runtime_namespaceObject.jsx)(App, {
+-                                ...props
+-                            })
+-                        ]
+-                    });
+-                return AppWrapper;
+-            });
+-        }
+-    });
+-exports.mfSSRDevPlugin = __webpack_exports__.mfSSRDevPlugin;
+-for(var __rspack_i in __webpack_exports__)if (-1 === [
+-    "mfSSRDevPlugin"
+-].indexOf(__rspack_i)) exports[__rspack_i] = __webpack_exports__[__rspack_i];
+-Object.defineProperty(exports, '__esModule', {
+-    value: true
+-});
+diff --git a/dist/cjs/ssr-runtime/workerPlugins.js b/dist/cjs/ssr-runtime/workerPlugins.js
+new file mode 100644
+--- /dev/null
++++ b/dist/cjs/ssr-runtime/workerPlugins.js
+@@ -0,0 +1,48 @@
++"use strict";
++var __webpack_require__ = {};
++(()=>{
++    __webpack_require__.d = (exports1, getters, values)=>{
++        var define = (defs, kind)=>{
++            for(var key in defs)if (__webpack_require__.o(defs, key) && !__webpack_require__.o(exports1, key)) Object.defineProperty(exports1, key, {
++                enumerable: true,
++                [kind]: defs[key]
++            });
++        };
++        define(getters, "get");
++        define(values, "value");
++    };
++})();
++(()=>{
++    __webpack_require__.o = (obj, prop)=>Object.prototype.hasOwnProperty.call(obj, prop);
++})();
++(()=>{
++    __webpack_require__.r = (exports1)=>{
++        if ("u" > typeof Symbol && Symbol.toStringTag) Object.defineProperty(exports1, Symbol.toStringTag, {
++            value: 'Module'
++        });
++        Object.defineProperty(exports1, '__esModule', {
++            value: true
++        });
++    };
++})();
++var __webpack_exports__ = {};
++__webpack_require__.r(__webpack_exports__);
++const injectDataFetchFunctionPlugin = (_options)=>({
++        name: '@module-federation/inject-data-fetch-function-plugin'
++    });
++const mfSSRDevPlugin = ()=>({
++        name: '@module-federation/modern-js-v3'
++    });
++__webpack_require__.d(__webpack_exports__, {}, {
++    injectDataFetchFunctionPlugin: injectDataFetchFunctionPlugin,
++    mfSSRDevPlugin: mfSSRDevPlugin
++});
++exports.injectDataFetchFunctionPlugin = __webpack_exports__.injectDataFetchFunctionPlugin;
++exports.mfSSRDevPlugin = __webpack_exports__.mfSSRDevPlugin;
++for(var __rspack_i in __webpack_exports__)if (-1 === [
++    "injectDataFetchFunctionPlugin",
++    "mfSSRDevPlugin"
++].indexOf(__rspack_i)) exports[__rspack_i] = __webpack_exports__[__rspack_i];
++Object.defineProperty(exports, '__esModule', {
++    value: true
++});
+diff --git a/dist/esm-node/cli/configPlugin.mjs b/dist/esm-node/cli/configPlugin.mjs
+--- a/dist/esm-node/cli/configPlugin.mjs
++++ b/dist/esm-node/cli/configPlugin.mjs
+@@ -1,4 +1,5 @@
+ import fs from "fs";
++import { createRequire } from "module";
+ import path from "path";
+ import { isDev, isWebTarget, skipByTarget } from "./utils.mjs";
+ import { encodeName } from "@module-federation/sdk";
+@@ -12,16 +13,17 @@
+         module.exports = __rspack_external_jiti;
+     }
+ });
++const requireFromPlugin = createRequire(import.meta.url);
+ const defaultPath = path.resolve(process.cwd(), 'module-federation.config.ts');
+ const resolvePackageFile = (packageName, esmRelativePath, cjsRelativePath)=>{
+-    const packageEntry = require.resolve(packageName);
++    const packageEntry = requireFromPlugin.resolve(packageName);
+     let packageRoot = path.dirname(packageEntry);
+     while(!fs.existsSync(path.join(packageRoot, 'package.json'))){
+         const parentDir = path.dirname(packageRoot);
+         if (parentDir === packageRoot) throw new Error(`Unable to resolve package root for ${packageName} from ${packageEntry}`);
+         packageRoot = parentDir;
+     }
+-    return require.resolve(path.join(packageRoot, 'true' === process.env['IS_ESM_BUILD'] ? esmRelativePath : cjsRelativePath));
++    return requireFromPlugin.resolve(path.join(packageRoot, 'true' === process.env['IS_ESM_BUILD'] ? esmRelativePath : cjsRelativePath));
+ };
+ const resolveSharedStrategyPlugin = ()=>resolvePackageFile('@module-federation/modern-js-v3', 'dist/esm/cli/mfRuntimePlugins/shared-strategy.mjs', 'dist/cjs/cli/mfRuntimePlugins/shared-strategy.js');
+ const resolveInjectNodeFetchPlugin = ()=>resolvePackageFile('@module-federation/modern-js-v3', 'dist/esm/cli/mfRuntimePlugins/inject-node-fetch.mjs', 'dist/cjs/cli/mfRuntimePlugins/inject-node-fetch.js');
+@@ -163,10 +165,36 @@
+     if (!chain.output.get('uniqueName')) chain.output.uniqueName(mfConfig.name);
+     const splitChunkConfig = chain.optimization.splitChunks.entries();
+     if (!isServer) autoDeleteSplitChunkCacheGroups(mfConfig, splitChunkConfig);
+-    if (!isServer && enableSSR && splitChunkConfig && 'object' == typeof splitChunkConfig && splitChunkConfig.cacheGroups) {
+-        const previousChunks = splitChunkConfig.chunks;
+-        splitChunkConfig.chunks = 'async';
+-        if (previousChunks && 'async' !== previousChunks) logger.warn(`splitChunks.chunks = "${previousChunks}" is not allowed with stream SSR mode; forcing "async"`);
++    if (!isServer && enableSSR && splitChunkConfig && 'object' == typeof splitChunkConfig) {
++        const splitChunksValue = splitChunkConfig.chunks;
++        let shouldWarn = void 0 !== splitChunksValue && 'async' !== splitChunksValue;
++        if ('function' == typeof splitChunksValue) splitChunkConfig.chunks = (chunk)=>!chunk.canBeInitial() && splitChunksValue(chunk);
++        else splitChunkConfig.chunks = 'async';
++        if (splitChunkConfig.cacheGroups && 'object' == typeof splitChunkConfig.cacheGroups) {
++            for (const cacheGroup of Object.values(splitChunkConfig.cacheGroups))if (cacheGroup && 'object' == typeof cacheGroup) {
++                const { chunks } = cacheGroup;
++                if ('function' == typeof chunks) {
++                    cacheGroup.chunks = (chunk)=>!chunk.canBeInitial() && chunks(chunk);
++                    shouldWarn = true;
++                } else if ('string' == typeof chunks && 'async' !== chunks) {
++                    cacheGroup.chunks = 'async';
++                    shouldWarn = true;
++                }
++            }
++        }
++        const { fallbackCacheGroup } = splitChunkConfig;
++        if (fallbackCacheGroup && 'object' == typeof fallbackCacheGroup) {
++            const { chunks } = fallbackCacheGroup;
++            if ('function' == typeof chunks) {
++                fallbackCacheGroup.chunks = (chunk)=>!chunk.canBeInitial() && chunks(chunk);
++                shouldWarn = true;
++            } else if ('string' == typeof chunks && 'async' !== chunks) {
++                fallbackCacheGroup.chunks = 'async';
++                shouldWarn = true;
++            }
++        }
++        chain.optimization.splitChunks(splitChunkConfig);
++        if (shouldWarn) logger.warn('Stream SSR requires async-only splitChunks; constraining chunk filters to async chunks');
+     }
+     if (isDev() && 'auto' === chain.output.get('publicPath')) {
+         var _modernjsConfig_server;
+@@ -262,7 +290,7 @@
+                     },
+                     resolve: {
+                         alias: {
+-                            '@modern-js/runtime/mf': require.resolve('@module-federation/modern-js-v3/runtime')
++                            '@modern-js/runtime/mf': requireFromPlugin.resolve('@module-federation/modern-js-v3/runtime')
+                         }
+                     },
+                     source: {
+diff --git a/dist/esm-node/cli/ssrDevReload.mjs b/dist/esm-node/cli/ssrDevReload.mjs
+new file mode 100644
+--- /dev/null
++++ b/dist/esm-node/cli/ssrDevReload.mjs
+@@ -0,0 +1,44 @@
++import logger from "../logger.mjs";
++const isPageRequest = (req)=>{
++    var _req_headers_accept;
++    return 'GET' === req.method && Boolean(null == (_req_headers_accept = req.headers.accept) ? void 0 : _req_headers_accept.includes('text/html'));
++};
++const revalidateRemotes = async ()=>{
++    const { revalidate } = await import("@module-federation/node/utils");
++    return revalidate();
++};
++const flushRemoteState = async ()=>{
++    const [{ flushChunks }, { flushDataFetch }] = await Promise.all([
++        import("@module-federation/node/utils"),
++        import("@module-federation/bridge-react/data-fetch")
++    ]);
++    await flushChunks();
++    flushDataFetch();
++};
++const createRemoteRevalidateMiddleware = (sockWrite, revalidate = revalidateRemotes, flush = flushRemoteState)=>{
++    let pending;
++    const check = async ()=>{
++        if (!await revalidate()) return;
++        await flush();
++        sockWrite('full-reload');
++    };
++    return (req, _res, next)=>{
++        if (!isPageRequest(req)) return void next();
++        pending || (pending = check().finally(()=>{
++            pending = void 0;
++        }));
++        pending.then(()=>next(), (err)=>{
++            logger.error('Failed to check remotes for changes; the page may render a stale remote. Restart the dev server if it persists.', err);
++            next();
++        });
++    };
++};
++const mfSSRDevReloadPlugin = ()=>({
++        name: '@module-federation/modern-js-v3/ssr-dev-reload',
++        setup (api) {
++            api.onBeforeStartDevServer(({ server })=>{
++                server.middlewares.use(createRemoteRevalidateMiddleware(server.sockWrite));
++            });
++        }
++    });
++export { createRemoteRevalidateMiddleware, mfSSRDevReloadPlugin };
+diff --git a/dist/esm-node/cli/ssrPlugin.mjs b/dist/esm-node/cli/ssrPlugin.mjs
+--- a/dist/esm-node/cli/ssrPlugin.mjs
++++ b/dist/esm-node/cli/ssrPlugin.mjs
+@@ -4,6 +4,7 @@
+ import universe_entry_chunk_tracker_plugin from "@module-federation/node/universe-entry-chunk-tracker-plugin";
+ import logger from "../logger.mjs";
+ import { isDev, isWebTarget, skipByTarget } from "./utils.mjs";
++import { mfSSRDevReloadPlugin } from "./ssrDevReload.mjs";
+ import { updateStatsAndManifest } from "@module-federation/rsbuild-plugin/utils";
+ import { ManifestFileName, StatsFileName, simpleJoinRemoteEntry } from "@module-federation/sdk";
+ function setEnv() {
+@@ -150,15 +151,6 @@
+                         fetchServerQuery
+                     }
+                 });
+-                if (!isDev()) return {
+-                    entrypoint,
+-                    plugins
+-                };
+-                plugins.push({
+-                    name: 'mfSSRDev',
+-                    path: '@module-federation/modern-js-v3/ssr-dev-plugin',
+-                    config: {}
+-                });
+                 return {
+                     entrypoint,
+                     plugins
+@@ -195,13 +187,13 @@
+                     chain.target('async-node');
+                     if (isDev()) chain.plugin('UniverseEntryChunkTrackerPlugin').use(universe_entry_chunk_tracker_plugin);
+                 }
+-                if (isDev() && isWeb) chain.externals({
+-                    '@module-federation/node/utils': 'NOT_USED_IN_BROWSER'
+-                });
+             });
+             api.config(()=>({
+                     builderPlugins: [
+-                        mfSSRRsbuildPlugin(pluginOptions)
++                        mfSSRRsbuildPlugin(pluginOptions),
++                        ...isDev() ? [
++                            mfSSRDevReloadPlugin()
++                        ] : []
+                     ],
+                     dev: {
+                         setupMiddlewares: [
+diff --git a/dist/esm-node/react/index.mjs b/dist/esm-node/react/index.mjs
+--- a/dist/esm-node/react/index.mjs
++++ b/dist/esm-node/react/index.mjs
+@@ -1 +1 @@
+-export * from "@module-federation/bridge-react";
++export * from "@module-federation/bridge-react/base";
+diff --git a/dist/esm-node/server/index.mjs b/dist/esm-node/server/index.mjs
+--- a/dist/esm-node/server/index.mjs
++++ b/dist/esm-node/server/index.mjs
+@@ -1,7 +1,11 @@
++import helpers from "@module-federation/runtime/helpers";
+ import { createCorsMiddleware, createStaticMiddleware } from "./staticMiddleware.mjs";
+ const staticServePlugin = ()=>({
+         name: '@modern-js/module-federation/server',
+         setup: (api)=>{
++            api.onReset(({ event })=>{
++                if ('repack' === event.type) helpers.global.resetFederationRuntime();
++            });
+             api.onPrepare(()=>{
+                 var _config_output, _config_server;
+                 if ('development' === process.env.NODE_ENV) return;
+diff --git a/dist/esm-node/server/staticMiddleware.mjs b/dist/esm-node/server/staticMiddleware.mjs
+--- a/dist/esm-node/server/staticMiddleware.mjs
++++ b/dist/esm-node/server/staticMiddleware.mjs
+@@ -34,7 +34,7 @@
+         const fileResult = await fileCache.getFile(filepath);
+         if (!fileResult) return next();
+         c.header('Content-Type', "application/javascript");
+-        c.header('Content-Length', String(fileResult.content.length));
++        c.header('Content-Length', String(Buffer.byteLength(fileResult.content, 'utf8')));
+         return c.body(fileResult.content, 200);
+     };
+ };
+diff --git a/dist/esm-node/ssr-runtime/SSRLiveReload.mjs b/dist/esm-node/ssr-runtime/SSRLiveReload.mjs
+deleted file mode 100644
+--- a/dist/esm-node/ssr-runtime/SSRLiveReload.mjs
++++ /dev/null
+@@ -1,16 +0,0 @@
+-import { jsx } from "react/jsx-runtime";
+-import "react";
+-function SSRLiveReload() {
+-    if ('development' !== process.env.NODE_ENV) return null;
+-    return /*#__PURE__*/ jsx("script", {
+-        suppressHydrationWarning: true,
+-        dangerouslySetInnerHTML: {
+-            __html: String.raw`
+-      if(${globalThis.shouldUpdate}){
+-        location.reload();
+-      }
+-   `
+-        }
+-    });
+-}
+-export { SSRLiveReload };
+diff --git a/dist/esm-node/ssr-runtime/devPlugin.mjs b/dist/esm-node/ssr-runtime/devPlugin.mjs
+deleted file mode 100644
+--- a/dist/esm-node/ssr-runtime/devPlugin.mjs
++++ /dev/null
+@@ -1,33 +0,0 @@
+-import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+-import { SSRLiveReload } from "./SSRLiveReload.mjs";
+-import { flushDataFetch } from "@module-federation/bridge-react/data-fetch";
+-const mfSSRDevPlugin = ()=>({
+-        name: '@module-federation/modern-js-v3',
+-        setup: (api)=>{
+-            api.onBeforeRender(async ()=>{
+-                if ("u" > typeof window) return;
+-                globalThis.shouldUpdate = false;
+-                const nodeUtils = await import("@module-federation/node/utils");
+-                const shouldUpdate = await nodeUtils.revalidate();
+-                console.log('shouldUpdate: ', shouldUpdate);
+-                if (shouldUpdate) {
+-                    console.log('should RELOAD', shouldUpdate);
+-                    await nodeUtils.flushChunks();
+-                    flushDataFetch();
+-                    globalThis.shouldUpdate = true;
+-                }
+-            });
+-            api.wrapRoot((App)=>{
+-                const AppWrapper = (props)=>/*#__PURE__*/ jsxs(Fragment, {
+-                        children: [
+-                            /*#__PURE__*/ jsx(SSRLiveReload, {}),
+-                            /*#__PURE__*/ jsx(App, {
+-                                ...props
+-                            })
+-                        ]
+-                    });
+-                return AppWrapper;
+-            });
+-        }
+-    });
+-export { mfSSRDevPlugin };
+diff --git a/dist/esm-node/ssr-runtime/workerPlugins.mjs b/dist/esm-node/ssr-runtime/workerPlugins.mjs
+new file mode 100644
+--- /dev/null
++++ b/dist/esm-node/ssr-runtime/workerPlugins.mjs
+@@ -0,0 +1,7 @@
++const injectDataFetchFunctionPlugin = (_options)=>({
++        name: '@module-federation/inject-data-fetch-function-plugin'
++    });
++const mfSSRDevPlugin = ()=>({
++        name: '@module-federation/modern-js-v3'
++    });
++export { injectDataFetchFunctionPlugin, mfSSRDevPlugin };
+diff --git a/dist/esm/cli/configPlugin.mjs b/dist/esm/cli/configPlugin.mjs
+--- a/dist/esm/cli/configPlugin.mjs
++++ b/dist/esm/cli/configPlugin.mjs
+@@ -5,6 +5,7 @@
+ import { _ as _ts_generator__ } from "@swc/helpers/_/_ts_generator";
+ import { _ as _type_of__ } from "@swc/helpers/_/_type_of";
+ import fs from "fs";
++import { createRequire } from "module";
+ import path from "path";
+ import { isDev, isWebTarget, skipByTarget } from "./utils.mjs";
+ import { encodeName } from "@module-federation/sdk";
+@@ -18,16 +19,17 @@
+         module.exports = __rspack_external_jiti;
+     }
+ });
++var requireFromPlugin = createRequire(import.meta.url);
+ var defaultPath = path.resolve(process.cwd(), 'module-federation.config.ts');
+ var configPlugin_resolvePackageFile = function(packageName, esmRelativePath, cjsRelativePath) {
+-    var packageEntry = require.resolve(packageName);
++    var packageEntry = requireFromPlugin.resolve(packageName);
+     var packageRoot = path.dirname(packageEntry);
+     while(!fs.existsSync(path.join(packageRoot, 'package.json'))){
+         var parentDir = path.dirname(packageRoot);
+         if (parentDir === packageRoot) throw new Error("Unable to resolve package root for ".concat(packageName, " from ").concat(packageEntry));
+         packageRoot = parentDir;
+     }
+-    return require.resolve(path.join(packageRoot, 'true' === process.env['IS_ESM_BUILD'] ? esmRelativePath : cjsRelativePath));
++    return requireFromPlugin.resolve(path.join(packageRoot, 'true' === process.env['IS_ESM_BUILD'] ? esmRelativePath : cjsRelativePath));
+ };
+ var configPlugin_resolveSharedStrategyPlugin = function() {
+     return configPlugin_resolvePackageFile('@module-federation/modern-js-v3', 'dist/esm/cli/mfRuntimePlugins/shared-strategy.mjs', 'dist/cjs/cli/mfRuntimePlugins/shared-strategy.js');
+@@ -193,10 +195,58 @@
+     if (!chain.output.get('uniqueName')) chain.output.uniqueName(mfConfig.name);
+     var splitChunkConfig = chain.optimization.splitChunks.entries();
+     if (!isServer) autoDeleteSplitChunkCacheGroups(mfConfig, splitChunkConfig);
+-    if (!isServer && enableSSR && splitChunkConfig && (void 0 === splitChunkConfig ? "undefined" : _type_of__(splitChunkConfig)) === 'object' && splitChunkConfig.cacheGroups) {
+-        var previousChunks = splitChunkConfig.chunks;
+-        splitChunkConfig.chunks = 'async';
+-        if (previousChunks && 'async' !== previousChunks) logger.warn('splitChunks.chunks = "'.concat(previousChunks, '" is not allowed with stream SSR mode; forcing "async"'));
++    if (!isServer && enableSSR && splitChunkConfig && (void 0 === splitChunkConfig ? "undefined" : _type_of__(splitChunkConfig)) === 'object') {
++        var splitChunksValue = splitChunkConfig.chunks;
++        var shouldWarn = void 0 !== splitChunksValue && 'async' !== splitChunksValue;
++        if ('function' == typeof splitChunksValue) splitChunkConfig.chunks = function(chunk) {
++            return !chunk.canBeInitial() && splitChunksValue(chunk);
++        };
++        else splitChunkConfig.chunks = 'async';
++        if (splitChunkConfig.cacheGroups && 'object' === _type_of__(splitChunkConfig.cacheGroups)) {
++            var _iteratorNormalCompletion = true, _didIteratorError = false, _iteratorError = void 0;
++            try {
++                var _loop = function() {
++                    var cacheGroup = _step.value;
++                    if (cacheGroup && (void 0 === cacheGroup ? "undefined" : _type_of__(cacheGroup)) === 'object') {
++                        var chunks = cacheGroup.chunks;
++                        if ('function' == typeof chunks) {
++                            cacheGroup.chunks = function(chunk) {
++                                return !chunk.canBeInitial() && chunks(chunk);
++                            };
++                            shouldWarn = true;
++                        } else if ('string' == typeof chunks && 'async' !== chunks) {
++                            cacheGroup.chunks = 'async';
++                            shouldWarn = true;
++                        }
++                    }
++                };
++                for(var _iterator = Object.values(splitChunkConfig.cacheGroups)[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true)_loop();
++            } catch (err) {
++                _didIteratorError = true;
++                _iteratorError = err;
++            } finally{
++                try {
++                    if (!_iteratorNormalCompletion && null != _iterator.return) _iterator.return();
++                } finally{
++                    if (_didIteratorError) throw _iteratorError;
++                }
++            }
++        }
++        var fallbackCacheGroup = splitChunkConfig.fallbackCacheGroup;
++        if (fallbackCacheGroup && (void 0 === fallbackCacheGroup ? "undefined" : _type_of__(fallbackCacheGroup)) === 'object') {
++            var chunks = fallbackCacheGroup.chunks;
++            if ('function' == typeof chunks) {
++                fallbackCacheGroup.chunks = function(chunk) {
++                    return !chunk.canBeInitial() && chunks(chunk);
++                };
++                shouldWarn = true;
++            } else if ('string' == typeof chunks && 'async' !== chunks) {
++                fallbackCacheGroup.chunks = 'async';
++                shouldWarn = true;
++            }
++        }
++        chain.optimization.splitChunks(splitChunkConfig);
++        if (shouldWarn) logger.warn('Stream SSR requires async-only splitChunks; constraining chunk filters to async chunks');
+     }
+     if (isDev() && 'auto' === chain.output.get('publicPath')) {
+         var _modernjsConfig_server;
+@@ -301,7 +351,7 @@
+                                     },
+                                     resolve: {
+                                         alias: {
+-                                            '@modern-js/runtime/mf': require.resolve('@module-federation/modern-js-v3/runtime')
++                                            '@modern-js/runtime/mf': requireFromPlugin.resolve('@module-federation/modern-js-v3/runtime')
+                                         }
+                                     },
+                                     source: {
+diff --git a/dist/esm/cli/ssrDevReload.mjs b/dist/esm/cli/ssrDevReload.mjs
+new file mode 100644
+--- /dev/null
++++ b/dist/esm/cli/ssrDevReload.mjs
+@@ -0,0 +1,115 @@
++import { _ } from "@swc/helpers/_/_async_to_generator";
++import { _ as _sliced_to_array__ } from "@swc/helpers/_/_sliced_to_array";
++import { _ as _ts_generator__ } from "@swc/helpers/_/_ts_generator";
++import logger from "../logger.mjs";
++var ssrDevReload_isPageRequest = function(req) {
++    var _req_headers_accept;
++    return 'GET' === req.method && Boolean(null == (_req_headers_accept = req.headers.accept) ? void 0 : _req_headers_accept.includes('text/html'));
++};
++var ssrDevReload_revalidateRemotes = function() {
++    return _(function() {
++        var revalidate;
++        return _ts_generator__(this, function(_state) {
++            switch(_state.label){
++                case 0:
++                    return [
++                        4,
++                        import("@module-federation/node/utils")
++                    ];
++                case 1:
++                    revalidate = _state.sent().revalidate;
++                    return [
++                        2,
++                        revalidate()
++                    ];
++            }
++        });
++    })();
++};
++var ssrDevReload_flushRemoteState = function() {
++    return _(function() {
++        var _ref, flushChunks, flushDataFetch;
++        return _ts_generator__(this, function(_state) {
++            switch(_state.label){
++                case 0:
++                    return [
++                        4,
++                        Promise.all([
++                            import("@module-federation/node/utils"),
++                            import("@module-federation/bridge-react/data-fetch")
++                        ])
++                    ];
++                case 1:
++                    _ref = _sliced_to_array__.apply(void 0, [
++                        _state.sent(),
++                        2
++                    ]), flushChunks = _ref[0].flushChunks, flushDataFetch = _ref[1].flushDataFetch;
++                    return [
++                        4,
++                        flushChunks()
++                    ];
++                case 2:
++                    _state.sent();
++                    flushDataFetch();
++                    return [
++                        2
++                    ];
++            }
++        });
++    })();
++};
++var ssrDevReload_createRemoteRevalidateMiddleware = function(sockWrite) {
++    var revalidate = arguments.length > 1 && void 0 !== arguments[1] ? arguments[1] : ssrDevReload_revalidateRemotes, flush = arguments.length > 2 && void 0 !== arguments[2] ? arguments[2] : ssrDevReload_flushRemoteState;
++    var pending;
++    var check = function() {
++        return _(function() {
++            return _ts_generator__(this, function(_state) {
++                switch(_state.label){
++                    case 0:
++                        return [
++                            4,
++                            revalidate()
++                        ];
++                    case 1:
++                        if (!_state.sent()) return [
++                            2
++                        ];
++                        return [
++                            4,
++                            flush()
++                        ];
++                    case 2:
++                        _state.sent();
++                        sockWrite('full-reload');
++                        return [
++                            2
++                        ];
++                }
++            });
++        })();
++    };
++    return function(req, _res, next) {
++        if (!ssrDevReload_isPageRequest(req)) return void next();
++        pending || (pending = check().finally(function() {
++            pending = void 0;
++        }));
++        pending.then(function() {
++            return next();
++        }, function(err) {
++            logger.error('Failed to check remotes for changes; the page may render a stale remote. Restart the dev server if it persists.', err);
++            next();
++        });
++    };
++};
++var ssrDevReload_mfSSRDevReloadPlugin = function() {
++    return {
++        name: '@module-federation/modern-js-v3/ssr-dev-reload',
++        setup: function(api) {
++            api.onBeforeStartDevServer(function(param) {
++                var server = param.server;
++                server.middlewares.use(ssrDevReload_createRemoteRevalidateMiddleware(server.sockWrite));
++            });
++        }
++    };
++};
++export { ssrDevReload_createRemoteRevalidateMiddleware as createRemoteRevalidateMiddleware, ssrDevReload_mfSSRDevReloadPlugin as mfSSRDevReloadPlugin };
+diff --git a/dist/esm/cli/ssrPlugin.mjs b/dist/esm/cli/ssrPlugin.mjs
+--- a/dist/esm/cli/ssrPlugin.mjs
++++ b/dist/esm/cli/ssrPlugin.mjs
+@@ -1,5 +1,6 @@
+ import { _ } from "@swc/helpers/_/_async_to_generator";
+ import { _ as _instanceof__ } from "@swc/helpers/_/_instanceof";
++import { _ as _to_consumable_array__ } from "@swc/helpers/_/_to_consumable_array";
+ import { _ as _ts_generator__ } from "@swc/helpers/_/_ts_generator";
+ import { _ as _type_of__ } from "@swc/helpers/_/_type_of";
+ import path from "path";
+@@ -8,6 +9,7 @@
+ import universe_entry_chunk_tracker_plugin from "@module-federation/node/universe-entry-chunk-tracker-plugin";
+ import logger from "../logger.mjs";
+ import { isDev, isWebTarget, skipByTarget } from "./utils.mjs";
++import { mfSSRDevReloadPlugin } from "./ssrDevReload.mjs";
+ import { updateStatsAndManifest } from "@module-federation/rsbuild-plugin/utils";
+ import { ManifestFileName, StatsFileName, simpleJoinRemoteEntry } from "@module-federation/sdk";
+ function setEnv() {
+@@ -180,15 +182,6 @@
+                                 fetchServerQuery: fetchServerQuery
+                             }
+                         });
+-                        if (!isDev()) return {
+-                            entrypoint: entrypoint,
+-                            plugins: plugins
+-                        };
+-                        plugins.push({
+-                            name: 'mfSSRDev',
+-                            path: '@module-federation/modern-js-v3/ssr-dev-plugin',
+-                            config: {}
+-                        });
+                         return {
+                             entrypoint: entrypoint,
+                             plugins: plugins
+@@ -226,15 +219,14 @@
+                             chain.target('async-node');
+                             if (isDev()) chain.plugin('UniverseEntryChunkTrackerPlugin').use(universe_entry_chunk_tracker_plugin);
+                         }
+-                        if (isDev() && isWeb) chain.externals({
+-                            '@module-federation/node/utils': 'NOT_USED_IN_BROWSER'
+-                        });
+                     });
+                     api.config(function() {
+                         return {
+                             builderPlugins: [
+                                 ssrPlugin_mfSSRRsbuildPlugin(pluginOptions)
+-                            ],
++                            ].concat(_to_consumable_array__(isDev() ? [
++                                mfSSRDevReloadPlugin()
++                            ] : [])),
+                             dev: {
+                                 setupMiddlewares: [
+                                     function(middlewares) {
+diff --git a/dist/esm/react/index.mjs b/dist/esm/react/index.mjs
+--- a/dist/esm/react/index.mjs
++++ b/dist/esm/react/index.mjs
+@@ -1 +1 @@
+-export * from "@module-federation/bridge-react";
++export * from "@module-federation/bridge-react/base";
+diff --git a/dist/esm/server/index.mjs b/dist/esm/server/index.mjs
+--- a/dist/esm/server/index.mjs
++++ b/dist/esm/server/index.mjs
+@@ -1,8 +1,13 @@
++import helpers from "@module-federation/runtime/helpers";
+ import { createCorsMiddleware, createStaticMiddleware } from "./staticMiddleware.mjs";
+ var server_staticServePlugin = function() {
+     return {
+         name: '@modern-js/module-federation/server',
+         setup: function(api) {
++            api.onReset(function(param) {
++                var event = param.event;
++                if ('repack' === event.type) helpers.global.resetFederationRuntime();
++            });
+             api.onPrepare(function() {
+                 var _config_output, _config_server;
+                 if ('development' === process.env.NODE_ENV) return;
+diff --git a/dist/esm/server/staticMiddleware.mjs b/dist/esm/server/staticMiddleware.mjs
+--- a/dist/esm/server/staticMiddleware.mjs
++++ b/dist/esm/server/staticMiddleware.mjs
+@@ -90,7 +90,7 @@
+                             next()
+                         ];
+                         c.header('Content-Type', "application/javascript");
+-                        c.header('Content-Length', String(fileResult.content.length));
++                        c.header('Content-Length', String(Buffer.byteLength(fileResult.content, 'utf8')));
+                         return [
+                             2,
+                             c.body(fileResult.content, 200)
+diff --git a/dist/esm/ssr-runtime/SSRLiveReload.mjs b/dist/esm/ssr-runtime/SSRLiveReload.mjs
+deleted file mode 100644
+--- a/dist/esm/ssr-runtime/SSRLiveReload.mjs
++++ /dev/null
+@@ -1,23 +0,0 @@
+-import { _ } from "@swc/helpers/_/_tagged_template_literal";
+-import { jsx } from "react/jsx-runtime";
+-import "react";
+-function SSRLiveReload_templateObject() {
+-    var data = _([
+-        "\n      if(",
+-        "){\n        location.reload();\n      }\n   "
+-    ]);
+-    SSRLiveReload_templateObject = function() {
+-        return data;
+-    };
+-    return data;
+-}
+-function SSRLiveReload() {
+-    if ('development' !== process.env.NODE_ENV) return null;
+-    return /*#__PURE__*/ jsx("script", {
+-        suppressHydrationWarning: true,
+-        dangerouslySetInnerHTML: {
+-            __html: String.raw(SSRLiveReload_templateObject(), globalThis.shouldUpdate)
+-        }
+-    });
+-}
+-export { SSRLiveReload };
+diff --git a/dist/esm/ssr-runtime/devPlugin.mjs b/dist/esm/ssr-runtime/devPlugin.mjs
+deleted file mode 100644
+--- a/dist/esm/ssr-runtime/devPlugin.mjs
++++ /dev/null
+@@ -1,70 +0,0 @@
+-import { _ } from "@swc/helpers/_/_async_to_generator";
+-import { _ as _object_spread__ } from "@swc/helpers/_/_object_spread";
+-import { _ as _ts_generator__ } from "@swc/helpers/_/_ts_generator";
+-import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+-import { SSRLiveReload } from "./SSRLiveReload.mjs";
+-import { flushDataFetch } from "@module-federation/bridge-react/data-fetch";
+-var devPlugin_mfSSRDevPlugin = function() {
+-    return {
+-        name: '@module-federation/modern-js-v3',
+-        setup: function(api) {
+-            api.onBeforeRender(function() {
+-                return _(function() {
+-                    var nodeUtils, shouldUpdate;
+-                    return _ts_generator__(this, function(_state) {
+-                        switch(_state.label){
+-                            case 0:
+-                                if ("u" > typeof window) return [
+-                                    2
+-                                ];
+-                                globalThis.shouldUpdate = false;
+-                                return [
+-                                    4,
+-                                    import("@module-federation/node/utils")
+-                                ];
+-                            case 1:
+-                                nodeUtils = _state.sent();
+-                                return [
+-                                    4,
+-                                    nodeUtils.revalidate()
+-                                ];
+-                            case 2:
+-                                shouldUpdate = _state.sent();
+-                                console.log('shouldUpdate: ', shouldUpdate);
+-                                if (!shouldUpdate) return [
+-                                    3,
+-                                    4
+-                                ];
+-                                console.log('should RELOAD', shouldUpdate);
+-                                return [
+-                                    4,
+-                                    nodeUtils.flushChunks()
+-                                ];
+-                            case 3:
+-                                _state.sent();
+-                                flushDataFetch();
+-                                globalThis.shouldUpdate = true;
+-                                _state.label = 4;
+-                            case 4:
+-                                return [
+-                                    2
+-                                ];
+-                        }
+-                    });
+-                })();
+-            });
+-            api.wrapRoot(function(App) {
+-                var AppWrapper = function(props) {
+-                    return /*#__PURE__*/ jsxs(Fragment, {
+-                        children: [
+-                            /*#__PURE__*/ jsx(SSRLiveReload, {}),
+-                            /*#__PURE__*/ jsx(App, _object_spread__({}, props))
+-                        ]
+-                    });
+-                };
+-                return AppWrapper;
+-            });
+-        }
+-    };
+-};
+-export { devPlugin_mfSSRDevPlugin as mfSSRDevPlugin };
+diff --git a/dist/esm/ssr-runtime/workerPlugins.mjs b/dist/esm/ssr-runtime/workerPlugins.mjs
+new file mode 100644
+--- /dev/null
++++ b/dist/esm/ssr-runtime/workerPlugins.mjs
+@@ -0,0 +1,11 @@
++var workerPlugins_injectDataFetchFunctionPlugin = function(_options) {
++    return {
++        name: '@module-federation/inject-data-fetch-function-plugin'
++    };
++};
++var workerPlugins_mfSSRDevPlugin = function() {
++    return {
++        name: '@module-federation/modern-js-v3'
++    };
++};
++export { workerPlugins_injectDataFetchFunctionPlugin as injectDataFetchFunctionPlugin, workerPlugins_mfSSRDevPlugin as mfSSRDevPlugin };
+diff --git a/dist/types/cli/ssrDevReload.d.ts b/dist/types/cli/ssrDevReload.d.ts
+new file mode 100644
+--- /dev/null
++++ b/dist/types/cli/ssrDevReload.d.ts
+@@ -0,0 +1,12 @@
++import type { IncomingMessage, ServerResponse } from 'http';
++import type { RsbuildDevServer, RsbuildPlugin } from '@rsbuild/core';
++type Revalidate = () => Promise<boolean>;
++type FlushRemoteState = () => Promise<void>;
++/**
++ * Before each SSR page request, check whether a remote changed. When one did,
++ * drop the server-side federation caches so this request renders the new
++ * remote, and tell every open page to reload through the dev-server socket.
++ */
++export declare const createRemoteRevalidateMiddleware: (sockWrite: RsbuildDevServer['sockWrite'], revalidate?: Revalidate, flush?: FlushRemoteState) => (req: IncomingMessage, _res: ServerResponse, next: () => void) => void;
++export declare const mfSSRDevReloadPlugin: () => RsbuildPlugin;
++export {};
+diff --git a/dist/types/react/index.d.ts b/dist/types/react/index.d.ts
+--- a/dist/types/react/index.d.ts
++++ b/dist/types/react/index.d.ts
+@@ -1 +1 @@
+-export * from '@module-federation/bridge-react';
++export * from '@module-federation/bridge-react/base';
+diff --git a/dist/types/ssr-runtime/SSRLiveReload.d.ts b/dist/types/ssr-runtime/SSRLiveReload.d.ts
+deleted file mode 100644
+--- a/dist/types/ssr-runtime/SSRLiveReload.d.ts
++++ /dev/null
+@@ -1,2 +0,0 @@
+-import React from 'react';
+-export declare function SSRLiveReload(): React.JSX.Element | null;
+diff --git a/dist/types/ssr-runtime/devPlugin.d.ts b/dist/types/ssr-runtime/devPlugin.d.ts
+deleted file mode 100644
+--- a/dist/types/ssr-runtime/devPlugin.d.ts
++++ /dev/null
+@@ -1,2 +0,0 @@
+-import type { RuntimePlugin } from '@modern-js/runtime';
+-export declare const mfSSRDevPlugin: () => RuntimePlugin;
+diff --git a/dist/types/ssr-runtime/workerPlugins.d.ts b/dist/types/ssr-runtime/workerPlugins.d.ts
+new file mode 100644
+--- /dev/null
++++ b/dist/types/ssr-runtime/workerPlugins.d.ts
+@@ -0,0 +1,5 @@
++import type { RuntimePlugin } from '@modern-js/runtime';
++export declare const injectDataFetchFunctionPlugin: (_options: {
++    fetchServerQuery?: Record<string, unknown>;
++}) => RuntimePlugin;
++export declare const mfSSRDevPlugin: () => RuntimePlugin;
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -44,12 +44,9 @@
+       "types": "./dist/types/react/plugin.d.ts",
+       "default": "./dist/esm/react/plugin.mjs"
+     },
+-    "./ssr-dev-plugin": {
+-      "types": "./dist/types/ssr-runtime/devPlugin.d.ts",
+-      "default": "./dist/esm/ssr-runtime/devPlugin.mjs"
+-    },
+     "./ssr-inject-data-fetch-function-plugin": {
+       "types": "./dist/types/ssr-runtime/injectDataFetchFunctionPlugin.d.ts",
++      "worker": "./dist/esm/ssr-runtime/workerPlugins.mjs",
+       "default": "./dist/esm/ssr-runtime/injectDataFetchFunctionPlugin.mjs"
+     },
+     "./config-plugin": {
+diff --git a/dist/types/cli/index.d.ts b/dist/types/cli/index.d.ts
+--- a/dist/types/cli/index.d.ts
++++ b/dist/types/cli/index.d.ts
+@@ -2,5 +2,5 @@
+ import type { PluginOptions } from '../types';
+ export declare const moduleFederationPlugin: (userConfig?: PluginOptions) => CliPlugin<AppTools>;
+ export default moduleFederationPlugin;
+-export { createModuleFederationConfig } from '@module-federation/enhanced';
++export { createModuleFederationConfig } from '@module-federation/sdk';
+ export type { ModuleFederationRuntimePlugin } from '@module-federation/enhanced/runtime';

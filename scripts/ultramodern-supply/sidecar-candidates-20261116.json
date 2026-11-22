@@ -223,13 +223,13 @@
     },
     "fork": {
       "name": "@bleedingdev/mf-modern-js-v3",
-      "version": "2.9.5"
+      "version": "2.9.6"
     },
     "license": "MIT",
     "artifacts": ["*"],
     "patch": {
-      "path": "patches/@module-federation__modern-js-v3@2.9.3.patch",
-      "sha256": "b9f885924b8c0b4c7d368a12d0d49257c1c38e6df867ee6eb7931490fd22c46c"
+      "path": "patches/@module-federation__modern-js-v3@2.9.3-config-types.patch",
+      "sha256": "4e4379d798b9bb170d0eebdac7199a5adb2781610a2ada745b2b7439e60d88bf"
     },
     "manifestChanges": {
       "dependencies": {
