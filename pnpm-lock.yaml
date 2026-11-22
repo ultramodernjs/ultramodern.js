@@ -3162,6 +3162,9 @@ importers:
       '@modern-js/utils':
         specifier: workspace:*
         version: link:../../toolkit/utils
+      '@rsbuild/core':
+        specifier: 2.3.3
+        version: 2.3.3(@bleedingdev/mf-runtime-tools@2.9.5)(core-js@3.51.0)
       '@rslib/core':
         specifier: 1.0.7
         version: 1.0.7(@bleedingdev/mf-runtime-tools@2.9.5)(core-js@3.51.0)(typescript@7.0.2)
@@ -3180,6 +3183,9 @@ importers:
       jsonc-parser:
         specifier: 3.3.1
         version: 3.3.1
+      rsbuild-plugin-dts:
+        specifier: 1.0.7
+        version: 1.0.7(patch_hash=bd0c8f1b4c4681eeb0d1ea0123c252ad41b17f01be1ca171bd8c42ca2d652e44)(@rsbuild/core@2.3.3(@bleedingdev/mf-runtime-tools@2.9.5)(core-js@3.51.0))(typescript@7.0.2)
       std-env:
         specifier: 4.3.0
         version: 4.3.0
@@ -3214,9 +3220,6 @@ importers:
       '@module-federation/runtime-tools':
         specifier: npm:@bleedingdev/mf-runtime-tools@2.9.5
         version: '@bleedingdev/mf-runtime-tools@2.9.5'
-      '@rsbuild/core':
-        specifier: 2.3.3
-        version: 2.3.3(@bleedingdev/mf-runtime-tools@2.9.5)(core-js@3.51.0)
       '@rsbuild/plugin-svgr':
         specifier: 2.0.5
         version: 2.0.5(@rsbuild/core@2.3.3(@bleedingdev/mf-runtime-tools@2.9.5)(core-js@3.51.0))(@rspack/core@2.3.3(@bleedingdev/mf-runtime-tools@2.9.5)(@swc/helpers@0.5.24))(supports-color@10.2.2)(typescript@7.0.2)
@@ -3256,9 +3259,6 @@ importers:
       react-dom:
         specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
-      rsbuild-plugin-dts:
-        specifier: 1.0.7
-        version: 1.0.7(patch_hash=bd0c8f1b4c4681eeb0d1ea0123c252ad41b17f01be1ca171bd8c42ca2d652e44)(@rsbuild/core@2.3.3(@bleedingdev/mf-runtime-tools@2.9.5)(core-js@3.51.0))(typescript@7.0.2)
       tsrs:
         specifier: 7.1.0-beta.tsrs3
         version: 7.1.0-beta.tsrs3

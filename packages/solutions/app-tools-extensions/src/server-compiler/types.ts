@@ -1,5 +1,6 @@
 import type { mergeAlias } from '@modern-js/utils/alias';
-import type { Dts, LibConfig, Redirect, RsbuildPlugin } from '@rslib/core';
+import type { OutputConfig, RsbuildPlugin } from '@rsbuild/core';
+import type { PluginDtsOptions } from 'rsbuild-plugin-dts';
 
 /** A parsed JSON tsconfig, with paths based at its owning config file. */
 export interface ServerCompilerConfig {
@@ -28,18 +29,16 @@ export interface ServerCompilerConfig {
   references?: Array<{ path: string }>;
 }
 
-type DtsOptions = Exclude<Dts, boolean>;
-
 /** The server build's declaration settings for its one emitting library. */
 export interface DeclarationPluginOptions {
   /**
    * A directory private to this compilation. The compiler moves what the
    * plugin writes here into the server output and reports each file.
    */
-  distPath: NonNullable<DtsOptions['distPath']>;
+  distPath: NonNullable<PluginDtsOptions['distPath']>;
   /** Emit-only diagnostics (such as TS2742) surface only through this. */
-  abortOnError: NonNullable<DtsOptions['abortOnError']>;
-  redirect: NonNullable<Redirect['dts']>;
+  abortOnError: NonNullable<PluginDtsOptions['abortOnError']>;
+  redirect: NonNullable<PluginDtsOptions['redirect']>;
 }
 
 /** Config parsing, checking and declarations must belong to one compiler. */
@@ -66,7 +65,7 @@ export type ServerCompilerProvider = (
 
 export interface ServerCompileConfig {
   alias?: Parameters<typeof mergeAlias>[0];
-  sourceMap?: NonNullable<LibConfig['output']>['sourceMap'];
+  sourceMap?: OutputConfig['sourceMap'];
   /**
    * `output.disableTsChecker`: skip the server type check. Declarations are
    * still emitted, from the same program without checking it (`noCheck`);
