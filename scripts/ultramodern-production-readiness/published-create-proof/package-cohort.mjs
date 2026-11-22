@@ -4,7 +4,7 @@ import path from 'node:path';
 import { canonicalJson } from '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs';
 import { assertStableSidecarVersion } from '../../ultramodern-publish/lib/prepare-bleedingdev-packages/sidecar-publication.mjs';
 import { readJsonFile } from './constants.mjs';
-import { parseYamlFile } from './release-age-audit.mjs';
+import { parseYamlFile } from './dependency-closure-audit.mjs';
 
 const releaseCohortPath = 'release-cohort.json';
 const retiredMetadataPaths = Object.freeze([
@@ -23,40 +23,11 @@ const bootstrapDependencyBlocks = Object.freeze([
   'dependencies',
   'optionalDependencies',
 ]);
-const minimumReleaseAgeMinutes = 1440;
 const ultramodernCreateSourceName = '@modern-js/ultramodern-create';
-const authenticatedBootstrapExtras = new WeakMap();
 const authenticatedBootstrapTrustCohorts = new WeakMap();
-// Only compiler package versions pinned by the authenticated packed generator
-// authorize these native-package identities. Other external dependencies do
-// not receive bootstrap exceptions.
-const compilerPlatformPackages = Object.freeze({
-  '@effect/tsgo': Object.freeze([
-    '@effect/tsgo-darwin-arm64',
-    '@effect/tsgo-darwin-x64',
-    '@effect/tsgo-linux-arm',
-    '@effect/tsgo-linux-arm64',
-    '@effect/tsgo-linux-x64',
-    '@effect/tsgo-win32-arm64',
-    '@effect/tsgo-win32-x64',
-  ]),
-  tsrs: Object.freeze([
-    '@tsrs/darwin-arm64',
-    '@tsrs/darwin-x64',
-    '@tsrs/linux-arm64-gnu',
-    '@tsrs/linux-arm64-musl',
-    '@tsrs/linux-x64-gnu',
-    '@tsrs/linux-x64-musl',
-    '@tsrs/win32-arm64',
-    '@tsrs/win32-x64',
-  ]),
-});
-
 function compilerBootstrapSelectors(packageJson) {
   const selectors = [];
-  for (const [compiler, platforms] of Object.entries(
-    compilerPlatformPackages,
-  )) {
+  for (const compiler of ['@effect/tsgo', 'tsrs']) {
     const versions = bootstrapDependencyBlocks.flatMap(blockName =>
       Object.hasOwn(packageJson[blockName] ?? {}, compiler)
         ? [packageJson[blockName][compiler]]
@@ -74,25 +45,8 @@ function compilerBootstrapSelectors(packageJson) {
       `Authenticated generator compiler ${compiler} must use one exact bootstrap version, found ${versions.join(', ')}`,
     );
     selectors.push(`${compiler}@${version}`);
-    for (const platform of platforms) selectors.push(`${platform}@${version}`);
   }
-  // This metadata is authenticated with the packed producer. Admit only the
-  // two reviewed runtime releases, never arbitrary dependencies or selectors.
-  const runtimeSelectors =
-    packageJson.ultramodern?.bootstrapReleaseAgeExclude ?? [];
-  const reviewedRuntimeSelectors = new Set([
-    'effect@4.1.4',
-    '@effect/opentelemetry@4.1.4',
-  ]);
-  assertCondition(
-    Array.isArray(runtimeSelectors) &&
-      runtimeSelectors.every(selector =>
-        reviewedRuntimeSelectors.has(selector),
-      ) &&
-      new Set(runtimeSelectors).size === runtimeSelectors.length,
-    'Authenticated generator runtime exceptions must name only reviewed exact Effect releases',
-  );
-  return [...selectors, ...runtimeSelectors];
+  return selectors;
 }
 
 function assertCondition(condition, message) {
@@ -288,7 +242,7 @@ function exactBootstrapDependencyTargets(packageJson, release, cohort) {
   return [...targets].sort((left, right) => left.localeCompare(right));
 }
 
-function resolveBootstrapReleaseAgePolicy(release, cohort, createPackage) {
+function resolveBootstrapPolicy(release, cohort, createPackage) {
   assertCondition(
     isPlainObject(release?.dependencyGraph),
     'Strict release manifest dependencyGraph is required for bootstrap policy',
@@ -448,31 +402,14 @@ function resolveBootstrapReleaseAgePolicy(release, cohort, createPackage) {
   for (const targetName of reachableTargets) {
     visitSidecars(packagesByTarget.get(targetName).packageJson);
   }
-  const sidecarSelectors = [...reachableSidecars].map(name => {
-    const item = sidecarsByName.get(name);
-    return `${item.name}@${item.version}`;
-  });
-  const compilerSelectors = compilerBootstrapSelectors(
-    packagesByTarget.get(createPackage.targetName).packageJson,
-  );
   const policy = Object.freeze({
-    minimumReleaseAge: minimumReleaseAgeMinutes,
-    minimumReleaseAgeExclude: Object.freeze(
-      [
-        ...[...reachableTargets].map(
-          targetName => `${targetName}@${release.release.version}`,
-        ),
-        ...sidecarSelectors,
-        ...compilerSelectors,
-      ].sort((left, right) => left.localeCompare(right)),
+    exactSpecifier: `${createPackage.targetName}@${createPackage.version}`,
+    compilerSelectors: Object.freeze(
+      compilerBootstrapSelectors(
+        packagesByTarget.get(createPackage.targetName).packageJson,
+      ),
     ),
-    minimumReleaseAgeIgnoreMissingTime: false,
-    minimumReleaseAgeStrict: true,
   });
-  authenticatedBootstrapExtras.set(
-    policy,
-    new Set([...sidecarSelectors, ...compilerSelectors]),
-  );
   authenticatedBootstrapTrustCohorts.set(
     policy,
     release.packages.map(item => `${item.targetName}@${item.version}`).sort(),
@@ -513,7 +450,7 @@ function resolveCreatePackage(release, requestedSpecifier) {
       `Create package must be the exact release manifest package ${exactSpecifier}, found ${requestedSpecifier}`,
     );
   }
-  const bootstrapReleaseAgePolicy = resolveBootstrapReleaseAgePolicy(
+  const bootstrapPolicy = resolveBootstrapPolicy(
     release,
     cohort,
     createPackage,
@@ -523,54 +460,24 @@ function resolveCreatePackage(release, requestedSpecifier) {
     version: createPackage.version,
     frameworkVersion,
     exactSpecifier,
-    bootstrapReleaseAgePolicy,
+    bootstrapPolicy,
   });
 }
 
-function assertBootstrapReleaseAgePolicy(createPackage) {
-  const policy = createPackage?.bootstrapReleaseAgePolicy;
-  const createIdentity =
-    typeof createPackage?.exactSpecifier === 'string'
-      ? /^(?<packageName>@[^/]+\/[^@]+)@(?<version>[1-9]\d*\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)$/u.exec(
-          createPackage.exactSpecifier,
-        )?.groups
-      : undefined;
-  const exactExcludes = policy?.minimumReleaseAgeExclude;
+function assertBootstrapPolicy(createPackage) {
+  const policy = createPackage?.bootstrapPolicy;
   assertCondition(
-    createIdentity &&
-      createPackage.version === createIdentity.version &&
-      policy?.minimumReleaseAge === minimumReleaseAgeMinutes &&
-      policy.minimumReleaseAgeStrict === true &&
-      policy.minimumReleaseAgeIgnoreMissingTime === false &&
-      Array.isArray(exactExcludes) &&
-      exactExcludes.length > 0 &&
-      exactExcludes.every(
-        specifier =>
-          typeof specifier === 'string' &&
-          (authenticatedBootstrapExtras.get(policy)?.has(specifier) ||
-            (/^@[^/]+\/[^@/]+@(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/u.test(
-              specifier,
-            ) &&
-              specifier.endsWith(`@${createIdentity.version}`) &&
-              specifier.startsWith(
-                `${createIdentity.packageName.slice(
-                  0,
-                  createIdentity.packageName.indexOf('/') + 1,
-                )}`,
-              ))),
-      ) &&
-      new Set(exactExcludes).size === exactExcludes.length &&
-      JSON.stringify(exactExcludes) ===
-        JSON.stringify(
-          [...exactExcludes].sort((left, right) => left.localeCompare(right)),
-        ) &&
-      exactExcludes.includes(createPackage.exactSpecifier),
-    'Create package must carry an exact authenticated bootstrap release-age policy',
+    policy &&
+      authenticatedBootstrapTrustCohorts.has(policy) &&
+      policy.exactSpecifier === createPackage.exactSpecifier &&
+      `${createPackage.packageName}@${createPackage.version}` ===
+        policy.exactSpecifier,
+    'Create package must carry its authenticated bootstrap policy',
   );
   return policy;
 }
 
-// An age approval alone is not a trust approval. Only this reviewed release
+// Only this reviewed compiler release
 // needs the bootstrap-approver workaround, and only when the producer pins it.
 function reviewedCompilerTrustExclusions(bootstrapSelectors) {
   return bootstrapSelectors.includes('tsrs@7.1.0-beta.tsrs3')
@@ -580,14 +487,14 @@ function reviewedCompilerTrustExclusions(bootstrapSelectors) {
 
 function authenticatedCompilerTrustExclusions(release) {
   if (!release?.createPackage) return [];
-  const policy = resolveCreatePackage(release).bootstrapReleaseAgePolicy;
-  return reviewedCompilerTrustExclusions(policy.minimumReleaseAgeExclude);
+  const policy = resolveCreatePackage(release).bootstrapPolicy;
+  return reviewedCompilerTrustExclusions(policy.compilerSelectors);
 }
 
 function createPnpmDlxArgs(createPackage, forwardedArgs, environment = {}) {
-  const policy = assertBootstrapReleaseAgePolicy(createPackage);
+  const policy = assertBootstrapPolicy(createPackage);
   const compilerTrust = reviewedCompilerTrustExclusions(
-    policy.minimumReleaseAgeExclude,
+    policy.compilerSelectors,
   );
   let trustExclusions = compilerTrust;
   if (
@@ -615,14 +522,7 @@ function createPnpmDlxArgs(createPackage, forwardedArgs, environment = {}) {
   }
   return [
     '--pm-on-fail=ignore',
-    `--config.minimum-release-age=${policy.minimumReleaseAge}`,
-    `--config.minimum-release-age-strict=${String(policy.minimumReleaseAgeStrict)}`,
-    `--config.minimum-release-age-ignore-missing-time=${String(
-      policy.minimumReleaseAgeIgnoreMissingTime,
-    )}`,
-    ...policy.minimumReleaseAgeExclude.map(
-      specifier => `--config.minimum-release-age-exclude=${specifier}`,
-    ),
+    '--config.minimum-release-age=0',
     ...(compilerTrust.length
       ? [
           '--config.trust-policy=no-downgrade',
@@ -800,7 +700,7 @@ function assertGeneratedCohort(projectDir, release) {
 }
 
 export {
-  assertBootstrapReleaseAgePolicy,
+  assertBootstrapPolicy,
   assertGeneratedCohort,
   authenticatedCompilerTrustExclusions,
   compilerBootstrapSelectors,

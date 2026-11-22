@@ -1,6 +1,4 @@
 import { createAcceptanceWorkspaceEnv } from '../ultramodern-production-readiness/published-create-proof/process.mjs';
-import { releaseAgeExemptions } from '../ultramodern-production-readiness/published-create-proof/release-age-audit.mjs';
-import { defaultReleaseAgePolicyPath } from '../ultramodern-publish/run-release-acceptance.mjs';
 
 export function createRendererAcceptanceEnv(
   runtimeEnv,
@@ -18,13 +16,6 @@ export function createRendererAcceptanceEnv(
     // Renderer acceptance already runs the pinned manager; retain its policy.
     pnpm_config_pm_on_fail: runtimeEnv.pnpm_config_pm_on_fail,
     npm_config_store_dir: storeDir,
-    pnpm_config_minimum_release_age: '1440',
-    pnpm_config_minimum_release_age_strict: 'true',
-    pnpm_config_minimum_release_age_ignore_missing_time: 'false',
-    pnpm_config_minimum_release_age_exclude: JSON.stringify(
-      releaseAgeExemptions(release, {
-        policyPath: defaultReleaseAgePolicyPath,
-      }),
-    ),
+    pnpm_config_minimum_release_age: '0',
   };
 }

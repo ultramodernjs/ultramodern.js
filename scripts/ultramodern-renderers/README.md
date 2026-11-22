@@ -88,9 +88,9 @@ test what a user sees. Target: about 3-4k lines total.
        --no-agents-md. For Solid and Octane, install, build and serve the
        untouched starter first (GET / answers 200 with its renderer
        markup). Then copy the renderer-<r> fixture src/ over it.
-    4. pnpm install with the strict release-age policy: minimum_release_age
-       1440, strict, plus resolveAcceptanceReleaseAgeExclusions only for our
-       own cohort.
+    4. pnpm install with minimum_release_age 0. Newly published versions need
+       no age exemptions; exact cohort integrity and no-downgrade trust remain
+       required.
     5. Inside each app: a native TS 7 typecheck.
     6. rstest run -c tests/rstest.config.mts renderer-specs with
        RENDERER_TARGET_DIR=<app> and RENDERER_TARGET_BIN=<installed bin>.
@@ -139,5 +139,5 @@ where they import deleted helpers.
 - In-repo behavior: `tests/integration/renderer-*` (see `tests/integration/renderer-specs`).
 - Native Octane Module Federation: `owned-temp-dir --run octane-federation-proof -- node tests/ultramodern-renderers/octane-federation/proof.mjs`. The source proof builds an exposed remote, an SSR host and a CSR host. It checks shared Octane/router context, remote styles, retained SSR nodes, signal state after host props change, unavailable/slow remotes, browser and server recovery after failed SSR containers, and foreign-renderer rejection.
 - Packed release: `owned-temp-dir --run renderer-release -- pnpm ultramodern:renderer-release --version <x.y.z-ultramodern.N>` (or `--cohort-dir <dir>`). It also runs the React worker, RSC and Module Federation runners from `scripts/ultramodern-production-readiness` (`--with`), and Tractor with `--tractor-source`.
-- Packed Solid and Octane Node deployment uses separate ordinary fixture apps, installed from the same cohort under the same release-age policy. The shared specs run copied `.output` with Node filesystem permissions restricted to that directory, then check HTML, hydration, styles, navigation, actions, redirects and errors.
+- Packed Solid and Octane Node deployment uses separate ordinary fixture apps, installed from the same cohort without release-age waits. The shared specs run copied `.output` with Node filesystem permissions restricted to that directory, then check HTML, hydration, styles, navigation, actions, redirects and errors.
 - These fixtures prove plain-app deployment. The generated shell still requires a committed source revision and its delivery-unit release envelope; they do not prove that separate release path.

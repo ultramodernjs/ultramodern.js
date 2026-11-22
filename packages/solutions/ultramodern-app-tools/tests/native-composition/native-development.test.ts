@@ -1063,6 +1063,11 @@ describe('native development', () => {
     app.afterNextAggregateCompile(() => completed.resolve());
     app.editRemoteLazy('REMOTE_LAZY_ESM_HOT_APPLY');
     await completed.promise;
+    const firstUpdate = await untilCompilationAfter(
+      app,
+      manifestUrl,
+      initial.compilationHash,
+    );
     const manifests = app.browserHotUpdateManifests();
     expect(manifests.length).toBeGreaterThan(0);
     const retainedBodies = manifests.map(manifest => manifest.body);
@@ -1083,10 +1088,13 @@ describe('native development', () => {
       );
       expect(await namespaced.text()).toBe(expected);
     }
+    const releaseClient = await app.delayClientNotifications();
     const rebuilt = Promise.withResolvers<void>();
     app.afterNextAggregateCompile(() => rebuilt.resolve());
     app.editRemoteLazy('REMOTE_LAZY_ESM_NEXT_APPLY');
     await rebuilt.promise;
+    releaseClient();
+    await untilCompilationAfter(app, manifestUrl, firstUpdate.hash);
     const nextManifests = app.browserHotUpdateManifests();
     expect(nextManifests.length).toBeGreaterThan(0);
     expect(nextManifests.map(manifest => manifest.name)).not.toEqual(

@@ -147,16 +147,12 @@ function packedPrerequisites() {
         'tests/utils/runWithPrerequisites.mjs --pack-only <directory>.',
     );
   }
-  const {
-    packages,
-    sidecars,
-    allowBuilds,
-    minimumReleaseAgeExclude = [],
-  } = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
+  const { packages, sidecars, allowBuilds } = JSON.parse(
+    fs.readFileSync(manifestPath, 'utf8'),
+  ) as {
     packages: Record<string, PackedPackage>;
     sidecars: Record<string, PackedSidecar>;
     allowBuilds: Record<string, boolean>;
-    minimumReleaseAgeExclude: string[];
   };
   const overrides: Record<string, string> = {};
   for (const [name, { tarball }] of Object.entries(packages)) {
@@ -174,7 +170,6 @@ function packedPrerequisites() {
     overrides,
     sidecars,
     allowBuilds,
-    minimumReleaseAgeExclude,
   };
 }
 
@@ -235,7 +230,6 @@ export async function materializeGeneratedWorkspaceDependencies(
     overrides: packedOverrides,
     framework,
     sidecars,
-    minimumReleaseAgeExclude,
   } = packedPrerequisites();
   const overrides = Object.fromEntries(
     Object.entries(packedOverrides).filter(([name]) =>
@@ -255,7 +249,6 @@ export async function materializeGeneratedWorkspaceDependencies(
   const workspaceFile = path.join(workspaceDir, 'pnpm-workspace.yaml');
   const workspace = load(fs.readFileSync(workspaceFile, 'utf8')) as {
     overrides?: Record<string, string>;
-    minimumReleaseAgeExclude?: string[];
   };
   // Validate authored alias versions without replacing the producer's policy.
   const authoredEdges: BleedingdevEdge[] = [
@@ -263,8 +256,6 @@ export async function materializeGeneratedWorkspaceDependencies(
     ...bleedingdevEdges({ dependencies: workspace.overrides }),
   ];
   for (const edge of authoredEdges) packedBleedingdevSpecifier(edge, sidecars);
-  // Fresh dependency candidates use only the repository's exact reviewed selectors.
-  // The published generator retains its normal release-age policy.
   // Keep the framework file overrides installed: reverting them would invalidate
   // pnpm's lockfile settings and break verifyDepsBeforeRun for real commands.
   fs.writeFileSync(
@@ -275,15 +266,7 @@ export async function materializeGeneratedWorkspaceDependencies(
         ...workspace.overrides,
         ...overrides,
       },
-      minimumReleaseAgeExclude: [
-        ...new Set([
-          ...(workspace.minimumReleaseAgeExclude ?? []),
-          ...minimumReleaseAgeExclude,
-          ...Object.entries(sidecars).map(
-            ([name, { version }]) => `${name}@${version}`,
-          ),
-        ]),
-      ],
+      minimumReleaseAge: 0,
     }),
   );
   const npmrcPath = path.join(workspaceDir, '.npmrc');
@@ -321,8 +304,7 @@ export async function materializeGeneratedWorkspaceDependencies(
 
 /** A standalone consumer outside the repository, without source links. */
 export function installPackedGenerator(tempRoot: string): string {
-  const { overrides, allowBuilds, minimumReleaseAgeExclude } =
-    packedPrerequisites();
+  const { overrides, allowBuilds } = packedPrerequisites();
   const consumer = path.join(tempRoot, 'generator-consumer');
   fs.mkdirSync(consumer, { recursive: true });
   fs.writeFileSync(
@@ -338,7 +320,7 @@ export function installPackedGenerator(tempRoot: string): string {
   );
   fs.writeFileSync(
     path.join(consumer, 'pnpm-workspace.yaml'),
-    dump({ packages: [], overrides, allowBuilds, minimumReleaseAgeExclude }),
+    dump({ packages: [], overrides, allowBuilds, minimumReleaseAge: 0 }),
   );
   runPnpm(['install', '--no-frozen-lockfile'], {
     cwd: consumer,

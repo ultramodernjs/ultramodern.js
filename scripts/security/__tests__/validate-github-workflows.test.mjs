@@ -9,6 +9,7 @@ import { evaluateJobSchedule } from '../github-job-condition.mjs';
 import { listTrackedFiles } from '../static-import-closure.mjs';
 import {
   repoRoot,
+  validateRenovateConfigObject,
   validateRepository,
   validateTractorBaselinePin,
   validateWorkflowContent,
@@ -28,6 +29,30 @@ jobs:
       - name: Run
         run: echo ok
 `;
+
+test('Renovate permits immediate updates while retaining supply-chain checks', () => {
+  for (const relativePath of [
+    '.github/renovate.json',
+    'packages/toolkit/ultramodern-create/template-workspace/.github/renovate.json',
+  ]) {
+    const config = JSON.parse(
+      fs.readFileSync(path.join(repoRoot, relativePath), 'utf8'),
+    );
+    assert.deepEqual(validateRenovateConfigObject(relativePath, config), []);
+    const withoutDigestPinning = {
+      ...config,
+      extends: config.extends.filter(
+        preset => preset !== 'helpers:pinGitHubActionDigests',
+      ),
+    };
+    assert.match(
+      validateRenovateConfigObject(relativePath, withoutDigestPinning).join(
+        '\n',
+      ),
+      /must pin GitHub Action digests/,
+    );
+  }
+});
 
 test('accepted-tarball dry-run validation installs the frozen publication CLI first', () => {
   const workflow = yaml.load(

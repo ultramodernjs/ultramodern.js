@@ -92,12 +92,12 @@ export async function packTestPackages(outputDir) {
     run: runPnpmAsync,
   });
   const sidecars = await packTestSidecars(outputDir);
-  const { allowBuilds, minimumReleaseAgeExclude = [] } = yaml.load(
+  const { allowBuilds } = yaml.load(
     fs.readFileSync(path.join(repoRoot, 'pnpm-workspace.yaml'), 'utf8'),
   );
   fs.writeFileSync(
     manifest,
-    `${JSON.stringify({ packages, sidecars, allowBuilds, minimumReleaseAgeExclude: minimumReleaseAgeExclude.filter(selector => !selector.includes('*')) }, null, 2)}\n`,
+    `${JSON.stringify({ packages, sidecars, allowBuilds }, null, 2)}\n`,
   );
   return manifest;
 }

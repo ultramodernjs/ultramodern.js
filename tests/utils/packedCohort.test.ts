@@ -68,9 +68,7 @@ test('the harness packs exactly the sidecars the release publishes', async () =>
         '@bleedingdev:registry=' + registry.registryUrl + '\n',
       );
       const policy =
-        "packages: []\nminimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\nminimumReleaseAgeIgnoreMissingTime: false\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\nminimumReleaseAgeExclude:\n  - '@bleedingdev/braces@" +
-        braces.version +
-        "'\nverifyDepsBeforeRun: error\npackageImportMethod: clone-or-copy\noverrides:\n  'braces@>=3.0.0 <3.0.4': 'npm:@bleedingdev/braces@" +
+        "packages: []\nminimumReleaseAge: 0\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\nverifyDepsBeforeRun: error\npackageImportMethod: clone-or-copy\noverrides:\n  'braces@>=3.0.0 <3.0.4': 'npm:@bleedingdev/braces@" +
         braces.version +
         "'\n  'sharp@>=0.35.0 <0.35.5': '0.35.5'\n";
       fs.writeFileSync(path.join(consumer, 'pnpm-workspace.yaml'), policy);

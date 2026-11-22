@@ -1630,10 +1630,7 @@ test('Node browser continuation uses strict native policy without requiring trus
   const root = tempRoot();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const settings = {
-    minimumReleaseAge: 1440,
-    minimumReleaseAgeStrict: true,
-    minimumReleaseAgeIgnoreMissingTime: false,
-    minimumReleaseAgeExclude: ['@fixture/cohort@1.0.0'],
+    minimumReleaseAge: 0,
     trustPolicy: 'no-downgrade',
     enableGlobalVirtualStore: false,
   };
@@ -1655,7 +1652,7 @@ test('Node browser continuation uses strict native policy without requiring trus
   assert.equal(env.pnpm_config_trust_policy_exclude, undefined);
   assert.equal(env.pnpm_config_enable_global_virtual_store, 'false');
   assert.equal(env.pnpm_config_verify_deps_before_run, 'error');
-  settings.minimumReleaseAgeStrict = false;
+  settings.trustPolicy = 'off';
   writeJson(root, 'node_modules/.pnpm-workspace-state-v1.json', { settings });
   assert.throws(
     () => createAcceptedNodeProofEnvironment(root),

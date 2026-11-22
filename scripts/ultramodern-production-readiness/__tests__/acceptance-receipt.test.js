@@ -130,7 +130,6 @@ async function createReceiptFixture(root, mode = 'source') {
   });
   bindSupplyChainEvidence(receipt, {
     closureSha256: fixtureClosureSha256,
-    exceptionPolicySha256: digest('exceptions'),
     lockSha256: digest('lock'),
     registryMetadataSha256: digest('registry'),
     releaseManifestSha256: release.manifestSha256,
@@ -458,7 +457,7 @@ test('published receipt accepts its own closure only with complete runtime and i
   ).details.closureIdentities;
   closure[0].version = '1.0.1';
   const { canonicalJson, sha256 } = await import(
-    '../published-create-proof/release-age-audit.mjs'
+    '../published-create-proof/dependency-closure-audit.mjs'
   );
   published.binding.supplyChain.closureSha256 = sha256(canonicalJson(closure));
   assert.notEqual(

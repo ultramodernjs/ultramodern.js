@@ -26,7 +26,7 @@
 // For each renderer: generate a workspace with the packed create CLI,
 // (Solid, Octane) build and serve its untouched starter, put the
 // tests/integration/renderer-<r> app into its shell, install from a local
-// registry under the strict release-age policy, recapture the shell's delivery
+// registry without release-age waits, recapture the shell's delivery
 // unit from the fixture config (sync-delivery-unit), check the installed cohort is
 // the packed bytes, typecheck, and run the specs. Solid and Octane also install
 // an ordinary fixture outside the generated topology to prove portable Node
@@ -71,10 +71,6 @@ import {
 } from './native-federation-packed.mjs';
 import { octaneTypecheckEvidenceEnv } from './octane-cli-evidence.mjs';
 import { diagnoseOctaneTypecheck } from './octane-router-probe.mjs';
-import {
-  assertReleaseAgeExclusionsUnchanged,
-  captureReleaseAgeExclusions,
-} from './release-age-policy.mjs';
 import {
   createReleaseSteps,
   oneAtATime,
@@ -230,7 +226,6 @@ async function awaitNativeFederation(run) {
   }
 }
 let registry;
-let releaseForAgePolicy;
 async function stopAll() {
   for (const child of children) child.kill('SIGTERM');
   await registry?.stop?.();
@@ -238,10 +233,6 @@ async function stopAll() {
 /** Runs a command, logging to logs/<log>.log; rejects with the log tail. */
 function sh(command, args, { cwd = root, env = process.env, log }) {
   const file = path.join(logs, `${log}.log`);
-  const releaseAgeBaseline =
-    path.basename(command) === 'pnpm' && args[0] === 'install'
-      ? captureReleaseAgeExclusions(cwd, { release: releaseForAgePolicy })
-      : undefined;
   return new Promise((resolve, reject) => {
     const out = fs.openSync(file, 'w');
     const child = spawn(command, args, {
@@ -255,13 +246,7 @@ function sh(command, args, { cwd = root, env = process.env, log }) {
     child.once('close', code => {
       children.delete(child);
       if (code === 0) {
-        try {
-          if (releaseAgeBaseline)
-            assertReleaseAgeExclusionsUnchanged(releaseAgeBaseline);
-          return resolve();
-        } catch (error) {
-          return reject(error);
-        }
+        return resolve();
       }
       const tail = fs.readFileSync(file, 'utf8').trim().split('\n');
       reject(
@@ -519,7 +504,6 @@ async function accept() {
         manifestPath: path.join(cohortDir, 'manifest.json'),
       });
       cohort = readCohort(release.manifestPath);
-      releaseForAgePolicy = release;
     });
 
     let createBin;
@@ -575,9 +559,7 @@ async function accept() {
           stringifyYaml({
             packages: ['.'],
             allowBuilds,
-            minimumReleaseAge: 1440,
-            minimumReleaseAgeStrict: true,
-            minimumReleaseAgeIgnoreMissingTime: false,
+            minimumReleaseAge: 0,
           }),
         );
         await sh('pnpm', ['install'], {
@@ -638,7 +620,7 @@ async function accept() {
         ready,
       );
       // The authored fixture can add dependencies after the starter install.
-      // Resolve those requests under the same release-age and trust policy,
+      // Resolve those requests under the same trust policy,
       // then prove the actual installation consumes that lock unchanged.
       ready = await step(
         `${renderer} resolve fixture`,
@@ -728,9 +710,7 @@ async function accept() {
                 packages: ['.'],
                 allowBuilds,
                 packageImportMethod: 'clone-or-copy',
-                minimumReleaseAge: 1440,
-                minimumReleaseAgeStrict: true,
-                minimumReleaseAgeIgnoreMissingTime: false,
+                minimumReleaseAge: 0,
               }),
             );
             await sh('pnpm', ['install'], {

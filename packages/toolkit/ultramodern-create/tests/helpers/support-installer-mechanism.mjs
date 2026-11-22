@@ -156,9 +156,7 @@ export async function proveSupportInstallerMechanism(
         path.join(directory, 'pnpm-workspace.yaml'),
         [
           `registry: ${base}/`,
-          'minimumReleaseAge: 1440',
-          'minimumReleaseAgeStrict: true',
-          'minimumReleaseAgeIgnoreMissingTime: false',
+          'minimumReleaseAge: 0',
           'blockExoticSubdeps: true',
           'trustPolicy: no-downgrade',
           'strictPeerDependencies: true',

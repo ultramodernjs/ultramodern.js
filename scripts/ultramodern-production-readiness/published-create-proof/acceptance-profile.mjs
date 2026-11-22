@@ -50,7 +50,14 @@ import {
   writeJsonFile,
 } from './constants.mjs';
 import {
-  assertBootstrapReleaseAgePolicy,
+  auditDependencyClosure,
+  parseYamlFile,
+  verifyStrictInstallInputs,
+  YAML_INTEGRITY,
+  YAML_NAME,
+  YAML_VERSION,
+} from './dependency-closure-audit.mjs';
+import {
   assertGeneratedCohort,
   resolveCreatePackage,
 } from './package-cohort.mjs';
@@ -63,16 +70,6 @@ import {
   runAsync,
 } from './process.mjs';
 import { verifyRegistryCohort } from './registry-cohort.mjs';
-import {
-  auditReleaseAgePolicy,
-  parseYamlFile,
-  releaseAgeExemptions,
-  validateExactExclusions,
-  verifyStrictInstallInputs,
-  YAML_INTEGRITY,
-  YAML_NAME,
-  YAML_VERSION,
-} from './release-age-audit.mjs';
 import { scaffoldFiles } from './resolution-parity.mjs';
 import { addVertical, createWorkspace } from './workspace.mjs';
 
@@ -81,7 +78,7 @@ const requiredPnpmCommands = Object.freeze({
   // node_modules. `@modern-js/ultramodern-create` intentionally does not
   // install (it tells the user to run pnpm install), so acceptance materializes
   // the lock here —
-  // against the controlled release registry — before the release-age audit
+  // against the controlled release registry — before the dependency audit
   // reads it and before the frozen install re-verifies it.
   lockfileOnly: Object.freeze([
     'install',
@@ -98,44 +95,6 @@ function createRuntimeArtifactBinding(release) {
   return projectRuntimeArtifactBinding(createReleaseArtifactBinding(release));
 }
 
-function createAcceptanceReleaseAgeEnv(
-  runtimeEnv,
-  createPackage,
-  exactExclusions,
-  registryEnv = {},
-) {
-  const policy = assertBootstrapReleaseAgePolicy(createPackage);
-  validateExactExclusions(exactExclusions, 'Acceptance release-age exclusions');
-  if (
-    policy.minimumReleaseAgeExclude.some(
-      specifier => !exactExclusions.includes(specifier),
-    )
-  ) {
-    throw new Error(
-      'Acceptance release-age exclusions must contain the authenticated create closure',
-    );
-  }
-  return {
-    ...runtimeEnv,
-    NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: undefined,
-    NPM_CONFIG_TRUST_POLICY_EXCLUDE: undefined,
-    PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: undefined,
-    PNPM_CONFIG_TRUST_POLICY_EXCLUDE: undefined,
-    npm_config_minimum_release_age_exclude: undefined,
-    npm_config_trust_policy_exclude: undefined,
-    pnpm_config_pm_on_fail: 'ignore',
-    pnpm_config_minimum_release_age: String(policy.minimumReleaseAge),
-    pnpm_config_minimum_release_age_exclude: JSON.stringify(exactExclusions),
-    pnpm_config_trust_policy_exclude:
-      registryEnv.PNPM_CONFIG_TRUST_POLICY_EXCLUDE,
-    pnpm_config_minimum_release_age_ignore_missing_time: String(
-      policy.minimumReleaseAgeIgnoreMissingTime,
-    ),
-    pnpm_config_minimum_release_age_strict: String(
-      policy.minimumReleaseAgeStrict,
-    ),
-  };
-}
 const operationalIndependenceChangedPaths = Object.freeze([
   'verticals/inventory/api/index.ts',
   'verticals/inventory/locales/en/inventory.json',
@@ -1327,10 +1286,9 @@ async function runAcceptanceProfile({
   options,
   outPath,
   runIdentity,
-  releaseAgePolicyPath,
   runImpl = run,
   browserSmokeImpl = runBrowserSmoke,
-  auditReleaseAgePolicyImpl = auditReleaseAgePolicy,
+  auditDependencyClosureImpl = auditDependencyClosure,
   proveOperationalTargetImpl = proveOperationalTarget,
   now = Date,
   workDir: suppliedWorkDir,
@@ -1344,10 +1302,6 @@ async function runAcceptanceProfile({
   assertReleaseAcceptanceProfile(options);
 
   const createPackage = resolveCreatePackage(release, options.createPackage);
-  const commandExclusions = releaseAgeExemptions(release, {
-    policyPath: releaseAgePolicyPath,
-    now: currentTime(now),
-  });
   const workDir =
     suppliedWorkDir ??
     fs.mkdtempSync(path.join(os.tmpdir(), 'ultramodern-release-acceptance-'));
@@ -1368,12 +1322,6 @@ async function runAcceptanceProfile({
       runImpl,
       workDir,
     });
-    const bootstrapEnv = createAcceptanceReleaseAgeEnv(
-      runtimeEnv,
-      createPackage,
-      commandExclusions,
-      registryEnv,
-    );
     const packageManagerEnv = createAcceptanceWorkspaceEnv(runtimeEnv, {
       mode,
       release,
@@ -1404,7 +1352,7 @@ async function runAcceptanceProfile({
           verifyRegistryCohort({
             release,
             registryUrl,
-            env: bootstrapEnv,
+            env: packageManagerEnv,
             workDir,
             // Async runner: the cohort proof verifies packages through a
             // bounded concurrent pool; the profile's shared sync runImpl would
@@ -1420,7 +1368,7 @@ async function runAcceptanceProfile({
             workDir,
             options.projectName,
             createPackage,
-            bootstrapEnv,
+            packageManagerEnv,
             runImpl,
           );
           // The generated project is always-Zephyr by design (the zephyr-gating
@@ -1481,27 +1429,20 @@ async function runAcceptanceProfile({
 
       await recordAcceptanceResult(receipt, 'dependency-closure-audit', () =>
         withDuration(async () => {
-          audit = await auditReleaseAgePolicyImpl({
+          audit = await auditDependencyClosureImpl({
             projectDir,
             release,
-            commandExclusions,
             registryUrl,
-            policyPath: releaseAgePolicyPath,
             runImpl,
-            now: currentTime(now),
           });
           bindSupplyChainEvidence(receipt, audit.digests);
           return {
-            approvals: audit.approvals,
             candidateDiscovery: audit.candidateDiscovery,
             closureCount: audit.closureCount,
             closureIdentities: audit.closureIdentities,
             digests: audit.digests,
-            exactExclusionCount: audit.exactExclusions.length,
             importerCount: audit.importerCount,
             lockfileVersion: audit.lockfileVersion,
-            matureCount: audit.matureCount,
-            policyEntryCount: audit.policyEntryCount,
             registryMetadataCount: audit.registryMetadataCount,
             workspacePolicySha256: audit.workspacePolicySha256,
           };
@@ -1563,7 +1504,6 @@ export {
   createAcceptanceBuildEnv,
   createAcceptanceDeploymentEnv,
   createAcceptancePackageManagerEnv,
-  createAcceptanceReleaseAgeEnv,
   createAcceptanceRuntimeContext,
   createOperationalIndependenceCommit,
   createRuntimeArtifactBinding,

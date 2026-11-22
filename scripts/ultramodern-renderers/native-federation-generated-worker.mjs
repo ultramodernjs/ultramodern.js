@@ -36,10 +36,6 @@ import {
   verifyPackedWorkerProofResult,
 } from './native-federation-worker.mjs';
 import { verifyWorkerFederationModule } from './native-federation-workers.mjs';
-import {
-  assertReleaseAgeExclusionsUnchanged,
-  captureReleaseAgeExclusions,
-} from './release-age-policy.mjs';
 
 const readJson = filename => JSON.parse(fs.readFileSync(filename, 'utf8'));
 const digest = filename =>
@@ -433,9 +429,6 @@ async function runGeneratedWorkerOnClaimedPorts(
       process.env[`VERTICAL_REMOTE_${index === 1 ? 'A' : 'B'}_WORKER_NAME`] =
         `proof-${app.id}`;
   }
-  const releaseAgePolicy = captureReleaseAgeExclusions(workspaceRoot, {
-    release: context.release,
-  });
   await installPackedNativeFederationDependencies({
     directory: workspaceRoot,
     installerWitnessPath: path.join(
@@ -445,7 +438,6 @@ async function runGeneratedWorkerOnClaimedPorts(
     context,
     signal,
   });
-  assertReleaseAgeExclusionsUnchanged(releaseAgePolicy);
   await runPackedNativeFederationCommand(
     context.pnpmExecutable,
     ['--filter', './packages/*', 'run', 'typecheck'],

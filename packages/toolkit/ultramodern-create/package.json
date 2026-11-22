@@ -195,10 +195,6 @@
   },
   "modern:source": "./src/index.ts",
   "ultramodern": {
-    "bootstrapReleaseAgeExclude": [
-      "effect@4.1.4",
-      "@effect/opentelemetry@4.1.4"
-    ],
     "nativeArtifacts": {
       "packages": {
         "@octanejs/rspack-plugin": {

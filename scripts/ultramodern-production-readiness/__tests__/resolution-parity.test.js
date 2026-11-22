@@ -6,7 +6,7 @@ const test = require('node:test');
 
 async function api() {
   const [audit, parity] = await Promise.all([
-    import('../published-create-proof/release-age-audit.mjs'),
+    import('../published-create-proof/dependency-closure-audit.mjs'),
     import('../published-create-proof/resolution-parity.mjs'),
   ]);
   return { ...audit, ...parity };

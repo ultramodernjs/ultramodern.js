@@ -3819,9 +3819,6 @@ export function validateRenovateConfigObject(
   if (config.dependencyDashboard !== true) {
     errors.push(`${relativePath} must enable dependencyDashboard`);
   }
-  if (config.minimumReleaseAge !== '1 day') {
-    errors.push(`${relativePath} must set minimumReleaseAge to 1 day`);
-  }
   if (!config.extends?.includes('helpers:pinGitHubActionDigests')) {
     errors.push(
       `${relativePath} must pin GitHub Action digests through Renovate`,

@@ -263,7 +263,7 @@ test('generated Worker compilation receives its generated sources and installed 
         });
         fs.writeFileSync(
           path.join(workspaceRoot, 'pnpm-workspace.yaml'),
-          'minimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\n',
+          'minimumReleaseAge: 0\n',
         );
         const applications = coordinates.map(coordinate => ({
           ...coordinate,

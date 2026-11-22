@@ -29,44 +29,6 @@ export const RSBUILD_PLUGIN_TAILWINDCSS_VERSION = '2.0.3';
 export const EFFECT_VERSION = '4.1.4';
 export const EFFECT_TSGO_VERSION = '0.73.2';
 export const TSRS_VERSION = '7.1.0-beta.tsrs3';
-// Reviewed 2026-11-17 npm release metadata. Only these exact compiler releases
-// and their declared platform packages bypass the normal 24h release-age gate.
-export const COMPILER_RELEASE_AGE_EXCEPTIONS = Object.freeze(
-  [
-    `@effect/tsgo@${EFFECT_TSGO_VERSION}`,
-    ...[
-      'darwin-arm64',
-      'darwin-x64',
-      'linux-arm',
-      'linux-arm64',
-      'linux-x64',
-      'win32-arm64',
-      'win32-x64',
-    ].map(platform => `@effect/tsgo-${platform}@${EFFECT_TSGO_VERSION}`),
-    `tsrs@${TSRS_VERSION}`,
-    ...[
-      'darwin-arm64',
-      'darwin-x64',
-      'linux-arm64-gnu',
-      'linux-arm64-musl',
-      'linux-x64-gnu',
-      'linux-x64-musl',
-      'win32-x64',
-      'win32-arm64',
-    ].map(platform => `@tsrs/${platform}@${TSRS_VERSION}`),
-  ].sort(),
-);
-// Authenticated by the packed producer manifest, not arbitrary workspace pins.
-export const EFFECT_RUNTIME_RELEASE_AGE_EXCEPTIONS = Object.freeze([
-  `effect@${EFFECT_VERSION}`,
-  `@effect/opentelemetry@${EFFECT_VERSION}`,
-]);
-export const BOOTSTRAP_RELEASE_AGE_EXCEPTIONS = Object.freeze(
-  [
-    ...COMPILER_RELEASE_AGE_EXCEPTIONS,
-    ...EFFECT_RUNTIME_RELEASE_AGE_EXCEPTIONS,
-  ].sort(),
-);
 export const COMPILER_TRUST_EXCEPTIONS = Object.freeze([
   `tsrs@${TSRS_VERSION}`,
 ]);

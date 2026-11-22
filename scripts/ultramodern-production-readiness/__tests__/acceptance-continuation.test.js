@@ -929,15 +929,9 @@ test('continuation uses native policy without restoring acceptance age or trust 
   );
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   const settings = {
-    minimumReleaseAge: 1440,
-    minimumReleaseAgeStrict: true,
-    minimumReleaseAgeIgnoreMissingTime: false,
+    minimumReleaseAge: 0,
     trustPolicy: 'no-downgrade',
     enableGlobalVirtualStore: false,
-    minimumReleaseAgeExclude: [
-      '@bleedingdev/modern-js-ultramodern-create@3.4.0-ultramodern.1',
-      '@bleedingdev/runtime-sidecar@1.2.3',
-    ],
   };
   const stateText = JSON.stringify({ settings });
   fs.writeFileSync(statePath, stateText);
@@ -974,13 +968,6 @@ test('continuation uses native policy without restoring acceptance age or trust 
   assert.equal(env.pnpm_config_enable_global_virtual_store, 'false');
   assert.equal(env.pnpm_config_verify_deps_before_run, 'error');
   assert.equal(fs.readFileSync(workspacePath, 'utf8'), workspaceText);
-  policy.minimumReleaseAgeExclude = ['*'];
-  fs.writeFileSync(workspacePath, nativeYaml(policy));
-  assert.throws(
-    () => readInstalledPolicyEnvironment(root),
-    /unchanged native pnpm workspace policy/u,
-  );
-  policy.minimumReleaseAgeExclude = settings.minimumReleaseAgeExclude;
   policy.trustPolicyExclude = ['*'];
   fs.writeFileSync(workspacePath, nativeYaml(policy));
   assert.throws(
@@ -1008,13 +995,7 @@ test('source continuation preserves only authenticated saved candidate trust wit
     .map(item => `${item.targetName}@${item.version}`)
     .sort();
   const settings = {
-    minimumReleaseAge: 1440,
-    minimumReleaseAgeStrict: true,
-    minimumReleaseAgeIgnoreMissingTime: false,
-    minimumReleaseAgeExclude: [
-      ...selectors,
-      '@bleedingdev/sidecar@1.0.0',
-    ].sort(),
+    minimumReleaseAge: 0,
     trustPolicy: 'no-downgrade',
     trustPolicyIgnoreAfter: 1440,
     trustPolicyExclude: selectors,

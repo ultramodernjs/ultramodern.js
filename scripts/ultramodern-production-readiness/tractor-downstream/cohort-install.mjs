@@ -8,12 +8,12 @@ import {
 } from '../../ultramodern-publish/lib/prepare-bleedingdev-packages/release-artifacts.mjs';
 import { validateDescriptor as validateNativeDescriptor } from '../../ultramodern-renderers/native-artifacts/protocol.mjs';
 import { supportProtocol } from '../../ultramodern-support-artifacts/protocol.mjs';
+import { validateExactExclusions } from '../published-create-proof/dependency-closure-audit.mjs';
 import {
   compilerBootstrapSelectors,
   expectedReleaseCohort,
   reviewedCompilerTrustExclusions,
 } from '../published-create-proof/package-cohort.mjs';
-import { validateExactExclusions } from '../published-create-proof/release-age-audit.mjs';
 import { collectPackageJsonFiles } from './contract.mjs';
 
 const dependencyBlocks = [
@@ -248,7 +248,6 @@ export function prepareTractorCohortInstallation(
   {
     pnpmOverrides = {},
     pnpmPackageExtensions = {},
-    minimumReleaseAgeExclude,
     trustPolicy,
     trustPolicyIgnoreAfter,
     trustPolicyExclude,
@@ -302,10 +301,6 @@ export function prepareTractorCohortInstallation(
   const sidecars = new Map(
     verifiedSidecars.map(item => [item.name, item.version]),
   );
-  const producerExclusions = validateExactExclusions(
-    minimumReleaseAgeExclude,
-    'Producer pnpm minimumReleaseAgeExclude',
-  );
   const compilerSelectors = compilerBootstrapSelectors(packed.packageJson);
   const nativeDependencies = {
     ...admitTractorEffectDependencies(
@@ -341,19 +336,6 @@ export function prepareTractorCohortInstallation(
   if (nativeArtifacts)
     nativeDependencies[nativeCore] = admittedArtifacts[nativeCore].request;
   const nativePackages = Object.keys(nativeDependencies);
-  const expectedExclusions = [
-    ...cohort.targetNames.map(name => `${name}@${version}`),
-    ...Array.from(
-      sidecars,
-      ([name, sidecarVersion]) => `${name}@${sidecarVersion}`,
-    ),
-    ...compilerSelectors,
-  ].sort();
-  if (!isDeepStrictEqual(producerExclusions, expectedExclusions)) {
-    throw new Error(
-      'Producer pnpm minimumReleaseAgeExclude must select exactly the verified Modern.js cohort, sidecars and packed producer compiler selectors',
-    );
-  }
   if (trustPolicy !== 'no-downgrade' || trustPolicyIgnoreAfter !== 1440) {
     throw new Error(
       'Producer pnpm trust policy must retain no-downgrade and its 24-hour window',
@@ -682,10 +664,10 @@ export function prepareTractorCohortInstallation(
     ),
     ...pnpmPackageExtensions,
   };
-  policy.minimumReleaseAge = 1440;
-  policy.minimumReleaseAgeStrict = true;
-  policy.minimumReleaseAgeIgnoreMissingTime = false;
-  policy.minimumReleaseAgeExclude = producerExclusions;
+  policy.minimumReleaseAge = 0;
+  delete policy.minimumReleaseAgeStrict;
+  delete policy.minimumReleaseAgeIgnoreMissingTime;
+  delete policy.minimumReleaseAgeExclude;
   policy.trustPolicy = trustPolicy;
   policy.trustPolicyIgnoreAfter = trustPolicyIgnoreAfter;
   policy.trustPolicyExclude = trustExclusions;

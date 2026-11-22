@@ -16,7 +16,6 @@ import { ULTRAMODERN_WORKSPACE_POLICY } from '../src/ultramodern-workspace/polic
 import { createAppTsConfig } from '../src/ultramodern-workspace/tsconfigs';
 import type { ResolvedPackageSource } from '../src/ultramodern-workspace/types';
 import {
-  BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
   CLOUDFLARE_WORKERS_TYPES_VERSION,
   MINIFLARE_VERSION,
   WORKERD_VERSION,
@@ -228,30 +227,20 @@ test('generated dependency policy applies current fixes only within each reviewe
   assert.equal(overrides['body-parser@>=2.0.0 <2.4.0'], '2.4.0');
 });
 
-test('compiler bootstrap exemptions include Windows ARM64 without broadening release policy', () => {
-  assert.equal(BOOTSTRAP_RELEASE_AGE_EXCEPTIONS.length, 19);
-  assert(
-    BOOTSTRAP_RELEASE_AGE_EXCEPTIONS.includes(
-      '@tsrs/win32-arm64@7.1.0-beta.tsrs3',
-    ),
+test('dependency policy admits new releases without maintaining age exceptions', () => {
+  const policy = ULTRAMODERN_WORKSPACE_POLICY.pnpm;
+  assert.equal(policy.minimumReleaseAge, 0);
+  for (const key of [
+    'minimumReleaseAgeExclude',
+    'minimumReleaseAgeStrict',
+    'minimumReleaseAgeIgnoreMissingTime',
+  ])
+    assert.equal(Object.hasOwn(policy, key), false);
+  const producer = JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'),
   );
-  assert(
-    BOOTSTRAP_RELEASE_AGE_EXCEPTIONS.includes(
-      '@effect/tsgo-win32-arm64@0.73.2',
-    ),
-  );
-  assert(BOOTSTRAP_RELEASE_AGE_EXCEPTIONS.includes('effect@4.1.4'));
-  assert(
-    BOOTSTRAP_RELEASE_AGE_EXCEPTIONS.includes('@effect/opentelemetry@4.1.4'),
-  );
-  assert(
-    BOOTSTRAP_RELEASE_AGE_EXCEPTIONS.every(
-      selector => !/[*>^]/u.test(selector),
-    ),
-  );
-  assert(
-    !BOOTSTRAP_RELEASE_AGE_EXCEPTIONS.some(selector =>
-      /0\.21\.0|0\.67\.0|4\.0\.7/u.test(selector),
-    ),
+  assert.equal(
+    Object.hasOwn(producer.ultramodern, 'bootstrapReleaseAgeExclude'),
+    false,
   );
 });

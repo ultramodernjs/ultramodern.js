@@ -6,7 +6,6 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parse as parseYaml } from 'yaml';
 import { confinedPath } from '../../../scripts/lib/file-evidence.mjs';
 import { leasePorts } from '../../../scripts/ultramodern-production-readiness/renderer-mf-lifecycle-proof/port-lease.mjs';
 import { resolveDiskGuardian } from '../../../scripts/ultramodern-production-readiness/renderer-worker-lifecycle-proof/support.mjs';
@@ -511,10 +510,7 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
   const policyPath = path.join(workspaceRoot, 'pnpm-workspace.yaml');
   writeJson(policyPath, {
     packages: ['apps/*', 'verticals/*', 'shared'],
-    minimumReleaseAge: 1440,
-    minimumReleaseAgeStrict: true,
-    minimumReleaseAgeIgnoreMissingTime: false,
-    minimumReleaseAgeExclude: [],
+    minimumReleaseAge: 0,
     packageImportMethod: 'clone-or-copy',
     virtualStoreDir,
     ...(input.allowBuilds ? { allowBuilds: input.allowBuilds } : {}),
@@ -657,20 +653,9 @@ export async function runSourceWorkerConsumer(input, { signal } = {}) {
         '--virtual-store-dir',
         virtualStoreDir,
         '--config.package-import-method=clone-or-copy',
-        '--config.minimum-release-age=1440',
-        '--config.minimum-release-age-strict=true',
       ],
       workspaceRoot,
       'install',
-    );
-    const policy = parseYaml(fs.readFileSync(policyPath, 'utf8'));
-    assert.equal(policy.minimumReleaseAge, 1440);
-    assert.equal(policy.minimumReleaseAgeStrict, true);
-    assert.equal(policy.minimumReleaseAgeIgnoreMissingTime, false);
-    assert.deepEqual(
-      policy.minimumReleaseAgeExclude ?? [],
-      [],
-      'Installer-added age exemptions cannot qualify source validation.',
     );
     const generatorConsumerRoot = fs.realpathSync(dependencyRoot);
     const hostRequest = createRequire(

@@ -24,9 +24,9 @@ const replacements = new Map([
     `export async function verifyRegistryCohort() { return { packageCount: 1 }; }`,
   ],
   [
-    moduleUrl('./release-age-audit.mjs'),
+    moduleUrl('./dependency-closure-audit.mjs'),
     `
-    export * from ${JSON.stringify(moduleUrl('./release-age-audit.mjs'))};
+    export * from ${JSON.stringify(moduleUrl('./dependency-closure-audit.mjs'))};
     import fs from 'node:fs';
     export const parseYamlFile = file => JSON.parse(fs.readFileSync(file, 'utf8'));
     export const verifyStrictInstallInputs = () => ({ verified: true });
@@ -94,7 +94,7 @@ async function fixture(root, mode) {
     '../published-create-proof/constants.mjs'
   );
   const { canonicalJson, sha256 } = await import(
-    '../published-create-proof/release-age-audit.mjs'
+    '../published-create-proof/dependency-closure-audit.mjs'
   );
   const version = '3.11.3-ultramodern.10';
   const name = '@bleedingdev/modern-js-ultramodern-create';
@@ -159,11 +159,8 @@ async function fixture(root, mode) {
     verticals: readableErpVerticalNames,
     audit: {
       closureIdentities,
-      approvals: [],
-      exactExclusions: [`${name}@${version}`],
       digests: {
         closureSha256,
-        exceptionPolicySha256: 'd'.repeat(64),
         lockSha256: 'e'.repeat(64),
         registryMetadataSha256: 'f'.repeat(64),
         releaseManifestSha256: release.manifestSha256,
@@ -189,15 +186,6 @@ for (const mode of ['source', 'published']) {
     });
     const { release, audit, receiptApi, verticals } = await fixture(root, mode);
     const { runAcceptanceProfile } = await import(profileUrl);
-    const releaseAgePolicyPath = path.join(root, 'release-age-policy.json');
-    fs.writeFileSync(
-      releaseAgePolicyPath,
-      JSON.stringify({
-        schema: 'bleedingdev.ultramodern.release-age-exceptions',
-        schemaVersion: 2,
-        entries: [],
-      }),
-    );
     const workDir = path.join(root, 'work');
     fs.mkdirSync(workDir);
     const projectDir = path.join(workDir, 'consumer');
@@ -280,7 +268,6 @@ for (const mode of ['source', 'published']) {
     const input = {
       mode,
       release,
-      releaseAgePolicyPath,
       registryUrl: 'https://registry.npmjs.org/',
       registryEnv:
         mode === 'source'
@@ -300,7 +287,7 @@ for (const mode of ['source', 'published']) {
       runIdentity: 'test:runtime-acceptance',
       workDir,
       runImpl,
-      auditReleaseAgePolicyImpl: async () => audit,
+      auditDependencyClosureImpl: async () => audit,
       proveOperationalTargetImpl: async ({ baseline }) => {
         operational.push(baseline.target);
         if (badOperational) throw new Error('Operational proof failed');

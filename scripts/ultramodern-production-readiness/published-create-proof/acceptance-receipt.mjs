@@ -13,8 +13,8 @@ import {
   requiredAcceptanceResultIdsForMode,
   runtimeIdentityBinding,
 } from './acceptance-contract.mjs';
+import { canonicalJson, sha256 } from './dependency-closure-audit.mjs';
 import { authenticatedCompilerTrustExclusions } from './package-cohort.mjs';
-import { canonicalJson, sha256 } from './release-age-audit.mjs';
 
 const acceptanceReceiptSchema =
   'bleedingdev.ultramodern.release-acceptance-receipt';
@@ -74,7 +74,6 @@ function hasSkippedProof(value) {
 function pendingSupplyChainBinding(release) {
   return {
     closureSha256: null,
-    exceptionPolicySha256: null,
     lockSha256: null,
     registryMetadataSha256: null,
     releaseManifestSha256: release.manifestSha256,
@@ -171,7 +170,6 @@ function bindSupplyChainEvidence(receipt, digests) {
     digests,
     [
       'closureSha256',
-      'exceptionPolicySha256',
       'lockSha256',
       'registryMetadataSha256',
       'releaseManifestSha256',
@@ -590,7 +588,6 @@ function assertAcceptanceReceipt(
     receipt.binding.supplyChain,
     [
       'closureSha256',
-      'exceptionPolicySha256',
       'lockSha256',
       'registryMetadataSha256',
       'releaseManifestSha256',

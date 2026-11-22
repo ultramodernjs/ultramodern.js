@@ -65,9 +65,7 @@ function bootstrapRelease() {
   };
 }
 
-test('bare install uses only authenticated bootstrap selectors without changing PM or trust settings', () => {
-  const release = bootstrapRelease();
-  const createPackage = resolveCreatePackage(release);
+test('bare install removes inherited release-age gates without changing PM or trust settings', () => {
   const allowBuilds = { esbuild: true, workerd: true };
   const inherited = {
     PATH: '/qualified/bin',
@@ -81,47 +79,14 @@ test('bare install uses only authenticated bootstrap selectors without changing 
     PNPM_CONFIG_TRUST_POLICY_EXCLUDE: '["@bleedingdev/mf-runtime@2.9.1"]',
     npm_config_registry: 'http://verified-registry.invalid',
   };
-  const setup = createBareInstallSetup(createPackage, allowBuilds, inherited);
-  const expected = [
-    '@bleedingdev/mf-runtime@2.9.1',
-    '@bleedingdev/modern-js-ultramodern-create@3.8.3-ultramodern.candidate',
-    '@bleedingdev/modern-js-utils@3.8.3-ultramodern.candidate',
-  ];
-  assert.deepEqual(
-    setup.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude,
-    expected,
-  );
-  assert.equal(
-    setup.bootstrapReleaseAgePolicy,
-    createPackage.bootstrapReleaseAgePolicy,
-  );
-  assert.equal(Object.isFrozen(setup.bootstrapReleaseAgePolicy), true);
-  assert.equal(
-    Object.isFrozen(setup.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude),
-    true,
-  );
-  assert.equal(
-    Reflect.set(setup.bootstrapReleaseAgePolicy, 'minimumReleaseAge', 0),
-    false,
-  );
-  assert.equal(
-    Reflect.set(
-      setup.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude,
-      'length',
-      0,
-    ),
-    false,
-  );
-  assert.equal(setup.env.pnpm_config_minimum_release_age, '1440');
-  assert.equal(setup.env.pnpm_config_minimum_release_age_strict, 'true');
-  assert.equal(
-    setup.env.pnpm_config_minimum_release_age_ignore_missing_time,
-    'false',
-  );
-  assert.equal(
-    setup.env.pnpm_config_minimum_release_age_exclude,
-    JSON.stringify(expected),
-  );
+  const setup = createBareInstallSetup(allowBuilds, inherited);
+  assert.equal(setup.env.pnpm_config_minimum_release_age, '0');
+  for (const name of [
+    'pnpm_config_minimum_release_age_exclude',
+    'pnpm_config_minimum_release_age_strict',
+    'pnpm_config_minimum_release_age_ignore_missing_time',
+  ])
+    assert.equal(Object.hasOwn(setup.env, name), false);
   for (const name of [
     'NPM_CONFIG_MINIMUM_RELEASE_AGE',
     'NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE',
@@ -143,9 +108,7 @@ test('bare install uses only authenticated bootstrap selectors without changing 
   assert.deepEqual(workspace, {
     packages: ['.'],
     allowBuilds,
-    minimumReleaseAge: 1440,
-    minimumReleaseAgeStrict: true,
-    minimumReleaseAgeIgnoreMissingTime: false,
+    minimumReleaseAge: 0,
   });
   assert.equal(Object.hasOwn(workspace, 'minimumReleaseAgeExclude'), false);
 });
@@ -154,52 +117,22 @@ test('bare bootstrap setup rejects mismatched release versions and wildcard requ
   const wrongVersion = bootstrapRelease();
   wrongVersion.createPackage.version = '3.8.3-ultramodern.other';
   assert.throws(
-    () =>
-      createBareInstallSetup(
-        resolveCreatePackage(wrongVersion),
-        { esbuild: true },
-        {},
-      ),
+    () => resolveCreatePackage(wrongVersion),
     /create package version does not match release.version/u,
   );
   const wildcard = bootstrapRelease();
   wildcard.createPackage.packageJson.dependencies!['@modern-js/utils'] =
     'npm:@bleedingdev/modern-js-utils@*';
   assert.throws(
-    () =>
-      createBareInstallSetup(
-        resolveCreatePackage(wildcard),
-        { esbuild: true },
-        {},
-      ),
+    () => resolveCreatePackage(wildcard),
     /exact bootstrap dependency/u,
-  );
-  const createPackage = resolveCreatePackage(bootstrapRelease());
-  assert.throws(
-    () =>
-      createBareInstallSetup(
-        {
-          ...createPackage,
-          bootstrapReleaseAgePolicy: {
-            ...createPackage.bootstrapReleaseAgePolicy,
-            minimumReleaseAgeExclude: ['@bleedingdev/*'],
-          },
-        },
-        { esbuild: true },
-        {},
-      ),
-    /exact authenticated bootstrap release-age policy/u,
   );
 });
 
 test('bare workspace policy rejects every install mutation and unsafe replacement', () => {
   const f = fixture();
   try {
-    const setup = createBareInstallSetup(
-      resolveCreatePackage(bootstrapRelease()),
-      { esbuild: true },
-      {},
-    );
+    const setup = createBareInstallSetup({ esbuild: true }, {});
     const file = path.join(f.consumer, 'pnpm-workspace.yaml');
     fs.writeFileSync(file, setup.workspaceBytes);
     const evidence = assertBareWorkspacePolicyUnchanged(
@@ -212,16 +145,13 @@ test('bare workspace policy rejects every install mutation and unsafe replacemen
       `${setup.workspaceBytes.toString()}# auto-accepted by pnpm\n`,
       setup.workspaceBytes
         .toString()
-        .replace(
-          'minimumReleaseAgeStrict: true',
-          'minimumReleaseAgeStrict: false',
-        ),
+        .replace('minimumReleaseAge: 0', 'minimumReleaseAge: 1440'),
       `${setup.workspaceBytes.toString()}minimumReleaseAgeExclude: []\n`,
     ]) {
       fs.writeFileSync(file, mutation);
       assert.throws(
         () => assertBareWorkspacePolicyUnchanged(file, setup.workspaceBytes),
-        /Install changed the strict exception-free bare workspace policy/u,
+        /Install changed the bare workspace policy/u,
       );
     }
     fs.unlinkSync(file);

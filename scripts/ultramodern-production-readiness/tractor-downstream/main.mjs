@@ -4,7 +4,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { parse as load } from 'yaml';
 import { readReleaseManifest } from '../../ultramodern-publish/lib/source-create-proof/release-manifest.mjs';
-import { defaultReleaseAgePolicyPath } from '../../ultramodern-publish/run-release-acceptance.mjs';
 import {
   assertLocalPortsAvailable,
   launchBrowser,
@@ -30,6 +29,7 @@ import {
   withAcceptancePlaywrightBrowsersPath,
 } from '../published-create-proof/acceptance-profile.mjs';
 import { writeJsonFile } from '../published-create-proof/constants.mjs';
+import { validateExactExclusions } from '../published-create-proof/dependency-closure-audit.mjs';
 import {
   createPnpmDlxArgs,
   resolveCreatePackage,
@@ -38,10 +38,6 @@ import {
   createAcceptanceWorkspaceEnv,
   run,
 } from '../published-create-proof/process.mjs';
-import {
-  releaseAgeExemptions,
-  validateExactExclusions,
-} from '../published-create-proof/release-age-audit.mjs';
 import {
   assertAuthenticatedTractorCohort,
   assertExactModernDependencySpecifiers,
@@ -99,48 +95,6 @@ const executionCommands = Object.freeze([
     .map(command => Object.freeze({ command, report: true })),
 ]);
 
-function createTractorPnpmDlxArgs(
-  createPackage,
-  minimumReleaseAgeExclude,
-  forwardedArgs,
-  environment,
-) {
-  const exactExclusions = validateExactExclusions(
-    minimumReleaseAgeExclude,
-    'Tractor bootstrap minimumReleaseAgeExclude',
-  );
-  const baseArgs = createPnpmDlxArgs(createPackage, forwardedArgs, environment);
-  const dlxIndex = baseArgs.indexOf('dlx');
-  if (dlxIndex < 0) {
-    throw new Error('Authenticated create command is missing pnpm dlx');
-  }
-  const inheritedExclusions = baseArgs
-    .slice(0, dlxIndex)
-    .filter(argument =>
-      argument.startsWith('--config.minimum-release-age-exclude='),
-    )
-    .map(argument => argument.slice(argument.indexOf('=') + 1));
-  if (
-    inheritedExclusions.some(specifier => !exactExclusions.includes(specifier))
-  ) {
-    throw new Error(
-      'Tractor bootstrap exclusions must contain the authenticated create closure',
-    );
-  }
-  return [
-    ...baseArgs
-      .slice(0, dlxIndex)
-      .filter(
-        argument =>
-          !argument.startsWith('--config.minimum-release-age-exclude='),
-      ),
-    ...exactExclusions.map(
-      specifier => `--config.minimum-release-age-exclude=${specifier}`,
-    ),
-    ...baseArgs.slice(dlxIndex),
-  ];
-}
-
 function createTractorPackageManagerContext({
   mode,
   release,
@@ -154,7 +108,7 @@ function createTractorPackageManagerContext({
 }) {
   // Thin delegate: the shared acceptance owner decides the exact pnpm
   // executable, PATH, registry, npm/pnpm stores, XDG cache, and
-  // PLAYWRIGHT_BROWSERS_PATH. Native workspace YAML owns the age and trust
+  // PLAYWRIGHT_BROWSERS_PATH. Native workspace YAML owns the trust
   // policy. The registry environment is decided by the mode
   // (see resolveAcceptanceRegistryEnv) and passed straight through.
   const runtime = createAcceptanceRuntimeContext({
@@ -197,7 +151,6 @@ function createTractorPackageManagerContext({
 // fresh-workspace command rather than duplicating framework defaults here.
 function readTractorProducerOverrides({
   createPackage,
-  minimumReleaseAgeExclude,
   packageManager,
   packageManagerRoot,
   runImpl = run,
@@ -209,9 +162,8 @@ function readTractorProducerOverrides({
   try {
     runImpl(
       packageManager.pnpmExecutable,
-      createTractorPnpmDlxArgs(
+      createPnpmDlxArgs(
         createPackage,
-        minimumReleaseAgeExclude,
         [workspace, '--lang', 'en', '--no-agents-md'],
         packageManager.env,
       ),
@@ -232,23 +184,11 @@ function readTractorProducerOverrides({
       );
     }
     if (
-      policy.minimumReleaseAge !== 1440 ||
-      policy.minimumReleaseAgeStrict !== true ||
-      policy.minimumReleaseAgeIgnoreMissingTime !== false ||
       policy.trustPolicy !== 'no-downgrade' ||
       policy.trustPolicyIgnoreAfter !== 1440
     ) {
       throw new Error(
-        'Exact producer workspace must retain strict 24-hour age and no-downgrade trust policies',
-      );
-    }
-    const producerExclusions = validateExactExclusions(
-      policy.minimumReleaseAgeExclude,
-      'Exact producer workspace minimumReleaseAgeExclude',
-    );
-    if (!producerExclusions.includes(createPackage.exactSpecifier)) {
-      throw new Error(
-        'Exact producer workspace minimumReleaseAgeExclude must include its installed producer',
+        'Exact producer workspace must retain no-downgrade trust policy',
       );
     }
     const producerTrustExclusions = validateExactExclusions(
@@ -290,7 +230,6 @@ function readTractorProducerOverrides({
       ),
       pnpmOverrides: overrides,
       pnpmPackageExtensions: policy.packageExtensions ?? {},
-      minimumReleaseAgeExclude: producerExclusions,
       trustPolicy: policy.trustPolicy,
       trustPolicyIgnoreAfter: policy.trustPolicyIgnoreAfter,
       trustPolicyExclude: producerTrustExclusions,
@@ -398,7 +337,6 @@ function parseArgs(argv) {
     '--mode',
     '--out',
     '--registry-url',
-    '--release-age-policy',
     '--store-dir',
     '--workspace',
   ]);
@@ -458,9 +396,6 @@ function parseArgs(argv) {
             values.get('--registry-url') ?? 'https://registry.npmjs.org/',
           )
         : undefined,
-    releaseAgePolicyPath: path.resolve(
-      values.get('--release-age-policy') ?? defaultReleaseAgePolicyPath,
-    ),
     releaseDir: path.dirname(manifestPath),
     storeDir: storeDir === undefined ? undefined : path.resolve(storeDir),
     workspace: fs.realpathSync(path.resolve(values.get('--workspace'))),
@@ -848,7 +783,6 @@ function readPassingNodeBackendProof(workspace) {
 function installTractorRelease({
   workspace,
   createPackage,
-  minimumReleaseAgeExclude,
   packageManager,
   runImpl = run,
 }) {
@@ -862,12 +796,7 @@ function installTractorRelease({
   for (const command of ['sync-delivery-unit', 'validate']) {
     runImpl(
       packageManager.pnpmExecutable,
-      createTractorPnpmDlxArgs(
-        createPackage,
-        minimumReleaseAgeExclude,
-        ['ultramodern', command],
-        options.env,
-      ),
+      createPnpmDlxArgs(createPackage, ['ultramodern', command], options.env),
       options,
     );
   }
@@ -928,10 +857,6 @@ async function runTractorDownstreamAcceptance(
   });
   const createPackage = resolveCreatePackage(release);
   const startedAt = new now();
-  const minimumReleaseAgeExclude = releaseAgeExemptions(release, {
-    policyPath: options.releaseAgePolicyPath,
-    now: startedAt,
-  });
   const packageManagerRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), 'ultramodern-tractor-downstream-'),
   );
@@ -984,7 +909,6 @@ async function runTractorDownstreamAcceptance(
     }
     const producerPolicy = readTractorProducerOverrides({
       createPackage,
-      minimumReleaseAgeExclude,
       packageManager,
       packageManagerRoot,
       runImpl,
@@ -994,13 +918,10 @@ async function runTractorDownstreamAcceptance(
       release,
       producerPolicy,
     );
-    // pnpm validates the existing lock before resolving new dependencies. A
-    // recently accepted previous cohort is outside this candidate's exact
-    // release-age approvals, so resolve the candidate from a fresh native lock.
+    // Resolve this authenticated candidate from a fresh native lock.
     installTractorRelease({
       workspace: options.workspace,
       createPackage,
-      minimumReleaseAgeExclude,
       packageManager,
       runImpl,
     });
@@ -1298,7 +1219,6 @@ export {
   assertSourceCandidateSeedRuntime,
   createReleaseBoundNodeSmokeTargets,
   createTractorPackageManagerContext,
-  createTractorPnpmDlxArgs,
   executeTractorCommands,
   executionCommands,
   installTractorRelease,

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { canonicalJson, sha256 } from './release-age-audit.mjs';
+import { canonicalJson, sha256 } from './dependency-closure-audit.mjs';
 
 function compareCodeUnits(left, right) {
   if (left === right) {
