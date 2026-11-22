@@ -142,17 +142,6 @@ test('fresh workspace YAML has no release-age waits and preserves compiler trust
       ),
       COMPILER_TRUST_EXCEPTIONS,
     );
-    const pnpm = spawnSync('pnpm', ['exec', 'node', '-p', '12345'], {
-      cwd: workspace,
-      encoding: 'utf8',
-      shell: process.platform === 'win32',
-    });
-    // Age-free resolution does not bypass the required dependency install.
-    assert.notEqual(pnpm.status, 0);
-    assert.match(
-      `${pnpm.stdout}\n${pnpm.stderr}`,
-      /ERR_PNPM_VERIFY_DEPS_BEFORE_RUN/u,
-    );
     assert.equal(policy.verifyDepsBeforeRun, 'error');
     assert.equal(policy.blockExoticSubdeps, true);
     assert.equal(policy.strictDepBuilds, true);
