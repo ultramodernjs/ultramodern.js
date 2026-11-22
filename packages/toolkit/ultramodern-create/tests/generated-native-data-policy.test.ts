@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createOctaneWorkerFederationFixtures } from '../../../../tests/ultramodern-renderers/octane-federation-workers/fixtures.mjs';
 import {
-  authorGeneratedWorkerRoutes,
+  generatedWorkerConfig,
   generatedWorkerCoordinates,
 } from '../../../../tests/ultramodern-renderers/octane-federation-workers/generated.mjs';
 import { generateOctaneAppSources } from '../../../runtime/renderer-octane/src/plugin/create';
@@ -137,25 +137,55 @@ const policy = JSON.parse(
   ),
 );
 
-test('serialized Worker routes pass the shipped strict compiler policy', () => {
+test('complete generated Worker configs pass the shipped strict compiler policy', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'worker-routes-policy-'));
   try {
-    const configTypes = path.join(
+    const services = {
+      host: [],
+      remoteA: generatedWorkerCoordinates.remotes.slice(1).map(remote => ({
+        binding: 'VERTICAL_REMOTE_B_WORKER',
+        service: `proof-${remote.id}`,
+        fragments: [
+          {
+            remote: remote.id,
+            boundaryId: remote.moduleFederationName,
+            expose: './Widget',
+            path: '/{locale}/_mf/fragment/widget',
+          },
+        ],
+      })),
+    };
+    const files = [
+      generatedWorkerCoordinates.host,
+      ...generatedWorkerCoordinates.remotes,
+    ].map(app => {
+      const filename = `${app.id}.config.ts`;
+      fs.writeFileSync(
+        path.join(root, filename),
+        generatedWorkerConfig(app, services),
+      );
+      return filename;
+    });
+    const toolsRoot = path.join(
       repoRoot,
-      'packages/solutions/app-tools-extensions/dist/types/config.d.ts',
+      'packages/solutions/ultramodern-app-tools',
     );
-    fs.writeFileSync(
-      path.join(root, 'routes.ts'),
-      `import type { CloudflareWorkerServiceBindingConfig } from ${JSON.stringify(configTypes)};
-type Config = { deploy?: { worker?: { services?: CloudflareWorkerServiceBindingConfig[] } } };
-${authorGeneratedWorkerRoutes.toString().replace('(config, remotes)', '(config: Config, remotes: Array<{ id: string; moduleFederationName: string }>)')}
-`,
+    const toolsLink = path.join(
+      root,
+      'node_modules/@modern-js/ultramodern-app-tools',
     );
+    fs.mkdirSync(path.dirname(toolsLink), { recursive: true });
+    fs.symlinkSync(toolsRoot, toolsLink, 'dir');
     fs.writeFileSync(
       path.join(root, 'tsconfig.json'),
       JSON.stringify({
         compilerOptions: {
           ...policy.compilerOptions,
+          typeRoots: [
+            path.dirname(
+              path.dirname(require.resolve('@types/node/package.json')),
+            ),
+          ],
           types: [
             path.join(
               path.dirname(require.resolve('@types/node/package.json')),
@@ -163,7 +193,7 @@ ${authorGeneratedWorkerRoutes.toString().replace('(config, remotes)', '(config: 
             ),
           ],
         },
-        files: ['routes.ts'],
+        files,
       }),
     );
     for (const compiler of compilers.keys()) {

@@ -104,6 +104,17 @@ export function authorGeneratedWorkerRoutes(config, remotes) {
   };
 }
 
+/** Emit the complete authored build config used by the installed Worker proof. */
+export function generatedWorkerConfig(app, services) {
+  const remotes =
+    app.id === generatedWorkerCoordinates.host.id
+      ? generatedWorkerCoordinates.remotes.map(
+          ({ id, moduleFederationName }) => ({ id, moduleFederationName }),
+        )
+      : [];
+  return `import { defineConfig, i18nPlugin, presetUltramodernWorkspace } from '@modern-js/ultramodern-app-tools';\n${authorGeneratedWorkerRoutes.toString().replace('(config, remotes)', '(config: ReturnType<typeof presetUltramodernWorkspace>, remotes: Array<{ id: string; moduleFederationName: string }>)')}\nconst config = presetUltramodernWorkspace({ deploy: ${authoredJson(generatedWorkerDeploymentInput(app, services))}, plugins: [i18nPlugin({ localeDetection: { fallbackLanguage: 'en', languages: ['en', 'cs'] } })], renderer: 'octane', server: { ssr: true }, source: { mainEntryName: 'main' } }, { appId: ${JSON.stringify(app.id)}, deployTarget: 'cloudflare', from: import.meta.url });\nexport default defineConfig(authorGeneratedWorkerRoutes(config, ${authoredJson(remotes)}));\n`;
+}
+
 /** CodeSmith calls this while authoring, before the generator captures native identities. */
 export function authorGeneratedWorkerApplication(config) {
   const { outputWorkspaceRoot, generatedApp, origins, services, dependencies } =
@@ -173,7 +184,7 @@ export function authorGeneratedWorkerApplication(config) {
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     const authoredConfig =
       relative === 'modern.config.ts'
-        ? `import { defineConfig, i18nPlugin, presetUltramodernWorkspace } from '@modern-js/ultramodern-app-tools';\n${authorGeneratedWorkerRoutes.toString().replace('(config, remotes)', '(config: ReturnType<typeof presetUltramodernWorkspace>, remotes: Array<{ id: string; moduleFederationName: string }>)')}\nconst config = presetUltramodernWorkspace({ deploy: ${authoredJson(generatedWorkerDeploymentInput(selected, services))}, plugins: [i18nPlugin({ localeDetection: { fallbackLanguage: 'en', languages: ['en', 'cs'] } })], renderer: 'octane', server: { ssr: true }, source: { mainEntryName: 'main' } }, { appId: ${JSON.stringify(selected.id)}, deployTarget: 'cloudflare', from: import.meta.url });\nexport default defineConfig(authorGeneratedWorkerRoutes(config, ${authoredJson(selected.id === generatedWorkerCoordinates.host.id ? generatedWorkerCoordinates.remotes : [])}));\n`
+        ? generatedWorkerConfig(selected, services)
         : contents;
     fs.writeFileSync(destination, authoredConfig);
   }
