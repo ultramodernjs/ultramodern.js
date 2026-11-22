@@ -85,7 +85,7 @@ export function authorGeneratedWorkerRoutes(config, remotes) {
           const remote = remotes.find(value =>
             service.fragments?.some(fragment => fragment.remote === value.id),
           );
-          if (!remote) return service;
+          if (remote === undefined) return service;
           return {
             ...service,
             fragments: [
