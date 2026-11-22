@@ -1119,6 +1119,7 @@ five previously invalid advisory rows remain non-authorizing historical prose.
 {
   "schemaVersion": 1,
   "entries": [
+    {"path":"packages/toolkit/types/tests/neutralCliTypes.test.ts","owner":"bleedingdev","reason":"2026-11-23: compile the public NextFunction and RequestHandler error-forwarding contract through native TypeScript, including zero-argument continuation and asynchronous unknown-error propagation; the old declaration fails with TS2554.","dispositions":["inline-patch"]},
     {"path":"packages/toolkit/types/server/utils.d.ts","owner":"bleedingdev","reason":"2026-11-23: correct NextFunction to accept the optional unknown error already forwarded by the native Connect adapters; preserve zero-argument continuation without adding an app-local contract or changing runtime behavior.","dispositions":["inline-patch"]},
     {"path":"packages/cli/adapter-rstest/package.json","owner":"bleedingdev","reason":"2026-11-17 dependency cohort: update the existing registry declarations (@rsbuild/core 2.3.2 to 2.3.3) without changing package ownership or the shape of the dependency graph.","dispositions":["inline-patch","keep-[M]"]},
     {"path":"packages/cli/builder/package.json","owner":"bleedingdev","reason":"2026-11-17 dependency cohort: update the existing registry declarations (@rsbuild/core 2.3.2 to 2.3.3, browserslist 4.29.5 to 4.29.6, postcss-custom-properties 15.0.4 to 15.0.5) without changing package ownership or the shape of the dependency graph.","dispositions":["inline-patch","keep-[M]"]},
@@ -3184,6 +3185,7 @@ five previously invalid advisory rows remain non-authorizing historical prose.
 <!-- fork-evidence:table -->
 | Upstream-owned path | Owner | Reason | Disposition |
 | --- | --- | --- | --- |
+| `packages/toolkit/types/tests/neutralCliTypes.test.ts` | bleedingdev | 2026-11-23: compile the public NextFunction and RequestHandler error-forwarding contract through native TypeScript, including zero-argument continuation and asynchronous unknown-error propagation; the old declaration fails with TS2554. | `inline-patch` |
 | `packages/toolkit/types/server/utils.d.ts` | bleedingdev | 2026-11-23: correct NextFunction to accept the optional unknown error already forwarded by the native Connect adapters; preserve zero-argument continuation without adding an app-local contract or changing runtime behavior. | `inline-patch` |
 | `packages/cli/adapter-rstest/package.json` | bleedingdev | 2026-11-17 dependency cohort: update the existing registry declarations (@rsbuild/core 2.3.2 to 2.3.3) without changing package ownership or the shape of the dependency graph. | `inline-patch` + `keep-[M]` |
 | `packages/cli/builder/package.json` | bleedingdev | 2026-11-17 dependency cohort: update the existing registry declarations (@rsbuild/core 2.3.2 to 2.3.3, browserslist 4.29.5 to 4.29.6, postcss-custom-properties 15.0.4 to 15.0.5) without changing package ownership or the shape of the dependency graph. | `inline-patch` + `keep-[M]` |
