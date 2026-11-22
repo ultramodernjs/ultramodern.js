@@ -26,6 +26,12 @@ export async function packedMfCohortProbeMain(sdkProbe) {
     'sdk',
     'webpack-bundler-runtime',
   ];
+  const expectedVersion = suffix =>
+    suffix === 'node'
+      ? '2.7.54'
+      : suffix === 'modern-js-v3'
+        ? '2.9.6'
+        : '2.9.5';
   const roots = new Map();
   for (const suffix of suffixes) {
     const name = `@bleedingdev/mf-${suffix}`;
@@ -44,7 +50,7 @@ export async function packedMfCohortProbeMain(sdkProbe) {
     }
     assert.equal(
       manifest.version,
-      suffix === 'node' ? '2.7.54' : '2.9.5',
+      expectedVersion(suffix),
       `${name} cohort drift`,
     );
     roots.set(suffix, directory);
@@ -63,7 +69,7 @@ export async function packedMfCohortProbeMain(sdkProbe) {
         const target = `@bleedingdev/mf-${child}`;
         assert.equal(
           specifier,
-          `npm:${target}@${child === 'node' ? '2.7.54' : '2.9.5'}`,
+          `npm:${target}@${expectedVersion(child)}`,
           `${name} uncorrected runtime edge ${dependency}`,
         );
         let resolved = path.dirname(from.resolve(dependency));
@@ -77,7 +83,7 @@ export async function packedMfCohortProbeMain(sdkProbe) {
           target,
           `${name} resolved upstream ${dependency}`,
         );
-        assert.equal(installed.version, child === 'node' ? '2.7.54' : '2.9.5');
+        assert.equal(installed.version, expectedVersion(child));
       }
     }
   }
@@ -580,6 +586,27 @@ export async function packedMfCohortProbeMain(sdkProbe) {
   for (const format of ['cjs', 'esm-node', 'esm']) {
     const extension = format === 'cjs' ? 'js' : 'mjs';
     const directory = roots.get('modern-js-v3');
+    const modernRequire = createRequire(path.join(directory, 'package.json'));
+    const cliFile = path.join(
+      directory,
+      `dist/${format}/cli/index.${extension}`,
+    );
+    const cli =
+      format === 'cjs' ? installedRequire(cliFile) : await load(cliFile);
+    // Enhanced's shared root entry forwards its SDK CommonJS singleton.
+    const enhancedRequire = createRequire(
+      modernRequire.resolve('@module-federation/enhanced'),
+    );
+    const sdk = enhancedRequire('@module-federation/sdk');
+    assert.equal(
+      cli.createModuleFederationConfig,
+      sdk.createModuleFederationConfig,
+    );
+    assert.equal(cli.default, cli.moduleFederationPlugin);
+    assert.equal(
+      cli.moduleFederationPlugin().name,
+      '@modern-js/plugin-module-federation',
+    );
     const react =
       format === 'cjs'
         ? installedRequire(
@@ -588,7 +615,6 @@ export async function packedMfCohortProbeMain(sdkProbe) {
         : await load(
             path.join(directory, `dist/${format}/react/index.${extension}`),
           );
-    const modernRequire = createRequire(path.join(directory, 'package.json'));
     let bridgeRoot = path.dirname(
       modernRequire.resolve('@module-federation/bridge-react/base'),
     );

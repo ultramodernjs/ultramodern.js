@@ -54,4 +54,35 @@ test('serialized MF cohort probe rejects missing, linked and stale physical iden
   result = run();
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /physically installed/u);
+  fs.rmSync(directory);
+  const { sidecarProfile } = await import('../sidecar-profiles.mjs');
+  for (const [name, version] of Object.entries(
+    sidecarProfile('mf-cohort').dependencies,
+  )) {
+    const installed = path.join(root, 'node_modules', name);
+    fs.mkdirSync(installed, { recursive: true });
+    fs.writeFileSync(
+      path.join(installed, 'package.json'),
+      JSON.stringify({
+        name,
+        version,
+        ...(name === '@bleedingdev/mf-enhanced'
+          ? { peerDependencies: { webpack: '^5.112.2' } }
+          : {}),
+      }),
+    );
+  }
+  result = run();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /mf-runtime-core[/\\]dist[/\\]index\.cjs/u);
+  const modern = path.join(
+    root,
+    'node_modules/@bleedingdev/mf-modern-js-v3/package.json',
+  );
+  const manifest = JSON.parse(fs.readFileSync(modern, 'utf8'));
+  assert.equal(manifest.version, '2.9.6');
+  fs.writeFileSync(modern, JSON.stringify({ ...manifest, version: '2.9.5' }));
+  result = run();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /mf-modern-js-v3 cohort drift/u);
 });
