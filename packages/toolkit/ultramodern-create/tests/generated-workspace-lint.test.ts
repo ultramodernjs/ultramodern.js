@@ -23,6 +23,9 @@ const ultraciteRequire = createRequire(
 );
 const lintDependencyPackageDirs = {
   '@modern-js/ultramodern-create': packageRoot,
+  '@types/node': path.dirname(
+    createRequire(import.meta.url).resolve('@types/node/package.json'),
+  ),
   oxfmt: path.dirname(ultraciteRequire.resolve('oxfmt/package.json')),
   oxlint: path.dirname(ultraciteRequire.resolve('oxlint/package.json')),
   ultracite: ultracitePackageDir,

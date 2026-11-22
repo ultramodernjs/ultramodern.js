@@ -5,6 +5,11 @@ const returnDiagnosticCodes = new Set([7030, 2366, 2355]);
 
 export function checkReturnValues(context: SemanticContext): void {
   const { program, sourceFile, report } = context;
+  if (program.getCompilerOptions().noCheck === true) {
+    throw new Error(
+      `Semantic lint requires noCheck to be disabled in the configured project for ${sourceFile.fileName}`,
+    );
+  }
   if (program.getCompilerOptions().noImplicitReturns !== true) {
     throw new Error(
       `Semantic lint requires noImplicitReturns: true in the configured project for ${sourceFile.fileName}`,

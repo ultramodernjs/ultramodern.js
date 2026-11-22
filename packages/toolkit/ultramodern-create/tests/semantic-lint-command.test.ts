@@ -88,6 +88,48 @@ test('semantic runner rejects a broken project configuration', () => {
   });
 });
 
+test('semantic runner rejects noCheck instead of silently skipping return checking', () => {
+  fixture((root, write) => {
+    write(
+      'tsconfig.json',
+      '{"compilerOptions":{"strict":true,"noImplicitReturns":true,"noCheck":true,"types":[]},"files":["input.ts"]}',
+    );
+    write(
+      'input.ts',
+      'export function missing(flag: boolean) { if (flag) return 1; }',
+    );
+    assert.throws(
+      () => lintSemanticWorkspace(root, ['input.ts']),
+      /Semantic lint requires noCheck to be disabled/u,
+    );
+  });
+});
+
+test('semantic runner rejects invalid compiler-option combinations', () => {
+  fixture((root, write) => {
+    write(
+      'tsconfig.json',
+      '{"compilerOptions":{"strict":true,"noImplicitReturns":true,"moduleResolution":"NodeNext","module":"Preserve","types":[]},"files":["input.ts"]}',
+    );
+    write('input.ts', 'export const value = 1;');
+    assert.throws(
+      () => lintSemanticWorkspace(root, ['input.ts']),
+      /Invalid semantic lint project.*module.*NodeNext/u,
+    );
+  });
+});
+
+test('semantic runner leaves unrelated source type errors to the typecheck', () => {
+  fixture((root, write) => {
+    write(
+      'tsconfig.json',
+      '{"compilerOptions":{"strict":true,"noImplicitReturns":true,"types":[]},"files":["input.ts"]}',
+    );
+    write('input.ts', 'export const value: string = 1;');
+    assert.deepEqual(lintSemanticWorkspace(root, ['input.ts']).diagnostics, []);
+  });
+});
+
 test('semantic runner fails for empty, missing and malformed source selection', () => {
   fixture((root, write) => {
     assert.throws(() => lintSemanticWorkspace(root, []), /at least one/u);
@@ -262,6 +304,14 @@ test('a generated shell-only workspace has real project coverage for every lint 
   const { tempRoot, workspaceDir } = await createWorkspace('semantic-coverage');
   try {
     linkInstalledCompilerPolicy(workspaceDir);
+    const require = createRequire(import.meta.url);
+    const nodeTypes = path.join(workspaceDir, 'node_modules/@types/node');
+    fs.mkdirSync(path.dirname(nodeTypes), { recursive: true });
+    fs.symlinkSync(
+      path.dirname(require.resolve('@types/node/package.json')),
+      nodeTypes,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
     const result = lintSemanticWorkspace(workspaceDir, [
       'apps/*',
       'verticals/*',

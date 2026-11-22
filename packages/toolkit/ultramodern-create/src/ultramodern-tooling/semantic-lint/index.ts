@@ -117,8 +117,10 @@ export function lintSemanticWorkspace(
           );
         }
         if (!projects.has(project.configFileName)) {
-          const configErrors =
-            project.program.getConfigFileParsingDiagnostics();
+          const configErrors = [
+            ...project.program.getConfigFileParsingDiagnostics(),
+            ...project.program.getProgramDiagnostics(),
+          ];
           if (configErrors.length > 0) {
             throw new Error(
               `Invalid semantic lint project ${project.configFileName}: ${configErrors.map(error => error.text).join('; ')}`,
