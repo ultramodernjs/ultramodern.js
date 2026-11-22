@@ -4,7 +4,10 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { createOctaneWorkerFederationFixtures } from '../../../../tests/ultramodern-renderers/octane-federation-workers/fixtures.mjs';
-import { generatedWorkerCoordinates } from '../../../../tests/ultramodern-renderers/octane-federation-workers/generated.mjs';
+import {
+  authorGeneratedWorkerRoutes,
+  generatedWorkerCoordinates,
+} from '../../../../tests/ultramodern-renderers/octane-federation-workers/generated.mjs';
 import { generateOctaneAppSources } from '../../../runtime/renderer-octane/src/plugin/create';
 import { generateSolidAppSources } from '../../../runtime/renderer-solid/src/plugin/create';
 
@@ -133,6 +136,57 @@ const policy = JSON.parse(
     'utf8',
   ),
 );
+
+test('serialized Worker routes pass the shipped strict compiler policy', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'worker-routes-policy-'));
+  try {
+    const configTypes = path.join(
+      repoRoot,
+      'packages/solutions/app-tools-extensions/dist/types/config.d.ts',
+    );
+    fs.writeFileSync(
+      path.join(root, 'routes.ts'),
+      `import type { CloudflareWorkerServiceBindingConfig } from ${JSON.stringify(configTypes)};
+type Config = { deploy?: { worker?: { services?: CloudflareWorkerServiceBindingConfig[] } } };
+${authorGeneratedWorkerRoutes.toString().replace('(config, remotes)', '(config: Config, remotes: Array<{ id: string; moduleFederationName: string }>)')}
+`,
+    );
+    fs.writeFileSync(
+      path.join(root, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: {
+          ...policy.compilerOptions,
+          types: [
+            path.join(
+              path.dirname(require.resolve('@types/node/package.json')),
+              'index.d.ts',
+            ),
+          ],
+        },
+        files: ['routes.ts'],
+      }),
+    );
+    for (const compiler of compilers.keys()) {
+      const result = spawnSync(
+        compiler,
+        ['--project', root, '--pretty', 'false'],
+        {
+          cwd: root,
+          encoding: 'utf8',
+          timeout: 30_000,
+          env: { ...process.env, TSRS_CHECKER_ASSIGNMENT: 'go' },
+        },
+      );
+      if (result.error) throw result.error;
+      expect({
+        status: result.status,
+        output: `${result.stdout}${result.stderr}`,
+      }).toEqual({ status: 0, output: '' });
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test.each([
   ['solid', generateSolidAppSources],
