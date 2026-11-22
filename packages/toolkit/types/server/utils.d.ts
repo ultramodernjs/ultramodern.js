@@ -64,7 +64,7 @@ export type Reporter<C = any> = {
   ) => void;
 };
 
-export type NextFunction = () => void;
+export type NextFunction = (error?: unknown) => void;
 
 export type ProxyDetail = ProxyOptions & {
   bypass?: (

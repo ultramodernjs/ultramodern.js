@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import type { RequestHandler } from '@modern-js/types/server';
 import {
   connectMid2HonoMid,
   connectMockMid2HonoMid,
@@ -44,9 +45,13 @@ describe.each([
 
   it('rejects with the error the middleware passes to next', async () => {
     const { context } = createContext();
-    const middleware = adapt((_req, _res, done) => done(new Error('boom')));
+    const error = new Error('boom');
+    const handler: RequestHandler = (_req, _res, done) => {
+      queueMicrotask(() => done(error));
+    };
+    const middleware = adapt(handler);
 
-    await expect(middleware(context, async () => {})).rejects.toThrow('boom');
+    await expect(middleware(context, async () => {})).rejects.toBe(error);
   });
   it('keeps request context when compilation resumes next outside its scope', async () => {
     const { context } = createContext();

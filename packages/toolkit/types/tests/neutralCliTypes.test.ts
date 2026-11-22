@@ -91,3 +91,23 @@ describe('canonical CLI declaration contracts', () => {
     );
   });
 });
+
+it('accepts native development middleware error forwarding through the public server contract', () => {
+  check(
+    `
+    import type { NextFunction, RequestHandler } from './server';
+    declare const failure: unknown;
+    const next: NextFunction = () => {};
+    next();
+    next(undefined);
+    next(null);
+    next(new Error('filesystem read failed'));
+    next(failure);
+    const middleware: RequestHandler = (_request, _response, done) => {
+      queueMicrotask(() => done(new Error('asynchronous read failed')));
+    };
+    void middleware;
+    `,
+    'node',
+  );
+});
