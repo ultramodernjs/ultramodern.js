@@ -180,7 +180,7 @@ function reviewedSourcePins(read) {
     [`${proof}constants.mjs`]: [`playwright@${targets.playwright}`],
     [registry]: ["const VERDACCIO_VERSION = '7.1.1", verdaccioIntegrity],
     [devcert]: ['devcert@1.2.3'],
-    [`${proof}release-age-audit.mjs`]: ["const YAML_VERSION = '5.5.0"],
+    [`${proof}dependency-closure-audit.mjs`]: ["const YAML_VERSION = '5.5.0"],
     'scripts/ultramodern-renderers/provision-agent-browser.mjs': [
       "const version = '0.43.0'",
       '8e69c9fb662514c9cf36e4911e94e913742ba066e55102486350e049dd847612',

@@ -1173,10 +1173,10 @@ test('authored packed workspace keeps exact aliases, strict policy and one share
       path.join(options.directory, 'pnpm-workspace.yaml'),
       'utf8',
     );
-    assert.match(policy, /minimumReleaseAge: 1440/u);
-    assert.match(policy, /minimumReleaseAgeStrict: true/u);
-    assert.match(policy, /minimumReleaseAgeIgnoreMissingTime: false/u);
-    assert.match(policy, /minimumReleaseAgeExclude: \[\]/u);
+    assert.match(policy, /minimumReleaseAge: 0/u);
+    assert.doesNotMatch(policy, /minimumReleaseAgeStrict/u);
+    assert.doesNotMatch(policy, /minimumReleaseAgeIgnoreMissingTime/u);
+    assert.doesNotMatch(policy, /minimumReleaseAgeExclude/u);
     assert.equal(fs.existsSync(path.join(app, 'pnpm-workspace.yaml')), false);
   } finally {
     fs.rmSync(supplied.root, { recursive: true });

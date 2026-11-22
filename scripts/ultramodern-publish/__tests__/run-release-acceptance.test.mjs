@@ -9,7 +9,7 @@ import * as receiptApi from '../../ultramodern-production-readiness/published-cr
 import {
   canonicalJson,
   sha256,
-} from '../../ultramodern-production-readiness/published-create-proof/release-age-audit.mjs';
+} from '../../ultramodern-production-readiness/published-create-proof/dependency-closure-audit.mjs';
 
 const { createOperationalAcceptanceReceiptFixture, fixtureClosureSha256 } =
   fixtureApi;
@@ -85,7 +85,6 @@ test('published CLI authenticates source acceptance and verifies full published 
     });
     receiptApi.bindSupplyChainEvidence(receipt, {
       closureSha256: fixtureClosureSha256,
-      exceptionPolicySha256: 'd'.repeat(64),
       lockSha256: 'e'.repeat(64),
       registryMetadataSha256: 'f'.repeat(64),
       releaseManifestSha256: release.manifestSha256,

@@ -24,10 +24,6 @@ import { run } from '../ultramodern-production-readiness/published-create-proof/
 import { readReleaseManifest } from './lib/source-create-proof/release-manifest.mjs';
 import { startEphemeralRegistry } from './lib/source-create-proof/runtime-proof/registry.mjs';
 
-const defaultReleaseAgePolicyPath = fileURLToPath(
-  new URL('./release-age-exceptions-2026-08-10.json', import.meta.url),
-);
-
 const valueOptions = new Set([
   '--cloudflare-run-log',
   '--continue-from',
@@ -40,7 +36,6 @@ const valueOptions = new Set([
   '--prior-run-log',
   '--receipt',
   '--registry-url',
-  '--release-age-policy',
   '--run-identity',
   '--scale-profile',
   '--shell-finalization',
@@ -203,9 +198,6 @@ function parseArgs(argv) {
     projectName: defaultProjectName,
     receiptPath: path.resolve(receipt),
     registryUrl: values.get('--registry-url') ?? 'https://registry.npmjs.org/',
-    releaseAgePolicyPath: values.has('--release-age-policy')
-      ? path.resolve(values.get('--release-age-policy'))
-      : defaultReleaseAgePolicyPath,
     releaseDir,
     runIdentity: values.get('--run-identity'),
     scaleProfile,
@@ -412,7 +404,6 @@ async function runPrepublish({
       options: profileOptions(options),
       outPath: options.receiptPath,
       runIdentity,
-      releaseAgePolicyPath: options.releaseAgePolicyPath,
       storeDir: options.storeDir,
       // A supplied directory remains owned by the caller on success or failure.
       workDir: options.workDir,
@@ -454,7 +445,6 @@ async function runPublished({
     options: profileOptions(options),
     outPath: options.receiptPath,
     runIdentity,
-    releaseAgePolicyPath: options.releaseAgePolicyPath,
     storeDir: options.storeDir,
   });
 }
@@ -512,7 +502,6 @@ if (
 
 export {
   assertExpectedRelease,
-  defaultReleaseAgePolicyPath,
   main,
   parseArgs,
   profileOptions,

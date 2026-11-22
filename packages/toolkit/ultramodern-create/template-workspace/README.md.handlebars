@@ -137,7 +137,7 @@ The topology and ownership metadata are generated under `topology/`. The
 workspace also ships `.github/workflows/ultramodern-workspace-gates.yml` and
 `.github/renovate.json` with read-only workflow permissions, commit-pinned
 actions, frozen installs, StepSecurity audit-mode runner hardening, dependency
-dashboard review, one-day release age, grouped updates, and manual approval for
+dashboard review, grouped updates, and manual approval for
 major upgrades.
 
 Published framework versions live in `catalogs.ultramodern` in
@@ -217,7 +217,8 @@ in API modules.
 
 The generated Effect dependency selects the framework-qualified runtime.
 Corrected dependencies ship as packages, so applications do not need framework
-patches or root overrides. Normal installs retain release-age and trust checks.
+patches or root overrides. Normal installs allow new releases immediately while
+retaining integrity and no-downgrade trust checks.
 
 ## Troubleshooting
 

@@ -235,8 +235,7 @@ function snapshotPackedManifest(root, directory, manifestPath) {
     !source.packages ||
     !Object.keys(source.packages).length ||
     !source.sidecars ||
-    !source.allowBuilds ||
-    !Array.isArray(source.minimumReleaseAgeExclude)
+    !source.allowBuilds
   ) {
     throw new Error('Packed prerequisite manifest is incomplete');
   }
@@ -359,8 +358,7 @@ function validatePackedSnapshot(root, directory, packed) {
     !manifest?.packages ||
     !Object.keys(manifest.packages).length ||
     !manifest.sidecars ||
-    !manifest.allowBuilds ||
-    !Array.isArray(manifest.minimumReleaseAgeExclude)
+    !manifest.allowBuilds
   )
     throw new Error('Packed cache manifest is invalid');
   const referenced = new Set();

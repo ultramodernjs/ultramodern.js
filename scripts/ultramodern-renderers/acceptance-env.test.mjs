@@ -142,10 +142,7 @@ test('renderer starter installs the exact reviewed compiler with source registry
   const workspacePath = path.join(root, 'pnpm-workspace.yaml');
   const policy = {
     packages: ['.'],
-    minimumReleaseAge: 1440,
-    minimumReleaseAgeStrict: true,
-    minimumReleaseAgeIgnoreMissingTime: false,
-    minimumReleaseAgeExclude: [compiler],
+    minimumReleaseAge: 0,
     trustPolicy: 'no-downgrade',
     trustPolicyIgnoreAfter: 1440,
     trustPolicyExclude: [compiler],
@@ -195,14 +192,14 @@ test('renderer starter installs the exact reviewed compiler with source registry
 });
 
 for (const mode of ['source', 'published'])
-  test(`${mode} renderer policy retains only authenticated exceptions and strict release age`, t => {
+  test(`${mode} renderer policy retains only authenticated trust exceptions without release-age waits`, t => {
     const { registryEnv, storeDir } = fixture(t);
     const runtimeEnv = {
       PATH: '/qualified/bin',
       npm_config_registry: 'https://registry.npmjs.org/',
       PNPM_CONFIG_TRUST_POLICY: 'off',
       npm_config_trust_policy_exclude: '["*"]',
-      pnpm_config_minimum_release_age: '0',
+      pnpm_config_minimum_release_age: '1440',
       NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["*"]',
       pnpm_config_pm_on_fail: 'error',
     };
@@ -218,29 +215,16 @@ for (const mode of ['source', 'published'])
     assert.equal(env.PNPM_CONFIG_TRUST_POLICY_EXCLUDE, undefined);
     assert.equal(env.npm_config_trust_policy_exclude, undefined);
     assert.equal(env.NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE, undefined);
-    assert.equal(env.pnpm_config_minimum_release_age, '1440');
-    assert.equal(env.pnpm_config_minimum_release_age_strict, 'true');
+    assert.equal(env.pnpm_config_minimum_release_age, '0');
+    assert.equal(env.pnpm_config_minimum_release_age_strict, undefined);
     assert.equal(
       env.pnpm_config_minimum_release_age_ignore_missing_time,
-      'false',
+      undefined,
     );
     assert.equal(env.pnpm_config_pm_on_fail, 'error');
     assert.equal(env.npm_config_registry, runtimeEnv.npm_config_registry);
     assert.equal(env.npm_config_store_dir, storeDir);
-    assert.deepEqual(JSON.parse(env.pnpm_config_minimum_release_age_exclude), [
-      ...cohort,
-      ...[
-        'darwin-arm64',
-        'darwin-x64',
-        'linux-arm64-gnu',
-        'linux-arm64-musl',
-        'linux-x64-gnu',
-        'linux-x64-musl',
-        'win32-arm64',
-        'win32-x64',
-      ].map(platform => `@tsrs/${platform}@${compilerVersion}`),
-      compiler,
-    ]);
+    assert.equal(env.pnpm_config_minimum_release_age_exclude, undefined);
     if (mode === 'source')
       assert.deepEqual(JSON.parse(env.pnpm_config_trust_policy_exclude), [
         ...cohort,

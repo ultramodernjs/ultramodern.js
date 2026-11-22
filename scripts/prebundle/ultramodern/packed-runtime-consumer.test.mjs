@@ -236,9 +236,7 @@ test('packed runtime registry and TanStack runtime declarations resolve for a Ty
       stringify({
         packages: ['.'],
         overrides,
-        minimumReleaseAgeExclude: parse(
-          readFileSync(join(root, 'pnpm-workspace.yaml'), 'utf8'),
-        ).minimumReleaseAgeExclude.filter(selector => !selector.includes('*')),
+        minimumReleaseAge: 0,
       }),
     );
 

@@ -15,8 +15,8 @@ import {
   assertCohortResolutionProvenance,
   createAcceptancePackageManagerEnv,
 } from '../published-create-proof/acceptance-profile.mjs';
+import { parseYamlFile } from '../published-create-proof/dependency-closure-audit.mjs';
 import { createAcceptanceWorkspaceEnv } from '../published-create-proof/process.mjs';
-import { parseYamlFile } from '../published-create-proof/release-age-audit.mjs';
 import { registerOwnedRoot } from '../react-rsc-worker-proof/lifecycle.mjs';
 import { runCommand } from '../react-rsc-worker-proof/main.mjs';
 import {
@@ -258,11 +258,6 @@ export async function runProof(provided) {
     });
     const policy = parseYamlFile(path.join(consumer, 'pnpm-workspace.yaml'));
     receipt.installPolicy = {
-      minimumReleaseAge: policy.minimumReleaseAge,
-      minimumReleaseAgeStrict: policy.minimumReleaseAgeStrict,
-      minimumReleaseAgeIgnoreMissingTime:
-        policy.minimumReleaseAgeIgnoreMissingTime,
-      minimumReleaseAgeExclude: policy.minimumReleaseAgeExclude,
       trustPolicy: policy.trustPolicy,
       trustPolicyIgnoreAfter: policy.trustPolicyIgnoreAfter,
       pmOnFail: env.pnpm_config_pm_on_fail,

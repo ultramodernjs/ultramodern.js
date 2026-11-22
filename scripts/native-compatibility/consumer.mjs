@@ -472,7 +472,6 @@ export function createNativeConsumer(
             ? {
                 overrides,
                 allowBuilds: manifest.allowBuilds,
-                minimumReleaseAgeExclude: manifest.minimumReleaseAgeExclude,
               }
             : {
                 overrides,

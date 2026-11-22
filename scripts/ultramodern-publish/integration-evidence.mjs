@@ -7,7 +7,7 @@
 // the lockfile and the tests, so a second run repeats ~10 minutes of Windows
 // and Linux shards on the same source. It does not pin everything a run
 // depends on: the generator and fresh-consumer suites install third-party
-// packages from the registry under the release-age window, and runner images
+// packages from the registry without a release-age wait, and runner images
 // and the clock move. Reuse therefore accepts a result at most 24 hours old
 // instead of one taken at publish time; the Linux acceptance legs still
 // install against the registry at publish time. This selector finds that

@@ -307,7 +307,7 @@ export async function qualifyDtsPlugin({
         },
       },
       'pnpm-workspace.yaml':
-        'packages: []\nminimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\nstrictPeerDependencies: true\nautoInstallPeers: false\npackageImportMethod: clone-or-copy\n',
+        'packages: []\nminimumReleaseAge: 0\nstrictPeerDependencies: true\nautoInstallPeers: false\npackageImportMethod: clone-or-copy\n',
     });
     const install = run(
       pnpm,

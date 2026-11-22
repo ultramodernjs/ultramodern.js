@@ -167,9 +167,8 @@ explicit `TSRS_CHECKER_ASSIGNMENT` is kept; with `fast: false` it defaults to
 `locality`. Octane apps retain `octane-tsc` for their native TS7 checker.
 All renderer profiles retain exact stable `typescript@7.0.2` for metadata and
 tool dependencies. This is separate from tsrs's embedded TypeScript
-`7.1.0-beta`. Only these exact compiler releases and their declared native
-platform packages receive a release-age exception; the strict 24-hour gate
-still applies to other packages apart from the authenticated release cohort.
+`7.1.0-beta`. Package releases can be installed immediately, without
+release-age waits or per-version age exceptions.
 Generated app/package source must not
 depend on compiler API internals. If a future AST utility is needed, keep it
 behind a dedicated TypeScript adapter and test it against stable `typescript`.
@@ -262,7 +261,7 @@ Application manifests own package identity; the development overlay owns local p
 
 | Strategy | Use when | CLI |
 | --- | --- | --- |
-| `install` | Published BleedingDev package cohort or release proof | Default for the BleedingDev create package; optional `--ultramodern-package-version`, `--ultramodern-package-registry` (serves the cohort scope only; release-age metadata for every other dependency is validated against npmjs), `--ultramodern-package-scope`, and `--ultramodern-package-name-prefix` |
+| `install` | Published BleedingDev package cohort or release proof | Default for the BleedingDev create package; optional `--ultramodern-package-version`, `--ultramodern-package-registry` (serves the cohort scope only), `--ultramodern-package-scope`, and `--ultramodern-package-name-prefix` |
 | `workspace` | Local monorepo testing against unreleased packages | `--workspace` or `--ultramodern-package-source=workspace` |
 
 ## Framework dependencies
@@ -279,15 +278,9 @@ for local monorepo development. After installation, run `pnpm contract:check`,
 which invokes the installed CLI directly. The installed generator owns its
 release-integrity metadata.
 
-Normal installs retain the generated strict 24-hour release-age and trust
-policy. The one exception is `minimumReleaseAgeExclude`: it lists the exact
-`package@version` of every package in the cohort the create package ships, so a
-workspace created on the day that cohort is published can install it. Every
-other dependency still waits 24 hours, including a cohort selected with
-`--ultramodern-package-version` that differs from the create package's own; to
-install a fresh cohort on publish day, run that release's create package.
-Release acceptance adds exact, temporary exceptions for the sidecars under test
-on the command line.
+Normal installs allow every package release immediately, without release-age
+waits or exemption lists. Frozen-lockfile, integrity, authenticated release
+cohort, and no-downgrade trust checks remain enforced.
 
 ## CodeSmith Adapter And Overlays
 

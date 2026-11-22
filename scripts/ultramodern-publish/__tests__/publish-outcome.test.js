@@ -200,7 +200,6 @@ async function createEvidenceFixture({
     });
     receiptApi.bindSupplyChainEvidence(receipt, {
       closureSha256: fixtureClosureSha256,
-      exceptionPolicySha256: digest('exceptions'),
       lockSha256: digest('lock'),
       registryMetadataSha256: digest('registry'),
       releaseManifestSha256: manifestSha256,

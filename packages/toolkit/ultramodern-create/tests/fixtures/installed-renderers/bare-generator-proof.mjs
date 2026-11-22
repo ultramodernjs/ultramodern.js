@@ -6,10 +6,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { assertCohortResolutionProvenance } from '../../../../../../scripts/ultramodern-production-readiness/published-create-proof/acceptance-profile.mjs';
-import {
-  assertBootstrapReleaseAgePolicy,
-  resolveCreatePackage,
-} from '../../../../../../scripts/ultramodern-production-readiness/published-create-proof/package-cohort.mjs';
+import { resolveCreatePackage } from '../../../../../../scripts/ultramodern-production-readiness/published-create-proof/package-cohort.mjs';
 import {
   inspectNpmTarball,
   readVerifiedPackageArtifactBytes,
@@ -79,9 +76,8 @@ export function createBareManifest(release) {
   };
 }
 
-/** Install exceptions belong to the authenticated bootstrap, never authored YAML. */
-export function createBareInstallSetup(createPackage, allowBuilds, runtimeEnv) {
-  const policy = assertBootstrapReleaseAgePolicy(createPackage);
+/** Bare installs admit every release without changing trust settings. */
+export function createBareInstallSetup(allowBuilds, runtimeEnv) {
   assert.ok(
     allowBuilds &&
       typeof allowBuilds === 'object' &&
@@ -100,29 +96,15 @@ export function createBareInstallSetup(createPackage, allowBuilds, runtimeEnv) {
     if (setting && ageSettings.has(setting.replace(/[_-]/gu, '').toLowerCase()))
       delete env[name];
   }
-  Object.assign(env, {
-    pnpm_config_minimum_release_age: String(policy.minimumReleaseAge),
-    pnpm_config_minimum_release_age_exclude: JSON.stringify(
-      policy.minimumReleaseAgeExclude,
-    ),
-    pnpm_config_minimum_release_age_strict: String(
-      policy.minimumReleaseAgeStrict,
-    ),
-    pnpm_config_minimum_release_age_ignore_missing_time: String(
-      policy.minimumReleaseAgeIgnoreMissingTime,
-    ),
-  });
+  env.pnpm_config_minimum_release_age = '0';
   const workspaceBytes = Buffer.from(
     stringifyYaml({
       packages: ['.'],
       allowBuilds,
-      minimumReleaseAge: policy.minimumReleaseAge,
-      minimumReleaseAgeStrict: policy.minimumReleaseAgeStrict,
-      minimumReleaseAgeIgnoreMissingTime:
-        policy.minimumReleaseAgeIgnoreMissingTime,
+      minimumReleaseAge: 0,
     }),
   );
-  return { env, bootstrapReleaseAgePolicy: policy, workspaceBytes };
+  return { env, workspaceBytes };
 }
 
 export function assertBareWorkspacePolicyUnchanged(file, authoredBytes) {
@@ -134,7 +116,7 @@ export function assertBareWorkspacePolicyUnchanged(file, authoredBytes) {
   const installedBytes = fs.readFileSync(file);
   assert.ok(
     installedBytes.equals(authoredBytes),
-    'Install changed the strict exception-free bare workspace policy',
+    'Install changed the bare workspace policy',
   );
   return {
     path: file,
@@ -345,12 +327,15 @@ export async function withBareGeneratorProof(
     'qualifiedNode must be absolute',
   );
   const release = readReleaseManifest({ manifestPath: options.manifestPath });
-  const createPackage = resolveCreatePackage(release);
+  resolveCreatePackage(release);
   const baseEnv = runtimeEnv(options.qualifiedNode);
   const observedNode = run(
     options.qualifiedNode,
     ['--print', 'process.versions.node'],
-    { cwd: consumerRoot, env: baseEnv },
+    {
+      cwd: consumerRoot,
+      env: baseEnv,
+    },
   ).output;
   assert.equal(
     observedNode,
@@ -386,7 +371,6 @@ export async function withBareGeneratorProof(
     );
     const env = runtimeEnv(options.qualifiedNode, registry.env);
     const installSetup = createBareInstallSetup(
-      createPackage,
       rootWorkspace?.allowBuilds,
       env,
     );
@@ -502,21 +486,13 @@ export async function withBareGeneratorProof(
       directDependencies: manifest.dependencies,
       cohortResolution,
       installedBytes,
-      bootstrapReleaseAgePolicy: installSetup.bootstrapReleaseAgePolicy,
       bareWorkspacePolicy,
       installCommand: {
         command: 'pnpm',
         args: installArgs,
-        releaseAgeEnv: {
+        env: {
           pnpm_config_minimum_release_age:
             installSetup.env.pnpm_config_minimum_release_age,
-          pnpm_config_minimum_release_age_exclude:
-            installSetup.env.pnpm_config_minimum_release_age_exclude,
-          pnpm_config_minimum_release_age_strict:
-            installSetup.env.pnpm_config_minimum_release_age_strict,
-          pnpm_config_minimum_release_age_ignore_missing_time:
-            installSetup.env
-              .pnpm_config_minimum_release_age_ignore_missing_time,
         },
       },
       installOutputSha256: install.sha256,

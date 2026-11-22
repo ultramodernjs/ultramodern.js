@@ -88,11 +88,9 @@ const { startEphemeralRegistry } = await harness(
 const { readCohort, checkInstalledCohort } = await harness(
   'scripts/ultramodern-renderers/installed-cohort.mjs',
 );
-const { releaseAgeExemptions } = await harness(
-  'scripts/ultramodern-production-readiness/published-create-proof/release-age-audit.mjs',
+const { createRendererAcceptanceEnv } = await harness(
+  'scripts/ultramodern-renderers/acceptance-env.mjs',
 );
-const { captureReleaseAgeExclusions, assertReleaseAgeExclusionsUnchanged } =
-  await harness('scripts/ultramodern-renderers/release-age-policy.mjs');
 const { registerOwnedRoot } = await harness(
   'scripts/ultramodern-production-readiness/react-rsc-worker-proof/lifecycle.mjs',
 );
@@ -233,26 +231,34 @@ try {
         rootDir: path.join(workRoot, 'registry'),
         storeDir,
       });
-  const env = {
-    ...process.env,
+  // A source child inherits the chosen registry userconfig, not a new registry
+  // object. Reconstruct only the authenticated manifest's exact cohort trust
+  // selectors; the shared boundary validates and adds packed compiler trust.
+  const registryEnv = {
     ...registry.env,
+    ...(proofContext?.mode === 'source'
+      ? {
+          PNPM_CONFIG_TRUST_POLICY_EXCLUDE: JSON.stringify(
+            release.packages
+              .map(item => `${item.targetName}@${item.version}`)
+              .sort(),
+          ),
+        }
+      : {}),
+  };
+  const env = {
+    ...createRendererAcceptanceEnv(process.env, {
+      mode: proofContext?.mode ?? 'source',
+      release,
+      registryEnv,
+      storeDir,
+    }),
     NODE_PATH: '',
     CI: 'true',
     npm_config_store_dir: storeDir,
     pnpm_config_store_dir: storeDir,
     npm_config_package_import_method: 'clone-or-copy',
     pnpm_config_package_import_method: 'clone-or-copy',
-    pnpm_config_minimum_release_age: '1440',
-    pnpm_config_minimum_release_age_strict: 'true',
-    pnpm_config_minimum_release_age_ignore_missing_time: 'false',
-    pnpm_config_minimum_release_age_exclude: JSON.stringify(
-      releaseAgeExemptions(release, {
-        policyPath: path.join(
-          toolchain,
-          'scripts/ultramodern-publish/release-age-exceptions-2026-08-10.json',
-        ),
-      }),
-    ),
   };
   const command = async (
     executable,
@@ -293,19 +299,11 @@ try {
       packages: ['.'],
       allowBuilds,
       packageImportMethod: 'clone-or-copy',
-      minimumReleaseAge: 1440,
-      minimumReleaseAgeStrict: true,
-      minimumReleaseAgeIgnoreMissingTime: false,
-      minimumReleaseAgeExclude: JSON.parse(
-        env.pnpm_config_minimum_release_age_exclude,
-      ),
+      minimumReleaseAge: 0,
     }),
   );
-  const generatorPolicy = captureReleaseAgeExclusions(generatorRoot, {
-    release,
-  });
+
   await command(pnpm, ['install'], generatorRoot, 'generator-install');
-  assertReleaseAgeExclusionsUnchanged(generatorPolicy);
   checkInstalledCohort({ appRoot: generatorRoot, cohort });
   const generatorRequire = createRequire(
     path.join(generatorRoot, 'package.json'),
@@ -384,11 +382,8 @@ try {
           i18next,
         },
       });
-      const consumerPolicy = captureReleaseAgeExclusions(workspaceRoot, {
-        release,
-      });
+
       await command(pnpm, ['install'], workspaceRoot, `${renderer}-install`);
-      assertReleaseAgeExclusionsUnchanged(consumerPolicy);
       checkInstalledCohort({ appRoot, cohort });
       const nativeTuple = assertInstalledNavigationTuple({
         appRoot,
@@ -517,7 +512,6 @@ try {
       await server.stop();
       servers.pop();
       await claim.free();
-      assertReleaseAgeExclusionsUnchanged(consumerPolicy);
       observations[renderer] = {
         strictGeneratedTypes: true,
         nativeTuple: Object.fromEntries(

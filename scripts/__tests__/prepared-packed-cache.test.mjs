@@ -101,9 +101,7 @@ function prepare(fixture) {
         integrity: digest(sidecarBytes),
       },
     },
-    edges: [{ from: '@modern-js/example', to: '@bleedingdev/example' }],
     allowBuilds: { esbuild: true },
-    minimumReleaseAgeExclude: ['@modern-js/example'],
   };
   const manifestPath = write(
     '.ci-build-cache/packed/packages.json',
@@ -175,14 +173,60 @@ test('packed snapshots relocate with complete metadata and verified tarballs', t
       assert.equal(digest(fs.readFileSync(actual.tarball)), expected.integrity);
     }
   }
-  for (const property of ['edges', 'allowBuilds', 'minimumReleaseAgeExclude']) {
-    assert.deepEqual(relocated[property], source.manifest[property]);
-  }
+  assert.deepEqual(relocated.allowBuilds, source.manifest.allowBuilds);
+  assert.deepEqual(Object.keys(relocated).sort(), [
+    'allowBuilds',
+    'packages',
+    'sidecars',
+  ]);
   assert.equal(
     verifyCurrentPreparedBuild(destination.root, environment, toolchain),
     1,
   );
 });
+
+for (const property of ['packages', 'sidecars', 'allowBuilds']) {
+  test(`snapshot and restore still require ${property} metadata`, t => {
+    const prepared = prepare(fixture(t));
+    const snapshot = snapshotBuild(
+      prepared.root,
+      prepared.baseline,
+      prepared.manifestPath,
+    );
+    delete prepared.manifest[property];
+    prepared.write(
+      '.ci-build-cache/packed/packages.json',
+      JSON.stringify(prepared.manifest),
+    );
+    assert.throws(
+      () =>
+        snapshotBuild(prepared.root, prepared.baseline, prepared.manifestPath),
+      /Packed prerequisite manifest is incomplete/u,
+    );
+    delete snapshot.packed.manifest[property];
+    snapshot.packed.digest = digest(
+      JSON.stringify({
+        archives: snapshot.packed.archives,
+        manifest: snapshot.packed.manifest,
+      }),
+    );
+    prepared.write(
+      '.ci-build-cache/snapshot/manifest.json',
+      JSON.stringify(snapshot),
+    );
+    fs.rmSync(path.join(prepared.root, 'packages/example/dist'), {
+      recursive: true,
+    });
+    assert.throws(
+      () => restoreBuild(prepared.root, prepared.baseline.key),
+      /Packed cache manifest is invalid/u,
+    );
+    assert.equal(
+      fs.existsSync(path.join(prepared.root, 'packages/example/dist/index.js')),
+      false,
+    );
+  });
+}
 
 for (const mutation of ['corrupt', 'missing']) {
   test(`${mutation} packed archive rejects restore before any output copy`, t => {

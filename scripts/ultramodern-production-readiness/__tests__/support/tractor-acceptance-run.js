@@ -241,7 +241,7 @@ async function runTractorAcceptanceFixture({
   const [
     { runTractorDownstreamAcceptance },
     { readReleaseManifest },
-    { resolveCreatePackage, compilerBootstrapSelectors },
+    { resolveCreatePackage },
   ] = await Promise.all([
     import('../../tractor-downstream/main.mjs'),
     import(
@@ -254,17 +254,10 @@ async function runTractorAcceptanceFixture({
   const packedManifest = release.createPackage.packageJson;
   const descriptor = packedManifest.ultramodern.supportArtifacts;
   const telemetry = descriptor.packages['@effect/opentelemetry'];
-  const compilerSelectors = compilerBootstrapSelectors(packedManifest);
   const workspace = path.join(root, 'tractor');
   const outPath = path.join(root, 'tractor-downstream-acceptance.json');
-  const releaseAgePolicyPath = path.join(root, 'release-age-policy.json');
   const pnpmExecutable = path.join(root, 'bin/pnpm');
   writeTractorWorkspace(workspace);
-  writeJson(releaseAgePolicyPath, {
-    entries: [],
-    schema: 'bleedingdev.ultramodern.release-age-exceptions',
-    schemaVersion: 2,
-  });
 
   const runImpl = (command, args) => {
     if (command === 'node' && args[0] === '--version') {
@@ -293,16 +286,7 @@ async function runTractorAcceptanceFixture({
       });
       fs.writeFileSync(
         path.join(generated, 'pnpm-workspace.yaml'),
-        `overrides: {}\nminimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\nminimumReleaseAgeIgnoreMissingTime: false\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\nminimumReleaseAgeExclude:\n${[
-          ...release.packages.map(item => `${item.targetName}@${item.version}`),
-          ...(release.sidecars?.packages ?? []).map(
-            item => `${item.name}@${item.version}`,
-          ),
-          ...compilerSelectors,
-        ]
-          .sort()
-          .map(selector => `  - ${JSON.stringify(selector)}`)
-          .join('\n')}\n`,
+        'overrides: {}\nminimumReleaseAge: 0\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\n',
       );
     }
     if (command === 'git') {
@@ -364,7 +348,6 @@ async function runTractorAcceptanceFixture({
       manifestPath,
       mode,
       outPath,
-      releaseAgePolicyPath,
       workspace,
       ...registry,
     },

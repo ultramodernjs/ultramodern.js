@@ -36,7 +36,7 @@ function fixture(t) {
   };
 }
 
-test('packed prerequisites round-trip without the retired aggregate edge list', t => {
+test('packed prerequisites round-trip with only artifact and build policy metadata', t => {
   const { root, write, inputs } = fixture(t);
   const project = { name: '@modern-js/example', version: '1.0.0' };
   write('packages/example/package.json', JSON.stringify(project));
@@ -65,7 +65,6 @@ test('packed prerequisites round-trip without the retired aggregate edge list', 
     },
     sidecars: {},
     allowBuilds: {},
-    minimumReleaseAgeExclude: [],
   };
   const manifestPath = path.join(root, 'packed/packages.json');
   write('packed/packages.json', JSON.stringify(manifest));
@@ -80,6 +79,11 @@ test('packed prerequisites round-trip without the retired aggregate edge list', 
     fs.readFileSync(tarball),
   );
   assert.deepEqual(restored.allowBuilds, manifest.allowBuilds);
+  assert.deepEqual(Object.keys(restored).sort(), [
+    'allowBuilds',
+    'packages',
+    'sidecars',
+  ]);
 });
 
 test('identity changes with source, lockfile, shared build scripts and toolchain', t => {

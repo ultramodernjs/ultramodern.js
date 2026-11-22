@@ -36,41 +36,15 @@ const producerReactDependencies = {
   '@types/react': '19.3.0',
   '@types/react-dom': '19.3.0',
 };
-const releaseAgePromise = import(
-  '../published-create-proof/release-age-audit.mjs'
-);
 // Stable Solid is a registry package; support artifacts never host it.
 const registrySolid = '2.0.0';
-
-function releaseAgeEntry(selector, overrides = {}) {
-  const separator = selector.lastIndexOf('@');
-  return {
-    approvedBy: 'Tractor release reviewer',
-    evidence: {
-      sha256: 'a'.repeat(64),
-      uri: `https://github.com/BleedingDev/ultramodern.js/commit/${'b'.repeat(40)}`,
-    },
-    expiresAt: '2026-08-27T02:46:55.656Z',
-    integrity: 'sha512-QUFBQQ==',
-    package: selector.slice(0, separator),
-    reviewedAt: '2026-08-26T10:06:26.000Z',
-    version: selector.slice(separator + 1),
-    ...overrides,
-  };
-}
-
-function writeReleaseAgePolicy(root, entries) {
-  const policyPath = path.join(root, 'release-age-policy.json');
-  fs.writeFileSync(
-    policyPath,
-    `${JSON.stringify({
-      schema: 'bleedingdev.ultramodern.release-age-exceptions',
-      schemaVersion: 2,
-      entries,
-    })}\n`,
+let resolveBootstrapCreatePackage;
+test.before(async () => {
+  const { resolveCreatePackage } = await import(
+    '../published-create-proof/package-cohort.mjs'
   );
-  return policyPath;
-}
+  resolveBootstrapCreatePackage = resolveCreatePackage;
+});
 
 function writeCompilerTrustOwnership(root, ownership) {
   const file = path.join(root, 'ultramodern.compiler-trust.json');
@@ -309,18 +283,10 @@ async function packFixturePackage(packageDir, artifactPath, sourceName) {
   };
 }
 
-function toolingProducerOptions(next) {
+function toolingProducerOptions() {
   return {
     producerEffectDependencies,
     producerReactDependencies,
-    minimumReleaseAgeExclude: [
-      ...Object.values(next.aliases).map(
-        name => `${name}@${next.release.version}`,
-      ),
-      ...(next.sidecars?.packages ?? []).map(
-        ({ name, version }) => `${name}@${version}`,
-      ),
-    ].sort(),
     trustPolicy: 'no-downgrade',
     trustPolicyIgnoreAfter: 1440,
     trustPolicyExclude: [],
@@ -471,19 +437,12 @@ test('cohort staging projects packed tooling hosts per importer, including optio
       },
     }),
   );
-  const options = toolingProducerOptions(next);
+  const options = toolingProducerOptions();
   options.pnpmPackageExtensions = {
     '@rslib/core@1.0.7': {
       peerDependencies: { 'rsbuild-plugin-dts': '1.0.7' },
     },
   };
-  const { compilerBootstrapSelectors } = await import(
-    '../published-create-proof/package-cohort.mjs'
-  );
-  options.minimumReleaseAgeExclude.push(
-    ...compilerBootstrapSelectors(next.createPackage.packageJson),
-  );
-  options.minimumReleaseAgeExclude.sort();
   const tools = next.packages.find(
     item => item.sourceName === '@modern-js/fixture-tools',
   );
@@ -790,19 +749,12 @@ async function stageNativeCoreScenario(
       },
     }),
   );
-  const options = toolingProducerOptions(next);
+  const options = toolingProducerOptions();
   options.pnpmPackageExtensions = {
     '@rslib/core@1.0.7': {
       peerDependencies: { 'rsbuild-plugin-dts': '1.0.7' },
     },
   };
-  const { compilerBootstrapSelectors } = await import(
-    '../published-create-proof/package-cohort.mjs'
-  );
-  options.minimumReleaseAgeExclude.push(
-    ...compilerBootstrapSelectors(next.createPackage.packageJson),
-  );
-  options.minimumReleaseAgeExclude.sort();
   const read = relative =>
     JSON.parse(fs.readFileSync(path.join(root, relative), 'utf8'));
   return { root, next, options, importers, read };
@@ -1096,7 +1048,7 @@ test('cohort staging matches the supplied authenticated packed generator for eve
     }),
   );
   const selectors = compilerBootstrapSelectors(next.createPackage.packageJson);
-  const options = toolingProducerOptions(next);
+  const options = toolingProducerOptions();
   options.producerEffectDependencies = {
     ...pins.bffEffectDependencies,
     '@effect/opentelemetry': support.packages['@effect/opentelemetry'].request,
@@ -1108,8 +1060,6 @@ test('cohort staging matches the supplied authenticated packed generator for eve
     '@types/react': pins.appDevDependencies['@types/react'],
     '@types/react-dom': pins.appDevDependencies['@types/react-dom'],
   };
-  options.minimumReleaseAgeExclude.push(...selectors);
-  options.minimumReleaseAgeExclude.sort();
   options.trustPolicyExclude = reviewedCompilerTrustExclusions(selectors);
   prepareTractorCohortInstallation(root, next, options);
   assert.equal(
@@ -1183,18 +1133,25 @@ const exactPnpmExecutable = '/opt/pnpm-11.17.0/bin/pnpm';
 
 function packageManagerOptions(overrides) {
   return {
-    createPackage: {
-      bootstrapReleaseAgePolicy: {
-        minimumReleaseAge: 1440,
-        minimumReleaseAgeExclude: bootstrapExclude,
-        minimumReleaseAgeIgnoreMissingTime: false,
-        minimumReleaseAgeStrict: true,
-      },
-      exactSpecifier: bootstrapSpecifier,
-      version: bootstrapVersion,
-    },
+    createPackage: (() => {
+      const sourceName = '@modern-js/ultramodern-create';
+      const targetName = '@bleedingdev/modern-js-ultramodern-create';
+      const item = {
+        sourceName,
+        targetName,
+        version: bootstrapVersion,
+        packageJson: { ultramodern: { frameworkVersion: bootstrapVersion } },
+      };
+      return resolveBootstrapCreatePackage({
+        aliases: { [sourceName]: targetName },
+        publishOrder: [targetName],
+        release: { version: bootstrapVersion },
+        createPackage: item,
+        packages: [item],
+        dependencyGraph: { [targetName]: [] },
+      });
+    })(),
     expectedPnpmVersion: '11.17.0',
-    minimumReleaseAgeExclude: bootstrapExclude,
     registryEnv: {
       npm_config_registry: 'https://registry.npmjs.org/',
       pnpm_config_registry: 'https://registry.npmjs.org/',
@@ -1265,139 +1222,6 @@ test('native catalog and installed framework bind to the exact release', async (
   }
 });
 
-test('release-age exclusions are exact specifiers, sorted as specifiers, and reach pnpm dlx', async t => {
-  const { createTractorPnpmDlxArgs } = await runnerPromise;
-  const { releaseAgeExemptions } = await releaseAgePromise;
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tractor-dlx-policy-'));
-  t.after(() => fs.rmSync(root, { force: true, recursive: true }));
-
-  const releaseVersion = '3.8.2-ultramodern.15';
-  // `-` sorts before `@`, so these two names sort differently as names than as
-  // full `name@version` specifiers; pnpm only accepts the specifier order.
-  const strictRelease = {
-    packages: [
-      { targetName: '@bleedingdev/modern-js-plugin', version: releaseVersion },
-      {
-        targetName: '@bleedingdev/modern-js-plugin-testing',
-        version: releaseVersion,
-      },
-      {
-        targetName: '@bleedingdev/modern-js-ultramodern-create',
-        version: releaseVersion,
-      },
-    ],
-    release: { version: releaseVersion },
-  };
-  const expected = [
-    '@bleedingdev/modern-js-plugin-testing@3.8.2-ultramodern.15',
-    '@bleedingdev/modern-js-plugin@3.8.2-ultramodern.15',
-    '@bleedingdev/modern-js-ultramodern-create@3.8.2-ultramodern.15',
-    '@rspack/core@2.2.0',
-  ];
-
-  // An empty policy must not resurrect retired third-party exceptions into a
-  // release install.
-  assert.deepEqual(
-    releaseAgeExemptions(strictRelease, {
-      policyPath: writeReleaseAgePolicy(root, []),
-      now: new Date('2026-08-26T12:00:00.000Z'),
-    }),
-    expected.filter(selector => selector.startsWith('@bleedingdev/')),
-  );
-
-  const minimumReleaseAgeExclude = releaseAgeExemptions(strictRelease, {
-    policyPath: writeReleaseAgePolicy(root, [
-      releaseAgeEntry('@rspack/core@2.2.0'),
-    ]),
-    now: new Date('2026-08-26T12:00:00.000Z'),
-  });
-  assert.deepEqual(minimumReleaseAgeExclude, expected);
-
-  const args = createTractorPnpmDlxArgs(
-    {
-      bootstrapReleaseAgePolicy: {
-        minimumReleaseAge: 1440,
-        minimumReleaseAgeExclude: [
-          `@bleedingdev/modern-js-ultramodern-create@${releaseVersion}`,
-        ],
-        minimumReleaseAgeIgnoreMissingTime: false,
-        minimumReleaseAgeStrict: true,
-      },
-      exactSpecifier: `@bleedingdev/modern-js-ultramodern-create@${releaseVersion}`,
-      version: releaseVersion,
-    },
-    minimumReleaseAgeExclude,
-    ['ultramodern', 'validate'],
-  );
-  assert.deepEqual(
-    args.filter(argument =>
-      argument.startsWith('--config.minimum-release-age-exclude='),
-    ),
-    expected.map(
-      selector => `--config.minimum-release-age-exclude=${selector}`,
-    ),
-  );
-  assert.deepEqual(args.slice(-2), ['ultramodern', 'validate']);
-});
-
-test('Tractor bootstrap rejects wildcard, future-dated and unbound release-age approvals', async t => {
-  const { releaseAgeExemptions } = await releaseAgePromise;
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tractor-dlx-invalid-'));
-  t.after(() => fs.rmSync(root, { force: true, recursive: true }));
-  const now = new Date('2026-08-26T12:00:00.000Z');
-  const strictRelease = {
-    packages: [
-      {
-        targetName: '@bleedingdev/modern-js-ultramodern-create',
-        version: '3.8.2-ultramodern.15',
-      },
-    ],
-    release: { version: '3.8.2-ultramodern.15' },
-  };
-
-  assert.throws(
-    () =>
-      releaseAgeExemptions(strictRelease, {
-        policyPath: writeReleaseAgePolicy(root, [
-          releaseAgeEntry('@rspack/core@2.2.0', { package: '@rspack/*' }),
-        ]),
-        now,
-      }),
-    /must be one exact npm package name/u,
-  );
-
-  assert.throws(
-    () =>
-      releaseAgeExemptions(strictRelease, {
-        policyPath: writeReleaseAgePolicy(root, [
-          releaseAgeEntry('@rspack/core@2.2.0', {
-            expiresAt: '2026-08-28T12:00:00.000Z',
-            reviewedAt: '2026-08-27T12:00:00.000Z',
-          }),
-        ]),
-        now,
-      }),
-    /reviewedAt must not be in the future/u,
-  );
-
-  assert.throws(
-    () =>
-      releaseAgeExemptions(
-        {
-          ...strictRelease,
-          packages: [
-            {
-              targetName: '@bleedingdev/modern-js-ultramodern-create',
-              version: '3.8.2-ultramodern.14',
-            },
-          ],
-        },
-        { policyPath: writeReleaseAgePolicy(root, []), now },
-      ),
-    /must bind targetName to release version/u,
-  );
-});
-
 test('runner CLI has no bypass flag and builds a hermetic package-manager env', async () => {
   const { createTractorPackageManagerContext, parseArgs } = await runnerPromise;
   assert.throws(() => parseArgs([]), /--manifest is required/u);
@@ -1466,7 +1290,6 @@ test('Tractor children use the acceptance Node despite an older mise Node on PAT
       ...process.env,
       PATH: `${staleBin}${path.delimiter}${process.env.PATH}`,
     },
-    minimumReleaseAgeExclude: bootstrapExclude,
     packageManagerRoot: root,
     registryEnv: { npm_config_registry: 'https://registry.npmjs.org/' },
     resolveExactPnpmExecutableImpl: () => path.join(staleBin, 'pnpm'),
@@ -1492,7 +1315,6 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
   };
   const options = {
     createPackage: packageManagerOptions().createPackage,
-    minimumReleaseAgeExclude: bootstrapExclude,
     packageManager: { pnpmExecutable: exactPnpmExecutable, env },
     packageManagerRoot: root,
   };
@@ -1518,7 +1340,7 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
       );
       fs.writeFileSync(
         path.join(workspace, 'pnpm-workspace.yaml'),
-        `minimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\nminimumReleaseAgeIgnoreMissingTime: false\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\ntrustPolicyExclude:\n  - tsrs@7.1.0-beta.tsrs3\nminimumReleaseAgeExclude:\n${bootstrapExclude.map(selector => `  - ${JSON.stringify(selector)}`).join('\n')}\noverrides:\n  'braces@>=3.0.0 <3.0.4': npm:@bleedingdev/braces@3.0.4\n  'sharp@>=0.35.0 <0.35.5': 0.35.5\npackageExtensions:\n  '@rslib/core@1.0.7':\n    peerDependencies:\n      rsbuild-plugin-dts: 1.0.7\n`,
+        `minimumReleaseAge: 0\ntrustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 1440\ntrustPolicyExclude:\n  - tsrs@7.1.0-beta.tsrs3\noverrides:\n  'braces@>=3.0.0 <3.0.4': npm:@bleedingdev/braces@3.0.4\n  'sharp@>=0.35.0 <0.35.5': 0.35.5\npackageExtensions:\n  '@rslib/core@1.0.7':\n    peerDependencies:\n      rsbuild-plugin-dts: 1.0.7\n`,
       );
     },
   });
@@ -1534,7 +1356,6 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
         peerDependencies: { 'rsbuild-plugin-dts': '1.0.7' },
       },
     },
-    minimumReleaseAgeExclude: bootstrapExclude,
     trustPolicy: 'no-downgrade',
     trustPolicyIgnoreAfter: 1440,
     trustPolicyExclude: ['tsrs@7.1.0-beta.tsrs3'],
@@ -1542,9 +1363,6 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
   assert.deepEqual(fs.readdirSync(root), []);
   const { stringify: stringifyYaml } = await import('yaml');
   for (const invalid of [
-    { minimumReleaseAge: 0 },
-    { minimumReleaseAgeStrict: false },
-    { minimumReleaseAgeIgnoreMissingTime: true },
     { trustPolicy: 'none' },
     { trustPolicyIgnoreAfter: 0 },
     { trustPolicyExclude: ['*'] },
@@ -1552,8 +1370,6 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
     {
       trustPolicyExclude: ['tsrs@7.1.0-beta.tsrs3', 'tsrs@7.1.0-beta.tsrs3'],
     },
-    { minimumReleaseAgeExclude: ['@bleedingdev/*'] },
-    { minimumReleaseAgeExclude: [] },
   ]) {
     assert.throws(
       () =>
@@ -1566,10 +1382,7 @@ test('Tractor obtains native policy from the exact generator and cleans its temp
               path.join(workspace, 'pnpm-workspace.yaml'),
               stringifyYaml({
                 overrides: producerPolicy.pnpmOverrides,
-                minimumReleaseAge: 1440,
-                minimumReleaseAgeStrict: true,
-                minimumReleaseAgeIgnoreMissingTime: false,
-                minimumReleaseAgeExclude: bootstrapExclude,
+                minimumReleaseAge: 0,
                 trustPolicy: 'no-downgrade',
                 trustPolicyIgnoreAfter: 1440,
                 ...invalid,
@@ -1984,7 +1797,6 @@ test('Tractor synchronizes native delivery artifacts after installation and befo
   const options = {
     workspace: '/tractor',
     createPackage: packageManagerOptions().createPackage,
-    minimumReleaseAgeExclude: bootstrapExclude,
     packageManager: {
       pnpmExecutable: exactPnpmExecutable,
       env: { PATH: '/accepted/node' },
@@ -2310,9 +2122,6 @@ test('source-candidate rehearsal tears down its registry and refuses an escaped 
 for (const needsCompilerTrust of [true, false]) {
   test(`cohort upgrade preserves app trust while ${needsCompilerTrust ? 'replacing' : 'removing'} managed compiler approvals`, async () => {
     const { prepareTractorCohortInstallation } = await cohortInstallPromise;
-    const { compilerBootstrapSelectors } = await import(
-      '../published-create-proof/package-cohort.mjs'
-    );
     const { parse, stringify } = await import('yaml');
     const root = fixture();
     try {
@@ -2344,12 +2153,6 @@ for (const needsCompilerTrust of [true, false]) {
       const options = {
         producerEffectDependencies,
         producerReactDependencies,
-        minimumReleaseAgeExclude: [
-          ...Object.values(next.aliases).map(
-            name => `${name}@${next.release.version}`,
-          ),
-          ...compilerBootstrapSelectors(next.createPackage.packageJson),
-        ].sort(),
         trustPolicy: 'no-downgrade',
         trustPolicyIgnoreAfter: 1440,
         trustPolicyExclude: producerTrust,
@@ -2377,9 +2180,9 @@ for (const needsCompilerTrust of [true, false]) {
       assertPnpmAcceptsWorkspace(root);
       assert.equal(selected.trustPolicy, 'no-downgrade');
       assert.equal(selected.trustPolicyIgnoreAfter, 1440);
-      assert.equal(selected.minimumReleaseAge, 1440);
-      assert.equal(selected.minimumReleaseAgeStrict, true);
-      assert.equal(selected.minimumReleaseAgeIgnoreMissingTime, false);
+      assert.equal(selected.minimumReleaseAge, 0);
+      assert.equal(selected.minimumReleaseAgeStrict, undefined);
+      assert.equal(selected.minimumReleaseAgeIgnoreMissingTime, undefined);
       assert.equal(
         JSON.parse(fs.readFileSync(manifestFile, 'utf8')).devDependencies[
           '@acme/private-build-tool'
@@ -2464,9 +2267,6 @@ for (const needsCompilerTrust of [true, false]) {
 test('cohort installation adopts exact bundle and toolchain without changing authored Tractor UI', async () => {
   const { prepareTractorCohortInstallation } = await import(
     '../tractor-downstream/cohort-install.mjs'
-  );
-  const { compilerBootstrapSelectors } = await import(
-    '../published-create-proof/package-cohort.mjs'
   );
   const root = fixture();
   try {
@@ -2628,15 +2428,6 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       producerEffectDependencies,
       producerReactDependencies,
       pnpmOverrides,
-      minimumReleaseAgeExclude: [
-        ...Object.values(next.aliases).map(
-          name => `${name}@${next.release.version}`,
-        ),
-        ...next.sidecars.packages.map(
-          ({ name, version }) => `${name}@${version}`,
-        ),
-        ...compilerBootstrapSelectors(next.createPackage.packageJson),
-      ].sort(),
       trustPolicy: 'no-downgrade',
       trustPolicyIgnoreAfter: 1440,
       trustPolicyExclude: ['tsrs@7.1.0-beta.tsrs3'],
@@ -2727,26 +2518,12 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       'sharp@>=0.35.0 > unrelated': '2.0.0',
       ...pnpmOverrides,
     });
-    assert.deepEqual(
-      parseYaml(policyText).minimumReleaseAgeExclude,
-      producerOptions.minimumReleaseAgeExclude,
-    );
-    const compilerExclusions = compilerBootstrapSelectors(
-      next.createPackage.packageJson,
-    );
-    assert.equal(compilerExclusions.length, 17);
-    assert(compilerExclusions.includes('tsrs@7.1.0-beta.tsrs3'));
-    assert(compilerExclusions.includes('@effect/tsgo-win32-x64@0.69.0'));
-    assert(
-      !parseYaml(policyText).minimumReleaseAgeExclude.includes(
-        'unrelated-compiler@9.9.9',
-      ),
-    );
-    assert.equal(parseYaml(policyText).minimumReleaseAge, 1440);
-    assert.equal(parseYaml(policyText).minimumReleaseAgeStrict, true);
+    assert.equal(parseYaml(policyText).minimumReleaseAge, 0);
+    assert.equal(parseYaml(policyText).minimumReleaseAgeExclude, undefined);
+    assert.equal(parseYaml(policyText).minimumReleaseAgeStrict, undefined);
     assert.equal(
       parseYaml(policyText).minimumReleaseAgeIgnoreMissingTime,
-      false,
+      undefined,
     );
     assert.equal(parseYaml(policyText).trustPolicy, 'no-downgrade');
     assert.equal(parseYaml(policyText).trustPolicyIgnoreAfter, 1440);
@@ -2952,47 +2729,7 @@ test('cohort installation adopts exact bundle and toolchain without changing aut
       fs.readFileSync(path.join(root, '.mise.toml'), 'utf8'),
       selectedMise,
     );
-    for (const minimumReleaseAgeExclude of [
-      producerOptions.minimumReleaseAgeExclude.filter(
-        selector => !selector.startsWith('@bleedingdev/braces@'),
-      ),
-      producerOptions.minimumReleaseAgeExclude.filter(
-        selector => !selector.startsWith('@bleedingdev/mf-sdk@'),
-      ),
-      producerOptions.minimumReleaseAgeExclude.filter(
-        selector => selector !== 'tsrs@7.1.0-beta.tsrs3',
-      ),
-      producerOptions.minimumReleaseAgeExclude.filter(
-        selector => selector !== '@effect/tsgo-win32-x64@0.69.0',
-      ),
-      producerOptions.minimumReleaseAgeExclude.map(selector =>
-        selector === 'tsrs@7.1.0-beta.tsrs3'
-          ? 'tsrs@0.18.0-ts7.1.0-dev.20260929'
-          : selector,
-      ),
-      [
-        ...producerOptions.minimumReleaseAgeExclude,
-        'unrelated-compiler@9.9.9',
-      ].sort(),
-      [...producerOptions.minimumReleaseAgeExclude, 'sharp@0.35.5'].sort(),
-      ['@bleedingdev/*'],
-    ]) {
-      assert.throws(
-        () =>
-          prepareTractorCohortInstallation(root, next, {
-            ...producerOptions,
-            minimumReleaseAgeExclude,
-          }),
-        /minimumReleaseAgeExclude/u,
-      );
-      assert.equal(
-        fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8'),
-        selectedPolicy,
-      );
-      assert.equal(fs.readFileSync(uiFile, 'utf8'), beforeUi);
-    }
-    // Release-age approvals are not automatically trust approvals. Reject
-    // stale, foreign, platform-only and runtime selectors even when exact.
+    // Trust approvals remain exact and independent of release age.
     for (const trustPolicyExclude of [
       undefined,
       [],

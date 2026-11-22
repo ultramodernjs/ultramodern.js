@@ -18,9 +18,7 @@ import type {
   ResolvedPackageSource,
 } from '../src/ultramodern-workspace/types';
 import {
-  BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
   COMPILER_TRUST_EXCEPTIONS,
-  EFFECT_RUNTIME_RELEASE_AGE_EXCEPTIONS,
   EFFECT_TSGO_VERSION,
   EFFECT_VERSION,
   TSRS_VERSION,
@@ -82,50 +80,24 @@ test.each(['workspace', 'install'] as const)(
 
 test('compiler adoption preserves strict supply-chain and diagnostic policies', () => {
   const policy = ULTRAMODERN_WORKSPACE_POLICY.pnpm;
-  assert.equal(policy.minimumReleaseAge, 1440);
-  assert.equal(policy.minimumReleaseAgeStrict, true);
-  assert.equal(policy.minimumReleaseAgeIgnoreMissingTime, false);
+  assert.equal(policy.minimumReleaseAge, 0);
+  assert.equal(Object.hasOwn(policy, 'minimumReleaseAgeStrict'), false);
+  assert.equal(
+    Object.hasOwn(policy, 'minimumReleaseAgeIgnoreMissingTime'),
+    false,
+  );
   assert.equal(policy.trustPolicy, 'no-downgrade');
   assert.equal(policy.blockExoticSubdeps, true);
   assert.equal(policy.strictDepBuilds, true);
   const require = createRequire(import.meta.url);
-  const compilerExceptions = ['tsrs', '@effect/tsgo'].flatMap(name => {
-    const manifest = JSON.parse(
-      fs.readFileSync(require.resolve(`${name}/package.json`), 'utf8'),
-    );
-    if (name === 'tsrs') {
-      assert.equal(manifest.tsrs.typescriptVersion, '7.1.0-beta');
-      assert.match(manifest.tsrs.typescriptCommit, /^[a-f\d]{40}$/u);
-      assert.notEqual(manifest.tsrs.typescriptVersion, TYPESCRIPT_VERSION);
-    }
-    return [
-      `${name}@${manifest.version}`,
-      ...Object.entries(manifest.optionalDependencies).map(
-        ([platform, version]) => `${platform}@${version}`,
-      ),
-    ];
-  });
-  assert.deepEqual(
-    policy.minimumReleaseAgeExclude,
-    [...compilerExceptions, ...EFFECT_RUNTIME_RELEASE_AGE_EXCEPTIONS].sort(),
+  const manifest = JSON.parse(
+    fs.readFileSync(require.resolve('tsrs/package.json'), 'utf8'),
   );
+  assert.equal(manifest.tsrs.typescriptVersion, '7.1.0-beta');
+  assert.match(manifest.tsrs.typescriptCommit, /^[a-f\d]{40}$/u);
+  assert.notEqual(manifest.tsrs.typescriptVersion, TYPESCRIPT_VERSION);
+  assert.equal(Object.hasOwn(policy, 'minimumReleaseAgeExclude'), false);
   assert.deepEqual(policy.trustPolicyExclude, COMPILER_TRUST_EXCEPTIONS);
-  const producer = JSON.parse(
-    fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'),
-  );
-  assert.deepEqual(
-    producer.ultramodern.bootstrapReleaseAgeExclude,
-    EFFECT_RUNTIME_RELEASE_AGE_EXCEPTIONS,
-  );
-  assert.equal(policy.minimumReleaseAgeExclude.length, 19);
-  assert(
-    policy.minimumReleaseAgeExclude.every(
-      selector =>
-        !selector.includes('*') &&
-        !selector.includes('^') &&
-        !selector.includes('>'),
-    ),
-  );
   const diagnosticPolicy = fs.readFileSync(
     path.resolve(__dirname, '../templates/tsconfig.base.json'),
     'utf8',
@@ -136,7 +108,7 @@ test('compiler adoption preserves strict supply-chain and diagnostic policies', 
   );
 });
 
-test('fresh workspace YAML admits only exact reviewed compiler and runtime releases', async () => {
+test('fresh workspace YAML has no release-age waits and preserves compiler trust', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'um-tsrs-policy-'));
   try {
     const workspace = path.join(root, 'workspace');
@@ -151,13 +123,13 @@ test('fresh workspace YAML admits only exact reviewed compiler and runtime relea
     const policy = yaml.load(
       fs.readFileSync(path.join(workspace, 'pnpm-workspace.yaml'), 'utf8'),
     ) as Record<string, unknown>;
-    assert.deepEqual(
-      policy.minimumReleaseAgeExclude,
-      BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
+    assert.equal(Object.hasOwn(policy, 'minimumReleaseAgeExclude'), false);
+    assert.equal(policy.minimumReleaseAge, 0);
+    assert.equal(Object.hasOwn(policy, 'minimumReleaseAgeStrict'), false);
+    assert.equal(
+      Object.hasOwn(policy, 'minimumReleaseAgeIgnoreMissingTime'),
+      false,
     );
-    assert.equal(policy.minimumReleaseAge, 1440);
-    assert.equal(policy.minimumReleaseAgeStrict, true);
-    assert.equal(policy.minimumReleaseAgeIgnoreMissingTime, false);
     assert.equal(policy.trustPolicy, 'no-downgrade');
     assert.deepEqual(policy.trustPolicyExclude, COMPILER_TRUST_EXCEPTIONS);
     assert.equal(policy.ultramodernManagedCompilerTrustExclusions, undefined);
@@ -175,8 +147,13 @@ test('fresh workspace YAML admits only exact reviewed compiler and runtime relea
       encoding: 'utf8',
       shell: process.platform === 'win32',
     });
-    assert.equal(pnpm.status, 0, `${pnpm.stdout}\n${pnpm.stderr}`);
-    assert.equal(pnpm.stdout.trim(), '12345');
+    // Age-free resolution does not bypass the required dependency install.
+    assert.notEqual(pnpm.status, 0);
+    assert.match(
+      `${pnpm.stdout}\n${pnpm.stderr}`,
+      /ERR_PNPM_VERIFY_DEPS_BEFORE_RUN/u,
+    );
+    assert.equal(policy.verifyDepsBeforeRun, 'error');
     assert.equal(policy.blockExoticSubdeps, true);
     assert.equal(policy.strictDepBuilds, true);
   } finally {

@@ -4,12 +4,7 @@ import {
   modernPackageSpecifier,
   ULTRAMODERN_WORKSPACE_MODERN_PACKAGES,
 } from '../ultramodern-package-source';
-import {
-  hasCreateReleaseCohort,
-  isCreatePackageSourceCheckout,
-  readCreateReleaseCohort,
-  releaseCohortSelectors,
-} from '../ultramodern-release-cohort';
+import { isCreatePackageSourceCheckout } from '../ultramodern-release-cohort';
 import { runFreshWorkspaceTransaction } from './add-vertical/transaction';
 import { createSharedDesignTokensCss } from './app-files';
 import type { UltramodernBridgeConfig } from './bridge-config';
@@ -145,27 +140,11 @@ function writeSharedPackages(
   );
 }
 
-// The catalog pins one exact release cohort. The workspace keeps pnpm's strict
-// 24h release-age gate for everything else but exempts the reviewed compiler
-// releases and exact cohort and sidecar versions authenticated by this create
-// package, so freshly released framework packages and their owned transitive
-// dependencies install.
-// A catalog for any other release gets no exemption: this package cannot
-// authenticate that cohort, so it installs once it is 24h old.
 function renderCatalogPolicy(
   packageSource: ResolvedPackageSource,
   primaryShell: WorkspaceApp,
 ) {
-  const compilerExclusions =
-    ULTRAMODERN_WORKSPACE_POLICY.pnpm.minimumReleaseAgeExclude;
-  const renderExclusions = (selectors: readonly string[]) =>
-    `minimumReleaseAgeExclude:\n${[...new Set(selectors)]
-      .sort()
-      .map(selector => `  - ${JSON.stringify(selector)}`)
-      .join('\n')}\n\n`;
-  if (packageSource.strategy !== 'install') {
-    return renderExclusions(compilerExclusions);
-  }
+  if (packageSource.strategy !== 'install') return '';
   // The catalog is workspace policy: it must not offer packages that belong
   // to another renderer than the one the workspace was generated for.
   const renderer = resolveWorkspaceRenderer(primaryShell);
@@ -184,19 +163,7 @@ function renderCatalogPolicy(
         `    ${JSON.stringify(name)}: ${JSON.stringify(modernPackageSpecifier(name, packageSource))}`,
     )
     .join('\n');
-  const cohort = hasCreateReleaseCohort()
-    ? readCreateReleaseCohort()
-    : undefined;
-  const pinsShippedCohort = cohort?.packages.every(
-    item =>
-      modernPackageSpecifier(item.sourceName, packageSource) ===
-      `npm:${item.targetName}@${item.version}`,
-  );
-  const exclude = renderExclusions([
-    ...compilerExclusions,
-    ...(cohort && pinsShippedCohort ? releaseCohortSelectors(cohort) : []),
-  ]);
-  return `catalogs:\n  ultramodern:\n${catalog}\n\n${exclude}`;
+  return `catalogs:\n  ultramodern:\n${catalog}\n\n`;
 }
 
 function writePnpmWorkspacePackages(
@@ -427,7 +394,9 @@ async function generateUltramodernWorkspaceInPlace(
   const evaluations = await captureWorkspaceRendererEvaluations(
     options.targetDir,
     createdApps,
-    { command: 'generate' },
+    {
+      command: 'generate',
+    },
   );
   const reconciledApps = await reconcileWorkspaceRendererIdentities(
     options.targetDir,

@@ -317,8 +317,6 @@ test.each([true, false])(
         'blockExoticSubdeps',
         'trustPolicy',
         'minimumReleaseAge',
-        'minimumReleaseAgeStrict',
-        'minimumReleaseAgeIgnoreMissingTime',
         'peerDependencyRules',
       ] as const)
         assert.deepEqual(

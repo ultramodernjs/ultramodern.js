@@ -354,101 +354,6 @@ test('normal acceptance rejects missing or invalid packed runtime declarations',
   }
 });
 
-test('builds the supported pnpm dlx package command contract from the authenticated create closure', async () => {
-  const { createPnpmDlxArgs, resolveCreatePackage } = await import(
-    '../published-create-proof/package-cohort.mjs'
-  );
-  const createPackage = resolveCreatePackage(makeBootstrapRelease());
-  assert.deepEqual(
-    createPnpmDlxArgs(createPackage, ['my-super-app', '--lang', 'en']),
-    [
-      '--pm-on-fail=ignore',
-      '--config.minimum-release-age=1440',
-      '--config.minimum-release-age-strict=true',
-      '--config.minimum-release-age-ignore-missing-time=false',
-      '--config.minimum-release-age-exclude=@bleedingdev/modern-js-i18n-utils@3.4.0-ultramodern.2',
-      '--config.minimum-release-age-exclude=@bleedingdev/modern-js-ultramodern-create@3.4.0-ultramodern.2',
-      '--config.minimum-release-age-exclude=@bleedingdev/modern-js-utils@3.4.0-ultramodern.2',
-      'dlx',
-      '--allow-build=esbuild',
-      '@bleedingdev/modern-js-ultramodern-create@3.4.0-ultramodern.2',
-      'my-super-app',
-      '--lang',
-      'en',
-    ],
-  );
-  // A create package the release-age policy cannot exclude makes the
-  // documented bootstrap command fail against a freshly published cohort.
-  assert.throws(
-    () =>
-      createPnpmDlxArgs(
-        {
-          exactSpecifier: 'modern-js-ultramodern-create@3.5.0-ultramodern.77',
-        },
-        [],
-      ),
-    /exact authenticated bootstrap release-age policy/u,
-  );
-});
-
-test('orders exact bootstrap specifiers when a reachable package name prefixes another', async () => {
-  const { createPnpmDlxArgs, resolveCreatePackage } = await import(
-    '../published-create-proof/package-cohort.mjs'
-  );
-  const release = makeBootstrapRelease('3.9.0-ultramodern.5');
-  const { version } = release.release;
-  const pluginTarget = '@bleedingdev/modern-js-plugin';
-  const dataLoaderTarget = '@bleedingdev/modern-js-plugin-data-loader';
-  Object.assign(release.aliases, {
-    '@modern-js/plugin': pluginTarget,
-    '@modern-js/plugin-data-loader': dataLoaderTarget,
-  });
-  release.createPackage.packageJson.dependencies[
-    '@modern-js/plugin-data-loader'
-  ] = `npm:${dataLoaderTarget}@${version}`;
-  release.dependencyGraph[release.createPackage.targetName].push(
-    dataLoaderTarget,
-  );
-  release.dependencyGraph[dataLoaderTarget] = [pluginTarget];
-  release.dependencyGraph[pluginTarget] = [];
-  release.packages.push(
-    {
-      sourceName: '@modern-js/plugin-data-loader',
-      targetName: dataLoaderTarget,
-      version,
-      packageJson: {
-        dependencies: {
-          '@modern-js/plugin': `npm:${pluginTarget}@${version}`,
-        },
-      },
-    },
-    {
-      sourceName: '@modern-js/plugin',
-      targetName: pluginTarget,
-      version,
-      packageJson: {},
-    },
-  );
-  release.publishOrder.push(pluginTarget, dataLoaderTarget);
-
-  // pnpm rejects the whole bootstrap command when the exclusions are not
-  // ordered on the full `name@version` specifier, which only shows up when one
-  // package name is a prefix of another.
-  const args = createPnpmDlxArgs(resolveCreatePackage(release), ['my-app']);
-  assert.deepEqual(
-    args.filter(argument =>
-      argument.startsWith('--config.minimum-release-age-exclude='),
-    ),
-    [
-      `--config.minimum-release-age-exclude=@bleedingdev/modern-js-i18n-utils@${version}`,
-      `--config.minimum-release-age-exclude=${dataLoaderTarget}@${version}`,
-      `--config.minimum-release-age-exclude=${pluginTarget}@${version}`,
-      `--config.minimum-release-age-exclude=@bleedingdev/modern-js-ultramodern-create@${version}`,
-      `--config.minimum-release-age-exclude=@bleedingdev/modern-js-utils@${version}`,
-    ],
-  );
-});
-
 test('fails closed when the authenticated create closure is omitted or version-skewed', async () => {
   const { resolveCreatePackage } = await import(
     '../published-create-proof/package-cohort.mjs'
@@ -474,79 +379,6 @@ test('fails closed when the authenticated create closure is omitted or version-s
 function makeBootstrapSidecar(name, version, packageJson = {}) {
   return { name, version, packageJson: { name, version, ...packageJson } };
 }
-
-test('bootstrap admits only the exact reachable sidecar runtime and optional closure', async () => {
-  const { createPnpmDlxArgs, resolveCreatePackage } = await import(
-    '../published-create-proof/package-cohort.mjs'
-  );
-  const release = makeBootstrapRelease();
-  const jiti = makeBootstrapSidecar('@bleedingdev/jiti', '2.7.0');
-  const runtime = makeBootstrapSidecar('@bleedingdev/mf-runtime', '2.9.1');
-  const node = makeBootstrapSidecar('@bleedingdev/mf-node', '2.7.51');
-  const image = makeBootstrapSidecar('@bleedingdev/optional-native', '0.1.4');
-  const modern = makeBootstrapSidecar('@bleedingdev/mf-modern-js-v3', '2.9.1', {
-    dependencies: {
-      '@module-federation/runtime': `npm:${runtime.name}@${runtime.version}`,
-    },
-    optionalDependencies: { [node.name]: node.version },
-    devDependencies: { '@bleedingdev/dev-only': '1.0.0' },
-  });
-  const unused = makeBootstrapSidecar('@bleedingdev/unused', '1.0.0');
-  const devOnly = makeBootstrapSidecar('@bleedingdev/dev-only', '1.0.0');
-  const unreachable = makeBootstrapSidecar('@bleedingdev/unreachable', '1.0.0');
-  Object.assign(release.createPackage.packageJson.dependencies, {
-    jiti: `npm:${jiti.name}@${jiti.version}`,
-    '@module-federation/modern-js-v3': `npm:${modern.name}@${modern.version}`,
-  });
-  const utils = release.packages.find(
-    item => item.sourceName === '@modern-js/utils',
-  );
-  utils.packageJson.optionalDependencies = { [image.name]: image.version };
-  utils.packageJson.devDependencies = { [unused.name]: unused.version };
-  release.packages.find(
-    item => item.sourceName === '@modern-js/runtime',
-  ).packageJson.dependencies = { [unreachable.name]: unreachable.version };
-  release.sidecars = {
-    packages: [
-      jiti,
-      modern,
-      runtime,
-      node,
-      image,
-      unused,
-      devOnly,
-      unreachable,
-    ],
-  };
-  const createPackage = resolveCreatePackage(release);
-  const expected = [
-    ...resolveCreatePackage(makeBootstrapRelease()).bootstrapReleaseAgePolicy
-      .minimumReleaseAgeExclude,
-    ...[jiti, modern, runtime, node, image].map(
-      item => `${item.name}@${item.version}`,
-    ),
-  ].sort((left, right) => left.localeCompare(right));
-  assert.deepEqual(
-    createPackage.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude,
-    expected,
-  );
-  const args = createPnpmDlxArgs(createPackage, ['my-app']);
-  assert.deepEqual(
-    args.filter(value =>
-      value.startsWith('--config.minimum-release-age-exclude='),
-    ),
-    expected.map(value => `--config.minimum-release-age-exclude=${value}`),
-  );
-  for (const flag of [
-    '--config.minimum-release-age=1440',
-    '--config.minimum-release-age-strict=true',
-    '--config.minimum-release-age-ignore-missing-time=false',
-  ])
-    assert(args.includes(flag));
-  assert(args.includes('dlx'));
-  assert(args.includes(createPackage.exactSpecifier));
-});
-
 test('bootstrap rejects mismatched or inexact sidecar dependency identities', async () => {
   const { resolveCreatePackage } = await import(
     '../published-create-proof/package-cohort.mjs'
@@ -579,312 +411,6 @@ test('bootstrap rejects mismatched or inexact sidecar dependency identities', as
     /must resolve to exact bootstrap sidecar/u,
   );
 });
-
-test('bootstrap rejects invalid sidecar observations and cannot forge sidecar exemptions', async () => {
-  const { createPnpmDlxArgs, resolveCreatePackage } = await import(
-    '../published-create-proof/package-cohort.mjs'
-  );
-  const sidecar = makeBootstrapSidecar('@bleedingdev/jiti', '2.7.0');
-  for (const packages of [
-    [makeBootstrapSidecar('@foreign/jiti', '2.7.0')],
-    [makeBootstrapSidecar('@bleedingdev/*', '2.7.0')],
-    [makeBootstrapSidecar('@bleedingdev/modern-js-forged', '2.7.0')],
-    [makeBootstrapSidecar(sidecar.name, '^2.7.0')],
-    [{ ...sidecar, packageJson: { name: '@foreign/jiti', version: '2.7.0' } }],
-    [{ ...sidecar, packageJson: { name: sidecar.name, version: '2.6.0' } }],
-    [{ name: sidecar.name, version: sidecar.version }],
-    [sidecar, sidecar],
-  ]) {
-    const release = makeBootstrapRelease();
-    release.sidecars = { packages };
-    assert.throws(
-      () => resolveCreatePackage(release),
-      /invalid packed sidecar observation|must be stable semver/u,
-    );
-  }
-  const release = makeBootstrapRelease();
-  release.createPackage.packageJson.dependencies.jiti =
-    'npm:@bleedingdev/jiti@2.7.0';
-  // An unobserved published dependency gets no candidate-sidecar exemption.
-  assert.deepEqual(
-    resolveCreatePackage(release).bootstrapReleaseAgePolicy
-      .minimumReleaseAgeExclude,
-    resolveCreatePackage(makeBootstrapRelease()).bootstrapReleaseAgePolicy
-      .minimumReleaseAgeExclude,
-  );
-  release.sidecars = {
-    packages: [makeBootstrapSidecar('@bleedingdev/unrelated', '1.0.0')],
-  };
-  assert.throws(
-    () => resolveCreatePackage(release),
-    /targets omitted bootstrap sidecar @bleedingdev\/jiti/u,
-  );
-  release.sidecars = { packages: [sidecar] };
-  const actual = resolveCreatePackage(release);
-  assert.doesNotThrow(() => createPnpmDlxArgs(actual, []));
-  assert.throws(
-    () =>
-      createPnpmDlxArgs(
-        {
-          ...actual,
-          bootstrapReleaseAgePolicy: { ...actual.bootstrapReleaseAgePolicy },
-        },
-        [],
-      ),
-    /exact authenticated bootstrap release-age policy/u,
-  );
-});
-
-test('bootstrap admits exact compiler and native pins from the authenticated packed generator', async () => {
-  const { createPnpmDlxArgs, resolveCreatePackage } = await import(
-    '../published-create-proof/package-cohort.mjs'
-  );
-  const release = makeBootstrapRelease();
-  const baseline =
-    resolveCreatePackage(release).bootstrapReleaseAgePolicy
-      .minimumReleaseAgeExclude;
-  Object.assign(release.createPackage.packageJson.dependencies, {
-    '@effect/tsgo': '0.69.0',
-    tsrs: '7.1.0-beta.tsrs3',
-    'unrelated-compiler': '9.9.9',
-    '@tsrs/unreviewed-host': '7.1.0-beta.tsrs3',
-  });
-  const compilerSelectors = [
-    '@effect/tsgo@0.69.0',
-    '@effect/tsgo-darwin-arm64@0.69.0',
-    '@effect/tsgo-darwin-x64@0.69.0',
-    '@effect/tsgo-linux-arm@0.69.0',
-    '@effect/tsgo-linux-arm64@0.69.0',
-    '@effect/tsgo-linux-x64@0.69.0',
-    '@effect/tsgo-win32-arm64@0.69.0',
-    '@effect/tsgo-win32-x64@0.69.0',
-    'tsrs@7.1.0-beta.tsrs3',
-    '@tsrs/darwin-arm64@7.1.0-beta.tsrs3',
-    '@tsrs/darwin-x64@7.1.0-beta.tsrs3',
-    '@tsrs/linux-arm64-gnu@7.1.0-beta.tsrs3',
-    '@tsrs/linux-arm64-musl@7.1.0-beta.tsrs3',
-    '@tsrs/linux-x64-gnu@7.1.0-beta.tsrs3',
-    '@tsrs/linux-x64-musl@7.1.0-beta.tsrs3',
-    '@tsrs/win32-arm64@7.1.0-beta.tsrs3',
-    '@tsrs/win32-x64@7.1.0-beta.tsrs3',
-  ];
-  const createPackage = resolveCreatePackage(release);
-  const policy = createPackage.bootstrapReleaseAgePolicy;
-  const expected = [...baseline, ...compilerSelectors].sort((left, right) =>
-    left.localeCompare(right),
-  );
-  assert.deepEqual(policy.minimumReleaseAgeExclude, expected);
-  assert.equal(policy.minimumReleaseAge, 1440);
-  assert.equal(policy.minimumReleaseAgeStrict, true);
-  assert.equal(policy.minimumReleaseAgeIgnoreMissingTime, false);
-  assert.equal(Object.isFrozen(policy.minimumReleaseAgeExclude), true);
-  const args = createPnpmDlxArgs(createPackage, ['my-app']);
-  assert.deepEqual(
-    args.filter(value =>
-      value.startsWith('--config.minimum-release-age-exclude='),
-    ),
-    expected.map(value => `--config.minimum-release-age-exclude=${value}`),
-  );
-  // Later edits to a manifest cannot expand the already-authenticated policy.
-  release.createPackage.packageJson.dependencies.tsrs = 'latest';
-  assert.deepEqual(
-    createPackage.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude,
-    expected,
-  );
-});
-
-test('bootstrap authenticates only reviewed exact Effect runtime releases and the bounded tsrs trust exception', async () => {
-  const { createPnpmDlxArgs, resolveCreatePackage } = await import(
-    '../published-create-proof/package-cohort.mjs'
-  );
-  const release = makeBootstrapRelease();
-  const baseline =
-    resolveCreatePackage(release).bootstrapReleaseAgePolicy
-      .minimumReleaseAgeExclude;
-  const runtimeSelectors = ['effect@4.1.4', '@effect/opentelemetry@4.1.4'];
-  release.createPackage.packageJson.ultramodern.bootstrapReleaseAgeExclude =
-    runtimeSelectors;
-  const packedProducer = resolveCreatePackage(release);
-  assert.deepEqual(
-    packedProducer.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude,
-    [...baseline, ...runtimeSelectors].sort((a, b) => a.localeCompare(b)),
-  );
-  for (const invalid of [
-    ['effect@*'],
-    ['effect@^4.1.4'],
-    ['effect@4.0.8'],
-    ['unrelated@4.1.4'],
-    ['effect@4.1.4', 'effect@4.1.4'],
-    'effect@4.1.4',
-  ]) {
-    release.createPackage.packageJson.ultramodern.bootstrapReleaseAgeExclude =
-      invalid;
-    assert.throws(
-      () => resolveCreatePackage(release),
-      /only reviewed exact Effect releases/u,
-    );
-  }
-  // Authenticated policies remain fixed after the producer object is edited.
-  assert.doesNotThrow(() => createPnpmDlxArgs(packedProducer, []));
-  release.createPackage.packageJson.ultramodern.bootstrapReleaseAgeExclude =
-    runtimeSelectors;
-  release.createPackage.packageJson.dependencies.tsrs = '7.1.0-beta.tsrs3';
-  const args = createPnpmDlxArgs(resolveCreatePackage(release), []);
-  assert(args.includes('--config.trust-policy=no-downgrade'));
-  assert(args.includes('--config.trust-policy-ignore-after=1440'));
-  assert.deepEqual(
-    args.filter(arg => arg.startsWith('--config.trust-policy-exclude=')),
-    ['--config.trust-policy-exclude=tsrs@7.1.0-beta.tsrs3'],
-  );
-});
-
-test('authenticated compiler trust survives source bootstrap and published or source continuation without broadening', async t => {
-  const { createPnpmDlxArgs, resolveCreatePackage } = await import(
-    '../published-create-proof/package-cohort.mjs'
-  );
-  const { createAcceptanceWorkspaceEnv } = await import(
-    '../published-create-proof/process.mjs'
-  );
-  const { readInstalledPolicyEnvironment } = await import(
-    '../published-create-proof/acceptance-continuation.mjs'
-  );
-  const root = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), 'compiler-trust-continuation-')),
-  );
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const release = makeBootstrapRelease();
-  release.createPackage.packageJson.dependencies.tsrs = '7.1.0-beta.tsrs3';
-  const createPackage = resolveCreatePackage(release);
-  const compiler = 'tsrs@7.1.0-beta.tsrs3';
-  const cohort = release.packages
-    .map(item => `${item.targetName}@${item.version}`)
-    .sort();
-  const expected = [...cohort, compiler].sort();
-  const sourceEnv = createAcceptanceWorkspaceEnv(
-    {},
-    {
-      mode: 'source',
-      release,
-      registryEnv: { PNPM_CONFIG_TRUST_POLICY_EXCLUDE: JSON.stringify(cohort) },
-    },
-  );
-  assert.deepEqual(
-    JSON.parse(sourceEnv.pnpm_config_trust_policy_exclude),
-    expected,
-  );
-  for (const selectors of [cohort, expected]) {
-    const args = createPnpmDlxArgs(createPackage, [], {
-      pnpm_config_trust_policy_exclude: JSON.stringify(selectors),
-    });
-    assert.deepEqual(
-      args.filter(arg => arg.startsWith('--config.trust-policy-exclude=')),
-      expected.map(selector => `--config.trust-policy-exclude=${selector}`),
-    );
-  }
-  for (const invalid of [
-    ['*'],
-    [...expected, 'foreign@1.0.0'],
-    cohort.slice(1),
-  ]) {
-    assert.throws(
-      () =>
-        createPnpmDlxArgs(createPackage, [], {
-          pnpm_config_trust_policy_exclude: JSON.stringify(invalid),
-        }),
-      /exact authenticated source cohort/u,
-    );
-  }
-  const policy = {
-    ...createPackage.bootstrapReleaseAgePolicy,
-    trustPolicy: 'no-downgrade',
-    trustPolicyIgnoreAfter: 1440,
-    trustPolicyExclude: [compiler],
-  };
-  const writePolicy = value =>
-    fs.writeFileSync(
-      path.join(root, 'pnpm-workspace.yaml'),
-      Object.entries(value)
-        .map(([key, item]) => `${key}: ${JSON.stringify(item)}`)
-        .join('\n') + '\n',
-    );
-  writePolicy(policy);
-  writeJson(root, 'node_modules/.pnpm-workspace-state-v1.json', {
-    settings: { ...policy, trustPolicyExclude: expected },
-  });
-  const continued = readInstalledPolicyEnvironment(
-    root,
-    {},
-    { mode: 'source', release },
-  );
-  assert.deepEqual(
-    JSON.parse(continued.pnpm_config_trust_policy_exclude),
-    expected,
-  );
-  writeJson(root, 'node_modules/.pnpm-workspace-state-v1.json', {
-    settings: policy,
-  });
-  const published = readInstalledPolicyEnvironment(
-    root,
-    {},
-    { mode: 'published', release },
-  );
-  assert.equal(published.pnpm_config_trust_policy_exclude, undefined);
-  assert.equal(
-    readInstalledPolicyEnvironment(root).pnpm_config_trust_policy_exclude,
-    undefined,
-  );
-  writePolicy({
-    ...policy,
-    trustPolicyExclude: [compiler, 'foreign@1.0.0'].sort(),
-  });
-  assert.throws(
-    () =>
-      readInstalledPolicyEnvironment(root, {}, { mode: 'published', release }),
-    /native consumer trust policy/u,
-  );
-  writePolicy(policy);
-  writeJson(root, 'node_modules/.pnpm-workspace-state-v1.json', {
-    settings: { ...policy, trustPolicyExclude: [] },
-  });
-  assert.throws(
-    () =>
-      readInstalledPolicyEnvironment(root, {}, { mode: 'published', release }),
-    /installed authenticated exact compiler/u,
-  );
-});
-
-test('bootstrap compiler exceptions ignore development, other packages and unauthenticated create metadata', async () => {
-  const { resolveCreatePackage } = await import(
-    '../published-create-proof/package-cohort.mjs'
-  );
-  const release = makeBootstrapRelease();
-  const baseline =
-    resolveCreatePackage(release).bootstrapReleaseAgePolicy
-      .minimumReleaseAgeExclude;
-  release.createPackage.packageJson.devDependencies = {
-    '@effect/tsgo': '0.69.0',
-    tsrs: '7.1.0-beta.tsrs3',
-  };
-  release.packages.find(
-    item => item.sourceName === '@modern-js/utils',
-  ).packageJson.dependencies = { tsrs: '7.1.0-beta.tsrs3' };
-  release.createPackage = {
-    ...release.createPackage,
-    packageJson: {
-      ...release.createPackage.packageJson,
-      dependencies: {
-        ...release.createPackage.packageJson.dependencies,
-        tsrs: '7.1.0-beta.tsrs3',
-      },
-    },
-  };
-  assert.deepEqual(
-    resolveCreatePackage(release).bootstrapReleaseAgePolicy
-      .minimumReleaseAgeExclude,
-    baseline,
-  );
-});
-
 test('bootstrap rejects inexact or conflicting authenticated compiler pins', async () => {
   const { resolveCreatePackage } = await import(
     '../published-create-proof/package-cohort.mjs'
@@ -919,354 +445,6 @@ test('bootstrap rejects inexact or conflicting authenticated compiler pins', asy
     );
   }
 });
-
-test('bootstrap compiler exemptions cannot be forged or broadened by cloning policy', async () => {
-  const { createPnpmDlxArgs, resolveCreatePackage } = await import(
-    '../published-create-proof/package-cohort.mjs'
-  );
-  const release = makeBootstrapRelease();
-  Object.assign(release.createPackage.packageJson.dependencies, {
-    '@effect/tsgo': '0.69.0',
-    tsrs: '7.1.0-beta.tsrs3',
-  });
-  const actual = resolveCreatePackage(release);
-  assert.doesNotThrow(() => createPnpmDlxArgs(actual, []));
-  for (const extra of [
-    undefined,
-    'tsrs@*',
-    'tsrs@0.19.0-ts7.1.0-beta',
-    '@tsrs/unreviewed-host@7.1.0-beta.tsrs3',
-    '@effect/other@0.69.0',
-    'unrelated@0.69.0',
-  ]) {
-    const exclusions = [
-      ...actual.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude,
-      ...(extra ? [extra] : []),
-    ].sort((left, right) => left.localeCompare(right));
-    assert.throws(
-      () =>
-        createPnpmDlxArgs(
-          {
-            ...actual,
-            bootstrapReleaseAgePolicy: {
-              ...actual.bootstrapReleaseAgePolicy,
-              minimumReleaseAgeExclude: exclusions,
-            },
-          },
-          [],
-        ),
-      /exact authenticated bootstrap release-age policy/u,
-    );
-  }
-});
-
-test('bootstrap release policy binds one exact cohort and sidecar selector set', async t => {
-  const { releaseAgeExemptions } = await import(
-    '../published-create-proof/release-age-audit.mjs'
-  );
-  const { createAcceptanceReleaseAgeEnv } = await import(
-    '../published-create-proof/acceptance-profile.mjs'
-  );
-  const { resolveCreatePackage } = await import(
-    '../published-create-proof/package-cohort.mjs'
-  );
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-age-set-'));
-  t.after(() => fs.rmSync(root, { force: true, recursive: true }));
-  const policyPath = path.join(root, 'release-age-policy.json');
-  writeJson(root, 'release-age-policy.json', {
-    schema: 'bleedingdev.ultramodern.release-age-exceptions',
-    schemaVersion: 2,
-    entries: [],
-  });
-  const release = makeBootstrapRelease();
-  release.sidecars = {
-    packages: [makeBootstrapSidecar('@bleedingdev/mf-bridge-react', '1.0.0')],
-  };
-  const exemptions = releaseAgeExemptions(release, { policyPath });
-  assert.equal(exemptions.length, release.packages.length + 1);
-  assert.ok(exemptions.includes('@bleedingdev/mf-bridge-react@1.0.0'));
-  // No lane may derive a set without the reviewed policy.
-  assert.throws(
-    () => releaseAgeExemptions(release, {}),
-    /require the reviewed exception policy path/u,
-  );
-  const env = createAcceptanceReleaseAgeEnv(
-    { PATH: '/exact/pnpm' },
-    resolveCreatePackage(release),
-    exemptions,
-  );
-  assert.equal(
-    env.pnpm_config_minimum_release_age_exclude,
-    JSON.stringify(exemptions),
-  );
-  assert.equal(env.pnpm_config_minimum_release_age, '1440');
-  assert.equal(env.pnpm_config_minimum_release_age_strict, 'true');
-  assert.equal(env.PATH, '/exact/pnpm');
-  release.sidecars.packages[0].version = '1.*';
-  assert.throws(
-    () => releaseAgeExemptions(release, { policyPath }),
-    /Acceptance command release-age exclusions/u,
-  );
-});
-
-test('release acceptance shares authenticated compiler selectors across bootstrap, Tractor and workspace audit', async t => {
-  const { auditReleaseAgePolicy, releaseAgeExemptions } = await import(
-    '../published-create-proof/release-age-audit.mjs'
-  );
-  const { createAcceptanceReleaseAgeEnv } = await import(
-    '../published-create-proof/acceptance-profile.mjs'
-  );
-  const { resolveCreatePackage } = await import(
-    '../published-create-proof/package-cohort.mjs'
-  );
-  const { createTractorPnpmDlxArgs } = await import(
-    '../tractor-downstream/main.mjs'
-  );
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'compiler-age-set-'));
-  t.after(() => fs.rmSync(root, { force: true, recursive: true }));
-  const policyPath = path.join(root, 'release-age-policy.json');
-  writeJson(root, 'release-age-policy.json', {
-    schema: 'bleedingdev.ultramodern.release-age-exceptions',
-    schemaVersion: 2,
-    entries: [],
-  });
-  const release = makeBootstrapRelease();
-  Object.assign(release.createPackage.packageJson.dependencies, {
-    '@effect/tsgo': '0.69.0',
-    tsrs: '7.1.0-beta.tsrs3',
-    'unrelated-compiler': '9.9.9',
-  });
-  const createPackage = resolveCreatePackage(release);
-  const exclusions = releaseAgeExemptions(release, { policyPath });
-  assert.equal(exclusions.length, release.packages.length + 17);
-  assert(exclusions.includes('tsrs@7.1.0-beta.tsrs3'));
-  assert(exclusions.includes('@effect/tsgo-win32-x64@0.69.0'));
-  assert(!exclusions.includes('unrelated-compiler@9.9.9'));
-  assert(
-    createPackage.bootstrapReleaseAgePolicy.minimumReleaseAgeExclude.every(
-      selector => exclusions.includes(selector),
-    ),
-  );
-  const env = createAcceptanceReleaseAgeEnv({}, createPackage, exclusions);
-  assert.deepEqual(
-    JSON.parse(env.pnpm_config_minimum_release_age_exclude),
-    exclusions,
-  );
-  assert.equal(env.pnpm_config_trust_policy_exclude, undefined);
-  assert.equal(env.pnpm_config_minimum_release_age, '1440');
-  assert.equal(env.pnpm_config_minimum_release_age_strict, 'true');
-  assert.equal(
-    env.pnpm_config_minimum_release_age_ignore_missing_time,
-    'false',
-  );
-  const args = createTractorPnpmDlxArgs(createPackage, exclusions, [
-    'ultramodern',
-    'validate',
-  ]);
-  assert.deepEqual(
-    args.filter(value =>
-      value.startsWith('--config.minimum-release-age-exclude='),
-    ),
-    exclusions.map(value => `--config.minimum-release-age-exclude=${value}`),
-  );
-  const workspace = {
-    minimumReleaseAge: 1440,
-    minimumReleaseAgeExclude: exclusions,
-    minimumReleaseAgeIgnoreMissingTime: false,
-    minimumReleaseAgeStrict: true,
-    trustPolicy: 'no-downgrade',
-    trustPolicyIgnoreAfter: 1440,
-  };
-  writeJson(root, 'pnpm-workspace.yaml', workspace);
-  // This tests exclusion-policy agreement, not an install or compiler run.
-  writeJson(root, 'pnpm-lock.yaml', {
-    lockfileVersion: '9.0',
-    importers: { '.': {} },
-    packages: {},
-    snapshots: {},
-  });
-  const auditOptions = {
-    projectDir: root,
-    release,
-    commandExclusions: exclusions,
-    registryUrl: 'https://registry.npmjs.org/',
-    policyPath,
-    parseYamlImpl: JSON.parse,
-    verifyYamlTool: false,
-    fetchImpl: () => {
-      throw new Error('Empty dependency closure must not fetch metadata');
-    },
-  };
-  const audit = await auditReleaseAgePolicy(auditOptions);
-  assert.deepEqual(audit.exactExclusions, exclusions);
-  for (const badExclusions of [
-    exclusions.filter(value => value !== 'tsrs@7.1.0-beta.tsrs3'),
-    [...exclusions, 'unrelated-compiler@9.9.9'].sort(),
-  ]) {
-    writeJson(root, 'pnpm-workspace.yaml', {
-      ...workspace,
-      minimumReleaseAgeExclude: badExclusions,
-    });
-    await assert.rejects(
-      auditReleaseAgePolicy(auditOptions),
-      /must list exactly the release cohort/u,
-    );
-  }
-  release.createPackage.packageJson.dependencies.tsrs = '^0.20.0';
-  assert.throws(
-    () => releaseAgeExemptions(release, { policyPath }),
-    /must use one exact bootstrap version/u,
-  );
-});
-
-test('release-age audit honors only authenticated compiler pins with verified registry metadata', async t => {
-  const { auditReleaseAgePolicy, releaseAgeExemptions } = await import(
-    '../published-create-proof/release-age-audit.mjs'
-  );
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'compiler-age-audit-'));
-  t.after(() => fs.rmSync(root, { force: true, recursive: true }));
-  const policyPath = path.join(root, 'release-age-policy.json');
-  writeJson(root, 'release-age-policy.json', {
-    schema: 'bleedingdev.ultramodern.release-age-exceptions',
-    schemaVersion: 2,
-    entries: [],
-  });
-  const release = makeNormalAcceptanceRelease();
-  Object.assign(release.createPackage.packageJson.dependencies, {
-    '@effect/tsgo': '0.69.0',
-    tsrs: '7.1.0-beta.tsrs3',
-    'unrelated-compiler': '9.9.9',
-  });
-  release.createPackage.packageJson.devDependencies = {
-    '@effect/tsgo-dev-only': '0.69.0',
-  };
-  release.packages[1].packageJson.dependencies.tsrs = '0.19.0-ts7.1.0-beta';
-  release.createPackage.packageJson.ultramodern.bootstrapReleaseAgeExclude = [
-    'effect@4.1.4',
-    '@effect/opentelemetry@4.1.4',
-  ];
-  const exclusions = releaseAgeExemptions(release, { policyPath });
-  const cohort = new Set(
-    release.packages.map(item => `${item.targetName}@${item.version}`),
-  );
-  const compilerSelectors = exclusions.filter(value => !cohort.has(value));
-  assert.equal(compilerSelectors.length, 19);
-  const identities = compilerSelectors.map(selector => {
-    const separator = selector.lastIndexOf('@');
-    return {
-      name: selector.slice(0, separator),
-      version: selector.slice(separator + 1),
-      integrity: `sha512-${Buffer.from(selector).toString('base64')}`,
-    };
-  });
-  writeJson(root, 'pnpm-workspace.yaml', {
-    minimumReleaseAge: 1440,
-    minimumReleaseAgeExclude: exclusions,
-    minimumReleaseAgeIgnoreMissingTime: false,
-    minimumReleaseAgeStrict: true,
-    trustPolicy: 'no-downgrade',
-    trustPolicyIgnoreAfter: 1440,
-  });
-  const writeLock = entries =>
-    writeJson(root, 'pnpm-lock.yaml', {
-      lockfileVersion: '9.0',
-      importers: {
-        '.': {
-          dependencies: Object.fromEntries(
-            entries.map(item => [
-              item.name,
-              { specifier: item.version, version: item.version },
-            ]),
-          ),
-        },
-      },
-      packages: Object.fromEntries(
-        entries.map(item => [
-          `${item.name}@${item.version}`,
-          { resolution: { integrity: item.integrity } },
-        ]),
-      ),
-      snapshots: Object.fromEntries(
-        entries.map(item => [`${item.name}@${item.version}`, {}]),
-      ),
-    });
-  writeLock(identities);
-  let registryIntegrity;
-  let publishedAt = '2026-10-27T12:00:00.000Z';
-  const options = {
-    projectDir: root,
-    release,
-    commandExclusions: exclusions,
-    registryUrl: 'https://registry.npmjs.org/',
-    policyPath,
-    now: new Date('2026-10-27T12:15:00.000Z'),
-    parseYamlImpl: JSON.parse,
-    verifyYamlTool: false,
-    fetchImpl: async url => {
-      assert.equal(new URL(url).origin, 'https://registry.npmjs.org');
-      const name = decodeURIComponent(new URL(url).pathname.slice(1));
-      const item = identities.find(identity => identity.name === name);
-      assert(item, `Unexpected registry package ${name}`);
-      return new Response(
-        JSON.stringify({
-          time: { [item.version]: publishedAt },
-          versions: {
-            [item.version]: {
-              dist: { integrity: registryIntegrity ?? item.integrity },
-            },
-          },
-        }),
-        { status: 200 },
-      );
-    },
-  };
-  const audit = await auditReleaseAgePolicy(options);
-  assert.equal(audit.approvals.length, 19);
-  assert(
-    audit.approvals.every(
-      item => item.authority === 'authenticated-generator-compiler',
-    ),
-  );
-  assert.deepEqual(
-    audit.approvals.map(item => `${item.package}@${item.version}`).sort(),
-    compilerSelectors,
-  );
-  assert(audit.approvals.every(item => item.integrity));
-  registryIntegrity = 'sha512-ZGlmZmVyZW50';
-  await assert.rejects(
-    auditReleaseAgePolicy(options),
-    /Registry metadata integrity mismatch/u,
-  );
-  registryIntegrity = undefined;
-  for (publishedAt of [undefined, '2026-10-28T00:00:00.000Z']) {
-    await assert.rejects(
-      auditReleaseAgePolicy(options),
-      /Registry publication time is (?:missing or invalid|in the future)/u,
-    );
-  }
-  publishedAt = '2026-10-27T12:00:00.000Z';
-  for (const [name, version] of [
-    ['unrelated-compiler', '9.9.9'],
-    ['@effect/tsgo-dev-only', '0.69.0'],
-    ['@tsrs/unreviewed-host', '7.1.0-beta.tsrs3'],
-    ['tsrs', '0.19.0-ts7.1.0-beta'],
-    ['@effect/tsgo', '0.58.0'],
-  ]) {
-    const item = {
-      name,
-      version,
-      integrity: 'sha512-dW5hcHByb3ZlZA==',
-    };
-    identities.unshift(item);
-    writeLock([item]);
-    await assert.rejects(
-      auditReleaseAgePolicy(options),
-      /immature package\(s\) without an exact, unexpired approval/u,
-    );
-    identities.shift();
-  }
-});
-
 test('generated workspace commands cannot inherit release-age or trust policy overrides', async t => {
   const { createAcceptanceWorkspaceEnv } = await import(
     '../published-create-proof/process.mjs'
@@ -1943,7 +1121,7 @@ test('asserts generated cohorts only from strict manifest expectations', async t
     '../published-create-proof/package-cohort.mjs'
   );
   const { YAML_SPECIFIER, YAML_VERSION } = await import(
-    '../published-create-proof/release-age-audit.mjs'
+    '../published-create-proof/dependency-closure-audit.mjs'
   );
   const yamlRequire = createRequire(
     path.join(__dirname, '../../prebundle/package.json'),
@@ -2153,4 +1331,65 @@ test('asserts generated cohorts only from strict manifest expectations', async t
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('bootstrap accepts any fresh release without age selectors while retaining authenticated compiler trust', async () => {
+  const { createPnpmDlxArgs, resolveCreatePackage } = await import(
+    '../published-create-proof/package-cohort.mjs'
+  );
+  const release = makeBootstrapRelease('3.99.0-ultramodern.999');
+  release.createPackage.packageJson.dependencies.tsrs = '7.1.0-beta.tsrs3';
+  const createPackage = resolveCreatePackage(release);
+  const args = createPnpmDlxArgs(createPackage, ['new-app']);
+  const { createAcceptanceWorkspaceEnv } = await import(
+    '../published-create-proof/process.mjs'
+  );
+  const cohort = release.packages
+    .map(item => `${item.targetName}@${item.version}`)
+    .sort();
+  const sourceEnv = createAcceptanceWorkspaceEnv(
+    {},
+    {
+      mode: 'source',
+      release,
+      registryEnv: { PNPM_CONFIG_TRUST_POLICY_EXCLUDE: JSON.stringify(cohort) },
+    },
+  );
+  assert.deepEqual(
+    createPnpmDlxArgs(createPackage, [], sourceEnv).filter(arg =>
+      arg.startsWith('--config.trust-policy-exclude='),
+    ),
+    [...cohort, 'tsrs@7.1.0-beta.tsrs3']
+      .sort()
+      .map(selector => `--config.trust-policy-exclude=${selector}`),
+  );
+  assert.ok(args.includes('--config.minimum-release-age=0'));
+  assert.equal(
+    args.filter(arg => arg.startsWith('--config.minimum-release-age-exclude='))
+      .length,
+    0,
+  );
+  assert.ok(args.includes('--config.trust-policy=no-downgrade'));
+  assert.deepEqual(
+    args.filter(arg => arg.startsWith('--config.trust-policy-exclude=')),
+    ['--config.trust-policy-exclude=tsrs@7.1.0-beta.tsrs3'],
+  );
+  assert.throws(
+    () =>
+      createPnpmDlxArgs(
+        {
+          ...createPackage,
+          bootstrapPolicy: { ...createPackage.bootstrapPolicy },
+        },
+        [],
+      ),
+    /authenticated bootstrap policy/,
+  );
+  assert.throws(
+    () =>
+      createPnpmDlxArgs(createPackage, [], {
+        pnpm_config_trust_policy_exclude: '["*"]',
+      }),
+    /exact authenticated source cohort/,
+  );
 });

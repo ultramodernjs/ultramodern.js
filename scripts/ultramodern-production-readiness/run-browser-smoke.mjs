@@ -38,14 +38,14 @@ import {
   orderTargetsForLocalStartup,
 } from './browser-smoke/targets.mjs';
 import {
+  parseYamlFile,
+  validateExactExclusions,
+} from './published-create-proof/dependency-closure-audit.mjs';
+import {
   authenticatedCompilerTrustExclusions,
   reviewedCompilerTrustExclusions,
 } from './published-create-proof/package-cohort.mjs';
 import { createAcceptanceWorkspaceEnv } from './published-create-proof/process.mjs';
-import {
-  parseYamlFile,
-  validateExactExclusions,
-} from './published-create-proof/release-age-audit.mjs';
 
 export {
   findDuplicateStylesheetHrefs,
@@ -123,21 +123,9 @@ export function createAcceptedNodeProofEnvironment(
     path.join(projectDir, 'node_modules/.pnpm-workspace-state-v1.json'),
   );
   if (
-    settings?.minimumReleaseAge !== 1440 ||
-    settings.minimumReleaseAgeStrict !== true ||
-    settings.minimumReleaseAgeIgnoreMissingTime !== false ||
-    settings.trustPolicy !== 'no-downgrade' ||
+    settings?.trustPolicy !== 'no-downgrade' ||
     (settings.enableGlobalVirtualStore !== undefined &&
-      typeof settings.enableGlobalVirtualStore !== 'boolean') ||
-    !['minimumReleaseAgeExclude'].every(
-      key =>
-        Array.isArray(settings[key]) &&
-        settings[key].length > 0 &&
-        settings[key].every(
-          value => typeof value === 'string' && value.length > 0,
-        ) &&
-        new Set(settings[key]).size === settings[key].length,
-    )
+      typeof settings.enableGlobalVirtualStore !== 'boolean')
   )
     throw new BrowserSmokeError(
       'Continuation requires the original strict pnpm install settings',
@@ -148,22 +136,13 @@ export function createAcceptedNodeProofEnvironment(
     { singleDocument: true },
   );
   if (
-    policy?.minimumReleaseAge !== 1440 ||
-    policy.minimumReleaseAgeStrict !== true ||
-    policy.minimumReleaseAgeIgnoreMissingTime !== false ||
-    policy.trustPolicy !== 'no-downgrade' ||
-    policy.trustPolicyIgnoreAfter !== 1440 ||
-    JSON.stringify(policy.minimumReleaseAgeExclude) !==
-      JSON.stringify(settings.minimumReleaseAgeExclude)
+    policy?.trustPolicy !== 'no-downgrade' ||
+    policy.trustPolicyIgnoreAfter !== 1440
   ) {
     throw new BrowserSmokeError(
       'Continuation requires unchanged native pnpm workspace policy',
     );
   }
-  validateExactExclusions(
-    policy.minimumReleaseAgeExclude,
-    'Continuation native release-age exclusions',
-  );
   const nativeTrustExclusions = validateExactExclusions(
     policy.trustPolicyExclude === undefined ? [] : policy.trustPolicyExclude,
     'Continuation native trust exclusions',

@@ -267,13 +267,6 @@ export function assertReleaseCohortPackageSource(
   return cohort;
 }
 
-export function releaseCohortSelectors(cohort: UltramodernReleaseCohort) {
-  return [
-    ...cohort.packages.map(item => `${item.targetName}@${item.version}`),
-    ...cohort.sidecars.map(item => `${item.name}@${item.version}`),
-  ].sort();
-}
-
 /** Authenticate owned aliases actually emitted into consumer dependency policy. */
 export function assertReleaseCohortAliasRequest(
   cohort: UltramodernReleaseCohort,

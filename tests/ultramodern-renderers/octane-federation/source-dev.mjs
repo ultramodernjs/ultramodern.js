@@ -216,10 +216,7 @@ export async function prepareSourceDevApp({
     stringifyYaml({
       packages: ['.'],
       packageImportMethod: 'clone-or-copy',
-      minimumReleaseAge: 1440,
-      minimumReleaseAgeStrict: true,
-      minimumReleaseAgeIgnoreMissingTime: false,
-      minimumReleaseAgeExclude: [],
+      minimumReleaseAge: 0,
       overrides: context.frameworkOverrides,
       allowBuilds: context.allowBuilds,
     }),
@@ -243,9 +240,6 @@ export async function prepareSourceDevApp({
       '--virtual-store-dir',
       virtualStore,
       '--config.package-import-method=clone-or-copy',
-      '--config.minimum-release-age=1440',
-      '--config.minimum-release-age-strict=true',
-      '--config.minimum-release-age-ignore-missing-time=false',
     ],
     {
       cwd: appRoot,
@@ -267,10 +261,6 @@ export async function prepareSourceDevApp({
     },
   );
   const policy = parseYaml(fs.readFileSync(policyPath, 'utf8'));
-  assert.equal(policy.minimumReleaseAge, 1440);
-  assert.equal(policy.minimumReleaseAgeStrict, true);
-  assert.equal(policy.minimumReleaseAgeIgnoreMissingTime, false);
-  assert.deepEqual(policy.minimumReleaseAgeExclude ?? [], []);
   assert.deepEqual(policy.overrides, context.frameworkOverrides);
   assert.equal(fs.realpathSync(virtualStore), virtualStore);
   const installed = {};

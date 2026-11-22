@@ -12,17 +12,13 @@ import {
   assertReleaseCohortAliasRequest,
   assertReleaseCohortPackageSource,
   parseUltramodernReleaseCohort,
-  releaseCohortSelectors,
 } from '../src/ultramodern-release-cohort';
 import { generateUltramodernWorkspace } from '../src/ultramodern-workspace';
 import { readSupportArtifacts } from '../src/ultramodern-workspace/package-source';
 import { ULTRAMODERN_WORKSPACE_POLICY } from '../src/ultramodern-workspace/policy';
 import { readBundledFrameworkManifests } from '../src/ultramodern-workspace/tooling-support';
 import { assertWorkspaceDependencyOverrides } from '../src/ultramodern-workspace/validation/workspace';
-import {
-  BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
-  BRACES_FORK_VERSION,
-} from '../src/ultramodern-workspace/versions';
+import { BRACES_FORK_VERSION } from '../src/ultramodern-workspace/versions';
 import { createPublishedCreateFixture } from './helpers/published-create-fixture.mjs';
 
 function cohort() {
@@ -64,12 +60,8 @@ test('local source generation uses native workspace requests without copied rele
       manifest.devDependencies['@modern-js/ultramodern-create'],
       'workspace:*',
     );
-    assert.equal(
-      (policy.minimumReleaseAgeExclude ?? []).some((selector: string) =>
-        selector.startsWith('@bleedingdev/modern-js-'),
-      ),
-      false,
-    );
+    assert.equal(policy.minimumReleaseAge, 0);
+    assert.equal(Object.hasOwn(policy, 'minimumReleaseAgeExclude'), false);
     assert.equal(
       fs.existsSync(path.join(workspaceDir, '.modernjs/ultramodern.json')),
       false,
@@ -170,11 +162,7 @@ test('local source generation rejects an explicit install request', async () => 
   }
 });
 
-// Replays a workspace created on the day its cohort is published: the create
-// package runs from node_modules (no src/, shipped release-cohort.json), and
-// pnpm's strict 24h gate would reject every cohort package unless the
-// workspace exempts exactly those versions.
-test('an installed create package immediately installs its exact cohort and transitive sidecars under native release-age policy', async () => {
+test('an installed create package admits fresh arbitrary dependencies and authenticates its cohort', async () => {
   const packageRoot = path.resolve(__dirname, '..');
   const installRoot = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), 'um-installed-producer-')),
@@ -209,7 +197,7 @@ test('an installed create package immediately installs its exact cohort and tran
         left.name.localeCompare(right.name),
       );
     // modern-js-utils is not a catalog entry: it arrives transitively at the
-    // same cohort version and must be exempt too.
+    // same cohort version and must retain authenticated identity.
     const installedCohort = parseUltramodernReleaseCohort(
       createPublishedCreateFixture({
         installed,
@@ -223,9 +211,6 @@ test('an installed create package immediately installs its exact cohort and tran
     const owners = readBundledFrameworkManifests(installed, installedCohort);
     assert(owners.has('@modern-js/utils'));
     assert(owners.has('@modern-js/renderer-solid'));
-    const names = installedCohort.packages.map(item =>
-      item.sourceName.slice('@modern-js/'.length),
-    );
     const generateEnv = { ...process.env };
     delete generateEnv.NODE_PATH;
     const generate = (workspace: string, modernPackageVersion: string) =>
@@ -258,49 +243,25 @@ generateUltramodernWorkspace(JSON.parse(process.argv[2]));`,
     const policy = yaml.load(
       fs.readFileSync(path.join(tempRoot, 'fresh/pnpm-workspace.yaml'), 'utf8'),
     ) as Record<string, any>;
-    assert.deepEqual(
-      policy.minimumReleaseAgeExclude,
-      [
-        ...BOOTSTRAP_RELEASE_AGE_EXCEPTIONS,
-        ...names.map(name => `@bleedingdev/modern-js-${name}@${version}`),
-        ...sidecars.map(
-          (item: { name: string; version: string }) =>
-            `${item.name}@${item.version}`,
-        ),
-      ].sort(),
-    );
+    assert.equal(policy.minimumReleaseAge, 0);
+    for (const key of [
+      'minimumReleaseAgeExclude',
+      'minimumReleaseAgeStrict',
+      'minimumReleaseAgeIgnoreMissingTime',
+    ])
+      assert.equal(Object.hasOwn(policy, key), false);
     assert.deepEqual(
       policy.overrides,
       ULTRAMODERN_WORKSPACE_POLICY.pnpm.overrides,
     );
-    for (const name of ['@tanstack/redact', 'rsbuild-redact-plugin']) {
-      assert.equal(
-        policy.minimumReleaseAgeExclude.some((selector: string) =>
-          selector.includes(name),
-        ),
-        false,
-        `${name} must pass the ordinary third-party release-age gate`,
-      );
-    }
-    assert.equal(policy.minimumReleaseAge, 1440);
-    assert.equal(policy.minimumReleaseAgeStrict, true);
-    assert.equal(policy.minimumReleaseAgeIgnoreMissingTime, false);
     assert.equal(policy.trustPolicy, 'no-downgrade');
     assert.equal(policy.trustPolicyIgnoreAfter, 1440);
-    assert.equal(
-      policy.minimumReleaseAgeExclude.some(
-        (selector: string) =>
-          selector.includes('*') || selector.startsWith('sharp@'),
-      ),
-      false,
-    );
     assert.equal(
       policy.catalogs.ultramodern['@modern-js/runtime'],
       `npm:@bleedingdev/modern-js-runtime@${version}`,
     );
 
-    // Only registry timestamps and native pnpm policy decide admission here.
-    // These package fixtures isolate metadata age, not sidecar implementation.
+    // Fresh registry fixtures exercise admission independently of package identity.
     const sdk = sidecars.find(
       (item: { name: string }) => item.name === '@bleedingdev/mf-sdk',
     );
@@ -309,7 +270,7 @@ generateUltramodernWorkspace(JSON.parse(process.argv[2]));`,
     );
     assert(
       sdk && modern,
-      'Canonical MF sidecars are required for the transitive age proof',
+      'Canonical MF sidecars are required for the transitive dependency proof',
     );
     const definitions = [
       ...sidecars
@@ -331,7 +292,7 @@ generateUltramodernWorkspace(JSON.parse(process.argv[2]));`,
             : {}),
         })),
       { name: '@bleedingdev/modern-js-utils', version },
-      { name: 'sharp', version: '0.35.5' },
+      { name: 'arbitrary-fresh-dependency', version: '1.0.0' },
     ];
     const snapshots = definitions.map(definition => {
       const dir = path.join(
@@ -372,7 +333,7 @@ generateUltramodernWorkspace(JSON.parse(process.argv[2]));`,
       const consumer = path.join(tempRoot, 'native-consumer');
       fs.mkdirSync(consumer);
       // Scoped registry configuration otherwise wins over --registry. This
-      // routes fixtures only; the generated native age policy stays intact.
+      // routes fixtures only; the generated native dependency policy stays intact.
       fs.writeFileSync(
         path.join(consumer, '.npmrc'),
         `@bleedingdev:registry=${registry.registryUrl}\n`,
@@ -402,7 +363,7 @@ generateUltramodernWorkspace(JSON.parse(process.argv[2]));`,
       // A temporary cwd can make a version-manager shim select another pnpm.
       // Reuse the executable that launched the tests and understands this policy.
       const pnpm = process.env.npm_execpath;
-      assert(pnpm, 'Run the native release-age proof through pnpm');
+      assert(pnpm, 'Run the native dependency policy proof through pnpm');
       await promisify(execFile)(pnpm, installArgs, {
         cwd: consumer,
         env,
@@ -432,31 +393,35 @@ generateUltramodernWorkspace(JSON.parse(process.argv[2]));`,
       );
       fs.writeFileSync(
         path.join(consumer, 'package.json'),
-        JSON.stringify({ private: true, dependencies: { sharp: '0.35.5' } }),
+        JSON.stringify({
+          private: true,
+          dependencies: { 'arbitrary-fresh-dependency': '1.0.0' },
+        }),
       );
-      const sharpMetadata = await (
-        await fetch(`${registry.registryUrl}sharp`)
+      const metadata = await (
+        await fetch(`${registry.registryUrl}arbitrary-fresh-dependency`)
       ).json();
-      assert.equal(sharpMetadata.versions['0.35.5'].name, 'sharp');
-      assert(Date.now() - Date.parse(sharpMetadata.time['0.35.5']) < 60_000);
-      await assert.rejects(
-        // Resolve the changed manifest even when CI defaults to a frozen lock;
-        // otherwise lock freshness rejects before the native age policy runs.
-        promisify(execFile)(pnpm, [...installArgs, '--no-frozen-lockfile'], {
+      assert(Date.now() - Date.parse(metadata.time['1.0.0']) < 60_000);
+      await promisify(execFile)(
+        pnpm,
+        [...installArgs, '--no-frozen-lockfile'],
+        {
           cwd: consumer,
           env,
           maxBuffer: 1024 * 1024,
-        }),
-        error => {
-          const output =
-            String((error as { stdout?: string; stderr?: string }).stdout) +
-            String((error as { stdout?: string; stderr?: string }).stderr);
-          assert.match(
-            output,
-            /minimumReleaseAge|release age|too new|released/iu,
-          );
-          return true;
         },
+      );
+      assert.equal(
+        JSON.parse(
+          fs.readFileSync(
+            path.join(
+              consumer,
+              'node_modules/arbitrary-fresh-dependency/package.json',
+            ),
+            'utf8',
+          ),
+        ).version,
+        '1.0.0',
       );
     } finally {
       await registry.stop();
@@ -593,10 +558,7 @@ test('authenticated sidecar selectors reject foreign names, ranges and duplicate
     ...cohort(),
     sidecars: [good],
   });
-  assert.deepEqual(releaseCohortSelectors(projected), [
-    `@bleedingdev/braces@${BRACES_FORK_VERSION}`,
-    '@bleedingdev/modern-js-runtime@3.9.0',
-  ]);
+  assert.deepEqual(projected.sidecars, [good]);
   for (const sidecars of [
     [{ name: 'sharp', version: '0.35.5' }],
     [{ name: '@third-party/braces', version: '3.0.4' }],

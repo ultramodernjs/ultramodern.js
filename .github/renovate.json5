@@ -120,7 +120,7 @@
       "description": "Update the patched Redact runtime and its Rsbuild integration together after SSR, hydration and opt-out qualification.",
       "matchManagers": ["npm"],
       "matchPackageNames": ["@tanstack/redact", "rsbuild-redact-plugin"],
-      "minimumReleaseAge": "1 day",
+      "minimumReleaseAge": "0 days",
       "groupName": "redact (patched runtime lattice)",
       "dependencyDashboardApproval": true,
       "labels": ["dependencies", "pin-lattice"],

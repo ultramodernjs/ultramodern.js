@@ -3,7 +3,6 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mergePnpmLockfileDocuments } from '../../lib/pnpm-lockfile-documents.mjs';
-import { resolveCreatePackage } from './package-cohort.mjs';
 import { run } from './process.mjs';
 
 const YAML_NAME = 'js-yaml';
@@ -12,9 +11,6 @@ const YAML_SPECIFIER = `${YAML_NAME}@${YAML_VERSION}`;
 const YAML_INTEGRITY =
   'sha512-paNr4LFIFPjeeSmwNYdrb8FafLLG/Cr2Af3GjbsHJ5CxIjH4r0c2emlmRdAtpPAieP1gRVzk6buBbVP5gBMGAg==';
 const NPM_REGISTRY = 'https://registry.npmjs.org/';
-const releaseAgePolicySchema = 'bleedingdev.ultramodern.release-age-exceptions';
-const releaseAgePolicySchemaVersion = 2;
-const minimumReleaseAgeMinutes = 1440;
 const dependencyBlocks = Object.freeze([
   'dependencies',
   'devDependencies',
@@ -27,7 +23,6 @@ const exactVersionPattern =
 const exactPackageNamePattern =
   /^(?:@[a-z0-9][a-z0-9._~-]*\/[a-z0-9][a-z0-9._~-]*|[A-Za-z0-9][A-Za-z0-9._~-]*)$/u;
 const integrityPattern = /^sha512-[A-Za-z0-9+/]+={0,2}$/u;
-const sha256Pattern = /^[a-f0-9]{64}$/u;
 
 function assertCondition(condition, message) {
   if (!condition) {
@@ -52,18 +47,6 @@ function isPlainObject(value) {
 
 function assertPlainObject(value, label) {
   assertCondition(isPlainObject(value), `${label} must be a JSON object`);
-}
-
-function assertExactKeys(value, expectedKeys, label) {
-  assertPlainObject(value, label);
-  const actual = Object.keys(value).sort(compareCodeUnits);
-  const expected = [...expectedKeys].sort(compareCodeUnits);
-  assertCondition(
-    JSON.stringify(actual) === JSON.stringify(expected),
-    `${label} has unknown or missing fields: expected ${expected.join(
-      ', ',
-    )}; found ${actual.join(', ')}`,
-  );
 }
 
 function assertNonEmptyString(value, label) {
@@ -603,264 +586,6 @@ function formatUnresolvedCandidates(unresolved) {
     .join('\n');
 }
 
-function emptyExceptionPolicy() {
-  return {
-    schema: releaseAgePolicySchema,
-    schemaVersion: releaseAgePolicySchemaVersion,
-    entries: [],
-  };
-}
-
-function canonicalInstant(value, label) {
-  assertNonEmptyString(value, label);
-  const timestamp = Date.parse(value);
-  assertCondition(
-    Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value,
-    `${label} must be a canonical ISO-8601 UTC timestamp`,
-  );
-  return timestamp;
-}
-
-function assertImmutableEvidenceUri(value, label) {
-  assertNonEmptyString(value, label);
-  if (/^urn:sha256:[a-f0-9]{64}$/u.test(value)) {
-    return;
-  }
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new Error(`${label} must be an immutable evidence URI`);
-  }
-  if (parsed.protocol === 'ipfs:') {
-    assertCondition(
-      parsed.hostname.length > 0 && parsed.search === '' && parsed.hash === '',
-      `${label} must be an immutable evidence URI without query or fragment`,
-    );
-    return;
-  }
-  const immutablePathSegment = parsed.pathname
-    .split('/')
-    .some(segment => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(segment));
-  assertCondition(
-    parsed.protocol === 'https:' &&
-      parsed.username === '' &&
-      parsed.password === '' &&
-      parsed.search === '' &&
-      parsed.hash === '' &&
-      immutablePathSegment,
-    `${label} must be HTTPS and content-addressed by a full commit or SHA-256 path segment`,
-  );
-}
-
-function validateExceptionPolicy(policy, now = new Date()) {
-  assertExactKeys(
-    policy,
-    ['entries', 'schema', 'schemaVersion'],
-    'Release-age exception policy',
-  );
-  assertCondition(
-    policy.schema === releaseAgePolicySchema &&
-      policy.schemaVersion === releaseAgePolicySchemaVersion,
-    `Unknown release-age exception policy schema ${String(
-      policy.schema,
-    )}@${String(policy.schemaVersion)}`,
-  );
-  assertCondition(
-    Array.isArray(policy.entries),
-    'Release-age exception policy entries must be an array',
-  );
-  const normalized = [];
-  const identities = new Set();
-  const nowMs = now.getTime();
-  assertCondition(
-    Number.isFinite(nowMs),
-    'Release-age exception policy validation requires a valid current time',
-  );
-  for (const [index, entry] of policy.entries.entries()) {
-    const label = `Release-age exception policy entries[${index}]`;
-    assertExactKeys(
-      entry,
-      [
-        'approvedBy',
-        'evidence',
-        'expiresAt',
-        'integrity',
-        'package',
-        'reviewedAt',
-        'version',
-      ],
-      label,
-    );
-    for (const field of [
-      'approvedBy',
-      'expiresAt',
-      'integrity',
-      'package',
-      'reviewedAt',
-      'version',
-    ]) {
-      assertNonEmptyString(entry[field], `${label}.${field}`);
-    }
-    assertCondition(
-      exactPackageNamePattern.test(entry.package),
-      `${label}.package must be one exact npm package name without a range, tag, or glob`,
-    );
-    assertCondition(
-      exactVersionPattern.test(entry.version),
-      `${label}.version must be an exact semantic version`,
-    );
-    assertCondition(
-      integrityPattern.test(entry.integrity),
-      `${label}.integrity must be a SHA-512 SRI value`,
-    );
-    assertCondition(
-      !/^(?:unknown|todo|tbd|placeholder)$/iu.test(entry.approvedBy),
-      `${label}.approvedBy must identify a real reviewer`,
-    );
-    const reviewedAtMs = canonicalInstant(
-      entry.reviewedAt,
-      `${label}.reviewedAt`,
-    );
-    const expiresAtMs = canonicalInstant(entry.expiresAt, `${label}.expiresAt`);
-    assertCondition(
-      reviewedAtMs <= nowMs,
-      `${label}.reviewedAt must not be in the future`,
-    );
-    assertCondition(
-      expiresAtMs > reviewedAtMs,
-      `${label}.expiresAt must be after review`,
-    );
-    assertExactKeys(entry.evidence, ['sha256', 'uri'], `${label}.evidence`);
-    assertImmutableEvidenceUri(entry.evidence.uri, `${label}.evidence.uri`);
-    assertCondition(
-      sha256Pattern.test(entry.evidence.sha256),
-      `${label}.evidence.sha256 must be a lowercase SHA-256 digest`,
-    );
-    const key = identityKey(entry);
-    assertCondition(
-      !identities.has(key),
-      `Release-age exception policy contains duplicate ${key}`,
-    );
-    identities.add(key);
-    normalized.push({
-      approvedBy: entry.approvedBy,
-      evidence: { ...entry.evidence },
-      expiresAt: entry.expiresAt,
-      integrity: entry.integrity,
-      package: entry.package,
-      reviewedAt: entry.reviewedAt,
-      version: entry.version,
-    });
-  }
-  normalized.sort((left, right) =>
-    compareCodeUnits(identityKey(left), identityKey(right)),
-  );
-  return {
-    schema: releaseAgePolicySchema,
-    schemaVersion: releaseAgePolicySchemaVersion,
-    entries: normalized,
-  };
-}
-
-function readExceptionPolicy(policyPath, now = new Date()) {
-  if (!policyPath) {
-    return validateExceptionPolicy(emptyExceptionPolicy(), now);
-  }
-  const resolved = path.resolve(policyPath);
-  const stat = fs.lstatSync(resolved, { throwIfNoEntry: false });
-  assertCondition(
-    stat?.isFile() && !stat.isSymbolicLink(),
-    `Release-age exception policy is missing or is not a regular file: ${resolved}`,
-  );
-  let policy;
-  try {
-    policy = JSON.parse(fs.readFileSync(resolved, 'utf8'));
-  } catch (error) {
-    throw new Error(
-      `Release-age exception policy is invalid JSON: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-  return validateExceptionPolicy(policy, now);
-}
-
-function readActiveReleaseAgeExceptionSelectors(
-  policyPath,
-  { now = new Date() } = {},
-) {
-  const policy = readExceptionPolicy(policyPath, now);
-  const nowMs = now.getTime();
-  return policy.entries
-    .filter(entry => Date.parse(entry.expiresAt) > nowMs)
-    .map(identityKey)
-    .sort(compareCodeUnits);
-}
-
-// The one release-age exemption set. Every lane that installs a release —
-// source acceptance, published acceptance, the Tractor rehearsal and the
-// published Tractor run — passes exactly this set to pnpm, so the source
-// rehearsal reproduces the published install. There is deliberately no lane
-// parameter: a lane-specific set is how the published lanes of
-// 3.9.0-ultramodern.13 missed the sidecars the source lane exempted.
-function releaseAgeExemptions(release, { policyPath, now = new Date() } = {}) {
-  assertCondition(
-    typeof policyPath === 'string' && policyPath.length > 0,
-    'Release-age exemptions require the reviewed exception policy path (pass --release-age-policy)',
-  );
-  assertCondition(
-    Array.isArray(release?.packages) && release.packages.length > 0,
-    'Strict release manifest package observations are required for release-age exclusions',
-  );
-  const version = release.release?.version;
-  const cohort = release.packages.map((item, index) => {
-    assertCondition(
-      item?.version === version && typeof item.targetName === 'string',
-      `Strict release manifest package observation ${index} must bind targetName to release version ${String(version)}`,
-    );
-    return `${item.targetName}@${item.version}`;
-  });
-  // Sidecars are first-party @bleedingdev packages the release publishes just
-  // before the cohort, so every lane exempts exactly the manifest's versions.
-  const sidecars = release.sidecars?.packages ?? [];
-  assertCondition(
-    Array.isArray(sidecars),
-    'Release manifest sidecar observations must be an array',
-  );
-  const sidecarSelectors = sidecars.map((item, index) => {
-    assertCondition(
-      typeof item?.name === 'string' && typeof item.version === 'string',
-      `Verified sidecar observation ${index} must bind an exact name and version`,
-    );
-    return `${item.name}@${item.version}`;
-  });
-  const releaseSelectors = validateExactExclusions(
-    [...cohort, ...sidecarSelectors].sort(compareCodeUnits),
-    'Acceptance command release-age exclusions',
-  );
-  return validateExactExclusions(
-    [
-      ...new Set([
-        ...releaseSelectors,
-        ...readActiveReleaseAgeExceptionSelectors(policyPath, { now }),
-        ...authenticatedBootstrapExclusions(release),
-      ]),
-    ].sort(compareCodeUnits),
-    'Acceptance command release-age exclusions',
-  );
-}
-
-function authenticatedBootstrapExclusions(release) {
-  // Use the same authenticated packed producer as pnpm dlx. A release without
-  // a producer grants no compiler exceptions; malformed producer metadata
-  // must fail rather than infer exceptions from arbitrary dependencies.
-  return release.createPackage
-    ? resolveCreatePackage(release).bootstrapReleaseAgePolicy
-        .minimumReleaseAgeExclude
-    : [];
-}
-
 function packumentUrl(registryUrl, packageName) {
   const base = new URL(registryUrl);
   assertCondition(
@@ -910,7 +635,7 @@ async function fetchRegistryResponse(fetchImpl, url) {
 
 async function fetchRegistryMetadata(
   packages,
-  { registryUrlFor, fetchImpl = fetch, now = new Date(), concurrency = 16 },
+  { registryUrlFor, fetchImpl = fetch, concurrency = 16 },
 ) {
   assertCondition(
     typeof registryUrlFor === 'function',
@@ -962,23 +687,11 @@ async function fetchRegistryMetadata(
         integrity === item.integrity,
         `Registry metadata integrity mismatch for ${specifier}: lock has ${item.integrity}, registry has ${integrity}`,
       );
-      const publishedAt = packument?.time?.[item.version];
-      const publishedAtMs = Date.parse(publishedAt);
-      assertCondition(
-        typeof publishedAt === 'string' && Number.isFinite(publishedAtMs),
-        `Registry publication time is missing or invalid for ${specifier}`,
-      );
-      const ageMinutes = (now.getTime() - publishedAtMs) / 60_000;
-      assertCondition(
-        Number.isFinite(ageMinutes) && ageMinutes >= 0,
-        `Registry publication time is in the future for ${specifier}`,
-      );
       results[index] = {
         name: item.name,
         version: item.version,
         integrity,
-        publishedAt: new Date(publishedAtMs).toISOString(),
-        ageMinutes,
+        publishedAt: packument?.time?.[item.version] ?? null,
         path: item.path,
       };
     }
@@ -990,152 +703,6 @@ async function fetchRegistryMetadata(
     ),
   );
   return results;
-}
-
-function formatImmaturePackage(item) {
-  const matureAt = new Date(
-    Date.parse(item.publishedAt) + minimumReleaseAgeMinutes * 60_000,
-  ).toISOString();
-  const waitHours = (minimumReleaseAgeMinutes - item.ageMinutes) / 60;
-  return `- ${identityKey(item)} published ${item.publishedAt}, mature at ${matureAt} (wait ${waitHours.toFixed(
-    1,
-  )}h); path ${item.path.join(' -> ')}`;
-}
-
-function approveImmaturePackages({ metadata, policy, release, now }) {
-  const policyByIdentity = new Map(
-    policy.entries.map(entry => [identityKey(entry), entry]),
-  );
-  const releaseByIdentity = new Map(
-    release.packages.map(item => [`${item.targetName}@${item.version}`, item]),
-  );
-  const sidecars = new Map(
-    (release.sidecars?.packages ?? []).map(item => [
-      `${item.name}@${item.version}`,
-      item,
-    ]),
-  );
-  // pnpm and the generated workspace already use these exact compiler pins
-  // from the authenticated packed generator. Honor the same set in the
-  // closure audit, after registry metadata has verified lock integrity and
-  // publication time. Cohort and sidecar bytes retain their manifest checks.
-  const compilerSelectors = new Set(
-    authenticatedBootstrapExclusions(release).filter(
-      key => !releaseByIdentity.has(key) && !sidecars.has(key),
-    ),
-  );
-  const exactExclusions = [];
-  const approvals = [];
-  const rejected = [];
-  const matchedPolicyEntries = new Set();
-  for (const item of metadata) {
-    const key = identityKey(item);
-    const sidecar = sidecars.get(key);
-    assertCondition(
-      !sidecar || sidecar.integrity === item.integrity,
-      `Sidecar ${key} registry integrity differs from authenticated release manifest`,
-    );
-    const exception = policyByIdentity.get(key);
-    if (exception?.integrity === item.integrity) {
-      matchedPolicyEntries.add(key);
-    }
-    if (item.ageMinutes >= minimumReleaseAgeMinutes) {
-      continue;
-    }
-    const releaseItem = releaseByIdentity.get(key);
-    if (releaseItem?.integrity === item.integrity) {
-      exactExclusions.push(key);
-      approvals.push({
-        authority: 'strict-release-manifest',
-        package: item.name,
-        version: item.version,
-        integrity: item.integrity,
-        source: {
-          cohortDigest: release.cohortDigest,
-          commit: release.source.commit,
-          manifestSha256: release.manifestSha256,
-          repository: release.source.repository,
-          sourceName: releaseItem.sourceName,
-          targetName: releaseItem.targetName,
-        },
-      });
-      continue;
-    }
-    if (sidecar?.integrity === item.integrity) {
-      exactExclusions.push(key);
-      approvals.push({
-        authority: 'strict-release-manifest-sidecar',
-        package: item.name,
-        version: item.version,
-        integrity: item.integrity,
-        source: {
-          commit: release.source.commit,
-          manifestSha256: release.manifestSha256,
-        },
-      });
-      continue;
-    }
-    if (compilerSelectors.has(key)) {
-      exactExclusions.push(key);
-      approvals.push({
-        authority: 'authenticated-generator-compiler',
-        package: item.name,
-        version: item.version,
-        integrity: item.integrity,
-        source: {
-          createPackage: release.createPackage.targetName,
-          createVersion: release.createPackage.version,
-        },
-      });
-      continue;
-    }
-    if (
-      exception?.integrity === item.integrity &&
-      Date.parse(exception.expiresAt) > now.getTime()
-    ) {
-      exactExclusions.push(key);
-      approvals.push({
-        authority: 'external-release-age-policy',
-        package: exception.package,
-        version: exception.version,
-        integrity: exception.integrity,
-        approvedBy: exception.approvedBy,
-        reviewedAt: exception.reviewedAt,
-        expiresAt: exception.expiresAt,
-        evidence: { ...exception.evidence },
-      });
-      continue;
-    }
-    rejected.push(item);
-  }
-  if (rejected.length > 0) {
-    throw new Error(
-      [
-        `Dependency closure contains ${rejected.length} immature package(s) without an exact, unexpired approval:`,
-        ...rejected.slice(0, 20).map(formatImmaturePackage),
-        'Wait until the listed time, pin an older mature version, or add a reviewed exact entry (package, version, integrity) to the release-age exception policy.',
-      ].join('\n'),
-    );
-  }
-  const unmatchedPolicyEntries = policy.entries.filter(
-    entry => !matchedPolicyEntries.has(identityKey(entry)),
-  );
-  if (unmatchedPolicyEntries.length > 0) {
-    throw new Error(
-      `Release-age exception policy contains stale or unmatched approval(s): ${unmatchedPolicyEntries
-        .map(identityKey)
-        .join(', ')}`,
-    );
-  }
-  exactExclusions.sort(compareCodeUnits);
-  approvals.sort((left, right) =>
-    compareCodeUnits(identityKey(left), identityKey(right)),
-  );
-  return {
-    approvals,
-    exactExclusions,
-    matchedPolicyEntries: [...matchedPolicyEntries].sort(compareCodeUnits),
-  };
 }
 
 function readRegularFile(filePath, label) {
@@ -1187,14 +754,8 @@ function readNativeWorkspacePolicy(workspacePath, { parseYamlImpl } = {}) {
     : parseYamlFile(workspacePath);
   assertPlainObject(policy, 'Generated pnpm workspace policy');
   assertCondition(
-    policy.minimumReleaseAge === minimumReleaseAgeMinutes &&
-      policy.minimumReleaseAgeStrict === true &&
-      policy.minimumReleaseAgeIgnoreMissingTime === false,
-    'Generated pnpm workspace policy must natively enforce strict 1440-minute release age with missing times rejected',
-  );
-  assertCondition(
     policy.trustPolicy === 'no-downgrade' &&
-      policy.trustPolicyIgnoreAfter === minimumReleaseAgeMinutes,
+      policy.trustPolicyIgnoreAfter === 1440,
     'Generated pnpm workspace policy must natively enforce no-downgrade trust for 1440 minutes',
   );
   return {
@@ -1215,41 +776,15 @@ function readNativeLock(lockPath, { parseYamlImpl } = {}) {
   };
 }
 
-function assertExternalApprovalUnexpired(approval, now) {
-  if (approval.authority !== 'external-release-age-policy') {
-    return;
-  }
-  const nowMs = now.getTime();
-  assertCondition(
-    Number.isFinite(nowMs),
-    'Release-age expiry recheck requires a valid current time',
-  );
-  const expiresAtMs = canonicalInstant(
-    approval.expiresAt,
-    `Approval ${identityKey(approval)} expiresAt`,
-  );
-  assertCondition(
-    expiresAtMs > nowMs,
-    `Release-age approval for ${identityKey(approval)} expired at ${approval.expiresAt} before frozen install`,
-  );
-}
-
-async function auditReleaseAgePolicy({
+async function auditDependencyClosure({
   projectDir,
   release,
-  commandExclusions,
   registryUrl,
-  policyPath,
   runImpl = run,
   fetchImpl = fetch,
-  now = new Date(),
   parseYamlImpl,
   verifyYamlTool = true,
 }) {
-  assertCondition(
-    now instanceof Date && Number.isFinite(now.getTime()),
-    'Release-age audit requires a valid current time',
-  );
   if (verifyYamlTool) {
     assertYamlDistributionIntegrity(runImpl);
   }
@@ -1257,28 +792,6 @@ async function auditReleaseAgePolicy({
   const workspace = readNativeWorkspacePolicy(workspacePath, {
     parseYamlImpl,
   });
-  // Ordinary installs must use the exact authenticated producer policy.
-  const cohortSelectors = validateExactExclusions(
-    [
-      ...new Set([
-        ...release.packages.map(item => `${item.targetName}@${item.version}`),
-        ...(release.sidecars?.packages ?? []).map(
-          item => `${item.name}@${item.version}`,
-        ),
-        ...authenticatedBootstrapExclusions(release),
-      ]),
-    ].sort(compareCodeUnits),
-    'Authenticated generated workspace release-age exclusions',
-  );
-  const persistedExclusions = workspace.policy.minimumReleaseAgeExclude;
-  assertCondition(
-    JSON.stringify(persistedExclusions) === JSON.stringify(cohortSelectors),
-    [
-      'Generated pnpm workspace minimumReleaseAgeExclude must list exactly the release cohort and verified sidecars, plus authenticated producer compiler selectors.',
-      `Expected: ${cohortSelectors.join(', ')}`,
-      `Found: ${Array.isArray(persistedExclusions) ? persistedExclusions.join(', ') || '(empty)' : String(persistedExclusions)}`,
-    ].join('\n'),
-  );
   const lockPath = path.join(projectDir, 'pnpm-lock.yaml');
   const nativeLock = readNativeLock(lockPath, { parseYamlImpl });
   const closureResult = buildDependencyClosure(nativeLock.lock);
@@ -1301,28 +814,7 @@ async function auditReleaseAgePolicy({
     );
   }
 
-  const policy = readExceptionPolicy(policyPath, now);
-  const expectedExclusions = releaseAgeExemptions(release, { policyPath, now });
-  if (
-    JSON.stringify(commandExclusions) !== JSON.stringify(expectedExclusions)
-  ) {
-    const declared = new Set(
-      Array.isArray(commandExclusions) ? commandExclusions : [],
-    );
-    const expected = new Set(expectedExclusions);
-    throw new Error(
-      [
-        'Acceptance command release-age exclusions differ from releaseAgeExemptions(manifest, policy); every lane must pass that exact set.',
-        `Missing: ${expectedExclusions.filter(key => !declared.has(key)).join(', ') || '(none)'}`,
-        `Unexpected: ${[...declared].filter(key => !expected.has(key)).join(', ') || '(none)'}`,
-      ].join('\n'),
-    );
-  }
-  // Cohort packuments stay on the selected registry (in source mode that is
-  // the ephemeral Verdaccio, where the cohort's publishedAt lives and what
-  // feeds the strict-release-manifest exclusion path). External packuments go
-  // direct to npmjs — strictly stronger (authoritative publishedAt/integrity)
-  // and faster than proxying through Verdaccio.
+  // First-party metadata comes from the controlled release registry.
   const cohortScopePrefix = `@${release.targetScope}/`;
   const sidecarNames = new Set(
     (release.sidecars?.packages ?? []).map(item => item.name),
@@ -1334,27 +826,7 @@ async function auditReleaseAgePolicy({
   const metadata = await fetchRegistryMetadata(closureResult.closure, {
     registryUrlFor,
     fetchImpl,
-    now,
   });
-  const { approvals, exactExclusions: requiredExclusions } =
-    approveImmaturePackages({
-      metadata,
-      policy,
-      release,
-      now,
-    });
-  const declaredExclusions = new Set(persistedExclusions);
-  const missingExclusions = requiredExclusions.filter(
-    key => !declaredExclusions.has(key),
-  );
-  assertCondition(
-    missingExclusions.length === 0,
-    `Generated workspace release-age policy does not permit immature dependencies: ${
-      missingExclusions.join(', ') || '(empty)'
-    }. External release-age approvals cannot override ordinary workspace installs.`,
-  );
-  const exactExclusions = persistedExclusions;
-
   const metadataIdentity = metadata.map(item => ({
     name: item.name,
     version: item.version,
@@ -1365,12 +837,10 @@ async function auditReleaseAgePolicy({
     lockSha256: nativeLock.sha256,
     closureSha256: resolution.closureSha256,
     registryMetadataSha256: sha256(canonicalJson(metadataIdentity)),
-    exceptionPolicySha256: sha256(canonicalJson(policy)),
     releaseManifestSha256: release.manifestSha256,
   };
 
   return {
-    approvals,
     tarballs: closureResult.tarballs,
     closureCount: closureResult.closure.length,
     closureIdentities: resolution.closureIdentities,
@@ -1380,13 +850,8 @@ async function auditReleaseAgePolicy({
       workspaceMutation: false,
     },
     digests,
-    exactExclusions,
     importerCount: closureResult.importerCount,
     lockfileVersion: closureResult.lockfileVersion,
-    matureCount: metadata.filter(
-      item => item.ageMinutes >= minimumReleaseAgeMinutes,
-    ).length,
-    policyEntryCount: policy.entries.length,
     registryMetadataCount: metadata.length,
     workspacePolicySha256: workspace.sha256,
   };
@@ -1395,7 +860,7 @@ async function auditReleaseAgePolicy({
 function verifyStrictInstallInputs(
   projectDir,
   audit,
-  { parseYamlImpl, now = new Date(), phase = 'frozen-install' } = {},
+  { parseYamlImpl, phase = 'frozen-install' } = {},
 ) {
   const lockPath = path.join(projectDir, 'pnpm-lock.yaml');
   const nativeLock = readNativeLock(lockPath, { parseYamlImpl });
@@ -1411,20 +876,15 @@ function verifyStrictInstallInputs(
     workspace.sha256 === audit.workspacePolicySha256,
     `${phase} input pnpm workspace policy differs from the audited native policy`,
   );
-  for (const approval of audit.approvals) {
-    assertExternalApprovalUnexpired(approval, now);
-  }
   return {
-    exactExclusionCount: audit.exactExclusions.length,
     lockSha256: audit.digests.lockSha256,
-    minimumReleaseAgeMinutes,
     phase,
     workspacePolicySha256: audit.workspacePolicySha256,
   };
 }
 
 export {
-  auditReleaseAgePolicy,
+  auditDependencyClosure,
   buildDependencyClosure,
   canonicalJson,
   closureResolution,
@@ -1432,11 +892,8 @@ export {
   parsePackageKey,
   parseYaml,
   parseYamlFile,
-  readActiveReleaseAgeExceptionSelectors,
-  releaseAgeExemptions,
   sha256,
   validateExactExclusions,
-  validateExceptionPolicy,
   verifyStrictInstallInputs,
   YAML_INTEGRITY,
   YAML_NAME,

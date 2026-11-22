@@ -26,10 +26,6 @@ import {
   nativeStartArchiveRequests,
   nativeStartSharedPeers,
 } from './native-federation-inputs.mjs';
-import {
-  assertReleaseAgeExclusionsUnchanged,
-  captureReleaseAgeExclusions,
-} from './release-age-policy.mjs';
 
 const readJson = filename => JSON.parse(fs.readFileSync(filename, 'utf8'));
 const nativeDependency = name =>
@@ -607,21 +603,6 @@ export async function installPackedNativeFederationDependencies({
     inside(context.workRoot, appRoot),
     'Packed MF fixture must belong to its owned temporary run',
   );
-  for (const key of [
-    'pnpm_config_minimum_release_age',
-    'pnpm_config_minimum_release_age_strict',
-    'pnpm_config_minimum_release_age_ignore_missing_time',
-  ])
-    assert(process.env[key], `Packed MF requires the inherited ${key} policy`);
-  assert(
-    Number(process.env.pnpm_config_minimum_release_age) >= 1440,
-    'Packed MF requires the release-age policy',
-  );
-  assert.equal(process.env.pnpm_config_minimum_release_age_strict, 'true');
-  assert.equal(
-    process.env.pnpm_config_minimum_release_age_ignore_missing_time,
-    'false',
-  );
   assert(
     process.env.npm_config_store_dir || process.env.pnpm_config_store_dir,
     'Packed MF requires the external shared pnpm store',
@@ -651,9 +632,6 @@ export async function installPackedNativeFederationDependencies({
       inside(context.workRoot, witness),
       'Packed installer witness must belong to its proof',
     );
-    const releaseAgeBaseline = captureReleaseAgeExclusions(appRoot, {
-      release: context.release,
-    });
     await runPackedNativeFederationCommand(
       context.pnpmExecutable,
       ['install'],
@@ -673,7 +651,6 @@ export async function installPackedNativeFederationDependencies({
           : controller.signal,
       },
     );
-    assertReleaseAgeExclusionsUnchanged(releaseAgeBaseline);
   } finally {
     for (const event of ['SIGINT', 'SIGTERM', 'SIGHUP'])
       process.removeListener(event, interrupt);
@@ -715,9 +692,7 @@ export async function preparePackedNativeFederationApp({
     stringifyYaml({
       packages: ['.'],
       packageImportMethod: 'clone-or-copy',
-      minimumReleaseAge: 1440,
-      minimumReleaseAgeStrict: true,
-      minimumReleaseAgeIgnoreMissingTime: false,
+      minimumReleaseAge: 0,
       allowBuilds: context.allowBuilds,
     }),
   );
@@ -824,10 +799,7 @@ export function writePackedNativeFederationWorkspace({
         'shared',
       ],
       packageImportMethod: 'clone-or-copy',
-      minimumReleaseAge: 1440,
-      minimumReleaseAgeStrict: true,
-      minimumReleaseAgeIgnoreMissingTime: false,
-      minimumReleaseAgeExclude: [],
+      minimumReleaseAge: 0,
       allowBuilds: context.allowBuilds,
     }),
   );
