@@ -15,12 +15,108 @@ import { linkInstalledEffectCompiler } from './helpers/workspace-kit';
 type FileTreeSnapshot = Map<string, Buffer>;
 
 type GenerationProcess = {
+  executionId: string;
   kind: 'formatter' | 'metadata';
   event: 'start' | 'exit';
   pid: number;
+  ppid: number;
   time: number;
   code?: number;
 };
+
+function assertGenerationProcesses(processes: GenerationProcess[]) {
+  const started = processes.filter(record => record.event === 'start');
+  assert.equal(
+    started.filter(record => record.kind === 'formatter').length,
+    6,
+    'each workspace uses generation, one canonical batch, and final formatting',
+  );
+  const metadata = started.filter(record => record.kind === 'metadata');
+  assert.equal(metadata.length, 6);
+  assert.equal(
+    new Set(started.map(record => record.executionId)).size,
+    started.length,
+    'process starts must have distinct execution IDs',
+  );
+  const active = new Map<number, GenerationProcess>();
+  for (const record of processes) {
+    if (record.event === 'start') {
+      assert.notEqual(record.pid, process.pid, 'execution must be isolated');
+      if (record.kind === 'metadata') {
+        assert.equal(
+          record.ppid,
+          process.pid,
+          'metadata must be a direct child',
+        );
+      }
+      assert.ok(!active.has(record.pid), `PID ${record.pid} is still active`);
+      active.set(record.pid, record);
+    } else {
+      const child = active.get(record.pid);
+      assert.equal(
+        record.executionId,
+        child?.executionId,
+        'exit must match the active execution',
+      );
+      assert.equal(record.kind, child?.kind);
+      assert.equal(
+        record.code,
+        0,
+        `${record.kind} execution ${record.executionId} must finish successfully`,
+      );
+      active.delete(record.pid);
+    }
+  }
+  assert.equal(active.size, 0, 'every started execution must exit');
+}
+
+test('process audit accepts serialized executions with recycled PIDs', () => {
+  const processes = Array.from(
+    { length: 12 },
+    (_, index): GenerationProcess[] => {
+      const child = {
+        executionId: `execution-${index}`,
+        kind: index < 6 ? 'formatter' : 'metadata',
+        pid: process.pid + 1,
+        ppid: process.pid,
+      } satisfies Partial<GenerationProcess>;
+      return [
+        { ...child, event: 'start', time: index * 2 },
+        { ...child, event: 'exit', time: index * 2 + 1, code: 0 },
+      ];
+    },
+  ).flat();
+
+  assertGenerationProcesses(processes);
+  assert.throws(
+    () => assertGenerationProcesses(processes.slice(0, -1)),
+    /every started execution must exit/,
+  );
+  assert.throws(
+    () =>
+      assertGenerationProcesses([
+        ...processes.filter(record => record.event === 'start'),
+        ...processes.filter(record => record.event === 'exit'),
+      ]),
+    /still active/,
+  );
+  assert.throws(
+    () =>
+      assertGenerationProcesses(
+        processes.map(record => ({ ...record, executionId: 'same-execution' })),
+      ),
+    /distinct execution IDs/,
+  );
+  assert.throws(
+    () =>
+      assertGenerationProcesses(
+        processes.map(record =>
+          record.event === 'exit' ? { ...record, code: 1 } : record,
+        ),
+      ),
+    /must finish successfully/,
+  );
+});
 
 function trackPhases(onTestFailed: TestContext['onTestFailed']) {
   const startedAt = performance.now();
@@ -178,7 +274,8 @@ test('generates byte-identical workspaces for a fixed shell and MicroVertical sp
       const active: number[] = [];
       for (const child of started) {
         const exit = processes.find(
-          record => record.pid === child.pid && record.event === 'exit',
+          record =>
+            record.executionId === child.executionId && record.event === 'exit',
         );
         (exit ? durations : active).push(
           (exit?.time ?? capturedAt) - child.time,
@@ -207,8 +304,9 @@ test('generates byte-identical workspaces for a fixed shell and MicroVertical sp
 const path = require('node:path');
 const script = path.basename(process.argv[1] || '');
 const kind = script === 'oxfmt' ? 'formatter' : script === 'config-metadata-worker.mjs' ? 'metadata' : undefined;
-if (kind) {
-  const record = event => fs.appendFileSync(process.env.UM_GENERATION_PROCESS_AUDIT, JSON.stringify({ kind, pid: process.pid, time: Date.now(), ...event }) + '\\n');
+if (kind && require('node:worker_threads').isMainThread) {
+  const executionId = require('node:crypto').randomUUID();
+  const record = event => fs.appendFileSync(process.env.UM_GENERATION_PROCESS_AUDIT, JSON.stringify({ executionId, kind, pid: process.pid, ppid: process.ppid, time: Date.now(), ...event }) + '\\n');
   record({ event: 'start' });
   process.once('exit', code => record({ event: 'exit', code }));
 }
@@ -230,26 +328,7 @@ if (kind) {
 
     assert.equal(difference, undefined, difference);
     processes = readProcesses();
-    const started = processes.filter(record => record.event === 'start');
-    assert.equal(
-      started.filter(record => record.kind === 'formatter').length,
-      6,
-      'each workspace uses generation, one canonical batch, and final formatting',
-    );
-    const metadata = started.filter(record => record.kind === 'metadata');
-    assert.equal(metadata.length, 6);
-    assert.equal(new Set(metadata.map(record => record.pid)).size, 6);
-    for (const child of started) {
-      assert.ok(
-        processes.some(
-          record =>
-            record.pid === child.pid &&
-            record.event === 'exit' &&
-            record.code === 0,
-        ),
-        `${child.kind} process ${child.pid} must finish successfully`,
-      );
-    }
+    assertGenerationProcesses(processes);
   } finally {
     try {
       processes = readProcesses();
