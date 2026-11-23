@@ -1,0 +1,193 @@
+name: Installed Octane compiler delivery proof
+
+on:
+  push:
+    branches: [test/octane-corrected-effect-delivery]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: octane-compiler-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compiler:
+    if: github.repository == 'ultramodernjs/ultramodern.js'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [stock, corrected]
+    steps:
+      - name: Checkout the installed Effect compiler source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Effect-TS/tsgo
+          ref: 3cbaa7bc6f149b83d4d3c2f67ef95f8426487d8e
+          persist-credentials: false
+      - name: Checkout the proof and reviewed correction
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: harness
+          persist-credentials: false
+      - name: Add only the reviewed correction to the corrected arm
+        if: matrix.variant == 'corrected'
+        run: |
+          test ! -e _patches/tsrs/035-checker-base-constraint-identity.patch
+          cp harness/scripts/ultramodern-renderers/compiler-proof/base-constraint-identity.patch \
+            _patches/tsrs/035-checker-base-constraint-identity.patch
+      - name: Materialize the original matching Effect and tsrs component
+        uses: ./.github/actions/setup-repo
+        with:
+          component: tsrs
+      - name: Build the actual Effect-enabled compiler
+        run: |
+          pnpm exec repoctl tsrs port-check
+          cargo build --locked -p ets_tsrs --features cli
+          mkdir proof
+          cp target/debug/tsrs proof/tsrs
+          proof/tsrs --version | tee proof/version.txt
+          grep -Fx 'Version 7.1.0-beta+effect-tsgo.0.67.0 (tsrs 0.21.0-ts7.1.0-beta, microsoft/TypeScript@3e9236361fa9)' proof/version.txt
+          (cd proof && sha256sum tsrs) | tee proof/sha256.txt
+          git -C tsrs rev-parse HEAD > proof/tsrs-source.txt
+          test "$(cat proof/tsrs-source.txt)" = 38931a58019107ba31581791e26a7aa414c9e015
+      - name: Retain the compiler and its identity
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: octane-compiler-${{ matrix.variant }}-${{ github.sha }}
+          path: proof
+          if-no-files-found: error
+          retention-days: 14
+
+  installed-app:
+    needs: compiler
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [stock, corrected]
+    steps:
+      - name: Checkout the unchanged acceptance harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Setup pinned tools
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492
+        with:
+          version: 2026.9.18
+          cache_save: false
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '26.12.0'
+      - name: Install only the acceptance harness dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter @scripts/ultramodern-production-readiness --filter modern-js-monorepo --filter tests
+      - name: Download the matching compiler
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: octane-compiler-${{ matrix.variant }}-${{ github.sha }}
+          path: .modern/compiler-proof
+      - name: Download the same immutable installed-app cohort
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          repository: ultramodernjs/ultramodern.js
+          run-id: '43647525217'
+          github-token: ${{ github.token }}
+          name: bleedingdev-release-bundle-run-43647525217-attempt-1
+          path: .modern/bleedingdev-publish
+      - name: Verify and select the explicit matching compiler
+        run: |
+          (cd .modern/compiler-proof && sha256sum --check sha256.txt)
+          chmod +x .modern/compiler-proof/tsrs
+          .modern/compiler-proof/tsrs --version
+          echo "EFFECT_TSGO_BIN=$(realpath .modern/compiler-proof/tsrs)" >> "$GITHUB_ENV"
+      - name: Install the existing fixed renderer browser
+        id: browser
+        run: node scripts/ultramodern-renderers/provision-browser.mjs
+      - name: Resolve the shared renderer-spec browser
+        id: shared-browser
+        run: node scripts/lib/browser-provisioning.js --resolve --runtime tests
+      - name: Install the shared renderer-spec browser
+        run: >-
+          node scripts/lib/browser-provisioning.js --install --runtime tests
+          --version ${{ steps.shared-browser.outputs.version }}
+      - name: Create isolated owned proof roots
+        run: |
+          proof_root="$(mktemp -d "$RUNNER_TEMP/octane-delivery-XXXXXX")"
+          echo "PROOF_ROOT=$(realpath "$proof_root")" >> "$GITHUB_ENV"
+          mkdir -p "$proof_root/ordinary" "$proof_root/navigation" "$proof_root/inputs"
+      - name: Run the ordinary installed Octane app once
+        id: ordinary
+        continue-on-error: true
+        env:
+          BROWSER: ${{ steps.browser.outputs.executable_path }}
+        run: |
+          export OWNED_TEMP_DIR="$PROOF_ROOT/ordinary"
+          node scripts/ultramodern-renderers/release.mjs \
+            --cohort-dir .modern/bleedingdev-publish --renderers octane --with '' \
+            --work-dir "$OWNED_TEMP_DIR" --browser-executable "$BROWSER"
+      - name: Resolve navigation identities from the authenticated cohort
+        run: |
+          export OWNED_TEMP_DIR="$PROOF_ROOT/inputs"
+          node scripts/ultramodern-renderers/native-federation-inputs.mjs \
+            --manifest .modern/bleedingdev-publish/manifest.json --out "$PROOF_ROOT/inputs/native"
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import { readReleaseManifest } from './scripts/ultramodern-publish/lib/source-create-proof/release-manifest.mjs';
+          import { localizedNavigationInputs } from './scripts/ultramodern-renderers/native-localized-navigation.mjs';
+          const release = readReleaseManifest({ manifestPath: '.modern/bleedingdev-publish/manifest.json' });
+          const inputs = JSON.parse(fs.readFileSync(`${process.env.PROOF_ROOT}/inputs/native/native-inputs.json`, 'utf8'));
+          const identity = localizedNavigationInputs(release, inputs);
+          fs.writeFileSync(`${process.env.PROOF_ROOT}/inputs/tuples.json`, JSON.stringify(identity.expectedNativeTuples));
+          JS
+      - name: Run the unchanged eight-check navigation batch once
+        id: navigation
+        continue-on-error: true
+        env:
+          BROWSER: ${{ steps.browser.outputs.executable_path }}
+        run: |
+          export OWNED_TEMP_DIR="$PROOF_ROOT/navigation"
+          node tests/ultramodern-renderers/i18n/navigation-installed.mjs \
+            --cohort-dir .modern/bleedingdev-publish --store-dir "$(pnpm store path --silent)" \
+            --pnpm "$(command -v pnpm)" --toolchain-root "$GITHUB_WORKSPACE" \
+            --browser-executable "$BROWSER" --renderers octane \
+            --expected-native-tuples "$PROOF_ROOT/inputs/tuples.json"
+      - name: Retain both raw outcomes
+        if: always()
+        env:
+          ORDINARY: ${{ steps.ordinary.outcome }}
+          NAVIGATION: ${{ steps.navigation.outcome }}
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          mkdir -p .modern/compiler-proof
+          printf 'variant=%s\nordinary=%s\nnavigation=%s\n' "$VARIANT" "$ORDINARY" "$NAVIGATION" \
+            | tee .modern/compiler-proof/outcomes.txt
+      - name: Preserve proof evidence, not a release-acceptance receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: octane-installed-proof-${{ matrix.variant }}-${{ github.sha }}
+          path: |
+            .modern/compiler-proof/*.txt
+            ${{ runner.temp }}/octane-delivery-*/**/*.log
+          if-no-files-found: error
+          retention-days: 14
+      - name: Require both original test outcomes
+        if: always()
+        env:
+          ORDINARY: ${{ steps.ordinary.outcome }}
+          NAVIGATION: ${{ steps.navigation.outcome }}
+        run: test "$ORDINARY" = success && test "$NAVIGATION" = success
+      - name: Remove only this job's owned app workspaces
+        if: always()
+        run: |
+          if [ -n "${PROOF_ROOT:-}" ]; then
+            case "$PROOF_ROOT" in
+              "$RUNNER_TEMP"/octane-delivery-*) rm -rf -- "$PROOF_ROOT" ;;
+              *) exit 1 ;;
+            esac
+          fi
