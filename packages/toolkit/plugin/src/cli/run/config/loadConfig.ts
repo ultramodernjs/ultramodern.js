@@ -36,14 +36,7 @@ async function loadConfigContent<T>(configFile: string): Promise<T> {
   }
 
   try {
-    // Dynamically load the configuration file using jiti
-    let config: any;
-    // Dynamically load the configuration file using jiti
-    if (process.env.MODERN_LIB_FORMAT === 'esm') {
-      config = await jiti.import(configFile, {});
-    } else {
-      config = jiti(configFile);
-    }
+    const config: any = await jiti.import(configFile, {});
 
     // If the file exports as ESM, access the `default` property
     return config.default || config;

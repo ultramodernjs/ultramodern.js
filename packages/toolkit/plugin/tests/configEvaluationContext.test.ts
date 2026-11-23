@@ -107,8 +107,57 @@ ${exportPrefix}${form === 'async' ? 'async ' : ''}${callbackArgument} => {
     };
   }
 
+  it('reloads edited TypeScript configuration and dependencies', async () => {
+    const fixture = await createFixture('ts', 'object');
+    const dependency = path.join(fixture.cwd, 'dependency.ts');
+    await writeFile(dependency, 'export const label: string = "first";');
+    const file = path.join(fixture.cwd, fixture.filename);
+    await writeFile(
+      file,
+      'import { label } from "./dependency.ts"; export default { label };',
+    );
+    const load = () =>
+      createLoadedConfig<{ label: string }>(
+        fixture.cwd,
+        fixture.filename,
+        undefined,
+        { env: 'test', command: 'build' },
+      );
+
+    expect((await load()).config.label).toBe('first');
+    await writeFile(dependency, 'export const label: string = "second";');
+    await writeFile(
+      file,
+      'import { label } from "./dependency.ts"; export default { label: label + "-edited" };',
+    );
+    expect((await load()).config.label).toBe('second-edited');
+  });
+
   for (const extension of ['js', 'ts'] as const) {
     describe(`.${extension} config`, () => {
+      it('loads ESM dependencies that read optional import.meta properties', async () => {
+        const fixture = await createFixture(extension, 'object');
+        await writeFile(
+          path.join(fixture.cwd, 'dependency.mjs'),
+          'export const label = import.meta?.env?.MODE ?? "native-esm";',
+        );
+        await writeFile(
+          path.join(fixture.cwd, fixture.filename),
+          extension === 'js'
+            ? 'const { label } = require("./dependency.mjs"); module.exports = { label };'
+            : 'import { label } from "./dependency.mjs"; export default { label };',
+        );
+
+        const loaded = await createLoadedConfig<{ label: string }>(
+          fixture.cwd,
+          fixture.filename,
+          undefined,
+          { env: 'test', command: 'build' },
+        );
+
+        expect(loaded.config.label).toBe('native-esm');
+      });
+
       it('isolates callback mutation from its caller and local evaluation', async () => {
         process.argv = ['node', 'modern', 'build'];
         const fixture = await createFixture(extension, 'sync');
