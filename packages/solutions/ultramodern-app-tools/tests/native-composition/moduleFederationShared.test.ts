@@ -1,15 +1,31 @@
+import { randomUUID } from 'node:crypto';
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createPluginManager } from '@modern-js/plugin';
-import { presetUltramodern } from '@modern-js/ultramodern-app-tools';
+import { pathToFileURL } from 'node:url';
+import vm from 'node:vm';
+import type { AppTools } from '@modern-js/app-tools';
+import { type CLIPluginAPI, createPluginManager } from '@modern-js/plugin';
+import {
+  createContext,
+  initAppContext,
+  initPluginAPI,
+} from '@modern-js/plugin/cli';
+import {
+  defineConfig,
+  presetUltramodern,
+  resolveUltramodernConfig,
+} from '@modern-js/ultramodern-app-tools';
 import { createRsbuild, type RspackChain, rspack } from '@rsbuild/core';
+import { transformSync } from 'esbuild';
 import {
   resolveFrameworkSharedPackages,
   resolveManifestRecoveryRuntimePlugin,
@@ -90,6 +106,390 @@ const jsxRuntimes = (requiredVersion?: string) => ({
     singleton: true,
     treeShaking: false,
   },
+});
+
+const applicationRequire = createRequire(
+  path.resolve(
+    __dirname,
+    '../../../../../tests/integration/routes-tanstack-mf/mf-remote/package.json',
+  ),
+);
+const native = applicationRequire('@module-federation/modern-js-v3');
+const nativeRequire = createRequire(
+  applicationRequire.resolve('@module-federation/modern-js-v3/ssr-plugin'),
+);
+const routerName = '@tanstack/react-router';
+const consumerManifest = applicationRequire('./package.json');
+const routerArtifact =
+  consumerManifest.ultramodern.supportArtifacts.packages[routerName];
+
+/** Register native MF and apply the actual final browser/server options hook. */
+async function finalFederationOptions(
+  appDirectory: string,
+  mfConfig: Record<string, unknown>,
+  secondary = true,
+) {
+  const priorSSR = process.env.MF_SSR_PRJ;
+  try {
+    const manager = createPluginManager<CLIPluginAPI<AppTools>>();
+    manager.addPlugins([
+      native.moduleFederationPlugin({
+        config: native.createModuleFederationConfig({
+          name: 'shellSuperApp',
+          remotes: {},
+          ...mfConfig,
+          dts: false,
+        }),
+        ssr: true,
+        secondarySharedTreeShaking: secondary,
+      }),
+      ultramodernModuleFederationSharedPlugin(),
+    ]);
+    const plugins = manager.getPlugins();
+    const config = await resolveUltramodernConfig(
+      defineConfig({
+        server: { ssr: true },
+        source: { enableAsyncEntry: true },
+      }),
+      { env: 'production', command: 'build' },
+    );
+    const context = await createContext<AppTools>({
+      appContext: initAppContext({
+        packageName: 'artifact-share-consumer',
+        appDirectory,
+        configFile: false,
+        command: 'build',
+        metaName: 'modern-js',
+        plugins,
+      }),
+      config,
+      normalizedConfig: config,
+    });
+    const api = initPluginAPI({ context, pluginManager: manager });
+    for (const plugin of plugins) await plugin.setup?.(api);
+    const finalOptions: ReturnType<
+      typeof native.createModuleFederationConfig
+    >[] = [];
+    const rsbuild = await createRsbuild({
+      cwd: appDirectory,
+      rsbuildConfig: {
+        source: { entry: { index: './src/index.js' } },
+        environments: {
+          client: { output: { target: 'web' } },
+          ssr: { output: { target: 'node' } },
+        },
+        tools: {
+          bundlerChain: async (chain, utils) => {
+            await context.hooks.modifyBundlerChain.call(chain, utils);
+            for (const id of [
+              'plugin-module-federation',
+              'plugin-module-federation-server',
+            ]) {
+              if (!chain.plugins.has(id)) continue;
+              let [options] = chain.plugin(id).get('args');
+              while (options.mfConfig) options = options.mfConfig;
+              finalOptions.push(options);
+            }
+          },
+        },
+      },
+    });
+    await rsbuild.initConfigs();
+    expect(finalOptions).toHaveLength(2);
+    return finalOptions;
+  } finally {
+    if (priorSSR === undefined) delete process.env.MF_SSR_PRJ;
+    else process.env.MF_SSR_PRJ = priorSSR;
+  }
+}
+
+function consumeRouterShare(share: object, version: string) {
+  const { createInstance } = nativeRequire('@module-federation/runtime');
+  const name = `authored-shell-share-${randomUUID()}`;
+  const provider = { router: 'actual native MF provider' };
+  const runtime = createInstance({
+    name,
+    shared: {
+      [routerName]: {
+        version,
+        scope: name,
+        lib: () => provider,
+        shareConfig: share,
+      },
+    },
+  });
+  expect(runtime.loadShareSync(routerName)()).toBe(provider);
+}
+
+it('normalizes authored Shell artifact shares through final native MF options', async () => {
+  // The authored OntOS helper passes the dependency request through verbatim.
+  const createSharedRuntimeConfig = (versions: Record<string, string>) => ({
+    [routerName]: {
+      requiredVersion: versions[routerName],
+      singleton: true,
+      strictVersion: true,
+      treeShaking: false,
+    },
+  });
+  const shared = createSharedRuntimeConfig(consumerManifest.dependencies);
+  const original = JSON.stringify(shared);
+  expect(shared[routerName].requiredVersion).toBe(routerArtifact.request);
+  const appDirectory = path.dirname(
+    applicationRequire.resolve('./package.json'),
+  );
+  const options = await finalFederationOptions(appDirectory, { shared });
+  for (const config of options) {
+    const share = config.shared[routerName];
+    // Feed final plugin options, not a separately normalized test value, to MF.
+    consumeRouterShare(share, '1.170.46');
+    expect(() => consumeRouterShare(share, '1.170.47')).toThrow(
+      /does not satisfy the requirement/u,
+    );
+    expect(share).toEqual({
+      ...shared[routerName],
+      requiredVersion: '1.170.46',
+    });
+  }
+  expect(JSON.stringify(shared)).toBe(original);
+});
+
+it('normalizes unchanged generated Catalog config at the same native boundary', async () => {
+  const filename = applicationRequire.resolve('./module-federation.config.ts');
+  const source = readFileSync(filename, 'utf8');
+  const module: { exports: { default: Record<string, unknown> } } = {
+    exports: { default: {} },
+  };
+  vm.runInNewContext(
+    transformSync(source, {
+      format: 'cjs',
+      loader: 'ts',
+      define: {
+        'import.meta.url': JSON.stringify(pathToFileURL(filename).href),
+      },
+    }).code,
+    { module, exports: module.exports, require: applicationRequire },
+  );
+  const config = module.exports.default;
+  const original = JSON.stringify(config);
+  const manifestBefore = readFileSync(
+    applicationRequire.resolve('./package.json'),
+    'utf8',
+  );
+  const options = await finalFederationOptions(path.dirname(filename), config);
+  for (const final of options) {
+    const share = final.shared[routerName];
+    expect(share.requiredVersion).toBe('1.170.46');
+    expect(share.singleton).toBe(true);
+    expect(share.treeShaking).toBe(false);
+    consumeRouterShare({ ...share, strictVersion: true }, '1.170.46');
+    expect(() =>
+      consumeRouterShare({ ...share, strictVersion: true }, '1.170.47'),
+    ).toThrow(/does not satisfy the requirement/u);
+    expect(final.exposes).toEqual(config.exposes);
+  }
+  expect(JSON.stringify(config)).toBe(original);
+  expect(readFileSync(filename, 'utf8')).toBe(source);
+  expect(
+    readFileSync(applicationRequire.resolve('./package.json'), 'utf8'),
+  ).toBe(manifestBefore);
+});
+
+it('preserves authored ranges and sharing fields in record and array native options', async () => {
+  const appDirectory = path.dirname(
+    applicationRequire.resolve('./package.json'),
+  );
+  const router = {
+    requiredVersion: '~1.170.0',
+    singleton: true,
+    strictVersion: true,
+    import: routerName,
+    shareKey: routerName,
+    shareScope: 'authored',
+    treeShaking: false,
+    eager: false,
+  };
+  for (const secondary of [true, false]) {
+    for (const shared of [
+      {
+        [routerName]: router,
+        untouched: { requiredVersion: false },
+        shorthand: '^1.0.0',
+        file: { requiredVersion: 'file:../authored' },
+        tag: { requiredVersion: 'next' },
+      },
+      ['untouched', { [routerName]: router }],
+    ]) {
+      const before = JSON.stringify(shared);
+      const options = await finalFederationOptions(
+        appDirectory,
+        { shared },
+        secondary,
+      );
+      for (const final of options) {
+        const shares = Array.isArray(final.shared)
+          ? Object.assign(
+              {},
+              ...final.shared.filter(entry => typeof entry === 'object'),
+            )
+          : final.shared;
+        expect(shares[routerName]).toEqual(router);
+        if (!Array.isArray(shared)) {
+          expect(shares.untouched).toEqual(shared.untouched);
+          expect(shares.shorthand).toBe(shared.shorthand);
+          expect(shares.file).toEqual(shared.file);
+          expect(shares.tag).toEqual(shared.tag);
+        }
+        consumeRouterShare(shares[routerName], '1.170.46');
+        expect(() => consumeRouterShare(shares[routerName], '1.171.0')).toThrow(
+          /does not satisfy the requirement/u,
+        );
+        expect(Array.isArray(final.shared)).toBe(Array.isArray(shared));
+      }
+      expect(JSON.stringify(shared)).toBe(before);
+    }
+  }
+});
+
+it('normalizes admitted artifacts without changing import, shareKey or array sharing policy', async () => {
+  const appDirectory = path.dirname(
+    applicationRequire.resolve('./package.json'),
+  );
+  const router = {
+    requiredVersion: routerArtifact.request,
+    singleton: true,
+    strictVersion: true,
+    import: routerName,
+    shareKey: 'authored-router-key',
+    treeShaking: false,
+    eager: false,
+  };
+  const shared = ['untouched', { routerAlias: router }];
+  const before = JSON.stringify(shared);
+  const options = await finalFederationOptions(appDirectory, { shared });
+  for (const final of options) {
+    expect(final.shared[0]).toBe('untouched');
+    expect(final.shared[1]).toEqual({
+      routerAlias: { ...router, requiredVersion: '1.170.46' },
+    });
+  }
+  expect(JSON.stringify(shared)).toBe(before);
+});
+
+it('uses the admitted native artifact cohort without package-specific exceptions', async () => {
+  const manifest = JSON.parse(
+    readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8'),
+  );
+  const name = '@tanstack/router-core';
+  const artifact = manifest.ultramodern.nativeArtifacts.packages[name];
+  const root = realpathSync(
+    mkdtempSync(path.join(tmpdir(), 'um-mf-native-pin-')),
+  );
+  try {
+    const installed = path.join(root, 'node_modules', name);
+    mkdirSync(installed, { recursive: true });
+    writeFileSync(
+      path.join(root, 'package.json'),
+      JSON.stringify({
+        name: 'native-artifact-consumer',
+        devDependencies: { [name]: artifact.request },
+      }),
+    );
+    writeFileSync(
+      path.join(installed, 'package.json'),
+      JSON.stringify({
+        name,
+        version: artifact.version,
+      }),
+    );
+    const shared = {
+      [name]: {
+        requiredVersion: artifact.request,
+        singleton: true,
+        strictVersion: true,
+      },
+    };
+    for (const final of await finalFederationOptions(root, { shared })) {
+      expect(final.shared[name]).toEqual({
+        ...shared[name],
+        requiredVersion: artifact.version,
+      });
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it('rejects unadmitted URLs, mismatched dependency requests and missing or invalid installed identity', async () => {
+  const root = realpathSync(
+    mkdtempSync(path.join(tmpdir(), 'um-mf-artifact-evidence-')),
+  );
+  const installed = path.join(root, 'node_modules', routerName);
+  try {
+    const cases = [
+      {
+        request: routerArtifact.request,
+        installed: { name: routerName, version: '1.170.47' },
+      },
+      {
+        request: routerArtifact.request,
+        installed: { name: 'foreign-router', version: '1.170.46' },
+      },
+      {
+        request: routerArtifact.request,
+        installed: { name: routerName, version: 'invalid' },
+      },
+      { request: routerArtifact.request, installed: undefined },
+      {
+        request: '~1.170.0',
+        installed: { name: routerName, version: '1.170.46' },
+      },
+      {
+        request: 'https://untrusted.example/router.tgz',
+        installed: { name: routerName, version: '1.170.46' },
+      },
+      {
+        request: routerArtifact.request.replace('bea0d22f', 'aaa0d22f'),
+        installed: { name: routerName, version: '1.170.46' },
+      },
+    ];
+    for (const candidate of cases) {
+      rmSync(path.join(root, 'node_modules'), { recursive: true, force: true });
+      const manifest = structuredClone(consumerManifest);
+      manifest.dependencies[routerName] = candidate.request;
+      // Forging consumer metadata cannot admit a different artifact request.
+      manifest.ultramodern.supportArtifacts.packages[routerName].request =
+        candidate.request;
+      const manifestSource = JSON.stringify(manifest);
+      writeFileSync(path.join(root, 'package.json'), manifestSource);
+      if (candidate.installed) {
+        mkdirSync(installed, { recursive: true });
+        writeFileSync(
+          path.join(installed, 'package.json'),
+          JSON.stringify(candidate.installed),
+        );
+      }
+      const shared = {
+        [routerName]: {
+          requiredVersion: candidate.request.startsWith('https:')
+            ? candidate.request
+            : routerArtifact.request,
+          singleton: true,
+          strictVersion: true,
+          treeShaking: false,
+        },
+      };
+      const before = JSON.stringify(shared);
+      await expect(finalFederationOptions(root, { shared })).rejects.toThrow(
+        /artifact requiredVersion|Invalid installed framework manifest/u,
+      );
+      expect(JSON.stringify(shared)).toBe(before);
+      expect(readFileSync(path.join(root, 'package.json'), 'utf8')).toBe(
+        manifestSource,
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 describe('Module Federation React JSX runtime sharing', () => {

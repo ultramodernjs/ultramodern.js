@@ -1,8 +1,13 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { AppTools, CliPlugin } from '@modern-js/app-tools';
 import type { Rspack } from '@rsbuild/core';
+import {
+  readRendererFrameworkPackage,
+  resolveInstalledRendererPackage,
+} from '../../native-composition/renderer-installed-profile';
 
 type SharedConfig = { requiredVersion?: unknown } & Record<string, unknown>;
 type SharedRecord = Record<string, string | SharedConfig>;
@@ -135,6 +140,112 @@ const readManifest = (manifest: string) =>
     version: string;
     exports?: unknown;
   };
+
+const record = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const readPackage = (directory: string) => {
+  const filename = path.join(directory, 'package.json');
+  const manifest: unknown = JSON.parse(readFileSync(filename, 'utf8'));
+  if (!record(manifest))
+    throw new Error(`Module Federation: invalid package manifest ${filename}`);
+  return manifest;
+};
+
+/** Project publisher-admitted artifact identity, not an arbitrary URL's name. */
+const artifactRequirementVersion = (
+  appDirectory: string,
+  request: string,
+  requirement: string,
+): string => {
+  const name = request
+    .split('/')
+    .slice(0, request.startsWith('@') ? 2 : 1)
+    .join('/');
+  const fail = () =>
+    new Error(
+      `Module Federation: ${request} artifact requiredVersion must match this framework's admitted artifact request and the application's installed package identity: ${requirement}`,
+    );
+  const app = readPackage(appDirectory);
+  const dependencies = record(app.dependencies) ? app.dependencies : {};
+  const devDependencies = record(app.devDependencies)
+    ? app.devDependencies
+    : {};
+  if ((dependencies[name] ?? devDependencies[name]) !== requirement)
+    throw fail();
+  // These installed framework manifests carry release-admitted descriptors.
+  // App-authored descriptors cannot admit URLs; archive authentication stays
+  // with the publisher/installer, not this sharing-options projection.
+  const require = createRequire(import.meta.url);
+  for (const authority of [
+    {
+      specifier: '@modern-js/ultramodern-app-tools',
+      filename: fileURLToPath(import.meta.url),
+    },
+    {
+      specifier: '@modern-js/app-tools-extensions',
+      filename: require.resolve('@modern-js/app-tools-extensions'),
+    },
+  ]) {
+    const owner = readRendererFrameworkPackage(authority);
+    const metadata = readPackage(owner.directory).ultramodern;
+    if (!record(metadata)) continue;
+    for (const descriptor of [
+      metadata.supportArtifacts,
+      metadata.nativeArtifacts,
+    ]) {
+      if (!record(descriptor) || !record(descriptor.packages)) continue;
+      const pin = descriptor.packages[name];
+      if (!record(pin) || pin.request !== requirement) continue;
+      const installed = resolveInstalledRendererPackage(name, [appDirectory]);
+      if (
+        !installed ||
+        installed.name !== name ||
+        installed.version !== pin.version
+      )
+        throw fail();
+      return installed.version;
+    }
+  }
+  throw fail();
+};
+
+const withArtifactRequirements = (
+  shared: Shared | undefined,
+  appDirectory: string,
+): Shared | undefined => {
+  const rewrite = (entries: SharedRecord): SharedRecord => {
+    let result = entries;
+    for (const [request, config] of Object.entries(entries)) {
+      if (
+        config &&
+        typeof config === 'object' &&
+        typeof config.requiredVersion === 'string' &&
+        /^https?:\/\//iu.test(config.requiredVersion)
+      ) {
+        result = {
+          ...result,
+          [request]: {
+            ...config,
+            requiredVersion: artifactRequirementVersion(
+              appDirectory,
+              typeof config.import === 'string' ? config.import : request,
+              config.requiredVersion,
+            ),
+          },
+        };
+      }
+    }
+    return result;
+  };
+  if (!Array.isArray(shared)) return shared && rewrite(shared);
+  const result = shared.map(entry =>
+    typeof entry === 'string' ? entry : rewrite(entry),
+  );
+  return result.every((entry, index) => entry === shared[index])
+    ? shared
+    : result;
+};
 
 /**
  * `packageName` and all of its subpaths, as the framework package that
@@ -308,6 +419,7 @@ const withDefaults = (
   options: FederationPluginOptions,
   packages: FrameworkSharedPackage[],
   runtimePlugin: string | undefined,
+  appDirectory: string,
 ): FederationPluginOptions =>
   options.mfConfig && typeof options.mfConfig === 'object'
     ? {
@@ -316,12 +428,15 @@ const withDefaults = (
           options.mfConfig as FederationPluginOptions,
           packages,
           runtimePlugin,
+          appDirectory,
         ),
       }
     : {
         ...options,
         shared: withFrameworkShared(
-          withReactJsxRuntimeShared(options.shared),
+          withReactJsxRuntimeShared(
+            withArtifactRequirements(options.shared, appDirectory),
+          ),
           packages,
         ),
         // A host must start without contacting remotes it has not rendered
@@ -456,6 +571,7 @@ export const ultramodernModuleFederationSharedPlugin =
                 id === MODULE_FEDERATION_SERVER_CHAIN_ID
                   ? manifestRecovery
                   : undefined,
+                appDirectory,
               ),
               ...rest,
             ]);
