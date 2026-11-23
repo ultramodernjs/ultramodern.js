@@ -5,8 +5,8 @@
   "pathspec": ["packages"],
   "migrationGoal": "Shrink-only budget of fork edits inside upstream-owned files. Every entry is debt: move it upstream or behind an extension point, then re-run --write-divergence-allowlist.",
   "totalFiles": 1460,
-  "totalHunks": 4958,
-  "totalChangedLines": 104834,
+  "totalHunks": 4959,
+  "totalChangedLines": 104861,
   "files": [
     {
       "file": "packages/cli/adapter-rstest/CHANGELOG.md",
@@ -4006,7 +4006,7 @@
     {
       "file": "packages/server/core/tests/adapters/connectMiddleware.test.ts",
       "hunks": 1,
-      "changedLines": 93
+      "changedLines": 98
     },
     {
       "file": "packages/server/core/tests/adapters/node.test.ts",
@@ -5985,13 +5985,13 @@
     },
     {
       "file": "packages/toolkit/types/server/utils.d.ts",
-      "hunks": 3,
-      "changedLines": 12
+      "hunks": 4,
+      "changedLines": 14
     },
     {
       "file": "packages/toolkit/types/tests/neutralCliTypes.test.ts",
       "hunks": 1,
-      "changedLines": 93
+      "changedLines": 113
     },
     {
       "file": "packages/toolkit/types/tests/reexports.test.ts",
