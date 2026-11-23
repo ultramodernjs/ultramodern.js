@@ -2,4 +2,4 @@
 '@modern-js/plugin': patch
 ---
 
-Load configuration through Jiti's asynchronous import API in both CLI formats so ESM dependencies can use optional `import.meta` properties while preserving TypeScript configuration reloads.
+Evaluate installed JavaScript ESM configuration dependencies natively so optional `import.meta` properties work in the CJS CLI. Preserve CJS export identity and callable properties, local JavaScript and TypeScript configuration reloads, and the existing ESM CLI and dynamic-import behavior.
